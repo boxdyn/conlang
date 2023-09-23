@@ -37,11 +37,13 @@ pub trait Combinator: Combinable + Sized {
     }
 
     /// Repeats the function f on self until it fails
-    fn and_any(mut self, f: impl Fn(Self) -> Self) -> Self {
-        while self.is_alright() {
-            self = self.and(&f)
-        }
-        self.alright()
+    fn and_any(self, f: impl Fn(Self) -> Self) -> Self {
+        self.and(|mut this| {
+            while this.is_alright() {
+                this = this.and(&f)
+            }
+            this.alright()
+        })
     }
 
     /// Repeats the function f on self at least once, then until it fails.
