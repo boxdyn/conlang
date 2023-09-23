@@ -27,7 +27,7 @@ pub trait Combinator: Combinable + Sized {
     /// Returns the result of running f on self, or if it fails, the original self
     fn and_maybe(self, f: impl Fn(Self) -> Self) -> Self
     where Self: Clone {
-        self.clone().and(f).or(|_| self)
+        self.and_either(f, |g| g)
     }
 
     /// Returns the result of running f on self, or if it fails, runs g on self
