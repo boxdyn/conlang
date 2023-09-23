@@ -1,0 +1,16 @@
+unstable_features = true
+max_width = 100
+wrap_comments = true
+comment_width = 100
+struct_lit_width = 100
+
+imports_granularity = "Crate"
+# Allow structs to fill an entire line
+# use_small_heuristics = "Max"
+# Allow small functions on single line
+# fn_single_line = true
+
+# Alignment
+enum_discrim_align_threshold = 12
+#struct_field_align_threshold = 12
+where_single_line = true
