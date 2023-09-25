@@ -10,6 +10,7 @@ pub mod token {
         Comment,
         Identifier,
         Integer,
+        Float,
         String,
     }
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -129,6 +130,17 @@ pub mod lexer {
                         &|rule| rule.str("0b").and_any(Rule::bin_digit),
                         &|rule| rule.and_many(Rule::dec_digit),
                     ])
+                    .end()?,
+            )
+        }
+        pub fn float(&mut self) -> Option<Token> {
+            self.skip_whitespace();
+            self.produce_token(
+                Type::Float,
+                Rule::new(self.text())
+                    .and_any(Rule::dec_digit)
+                    .char('.')
+                    .and_many(Rule::dec_digit)
                     .end()?,
             )
         }
@@ -374,6 +386,27 @@ mod tests {
             #[test]
             fn base2() {
                 assert_whole_input_is_token("0b1010", Lexer::integer, Type::Integer);
+            }
+        }
+        mod float {
+            use super::*;
+            #[test]
+            fn number_dot_number_is_float() {
+                assert_whole_input_is_token("1.0", Lexer::float, Type::Float);
+            }
+            #[test]
+            fn nothing_dot_number_is_float() {
+                assert_whole_input_is_token(".0", Lexer::float, Type::Float);
+            }
+            #[test]
+            #[should_panic]
+            fn number_dot_nothing_is_not_float() {
+                assert_whole_input_is_token("1.", Lexer::float, Type::Float);
+            }
+            #[test]
+            #[should_panic]
+            fn nothing_dot_nothing_is_not_float() {
+                assert_whole_input_is_token(".", Lexer::float, Type::Float);
             }
         }
         mod string {
