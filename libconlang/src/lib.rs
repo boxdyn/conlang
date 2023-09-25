@@ -133,11 +133,11 @@ pub mod lexer {
         }
     }
 
-    impl<'t> lerox::Combinable for Rule<'t> {
+    impl<'t> lerox::Combinator for Rule<'t> {
         fn is_alright(&self) -> bool {
             self.is_alright
         }
-        fn alright(self) -> Self {
+        fn into_alright(self) -> Self {
             Self { is_alright: true, ..self }
         }
     }
