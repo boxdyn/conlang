@@ -138,7 +138,7 @@ pub mod lexer {
                 Type::String,
                 Rule::new(self.text())
                     .char('"')
-                    .and_any(|rule| rule.str(r#"\""#).or(|rule| rule.not_char('"')))
+                    .and_any(|rule| rule.and(Rule::string_escape).or(|rule| rule.not_char('"')))
                     .char('"')
                     .end()?,
             )
@@ -210,6 +210,9 @@ pub mod lexer {
         }
         pub fn bin_digit(self) -> Self {
             self.char_between('0', '1')
+        }
+        pub fn string_escape(self) -> Self {
+            self.char('\\').and(Rule::any)
         }
         fn has(self, condition: impl Fn(&Self) -> bool, len: usize) -> Self {
             let len = next_utf8(self.text, len);
