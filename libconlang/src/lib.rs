@@ -9,6 +9,7 @@ pub mod token {
     pub enum Type {
         Comment,
         Identifier,
+        Integer,
     }
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub struct Token {
@@ -110,6 +111,16 @@ pub mod lexer {
                     .char('_')
                     .or(Rule::xid_start)
                     .and_any(Rule::xid_continue)
+                    .end()?,
+            )
+        }
+        pub fn integer(&mut self) -> Option<Token> {
+            self.skip_whitespace();
+            self.produce_token(
+                Type::Integer,
+                Rule::new(self.text())
+                    .and_maybe(|rule| rule.char('0').char_fn(|c| "xdob".contains(c)))
+                    .and_many(|this| this.char_fn(|c| c.is_ascii_hexdigit()))
                     .end()?,
             )
         }
@@ -303,6 +314,33 @@ mod tests {
             #[should_panic]
             fn not_identifier() {
                 assert_whole_input_is_token("123456789", Lexer::identifier, Type::Identifier);
+            }
+        }
+        mod integer {
+            use super::*;
+            #[test]
+            fn bare() {
+                assert_whole_input_is_token("10010110", Lexer::integer, Type::Integer);
+                assert_whole_input_is_token("12345670", Lexer::integer, Type::Integer);
+                assert_whole_input_is_token("1234567890", Lexer::integer, Type::Integer);
+                assert_whole_input_is_token("123456789ABCDEF0", Lexer::integer, Type::Integer);
+            }
+            #[test]
+            fn base16() {
+                assert_has_type_and_len("0x1234", Lexer::integer, Type::Integer, 6);
+                assert_has_type_and_len("0x1234 \"hello\"", Lexer::integer, Type::Integer, 6);
+            }
+            #[test]
+            fn base10() {
+                assert_whole_input_is_token("0d1234", Lexer::integer, Type::Integer);
+            }
+            #[test]
+            fn base8() {
+                assert_whole_input_is_token("0o1234", Lexer::integer, Type::Integer);
+            }
+            #[test]
+            fn base2() {
+                assert_whole_input_is_token("0b1010", Lexer::integer, Type::Integer);
             }
         }
     }
