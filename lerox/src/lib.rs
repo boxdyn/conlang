@@ -59,4 +59,15 @@ pub trait Combinator: Sized {
     where Self: Clone {
         self.clone().and(f).or(|_| g(self))
     }
+
+    /// Returns the result of the first f that succeeds, or self
+    fn and_one_of(mut self, f: &[&dyn Fn(Self) -> Self]) -> Self {
+        for &f in f {
+            self = self.into_alright().and(f);
+            if self.is_alright() {
+                break;
+            }
+        }
+        self
+    }
 }

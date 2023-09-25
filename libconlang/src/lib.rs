@@ -58,6 +58,11 @@ pub mod lexer {
         pub fn new(text: &'t str) -> Self {
             Self { text, cursor: 0 }
         }
+        fn skip_whitespace(&mut self) {
+            if let Some(len) = Rule::new(self.text()).and_any(Rule::whitespace).end() {
+                self.cursor += len
+            }
+        }
         fn produce_token(&mut self, ty: Type, len: usize) -> Option<Token> {
             let start = self.cursor;
             self.cursor += len;
@@ -65,9 +70,6 @@ pub mod lexer {
         }
         fn text(&self) -> &str {
             &self.text[self.cursor..]
-        }
-        fn skip_whitespace(&mut self) {
-            self.cursor += Rule::new(self.text).whitespace().end().unwrap_or_default()
         }
         // functions for lexing individual tokens
         pub fn line_comment(&mut self) -> Option<Token> {
@@ -120,8 +122,13 @@ pub mod lexer {
             self.produce_token(
                 Type::Integer,
                 Rule::new(self.text())
-                    .and_maybe(|rule| rule.char('0').char_fn(|c| "xdob".contains(c)))
-                    .and_many(|this| this.char_fn(|c| c.is_ascii_hexdigit()))
+                    .and_one_of(&[
+                        &|rule| rule.str("0x").and_any(Rule::hex_digit),
+                        &|rule| rule.str("0d").and_any(Rule::dec_digit),
+                        &|rule| rule.str("0o").and_any(Rule::oct_digit),
+                        &|rule| rule.str("0b").and_any(Rule::bin_digit),
+                        &|rule| rule.and_many(Rule::dec_digit),
+                    ])
                     .end()?,
             )
         }
@@ -191,6 +198,18 @@ pub mod lexer {
         pub fn xid_continue(self) -> Self {
             use unicode_xid::UnicodeXID;
             self.char_fn(UnicodeXID::is_xid_continue)
+        }
+        pub fn hex_digit(self) -> Self {
+            self.char_fn(|c| c.is_ascii_hexdigit())
+        }
+        pub fn dec_digit(self) -> Self {
+            self.char_fn(|c| c.is_ascii_digit())
+        }
+        pub fn oct_digit(self) -> Self {
+            self.char_between('0', '7')
+        }
+        pub fn bin_digit(self) -> Self {
+            self.char_between('0', '1')
         }
         fn has(self, condition: impl Fn(&Self) -> bool, len: usize) -> Self {
             let len = next_utf8(self.text, len);
@@ -335,7 +354,6 @@ mod tests {
                 assert_whole_input_is_token("10010110", Lexer::integer, Type::Integer);
                 assert_whole_input_is_token("12345670", Lexer::integer, Type::Integer);
                 assert_whole_input_is_token("1234567890", Lexer::integer, Type::Integer);
-                assert_whole_input_is_token("123456789ABCDEF0", Lexer::integer, Type::Integer);
             }
             #[test]
             fn base16() {
