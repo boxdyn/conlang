@@ -60,35 +60,44 @@ pub mod lexer {
             self.cursor += len;
             Some(Token::new(ty, start, self.cursor))
         }
+        fn text(&self) -> &str {
+            &self.text[self.cursor..]
+        }
+        fn skip_whitespace(&mut self) {
+            self.cursor += Rule::new(self.text).whitespace().end().unwrap_or_default()
+        }
         // functions for lexing individual tokens
         pub fn line_comment(&mut self) -> Option<Token> {
             // line_comment := "//" ~ (^newline)*
+            self.skip_whitespace();
             self.produce_token(
                 Type::Comment,
-                Rule::new(self.text)
-                    .take_str("//")
-                    .and_any(|rule| rule.take_except_char('\n'))
+                Rule::new(self.text())
+                    .str("//")
+                    .and_any(|rule| rule.not_char('\n'))
                     .end()?,
             )
         }
         pub fn block_comment(&mut self) -> Option<Token> {
             // block_comment := "/*" ~ (block_comment | all_but("*/"))* ~ "*/"
+            self.skip_whitespace();
             self.produce_token(
                 Type::Comment,
-                Rule::new(self.text)
-                    .take_str("/*")
-                    .and_any(|rule| rule.take_except_str("*/"))
-                    .take_str("*/")
+                Rule::new(self.text())
+                    .str("/*")
+                    .and_any(|rule| rule.not_str("*/"))
+                    .str("*/")
                     .end()?,
             )
         }
         pub fn shebang_comment(&mut self) -> Option<Token> {
             // shebang_comment := "#!/" ~ (^newline)*
+            self.skip_whitespace();
             self.produce_token(
                 Type::Comment,
-                Rule::new(self.text)
-                    .take_str("#!/")
-                    .and_any(|rule| rule.take_except_char('\n'))
+                Rule::new(self.text())
+                    .str("#!/")
+                    .and_any(|rule| rule.not_char('\n'))
                     .end()?,
             )
         }
@@ -107,28 +116,44 @@ pub mod lexer {
         pub fn end(self) -> Option<usize> {
             self.is_alright.then_some(self.taken)
         }
+        pub fn remaining(&self) -> &str {
+            self.text
+        }
     }
 
     impl<'t> Rule<'t> {
-        pub fn take_char(self, c: char) -> Self {
-            self.take(|this| this.text.starts_with(c), 1)
+        pub fn char_between(self, start: char, end: char) -> Self {
+            self.char_fn(|c| start <= c && c <= end)
         }
-        pub fn take_except_char(self, c: char) -> Self {
-            self.take(|this| !this.text.starts_with(c), 1)
+        pub fn char(self, c: char) -> Self {
+            self.has(|rule| rule.text.starts_with(c), 1)
         }
-        pub fn take_str(self, s: &str) -> Self {
-            self.take(|this| this.text.starts_with(s), s.len())
+        pub fn str(self, s: &str) -> Self {
+            self.has(|rule| rule.text.starts_with(s), s.len())
         }
-        pub fn take_except_str(self, s: &str) -> Self {
-            self.take(|this| !this.text.starts_with(s), 1)
+        pub fn char_fn(self, f: impl Fn(char) -> bool) -> Self {
+            self.and(|rule| match rule.text.strip_prefix(&f) {
+                Some(text) => Self { text, taken: rule.taken + next_utf8(rule.text, 1), ..rule },
+                None => Self { is_alright: false, ..rule },
+            })
         }
-        pub fn take_any(self) -> Self {
-            self.take(|_| true, 1)
+        pub fn not_char(self, c: char) -> Self {
+            self.has(|rule| !rule.text.starts_with(c), 1)
         }
-        fn take(self, condition: impl Fn(&Self) -> bool, len: usize) -> Self {
-            self.and(|this| match condition(&this) && !this.text.is_empty() {
-                true => Self { text: &this.text[len..], taken: this.taken + len, ..this },
-                false => Self { is_alright: false, ..this },
+        pub fn not_str(self, s: &str) -> Self {
+            self.has(|rule| !rule.text.starts_with(s), 1)
+        }
+        pub fn any(self) -> Self {
+            self.has(|_| true, 1)
+        }
+        pub fn whitespace(self) -> Self {
+            self.and_any(|rule| rule.char_fn(|c| c.is_whitespace()))
+        }
+        fn has(self, condition: impl Fn(&Self) -> bool, len: usize) -> Self {
+            let len = next_utf8(self.text, len);
+            self.and(|rule| match condition(&rule) && !rule.text.is_empty() {
+                true => Self { text: &rule.text[len..], taken: rule.taken + len, ..rule },
+                false => Self { is_alright: false, ..rule },
             })
         }
     }
@@ -140,6 +165,15 @@ pub mod lexer {
         fn into_alright(self) -> Self {
             Self { is_alright: true, ..self }
         }
+    }
+
+    /// Returns the index of the next unicode character, rounded up
+    fn next_utf8(text: &str, mut index: usize) -> usize {
+        index = index.min(text.len());
+        while !text.is_char_boundary(index) {
+            index += 1
+        }
+        index
     }
 }
 
@@ -156,12 +190,12 @@ mod tests {
     mod token {
         use crate::token::*;
         #[test]
-        fn token_type_is_stored() {
-            let t = Token::new(Type::Comment, 0, 10);
-            assert_eq!(t.ty(), Type::Comment);
+        fn token_has_type() {
+            assert_eq!(Token::new(Type::Comment, 0, 10).ty(), Type::Comment);
+            assert_eq!(Token::new(Type::Identifier, 0, 10).ty(), Type::Identifier);
         }
         #[test]
-        fn token_range_is_stored() {
+        fn token_has_range() {
             let t = Token::new(Type::Comment, 0, 10);
             assert_eq!(t.range(), 0..10);
         }
@@ -175,16 +209,25 @@ mod tests {
             token::{Token, Type},
         };
 
-        fn assert_whole_input_is_token<'t, F>(input: &'t str, operation: F, output_type: Type)
+        fn assert_whole_input_is_token<'t, F>(input: &'t str, f: F, ty: Type)
         where F: FnOnce(&mut Lexer<'t>) -> Option<Token> {
-            assert_eq!(
-                operation(&mut Lexer::new(input)),
-                Some(Token::new(output_type, 0, input.len()))
-            );
+            assert_has_type_and_len(input, f, ty, input.len())
         }
+        fn assert_has_type_and_len<'t, F>(input: &'t str, f: F, ty: Type, len: usize)
+        where F: FnOnce(&mut Lexer<'t>) -> Option<Token> {
+            assert_eq!(Some(Token::new(ty, 0, len)), f(&mut Lexer::new(input)),)
+        }
+
+        mod comment {
+            use super::*;
+
         #[test]
         fn line_comment() {
-            assert_whole_input_is_token("// this is a comment", Lexer::line_comment, Type::Comment);
+                assert_whole_input_is_token(
+                    "// this is a comment",
+                    Lexer::line_comment,
+                    Type::Comment,
+                );
         }
         #[test]
         #[should_panic]
@@ -216,6 +259,7 @@ mod tests {
         #[should_panic]
         fn not_shebang_comment() {
             assert_whole_input_is_token("fn main() {}", Lexer::shebang_comment, Type::Comment);
+            }
         }
     }
     mod parser {
