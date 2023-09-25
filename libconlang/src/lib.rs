@@ -189,7 +189,7 @@ pub mod lexer {
             self.has(|_| true, 1)
         }
         pub fn whitespace(self) -> Self {
-            self.and_any(|rule| rule.char_fn(|c| c.is_whitespace()))
+            self.char_fn(|c| c.is_whitespace())
         }
         pub fn xid_start(self) -> Self {
             use unicode_xid::UnicodeXID;
