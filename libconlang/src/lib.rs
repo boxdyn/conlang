@@ -10,6 +10,7 @@ pub mod token {
         Comment,
         Identifier,
         Integer,
+        String,
     }
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub struct Token {
@@ -121,6 +122,17 @@ pub mod lexer {
                 Rule::new(self.text())
                     .and_maybe(|rule| rule.char('0').char_fn(|c| "xdob".contains(c)))
                     .and_many(|this| this.char_fn(|c| c.is_ascii_hexdigit()))
+                    .end()?,
+            )
+        }
+        pub fn string(&mut self) -> Option<Token> {
+            self.skip_whitespace();
+            self.produce_token(
+                Type::String,
+                Rule::new(self.text())
+                    .char('"')
+                    .and_any(|rule| rule.str(r#"\""#).or(|rule| rule.not_char('"')))
+                    .char('"')
                     .end()?,
             )
         }
@@ -341,6 +353,25 @@ mod tests {
             #[test]
             fn base2() {
                 assert_whole_input_is_token("0b1010", Lexer::integer, Type::Integer);
+            }
+        }
+        mod string {
+            use super::*;
+            #[test]
+            fn empty_string() {
+                assert_whole_input_is_token("\"\"", Lexer::string, Type::String);
+            }
+            #[test]
+            fn unicode_string() {
+                assert_whole_input_is_token("\"I 💙 🦈!\"", Lexer::string, Type::String);
+            }
+            #[test]
+            fn escape_string() {
+                assert_whole_input_is_token(
+                    r#"" \"This is a quote\" ""#,
+                    Lexer::string,
+                    Type::String,
+                );
             }
         }
     }
