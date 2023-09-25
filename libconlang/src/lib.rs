@@ -264,44 +264,44 @@ mod tests {
         mod comment {
             use super::*;
 
-        #[test]
-        fn line_comment() {
+            #[test]
+            fn line_comment() {
                 assert_whole_input_is_token(
                     "// this is a comment",
                     Lexer::line_comment,
                     Type::Comment,
                 );
-        }
-        #[test]
-        #[should_panic]
-        fn not_line_comment() {
-            assert_whole_input_is_token("fn main() {}", Lexer::line_comment, Type::Comment);
-        }
-        #[test]
-        fn block_comment() {
-            assert_whole_input_is_token(
-                "/* this is a comment */",
-                Lexer::block_comment,
-                Type::Comment,
-            );
-        }
-        #[test]
-        #[should_panic]
-        fn not_block_comment() {
-            assert_whole_input_is_token("fn main() {}", Lexer::block_comment, Type::Comment);
-        }
-        #[test]
-        fn shebang_comment() {
-            assert_whole_input_is_token(
-                "#!/ this is a comment",
-                Lexer::shebang_comment,
-                Type::Comment,
-            );
-        }
-        #[test]
-        #[should_panic]
-        fn not_shebang_comment() {
-            assert_whole_input_is_token("fn main() {}", Lexer::shebang_comment, Type::Comment);
+            }
+            #[test]
+            #[should_panic]
+            fn not_line_comment() {
+                assert_whole_input_is_token("fn main() {}", Lexer::line_comment, Type::Comment);
+            }
+            #[test]
+            fn block_comment() {
+                assert_whole_input_is_token(
+                    "/* this is a comment */",
+                    Lexer::block_comment,
+                    Type::Comment,
+                );
+            }
+            #[test]
+            #[should_panic]
+            fn not_block_comment() {
+                assert_whole_input_is_token("fn main() {}", Lexer::block_comment, Type::Comment);
+            }
+            #[test]
+            fn shebang_comment() {
+                assert_whole_input_is_token(
+                    "#!/ this is a comment",
+                    Lexer::shebang_comment,
+                    Type::Comment,
+                );
+            }
+            #[test]
+            #[should_panic]
+            fn not_shebang_comment() {
+                assert_whole_input_is_token("fn main() {}", Lexer::shebang_comment, Type::Comment);
             }
         }
         mod identifier {
