@@ -8,6 +8,7 @@ pub mod token {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Type {
         Comment,
+        Identifier,
     }
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub struct Token {
@@ -101,6 +102,17 @@ pub mod lexer {
                     .end()?,
             )
         }
+        pub fn identifier(&mut self) -> Option<Token> {
+            self.skip_whitespace();
+            self.produce_token(
+                Type::Identifier,
+                Rule::new(self.text())
+                    .char('_')
+                    .or(Rule::xid_start)
+                    .and_any(Rule::xid_continue)
+                    .end()?,
+            )
+        }
     }
 
     #[derive(Clone, Debug, PartialEq, Eq)]
@@ -148,6 +160,14 @@ pub mod lexer {
         }
         pub fn whitespace(self) -> Self {
             self.and_any(|rule| rule.char_fn(|c| c.is_whitespace()))
+        }
+        pub fn xid_start(self) -> Self {
+            use unicode_xid::UnicodeXID;
+            self.char_fn(UnicodeXID::is_xid_start)
+        }
+        pub fn xid_continue(self) -> Self {
+            use unicode_xid::UnicodeXID;
+            self.char_fn(UnicodeXID::is_xid_continue)
         }
         fn has(self, condition: impl Fn(&Self) -> bool, len: usize) -> Self {
             let len = next_utf8(self.text, len);
@@ -259,6 +279,30 @@ mod tests {
         #[should_panic]
         fn not_shebang_comment() {
             assert_whole_input_is_token("fn main() {}", Lexer::shebang_comment, Type::Comment);
+            }
+        }
+        mod identifier {
+            use super::*;
+
+            #[test]
+            fn identifier() {
+                assert_whole_input_is_token(
+                    "valid_identifier",
+                    Lexer::identifier,
+                    Type::Identifier,
+                );
+                assert_whole_input_is_token("_0", Lexer::identifier, Type::Identifier);
+                assert_whole_input_is_token("_", Lexer::identifier, Type::Identifier);
+            }
+            #[test]
+            fn unicode_identifier() {
+                assert_whole_input_is_token("ζ_ζζζ_ζζζ_ζζζ", Lexer::identifier, Type::Identifier);
+                assert_whole_input_is_token("_ζζζ_ζζζ_ζζζ_", Lexer::identifier, Type::Identifier);
+            }
+            #[test]
+            #[should_panic]
+            fn not_identifier() {
+                assert_whole_input_is_token("123456789", Lexer::identifier, Type::Identifier);
             }
         }
     }

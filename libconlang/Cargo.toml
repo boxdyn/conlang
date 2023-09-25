@@ -9,3 +9,4 @@ license.workspace = true
 
 [dependencies]
 lerox ={ path = "../lerox" }
+unicode-xid = "0.2.4"
