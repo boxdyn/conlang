@@ -21,6 +21,13 @@ pub mod token {
         LitInteger,
         LitFloat,
         LitString,
+        // Delimiters
+        LCurly,
+        RCurly,
+        LBrack,
+        RBrack,
+        LParen,
+        RParen,
     }
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,6 +98,7 @@ pub mod lexer {
                 .or_else(|| self.keyword())
                 .or_else(|| self.identifier())
                 .or_else(|| self.literal())
+                .or_else(|| self.delimiter())
         }
         pub fn keyword(&mut self) -> Option<Token> {
             None.or_else(|| self.kw_else())
@@ -105,6 +113,14 @@ pub mod lexer {
             None.or_else(|| self.lit_string())
                 .or_else(|| self.lit_float())
                 .or_else(|| self.lit_integer())
+        }
+        pub fn delimiter(&mut self) -> Option<Token> {
+            None.or_else(|| self.l_brack())
+                .or_else(|| self.r_brack())
+                .or_else(|| self.l_curly())
+                .or_else(|| self.r_curly())
+                .or_else(|| self.l_paren())
+                .or_else(|| self.r_paren())
         }
         // functions for lexing individual tokens
         // comments
@@ -158,6 +174,31 @@ pub mod lexer {
         pub fn lit_string(&mut self) -> Option<Token> {
             self.skip_whitespace();
             self.produce_token(Type::LitString, Rule::new(self.text()).string().end()?)
+        }
+        // delimiters
+        pub fn l_brack(&mut self) -> Option<Token> {
+            self.skip_whitespace();
+            self.produce_token(Type::LBrack, Rule::new(self.text()).char('[').end()?)
+        }
+        pub fn r_brack(&mut self) -> Option<Token> {
+            self.skip_whitespace();
+            self.produce_token(Type::RBrack, Rule::new(self.text()).char(']').end()?)
+        }
+        pub fn l_curly(&mut self) -> Option<Token> {
+            self.skip_whitespace();
+            self.produce_token(Type::LCurly, Rule::new(self.text()).char('{').end()?)
+        }
+        pub fn r_curly(&mut self) -> Option<Token> {
+            self.skip_whitespace();
+            self.produce_token(Type::RCurly, Rule::new(self.text()).char('}').end()?)
+        }
+        pub fn l_paren(&mut self) -> Option<Token> {
+            self.skip_whitespace();
+            self.produce_token(Type::LParen, Rule::new(self.text()).char('(').end()?)
+        }
+        pub fn r_paren(&mut self) -> Option<Token> {
+            self.skip_whitespace();
+            self.produce_token(Type::RParen, Rule::new(self.text()).char(')').end()?)
         }
     }
 
@@ -559,6 +600,34 @@ mod tests {
                     Lexer::lit_string,
                     Type::LitString,
                 );
+            }
+        }
+        mod delimiter {
+            use super::*;
+            #[test]
+            fn l_brack() {
+                assert_whole_input_is_token("[", Lexer::l_brack, Type::LBrack);
+            }
+            #[test]
+            fn r_brack() {
+                assert_whole_input_is_token("]", Lexer::r_brack, Type::RBrack);
+            }
+            #[test]
+            fn l_curly() {
+                assert_whole_input_is_token("{", Lexer::l_curly, Type::LCurly);
+            }
+            #[test]
+            fn r_curly() {
+                assert_whole_input_is_token("}", Lexer::r_curly, Type::RCurly);
+            }
+
+            #[test]
+            fn l_paren() {
+                assert_whole_input_is_token("(", Lexer::l_paren, Type::LParen);
+            }
+            #[test]
+            fn r_paren() {
+                assert_whole_input_is_token(")", Lexer::r_paren, Type::RParen);
             }
         }
     }
