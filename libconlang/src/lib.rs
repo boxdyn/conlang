@@ -9,6 +9,14 @@ pub mod token {
     pub enum Type {
         Comment,
         Identifier,
+        // Keywords
+        KwElse,
+        KwFor,
+        KwFn,
+        KwIf,
+        KwIn,
+        KwLet,
+        KwWhile,
         // Literals
         LitInteger,
         LitFloat,
@@ -80,8 +88,18 @@ pub mod lexer {
         // classifies a single arbitrary token
         pub fn any(&mut self) -> Option<Token> {
             None.or_else(|| self.comment())
+                .or_else(|| self.keyword())
                 .or_else(|| self.identifier())
                 .or_else(|| self.literal())
+        }
+        pub fn keyword(&mut self) -> Option<Token> {
+            None.or_else(|| self.kw_else())
+                .or_else(|| self.kw_for())
+                .or_else(|| self.kw_fn())
+                .or_else(|| self.kw_if())
+                .or_else(|| self.kw_in())
+                .or_else(|| self.kw_let())
+                .or_else(|| self.kw_while())
         }
         pub fn literal(&mut self) -> Option<Token> {
             None.or_else(|| self.lit_string())
@@ -93,6 +111,35 @@ pub mod lexer {
         pub fn comment(&mut self) -> Option<Token> {
             self.skip_whitespace();
             self.produce_token(Type::Comment, Rule::new(self.text()).comment().end()?)
+        }
+        // keywords
+        pub fn kw_else(&mut self) -> Option<Token> {
+            self.skip_whitespace();
+            self.produce_token(Type::KwElse, Rule::new(self.text()).str("else").end()?)
+        }
+        pub fn kw_for(&mut self) -> Option<Token> {
+            self.skip_whitespace();
+            self.produce_token(Type::KwFor, Rule::new(self.text()).str("for").end()?)
+        }
+        pub fn kw_fn(&mut self) -> Option<Token> {
+            self.skip_whitespace();
+            self.produce_token(Type::KwFn, Rule::new(self.text()).str("fn").end()?)
+        }
+        pub fn kw_if(&mut self) -> Option<Token> {
+            self.skip_whitespace();
+            self.produce_token(Type::KwIf, Rule::new(self.text()).str("if").end()?)
+        }
+        pub fn kw_in(&mut self) -> Option<Token> {
+            self.skip_whitespace();
+            self.produce_token(Type::KwIn, Rule::new(self.text()).str("in").end()?)
+        }
+        pub fn kw_let(&mut self) -> Option<Token> {
+            self.skip_whitespace();
+            self.produce_token(Type::KwLet, Rule::new(self.text()).str("let").end()?)
+        }
+        pub fn kw_while(&mut self) -> Option<Token> {
+            self.skip_whitespace();
+            self.produce_token(Type::KwWhile, Rule::new(self.text()).str("while").end()?)
         }
         // identifiers
         pub fn identifier(&mut self) -> Option<Token> {
@@ -385,6 +432,38 @@ mod tests {
             #[should_panic]
             fn not_shebang_comment() {
                 assert_whole_input_is_token("fn main() {}", Lexer::comment, Type::Comment);
+            }
+        }
+        mod keyword {
+            use super::*;
+            #[test]
+            fn kw_else() {
+                assert_whole_input_is_token("else", Lexer::kw_else, Type::KwElse);
+                assert_has_type_and_range("  else  ", Lexer::kw_else, Type::KwElse, 2..6);
+            }
+            #[test]
+            fn kw_for() {
+                assert_whole_input_is_token("for", Lexer::kw_for, Type::KwFor);
+            }
+            #[test]
+            fn kw_fn() {
+                assert_whole_input_is_token("fn", Lexer::kw_fn, Type::KwFn);
+            }
+            #[test]
+            fn kw_if() {
+                assert_whole_input_is_token("if", Lexer::kw_if, Type::KwIf);
+            }
+            #[test]
+            fn kw_in() {
+                assert_whole_input_is_token("in", Lexer::kw_in, Type::KwIn);
+            }
+            #[test]
+            fn kw_let() {
+                assert_whole_input_is_token("let", Lexer::kw_let, Type::KwLet);
+            }
+            #[test]
+            fn kw_while() {
+                assert_whole_input_is_token("while", Lexer::kw_while, Type::KwWhile);
             }
         }
         mod identifier {
