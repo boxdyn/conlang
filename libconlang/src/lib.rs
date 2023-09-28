@@ -5,6 +5,7 @@ pub mod token {
     //! Stores a component of a file as a type and span
     use std::ops::Range;
 
+    mod token_type;
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Type {
         Invalid,

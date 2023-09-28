@@ -9,7 +9,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let line = line?;
         let mut lexer = Lexer::new(&line);
         while let Some(token) = lexer.any() {
-            println!("{:?}: {}", token, &line[token.range()])
+            println!("{:#19} │{}│", token.ty(), &line[token.range()])
         }
     }
     Ok(())
