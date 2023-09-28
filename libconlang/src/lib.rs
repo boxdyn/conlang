@@ -11,12 +11,15 @@ pub mod token {
         Comment,
         Identifier,
         // Keywords
+        KwBreak,
         KwElse,
+        KwFalse,
         KwFor,
         KwFn,
         KwIf,
         KwIn,
         KwLet,
+        KwTrue,
         KwWhile,
         // Literals
         LitInteger,
@@ -151,12 +154,15 @@ pub mod lexer {
         }
         /// Attempts to produce a Keyword
         pub fn keyword(&mut self) -> Option<Token> {
-            None.or_else(|| self.kw_else())
+            None.or_else(|| self.kw_break())
+                .or_else(|| self.kw_else())
+                .or_else(|| self.kw_false())
                 .or_else(|| self.kw_for())
                 .or_else(|| self.kw_fn())
                 .or_else(|| self.kw_if())
                 .or_else(|| self.kw_in())
                 .or_else(|| self.kw_let())
+                .or_else(|| self.kw_true())
                 .or_else(|| self.kw_while())
         }
         /// Attempts to produce a [Type::LitString], [Type::LitFloat], or [Type::LitInteger]
@@ -230,8 +236,14 @@ pub mod lexer {
             self.map_rule(|r| r.comment(), Type::Comment)
         }
         // keywords
+        pub fn kw_break(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("break"), Type::KwBreak)
+        }
         pub fn kw_else(&mut self) -> Option<Token> {
             self.map_rule(|r| r.str("else"), Type::KwElse)
+        }
+        pub fn kw_false(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("false"), Type::KwFalse)
         }
         pub fn kw_for(&mut self) -> Option<Token> {
             self.map_rule(|r| r.str("for"), Type::KwFor)
@@ -247,6 +259,9 @@ pub mod lexer {
         }
         pub fn kw_let(&mut self) -> Option<Token> {
             self.map_rule(|r| r.str("let"), Type::KwLet)
+        }
+        pub fn kw_true(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("true"), Type::KwTrue)
         }
         pub fn kw_while(&mut self) -> Option<Token> {
             self.map_rule(|r| r.str("while"), Type::KwWhile)
@@ -696,9 +711,17 @@ mod tests {
         mod keyword {
             use super::*;
             #[test]
+            fn kw_break() {
+                assert_whole_input_is_token("break", Lexer::kw_break, Type::KwBreak);
+            }
+            #[test]
             fn kw_else() {
                 assert_whole_input_is_token("else", Lexer::kw_else, Type::KwElse);
                 assert_has_type_and_range("  else  ", Lexer::kw_else, Type::KwElse, 2..6);
+            }
+            #[test]
+            fn kw_false() {
+                assert_whole_input_is_token("false", Lexer::kw_false, Type::KwFalse);
             }
             #[test]
             fn kw_for() {
@@ -719,6 +742,10 @@ mod tests {
             #[test]
             fn kw_let() {
                 assert_whole_input_is_token("let", Lexer::kw_let, Type::KwLet);
+            }
+            #[test]
+            fn kw_true() {
+                assert_whole_input_is_token("true", Lexer::kw_true, Type::KwTrue);
             }
             #[test]
             fn kw_while() {
