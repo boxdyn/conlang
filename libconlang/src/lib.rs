@@ -29,6 +29,49 @@ pub mod token {
         RBrack,
         LParen,
         RParen,
+        // Compound punctuation
+        Lsh,
+        Rsh,
+        AndAnd,
+        OrOr,
+        NotNot,
+        CatEar,
+        EqEq,
+        NotEq,
+        StarEq,
+        DivEq,
+        AddEq,
+        SubEq,
+        AndEq,
+        OrEq,
+        XorEq,
+        LshEq,
+        RshEq,
+        Arrow,
+        FatArrow,
+        // Simple punctuation
+        Semi,
+        Dot,
+        Star,
+        Div,
+        Plus,
+        Minus,
+        Rem,
+        Bang,
+        Eq,
+        Lt,
+        Gt,
+        Amp,
+        Bar,
+        Xor,
+        Hash,
+        At,
+        Colon,
+        Backslash,
+        Question,
+        Comma,
+        Tilde,
+        Grave,
     }
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -131,6 +174,53 @@ pub mod lexer {
                 .or_else(|| self.l_paren())
                 .or_else(|| self.r_paren())
         }
+        /// Evaluates punctuation rules
+        pub fn punctuation(&mut self) -> Option<Token> {
+            None.or_else(|| self.lsh())
+                .or_else(|| self.rsh())
+                .or_else(|| self.and_and())
+                .or_else(|| self.or_or())
+                .or_else(|| self.not_not())
+                .or_else(|| self.cat_ear())
+                .or_else(|| self.eq_eq())
+                .or_else(|| self.not_eq())
+                .or_else(|| self.star_eq())
+                .or_else(|| self.div_eq())
+                .or_else(|| self.add_eq())
+                .or_else(|| self.sub_eq())
+                .or_else(|| self.and_eq())
+                .or_else(|| self.or_eq())
+                .or_else(|| self.xor_eq())
+                .or_else(|| self.lsh_eq())
+                .or_else(|| self.rsh_eq())
+                .or_else(|| self.arrow())
+                .or_else(|| self.fatarrow())
+                .or_else(|| self.semi())
+                .or_else(|| self.dot())
+                .or_else(|| self.star())
+                .or_else(|| self.div())
+                .or_else(|| self.plus())
+                .or_else(|| self.sub())
+                .or_else(|| self.rem())
+                .or_else(|| self.bang())
+                .or_else(|| self.eq())
+                .or_else(|| self.lt())
+                .or_else(|| self.gt())
+                .or_else(|| self.amp())
+                .or_else(|| self.bar())
+                .or_else(|| self.xor())
+                .or_else(|| self.hash())
+                .or_else(|| self.at())
+                .or_else(|| self.colon())
+                .or_else(|| self.backslash())
+                .or_else(|| self.question())
+                .or_else(|| self.comma())
+                .or_else(|| self.tilde())
+                .or_else(|| self.grave())
+        }
+        pub fn unary_op(&mut self) -> Option<Token> {
+            self.bang().or_else(|| self.sub())
+        }
         // functions for lexing individual tokens
         pub fn invalid(&mut self) -> Option<Token> {
             self.map_rule(|r| r.invalid(), Type::Invalid)
@@ -193,6 +283,131 @@ pub mod lexer {
         }
         pub fn r_paren(&mut self) -> Option<Token> {
             self.map_rule(|r| r.char(')'), Type::RParen)
+        }
+        // compound punctuation
+        pub fn lsh(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("<<"), Type::Lsh)
+        }
+        pub fn rsh(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str(">>"), Type::Rsh)
+        }
+        pub fn and_and(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("&&"), Type::AndAnd)
+        }
+        pub fn or_or(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("||"), Type::OrOr)
+        }
+        pub fn not_not(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("!!"), Type::NotNot)
+        }
+        pub fn cat_ear(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("^^"), Type::CatEar)
+        }
+        pub fn eq_eq(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("=="), Type::EqEq)
+        }
+        pub fn not_eq(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("!="), Type::NotEq)
+        }
+        pub fn star_eq(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("*="), Type::StarEq)
+        }
+        pub fn div_eq(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("/="), Type::DivEq)
+        }
+        pub fn add_eq(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("+="), Type::AddEq)
+        }
+        pub fn sub_eq(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("-="), Type::SubEq)
+        }
+        pub fn and_eq(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("&="), Type::AndEq)
+        }
+        pub fn or_eq(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("|="), Type::OrEq)
+        }
+        pub fn xor_eq(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("^="), Type::XorEq)
+        }
+        pub fn lsh_eq(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("<<="), Type::LshEq)
+        }
+        pub fn rsh_eq(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str(">>="), Type::RshEq)
+        }
+        pub fn arrow(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("->"), Type::Arrow)
+        }
+        pub fn fatarrow(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("=>"), Type::FatArrow)
+        }
+        // simple punctuation
+        pub fn semi(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char(';'), Type::Semi)
+        }
+        pub fn dot(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('.'), Type::Dot)
+        }
+        pub fn star(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('*'), Type::Star)
+        }
+        pub fn div(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('/'), Type::Div)
+        }
+        pub fn plus(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('+'), Type::Plus)
+        }
+        pub fn sub(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('-'), Type::Minus)
+        }
+        pub fn rem(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('%'), Type::Rem)
+        }
+        pub fn bang(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('!'), Type::Bang)
+        }
+        pub fn eq(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('='), Type::Eq)
+        }
+        pub fn lt(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('<'), Type::Lt)
+        }
+        pub fn gt(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('>'), Type::Gt)
+        }
+        pub fn amp(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('&'), Type::Amp)
+        }
+        pub fn bar(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('|'), Type::Bar)
+        }
+        pub fn xor(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('^'), Type::Xor)
+        }
+        pub fn hash(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('#'), Type::Hash)
+        }
+        pub fn at(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('@'), Type::At)
+        }
+        pub fn colon(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char(':'), Type::Colon)
+        }
+        pub fn question(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('?'), Type::Question)
+        }
+        pub fn comma(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char(','), Type::Comma)
+        }
+        pub fn tilde(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('~'), Type::Tilde)
+        }
+        pub fn grave(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('`'), Type::Grave)
+        }
+        pub fn backslash(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.char('\\'), Type::Backslash)
         }
     }
 
@@ -649,6 +864,199 @@ mod tests {
             #[test]
             fn r_paren() {
                 assert_whole_input_is_token(")", Lexer::r_paren, Type::RParen);
+            }
+        }
+        mod punctuation {
+            use super::*;
+            mod compound {
+                use super::*;
+
+                #[test]
+                fn lsh() {
+                    assert_whole_input_is_token("<<", Lexer::lsh, Type::Lsh)
+                }
+                #[test]
+                fn rsh() {
+                    assert_whole_input_is_token(">>", Lexer::rsh, Type::Rsh)
+                }
+                #[test]
+                fn and_and() {
+                    assert_whole_input_is_token("&&", Lexer::and_and, Type::AndAnd)
+                }
+                #[test]
+                fn or_or() {
+                    assert_whole_input_is_token("||", Lexer::or_or, Type::OrOr)
+                }
+                #[test]
+                fn not_not() {
+                    assert_whole_input_is_token("!!", Lexer::not_not, Type::NotNot)
+                }
+                #[test]
+                fn cat_ear() {
+                    assert_whole_input_is_token("^^", Lexer::cat_ear, Type::CatEar)
+                }
+                #[test]
+                fn eq_eq() {
+                    assert_whole_input_is_token("==", Lexer::eq_eq, Type::EqEq)
+                }
+                #[test]
+                fn not_eq() {
+                    assert_whole_input_is_token("!=", Lexer::not_eq, Type::NotEq)
+                }
+                #[test]
+                fn star_eq() {
+                    assert_whole_input_is_token("*=", Lexer::star_eq, Type::StarEq)
+                }
+                #[test]
+                fn div_eq() {
+                    assert_whole_input_is_token("/=", Lexer::div_eq, Type::DivEq)
+                }
+                #[test]
+                fn add_eq() {
+                    assert_whole_input_is_token("+=", Lexer::add_eq, Type::AddEq)
+                }
+                #[test]
+                fn sub_eq() {
+                    assert_whole_input_is_token("-=", Lexer::sub_eq, Type::SubEq)
+                }
+                #[test]
+                fn and_eq() {
+                    assert_whole_input_is_token("&=", Lexer::and_eq, Type::AndEq)
+                }
+                #[test]
+                fn or_eq() {
+                    assert_whole_input_is_token("|=", Lexer::or_eq, Type::OrEq)
+                }
+                #[test]
+                fn xor_eq() {
+                    assert_whole_input_is_token("^=", Lexer::xor_eq, Type::XorEq)
+                }
+                #[test]
+                fn lsh_eq() {
+                    assert_whole_input_is_token("<<=", Lexer::lsh_eq, Type::LshEq)
+                }
+                #[test]
+                fn rsh_eq() {
+                    assert_whole_input_is_token(">>=", Lexer::rsh_eq, Type::RshEq)
+                }
+            }
+
+            mod simple {
+                use super::*;
+                #[test]
+                fn punctuation_class() {
+                    assert_whole_input_is_token(";", Lexer::punctuation, Type::Semi);
+                    assert_whole_input_is_token(".", Lexer::punctuation, Type::Dot);
+                    assert_whole_input_is_token("*", Lexer::punctuation, Type::Star);
+                    assert_whole_input_is_token("/", Lexer::punctuation, Type::Div);
+                    assert_whole_input_is_token("+", Lexer::punctuation, Type::Plus);
+                    assert_whole_input_is_token("-", Lexer::punctuation, Type::Minus);
+                    assert_whole_input_is_token("%", Lexer::punctuation, Type::Rem);
+                    assert_whole_input_is_token("!", Lexer::punctuation, Type::Bang);
+                    assert_whole_input_is_token("=", Lexer::punctuation, Type::Eq);
+                    assert_whole_input_is_token("<", Lexer::punctuation, Type::Lt);
+                    assert_whole_input_is_token(">", Lexer::punctuation, Type::Gt);
+                    assert_whole_input_is_token("&", Lexer::punctuation, Type::Amp);
+                    assert_whole_input_is_token("|", Lexer::punctuation, Type::Bar);
+                    assert_whole_input_is_token("^", Lexer::punctuation, Type::Xor);
+                    assert_whole_input_is_token("#", Lexer::punctuation, Type::Hash);
+                    assert_whole_input_is_token("@", Lexer::punctuation, Type::At);
+                    assert_whole_input_is_token(":", Lexer::punctuation, Type::Colon);
+                    assert_whole_input_is_token("?", Lexer::punctuation, Type::Question);
+                    assert_whole_input_is_token(",", Lexer::punctuation, Type::Comma);
+                    assert_whole_input_is_token("~", Lexer::punctuation, Type::Tilde);
+                    assert_whole_input_is_token("`", Lexer::punctuation, Type::Grave);
+                    assert_whole_input_is_token("\\", Lexer::punctuation, Type::Backslash);
+                }
+                // individual functions below
+                #[test]
+                fn semi() {
+                    assert_whole_input_is_token(";", Lexer::semi, Type::Semi)
+                }
+                #[test]
+                fn dot() {
+                    assert_whole_input_is_token(".", Lexer::dot, Type::Dot)
+                }
+                #[test]
+                fn star() {
+                    assert_whole_input_is_token("*", Lexer::star, Type::Star)
+                }
+                #[test]
+                fn div() {
+                    assert_whole_input_is_token("/", Lexer::div, Type::Div)
+                }
+                #[test]
+                fn plus() {
+                    assert_whole_input_is_token("+", Lexer::plus, Type::Plus)
+                }
+                #[test]
+                fn minus() {
+                    assert_whole_input_is_token("-", Lexer::sub, Type::Minus)
+                }
+                #[test]
+                fn rem() {
+                    assert_whole_input_is_token("%", Lexer::rem, Type::Rem)
+                }
+                #[test]
+                fn bang() {
+                    assert_whole_input_is_token("!", Lexer::bang, Type::Bang)
+                }
+                #[test]
+                fn eq() {
+                    assert_whole_input_is_token("=", Lexer::eq, Type::Eq)
+                }
+                #[test]
+                fn lt() {
+                    assert_whole_input_is_token("<", Lexer::lt, Type::Lt)
+                }
+                #[test]
+                fn gt() {
+                    assert_whole_input_is_token(">", Lexer::gt, Type::Gt)
+                }
+                #[test]
+                fn and() {
+                    assert_whole_input_is_token("&", Lexer::amp, Type::Amp)
+                }
+                #[test]
+                fn or() {
+                    assert_whole_input_is_token("|", Lexer::bar, Type::Bar)
+                }
+                #[test]
+                fn xor() {
+                    assert_whole_input_is_token("^", Lexer::xor, Type::Xor)
+                }
+                #[test]
+                fn hash() {
+                    assert_whole_input_is_token("#", Lexer::hash, Type::Hash)
+                }
+                #[test]
+                fn at() {
+                    assert_whole_input_is_token("@", Lexer::at, Type::At)
+                }
+                #[test]
+                fn colon() {
+                    assert_whole_input_is_token(":", Lexer::colon, Type::Colon)
+                }
+                #[test]
+                fn backslash() {
+                    assert_whole_input_is_token("\\", Lexer::backslash, Type::Backslash)
+                }
+                #[test]
+                fn question() {
+                    assert_whole_input_is_token("?", Lexer::question, Type::Question)
+                }
+                #[test]
+                fn comma() {
+                    assert_whole_input_is_token(",", Lexer::comma, Type::Comma)
+                }
+                #[test]
+                fn tilde() {
+                    assert_whole_input_is_token("~", Lexer::tilde, Type::Tilde)
+                }
+                #[test]
+                fn grave() {
+                    assert_whole_input_is_token("`", Lexer::grave, Type::Grave)
+                }
             }
         }
     }
