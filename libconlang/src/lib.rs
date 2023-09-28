@@ -96,14 +96,17 @@ pub mod lexer {
             &self.text[self.cursor..]
         }
         // classifies a single arbitrary token
+        /// Returns the result of the rule with the highest precedence, if any matches
         pub fn any(&mut self) -> Option<Token> {
             None.or_else(|| self.comment())
                 .or_else(|| self.keyword())
                 .or_else(|| self.identifier())
                 .or_else(|| self.literal())
                 .or_else(|| self.delimiter())
+                .or_else(|| self.punctuation())
                 .or_else(|| self.invalid())
         }
+        /// Attempts to produce a Keyword
         pub fn keyword(&mut self) -> Option<Token> {
             None.or_else(|| self.kw_else())
                 .or_else(|| self.kw_for())
@@ -113,11 +116,13 @@ pub mod lexer {
                 .or_else(|| self.kw_let())
                 .or_else(|| self.kw_while())
         }
+        /// Attempts to produce a [Type::LitString], [Type::LitFloat], or [Type::LitInteger]
         pub fn literal(&mut self) -> Option<Token> {
             None.or_else(|| self.lit_string())
                 .or_else(|| self.lit_float())
                 .or_else(|| self.lit_integer())
         }
+        /// Evaluates delimiter rules
         pub fn delimiter(&mut self) -> Option<Token> {
             None.or_else(|| self.l_brack())
                 .or_else(|| self.r_brack())
