@@ -419,7 +419,8 @@ mod tests {
         }
         fn assert_has_type_and_range<'t, F>(input: &'t str, f: F, ty: Type, range: Range<usize>)
         where F: FnOnce(&mut Lexer<'t>) -> Option<Token> {
-            let tok = f(&mut Lexer::new(input)).unwrap();
+            let tok =
+                f(&mut Lexer::new(input)).unwrap_or_else(|| panic!("Should be {ty:?}, {range:?}"));
             assert_eq!(ty, tok.ty());
             assert_eq!(range, tok.range());
         }
@@ -528,7 +529,15 @@ mod tests {
                 assert_whole_input_is_token("123456789", Lexer::identifier, Type::Identifier);
             }
         }
-        mod integer {
+        mod literal {
+            use super::*;
+            #[test]
+            fn literal_class() {
+                assert_whole_input_is_token("1_00000", Lexer::literal, Type::LitInteger);
+                assert_whole_input_is_token("1.00000", Lexer::literal, Type::LitFloat);
+                assert_whole_input_is_token("\"1.0\"", Lexer::literal, Type::LitString);
+            }
+            mod integer {
                 use super::*;
                 #[test]
                 fn bare() {
@@ -599,8 +608,18 @@ mod tests {
                     );
                 }
             }
+        }
         mod delimiter {
             use super::*;
+            #[test]
+            fn delimiter_class() {
+                assert_whole_input_is_token("[", Lexer::delimiter, Type::LBrack);
+                assert_whole_input_is_token("]", Lexer::delimiter, Type::RBrack);
+                assert_whole_input_is_token("{", Lexer::delimiter, Type::LCurly);
+                assert_whole_input_is_token("}", Lexer::delimiter, Type::RCurly);
+                assert_whole_input_is_token("(", Lexer::delimiter, Type::LParen);
+                assert_whole_input_is_token(")", Lexer::delimiter, Type::RParen);
+            }
             #[test]
             fn l_brack() {
                 assert_whole_input_is_token("[", Lexer::l_brack, Type::LBrack);
