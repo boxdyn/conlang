@@ -7,6 +7,7 @@ pub mod token {
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Type {
+        Invalid,
         Comment,
         Identifier,
         // Keywords
@@ -99,6 +100,7 @@ pub mod lexer {
                 .or_else(|| self.identifier())
                 .or_else(|| self.literal())
                 .or_else(|| self.delimiter())
+                .or_else(|| self.invalid())
         }
         pub fn keyword(&mut self) -> Option<Token> {
             None.or_else(|| self.kw_else())
@@ -123,6 +125,10 @@ pub mod lexer {
                 .or_else(|| self.r_paren())
         }
         // functions for lexing individual tokens
+        pub fn invalid(&mut self) -> Option<Token> {
+            self.skip_whitespace();
+            self.produce_token(Type::Invalid, Rule::new(self.text()).invalid().end()?)
+        }
         // comments
         pub fn comment(&mut self) -> Option<Token> {
             self.skip_whitespace();
@@ -222,6 +228,10 @@ pub mod lexer {
     }
 
     impl<'t> Rule<'t> {
+        /// Matches any sequence of non-whitespace characters
+        pub fn invalid(self) -> Self {
+            self.and_many(Self::not_whitespace)
+        }
         /// Matches a block, line, or shebang comment
         pub fn comment(self) -> Self {
             self.and_either(Self::line_comment, Self::block_comment)
@@ -323,6 +333,10 @@ pub mod lexer {
         /// Matches one whitespace
         pub fn whitespace(self) -> Self {
             self.char_fn(|c| c.is_whitespace())
+        }
+        /// Matches anything but whitespace
+        pub fn not_whitespace(self) -> Self {
+            self.char_fn(|c| !c.is_whitespace())
         }
         /// Matches one XID_START
         pub fn xid_start(self) -> Self {
