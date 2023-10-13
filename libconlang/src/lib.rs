@@ -83,22 +83,31 @@ pub mod token {
         ty: Type,
         head: usize,
         tail: usize,
+        line: usize,
+        col: usize,
     }
     impl Token {
-        pub fn new(ty: Type, head: usize, tail: usize) -> Self {
-            Self { ty, head, tail }
+        pub fn new(ty: Type, head: usize, tail: usize, line: usize, col: usize) -> Self {
+            Self { ty, head, tail, line, col }
+        }
+        pub fn line(&self) -> usize {
+            self.line
+        }
+        pub fn col(&self) -> usize {
+            self.col
         }
         pub fn is_empty(&self) -> bool {
             self.tail == self.head
         }
+        /// Gets the length of the token, in bytes
         pub fn len(&self) -> usize {
             self.tail - self.head
         }
-        // Gets the [Type] of the token
+        /// Gets the [Type] of the token
         pub fn ty(&self) -> Type {
             self.ty
         }
-        // Gets the exclusive range of the token
+        /// Gets the exclusive range of the token
         pub fn range(&self) -> Range<usize> {
             self.head..self.tail
         }
@@ -118,25 +127,48 @@ pub mod lexer {
     pub struct Lexer<'t> {
         text: &'t str,
         cursor: usize,
+        line: usize,
+        col: usize,
     }
     /// Implements the non-terminals of a language
     impl<'t> Lexer<'t> {
         pub fn new(text: &'t str) -> Self {
-            Self { text, cursor: 0 }
+            Self { text, cursor: 0, line: 1, col: 1 }
+        }
+        /// Counts some length
+        #[inline]
+        fn count_len(&mut self, len: usize) -> &mut Self {
+            self.cursor += len;
+            self.col += len;
+            self
+        }
+        /// Counts a line
+        #[inline]
+        fn count_line(&mut self, lines: usize) -> &mut Self {
+            self.line += lines;
+            self.col = 1;
+            self
         }
         /// Skips whitespace in the text
         fn skip_whitespace(&mut self) {
-            if let Some(len) = Rule::new(self.text()).and_any(Rule::whitespace).end() {
-                self.cursor += len
+            self.count_len(
+                Rule::new(self.text())
+                    .and_any(Rule::whitespace_not_newline)
+                    .end()
+                    .unwrap_or_default(),
+            );
+            if Rule::new(self.text()).char('\n').end().is_some() {
+                // recurse until all newlines are skipped
+                self.count_len(1).count_line(1).skip_whitespace();
             }
         }
         /// Advances the cursor and produces a token from a provided [Rule] function
         fn map_rule<F>(&mut self, rule: F, ty: Type) -> Option<Token>
         where F: Fn(Rule) -> Rule {
             self.skip_whitespace();
-            let start = self.cursor;
-            self.cursor += Rule::new(self.text()).and(rule).end()?;
-            Some(Token::new(ty, start, self.cursor))
+            let (line, col, start) = (self.line, self.col, self.cursor);
+            self.count_len(Rule::new(self.text()).and(rule).end()?);
+            Some(Token::new(ty, start, self.cursor, line, col))
         }
         /// Gets a slice of text beginning at the cursor
         fn text(&self) -> &str {
@@ -553,6 +585,10 @@ pub mod lexer {
         pub fn whitespace(self) -> Self {
             self.char_fn(|c| c.is_whitespace())
         }
+        /// Matches one whitespace, except `'\n'`
+        pub fn whitespace_not_newline(self) -> Self {
+            self.char_fn(|c| '\n' != c && c.is_whitespace())
+        }
         /// Matches anything but whitespace
         pub fn not_whitespace(self) -> Self {
             self.char_fn(|c| !c.is_whitespace())
@@ -587,6 +623,7 @@ pub mod lexer {
         pub fn string_escape(self) -> Self {
             self.char('\\').and(Rule::any)
         }
+        /// Performs a consuming condition assertion on the input
         fn has(self, condition: impl Fn(&Self) -> bool, len: usize) -> Self {
             let len = next_utf8(self.text, len);
             self.and(|rule| match condition(&rule) && !rule.text.is_empty() {
@@ -629,12 +666,15 @@ mod tests {
         use crate::token::*;
         #[test]
         fn token_has_type() {
-            assert_eq!(Token::new(Type::Comment, 0, 10).ty(), Type::Comment);
-            assert_eq!(Token::new(Type::Identifier, 0, 10).ty(), Type::Identifier);
+            assert_eq!(Token::new(Type::Comment, 0, 10, 1, 1).ty(), Type::Comment);
+            assert_eq!(
+                Token::new(Type::Identifier, 0, 10, 1, 1).ty(),
+                Type::Identifier
+            );
         }
         #[test]
         fn token_has_range() {
-            let t = Token::new(Type::Comment, 0, 10);
+            let t = Token::new(Type::Comment, 0, 10, 1, 1);
             assert_eq!(t.range(), 0..10);
         }
     }
@@ -850,7 +890,7 @@ mod tests {
                 #[test]
                 fn escape_string() {
                     assert_whole_input_is_token(
-                        r#"" \"This is a quote\" ""#,
+                        "\" \\\"This is a quote\\\" \"",
                         Lexer::lit_string,
                         Type::LitString,
                     );
