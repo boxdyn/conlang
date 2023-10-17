@@ -991,7 +991,24 @@ pub mod lexer {
     use crate::token::{Token, Type};
     use lerox::Combinator;
 
-    #[allow(dead_code)]
+    pub struct IntoIter<'t> {
+        lexer: Lexer<'t>,
+    }
+    impl<'t> Iterator for IntoIter<'t> {
+        type Item = Token;
+        fn next(&mut self) -> Option<Self::Item> {
+            self.lexer.any()
+        }
+    }
+    impl<'t> IntoIterator for Lexer<'t> {
+        type Item = Token;
+        type IntoIter = IntoIter<'t>;
+        fn into_iter(self) -> Self::IntoIter {
+            IntoIter { lexer: self }
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct Lexer<'t> {
         text: &'t str,
         cursor: usize,
@@ -1002,6 +1019,12 @@ pub mod lexer {
     impl<'t> Lexer<'t> {
         pub fn new(text: &'t str) -> Self {
             Self { text, cursor: 0, line: 1, col: 1 }
+        }
+        /// Consumes the entire [`Lexer`], producing a [`Vec<Token>`]
+        /// and returning the original string
+        pub fn consume(self) -> (Vec<Token>, &'t str) {
+            let text = self.text;
+            (self.into_iter().collect(), text)
         }
         /// Counts some length
         #[inline]
