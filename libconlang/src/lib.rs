@@ -560,8 +560,6 @@ pub mod ast {
         //! Final := Identifier | Literal | Block | control::Branch
         //! ```
         //! See [control] and [math] for their respective production rules.
-
-        #[allow(unused_imports)]
         use super::*;
 
         /// Contains an expression
