@@ -12,7 +12,7 @@ Friday each month.
 - [x] Write parser for AST
 - [ ] Create tests for parser (and AST)
 - [ ] Parse `dummy.cl` into a valid AST
-- [ ] Pretty printer, for debugging
+- [x] Pretty printer, for debugging
 - [ ] Create minimal statement grammar
   - [ ] Variable definition statements
   - [ ] Function definition statements
