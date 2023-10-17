@@ -13,12 +13,20 @@ fn main() {
         x
     };
     
-    // A `for` expression is like the for-else construct in Python, but it returns a value via the `break` keyword
-    let z = for i in 0..y {
+    // A `while` expression is like the while-else construct in Python,
+    // but it returns a value via the `break` keyword
+    let z = while false {
         // do a thing repeatedly
         break true
+    // If `while` does not `break`, fall through to the `else` expression
     } else {
         false
-    };
+    }
+    // The same is true of `for` expressions!
+    let w = for idx in 0..100 {
+        break idx
+    } else {
+        12345
+    }
     // TODO: decide how to do IO
 }
