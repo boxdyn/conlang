@@ -23,9 +23,10 @@ pub mod token {
         KwTrue,
         KwWhile,
         // Literals
-        LitInteger,
-        LitFloat,
-        LitString,
+        Integer,
+        Float,
+        String,
+        Character,
         // Delimiters
         LCurly,
         RCurly,
@@ -200,9 +201,10 @@ pub mod lexer {
         }
         /// Attempts to produce a [Type::LitString], [Type::LitFloat], or [Type::LitInteger]
         pub fn literal(&mut self) -> Option<Token> {
-            None.or_else(|| self.lit_string())
-                .or_else(|| self.lit_float())
-                .or_else(|| self.lit_integer())
+            None.or_else(|| self.string())
+                .or_else(|| self.character())
+                .or_else(|| self.float())
+                .or_else(|| self.integer())
         }
         /// Evaluates delimiter rules
         pub fn delimiter(&mut self) -> Option<Token> {
@@ -304,14 +306,17 @@ pub mod lexer {
             self.map_rule(|r| r.identifier(), Type::Identifier)
         }
         // literals
-        pub fn lit_integer(&mut self) -> Option<Token> {
-            self.map_rule(|r| r.integer(), Type::LitInteger)
+        pub fn integer(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.integer(), Type::Integer)
         }
-        pub fn lit_float(&mut self) -> Option<Token> {
-            self.map_rule(|r| r.float(), Type::LitFloat)
+        pub fn float(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.float(), Type::Float)
         }
-        pub fn lit_string(&mut self) -> Option<Token> {
-            self.map_rule(|r| r.string(), Type::LitString)
+        pub fn string(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.string(), Type::String)
+        }
+        pub fn character(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.character(), Type::Character)
         }
         // delimiters
         pub fn l_brack(&mut self) -> Option<Token> {
@@ -509,7 +514,7 @@ pub mod lexer {
                 .and_any(Rule::xid_continue)
         }
         /// Matches a Rust-style base-prefixed int literal
-        fn int_literal_kind(self, prefix: &str, digit: impl Fn(Self) -> Self) -> Self {
+        fn integer_kind(self, prefix: &str, digit: impl Fn(Self) -> Self) -> Self {
             // int_kind<Prefix, Digit> := Prefix '_'* Digit (Digit | '_')*
             self.str(prefix)
                 .and_any(|r| r.char('_'))
@@ -521,10 +526,10 @@ pub mod lexer {
             // integer = (int_kind<0d, dec_digit> | int_kind<0x, hex_digit>
             //           | int_kind<0o, oct_digit> | int_kind<0b, bin_digit> | dec_digit (dec_digit | '_')*)
             self.and_one_of(&[
-                &|rule| rule.int_literal_kind("0d", Rule::dec_digit),
-                &|rule| rule.int_literal_kind("0x", Rule::hex_digit),
-                &|rule| rule.int_literal_kind("0o", Rule::oct_digit),
-                &|rule| rule.int_literal_kind("0b", Rule::bin_digit),
+                &|rule| rule.integer_kind("0d", Rule::dec_digit),
+                &|rule| rule.integer_kind("0x", Rule::hex_digit),
+                &|rule| rule.integer_kind("0o", Rule::oct_digit),
+                &|rule| rule.integer_kind("0b", Rule::bin_digit),
                 &|rule| {
                     rule.dec_digit()
                         .and_any(|r| r.dec_digit().or(|r| r.char('_')))
@@ -537,6 +542,13 @@ pub mod lexer {
             self.and_any(Rule::dec_digit)
                 .char('.')
                 .and_many(Rule::dec_digit)
+        }
+        /// Matches one apostrophe-delimited char literal
+        pub fn character(self) -> Self {
+            self.char('\'').character_continue().char('\'')
+        }
+        pub fn character_continue(self) -> Self {
+            self.and(|rule| rule.string_escape().or(|rule| rule.not_char('\'')))
         }
         /// Matches one quote-delimited string literal
         pub fn string(self) -> Self {
@@ -821,79 +833,102 @@ mod tests {
             use super::*;
             #[test]
             fn literal_class() {
-                assert_whole_input_is_token("1_00000", Lexer::literal, Type::LitInteger);
-                assert_whole_input_is_token("1.00000", Lexer::literal, Type::LitFloat);
-                assert_whole_input_is_token("\"1.0\"", Lexer::literal, Type::LitString);
+                assert_whole_input_is_token("1_00000", Lexer::literal, Type::Integer);
+                assert_whole_input_is_token("1.00000", Lexer::literal, Type::Float);
+                assert_whole_input_is_token("\"1.0\"", Lexer::literal, Type::String);
+                assert_whole_input_is_token("'\"'", Lexer::literal, Type::Character);
             }
             mod integer {
                 use super::*;
                 #[test]
                 fn bare() {
-                    assert_whole_input_is_token("10010110", Lexer::lit_integer, Type::LitInteger);
-                    assert_whole_input_is_token("12345670", Lexer::lit_integer, Type::LitInteger);
-                    assert_whole_input_is_token("1234567890", Lexer::lit_integer, Type::LitInteger);
+                    assert_whole_input_is_token("10010110", Lexer::integer, Type::Integer);
+                    assert_whole_input_is_token("12345670", Lexer::integer, Type::Integer);
+                    assert_whole_input_is_token("1234567890", Lexer::integer, Type::Integer);
                 }
                 #[test]
                 fn base16() {
-                    assert_has_type_and_range("0x1234", Lexer::lit_integer, Type::LitInteger, 0..6);
+                    assert_has_type_and_range("0x1234", Lexer::integer, Type::Integer, 0..6);
                     assert_has_type_and_range(
                         "0x1234 \"hello\"",
-                        Lexer::lit_integer,
-                        Type::LitInteger,
+                        Lexer::integer,
+                        Type::Integer,
                         0..6,
                     );
                 }
                 #[test]
                 fn base10() {
-                    assert_whole_input_is_token("0d1234", Lexer::lit_integer, Type::LitInteger);
+                    assert_whole_input_is_token("0d1234", Lexer::integer, Type::Integer);
                 }
                 #[test]
                 fn base8() {
-                    assert_whole_input_is_token("0o1234", Lexer::lit_integer, Type::LitInteger);
+                    assert_whole_input_is_token("0o1234", Lexer::integer, Type::Integer);
                 }
                 #[test]
                 fn base2() {
-                    assert_whole_input_is_token("0b1010", Lexer::lit_integer, Type::LitInteger);
+                    assert_whole_input_is_token("0b1010", Lexer::integer, Type::Integer);
                 }
             }
             mod float {
                 use super::*;
                 #[test]
                 fn number_dot_number_is_float() {
-                    assert_whole_input_is_token("1.0", Lexer::lit_float, Type::LitFloat);
+                    assert_whole_input_is_token("1.0", Lexer::float, Type::Float);
                 }
                 #[test]
                 fn nothing_dot_number_is_float() {
-                    assert_whole_input_is_token(".0", Lexer::lit_float, Type::LitFloat);
+                    assert_whole_input_is_token(".0", Lexer::float, Type::Float);
                 }
                 #[test]
                 #[should_panic]
                 fn number_dot_nothing_is_not_float() {
-                    assert_whole_input_is_token("1.", Lexer::lit_float, Type::LitFloat);
+                    assert_whole_input_is_token("1.", Lexer::float, Type::Float);
                 }
                 #[test]
                 #[should_panic]
                 fn nothing_dot_nothing_is_not_float() {
-                    assert_whole_input_is_token(".", Lexer::lit_float, Type::LitFloat);
+                    assert_whole_input_is_token(".", Lexer::float, Type::Float);
                 }
             }
             mod string {
                 use super::*;
                 #[test]
                 fn empty_string() {
-                    assert_whole_input_is_token("\"\"", Lexer::lit_string, Type::LitString);
+                    assert_whole_input_is_token("\"\"", Lexer::string, Type::String);
                 }
                 #[test]
                 fn unicode_string() {
-                    assert_whole_input_is_token("\"I 💙 🦈!\"", Lexer::lit_string, Type::LitString);
+                    assert_whole_input_is_token("\"I 💙 🦈!\"", Lexer::string, Type::String);
                 }
                 #[test]
                 fn escape_string() {
                     assert_whole_input_is_token(
                         "\" \\\"This is a quote\\\" \"",
-                        Lexer::lit_string,
-                        Type::LitString,
+                        Lexer::string,
+                        Type::String,
                     );
+                }
+            }
+            mod char {
+                use super::*;
+                #[test]
+                fn plain_char() {
+                    assert_whole_input_is_token("'A'", Lexer::character, Type::Character);
+                    assert_whole_input_is_token("'a'", Lexer::character, Type::Character);
+                    assert_whole_input_is_token("'#'", Lexer::character, Type::Character);
+                }
+                #[test]
+                fn unicode_char() {
+                    assert_whole_input_is_token("'ε'", Lexer::character, Type::Character);
+                }
+                #[test]
+                fn escaped_char() {
+                    assert_whole_input_is_token("'\\n'", Lexer::character, Type::Character);
+                }
+                #[test]
+                #[should_panic]
+                fn no_char() {
+                    assert_whole_input_is_token("''", Lexer::character, Type::Character);
                 }
             }
         }
