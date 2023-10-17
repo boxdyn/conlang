@@ -19,11 +19,13 @@ Friday each month.
 
 ## Short Goals:
 - [ ] `for` loops and `while` loops can be used on the right-hand side of an assignment
+- [ ] Data structures and sum-type enums
 - [ ] Expression type-checker
-- [ ] AST-walk interpreter for prototyping and debugging
+- [ ] Trait/Interface system
+- [ ] Tree-walk interpreter for prototyping and debugging
 - [ ] Three-reference bytecode VM for standard library development
-- [ ] Semicolons are not given special treatment
 
 ## Long Goals:
+- [ ] Semicolons are NEVER given special treatment
 - [ ] Compile to LLVM IR
-- [ ] Create a standard library for the language, with Rust-like
+- [ ] Create a standard library for the language, with Rust-like abstractions.
