@@ -8,8 +8,8 @@ Friday each month.
 - [x] Decide on a minimal set of keywords and operators to support
 - [x] Lex an entire Rust source file (minus generics, paths, and lifetimes)
 - [x] Write expression grammar
-- [ ] Write AST for expression grammar
-- [ ] Write parser for AST
+- [x] Write AST for expression grammar
+- [x] Write parser for AST
 - [ ] Create tests for parser (and AST)
 - [ ] Parse `dummy.cl` into a valid AST
 - [ ] Pretty printer, for debugging
