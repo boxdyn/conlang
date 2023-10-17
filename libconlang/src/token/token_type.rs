@@ -1,24 +1,18 @@
-use super::Type;
+//! Trait impls and helper functions for [Type] and [Keyword]
+use super::{Keyword, Type};
 use std::fmt::Display;
+
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Type::Invalid => Display::fmt("invalid", f),
             Type::Comment => Display::fmt("comment", f),
             Type::Identifier => Display::fmt("identifier", f),
-            Type::KwBreak => Display::fmt("break", f),
-            Type::KwElse => Display::fmt("else", f),
-            Type::KwFalse => Display::fmt("false", f),
-            Type::KwFor => Display::fmt("for", f),
-            Type::KwFn => Display::fmt("fn", f),
-            Type::KwIf => Display::fmt("if", f),
-            Type::KwIn => Display::fmt("in", f),
-            Type::KwLet => Display::fmt("let", f),
-            Type::KwTrue => Display::fmt("true", f),
-            Type::KwWhile => Display::fmt("while", f),
-            Type::LitInteger => Display::fmt("integer literal", f),
-            Type::LitFloat => Display::fmt("float literal", f),
-            Type::LitString => Display::fmt("string literal", f),
+            Type::Keyword(k) => Display::fmt(k, f),
+            Type::Integer => Display::fmt("integer literal", f),
+            Type::Float => Display::fmt("float literal", f),
+            Type::String => Display::fmt("string literal", f),
+            Type::Character => Display::fmt("char literal", f),
             Type::LCurly => Display::fmt("left curly", f),
             Type::RCurly => Display::fmt("right curly", f),
             Type::LBrack => Display::fmt("left brack", f),
@@ -27,14 +21,17 @@ impl Display for Type {
             Type::RParen => Display::fmt("right paren", f),
             Type::Lsh => Display::fmt("shift left", f),
             Type::Rsh => Display::fmt("shift right", f),
-            Type::AndAnd => Display::fmt("logical and", f),
-            Type::OrOr => Display::fmt("logical or", f),
+            Type::AmpAmp => Display::fmt("and-and", f),
+            Type::BarBar => Display::fmt("or-or", f),
             Type::NotNot => Display::fmt("not-not", f),
             Type::CatEar => Display::fmt("cat-ears", f),
             Type::EqEq => Display::fmt("equal to", f),
+            Type::GtEq => Display::fmt("greater than or equal to", f),
+            Type::LtEq => Display::fmt("less than or equal to", f),
             Type::NotEq => Display::fmt("not equal to", f),
             Type::StarEq => Display::fmt("star-assign", f),
             Type::DivEq => Display::fmt("div-assign", f),
+            Type::RemEq => Display::fmt("rem-assign", f),
             Type::AddEq => Display::fmt("add-assign", f),
             Type::SubEq => Display::fmt("sub-assign", f),
             Type::AndEq => Display::fmt("and-assign", f),
@@ -66,6 +63,25 @@ impl Display for Type {
             Type::Comma => Display::fmt("comma", f),
             Type::Tilde => Display::fmt("tilde", f),
             Type::Grave => Display::fmt("grave", f),
+        }
+    }
+}
+
+impl Display for Keyword {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Break => Display::fmt("break", f),
+            Self::Continue => Display::fmt("continue", f),
+            Self::Else => Display::fmt("else", f),
+            Self::False => Display::fmt("false", f),
+            Self::For => Display::fmt("for", f),
+            Self::Fn => Display::fmt("fn", f),
+            Self::If => Display::fmt("if", f),
+            Self::In => Display::fmt("in", f),
+            Self::Let => Display::fmt("let", f),
+            Self::Return => Display::fmt("return", f),
+            Self::True => Display::fmt("true", f),
+            Self::While => Display::fmt("while", f),
         }
     }
 }

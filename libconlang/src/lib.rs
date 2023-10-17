@@ -8,20 +8,13 @@ pub mod token {
     mod token_type;
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Type {
+        // Invalid syntax
         Invalid,
+        // Any kind of comment
         Comment,
+        // Any identifier
         Identifier,
-        // Keywords
-        KwBreak,
-        KwElse,
-        KwFalse,
-        KwFor,
-        KwFn,
-        KwIf,
-        KwIn,
-        KwLet,
-        KwTrue,
-        KwWhile,
+        Keyword(Keyword),
         // Literals
         Integer,
         Float,
@@ -37,14 +30,17 @@ pub mod token {
         // Compound punctuation
         Lsh,
         Rsh,
-        AndAnd,
-        OrOr,
+        AmpAmp,
+        BarBar,
         NotNot,
         CatEar,
         EqEq,
+        GtEq,
+        LtEq,
         NotEq,
         StarEq,
         DivEq,
+        RemEq,
         AddEq,
         SubEq,
         AndEq,
@@ -79,6 +75,43 @@ pub mod token {
         Grave,
     }
 
+    /// Represents a reserved word.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum Keyword {
+        Break,
+        Continue,
+        Else,
+        False,
+        For,
+        Fn,
+        If,
+        In,
+        Let,
+        Return,
+        True,
+        While,
+    }
+    impl std::str::FromStr for Keyword {
+        type Err = ();
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            Ok(match s {
+                "break" => Self::Break,
+                "continue" => Self::Continue,
+                "else" => Self::Else,
+                "false" => Self::False,
+                "for" => Self::For,
+                "fn" => Self::Fn,
+                "if" => Self::If,
+                "in" => Self::In,
+                "let" => Self::Let,
+                "return" => Self::Return,
+                "true" => Self::True,
+                "while" => Self::While,
+                _ => Err(())?,
+            })
+        }
+    }
+
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub struct Token {
         ty: Type,
@@ -90,6 +123,12 @@ pub mod token {
     impl Token {
         pub fn new(ty: Type, head: usize, tail: usize, line: usize, col: usize) -> Self {
             Self { ty, head, tail, line, col }
+        }
+        pub fn cast(self, ty: Type) -> Self {
+            Self { ty, ..self }
+        }
+        pub fn rebound(self, head: usize, tail: usize) -> Self {
+            Self { head, tail, ..self }
         }
         pub fn line(&self) -> usize {
             self.line
@@ -179,27 +218,14 @@ pub mod lexer {
         /// Returns the result of the rule with the highest precedence, if any matches
         pub fn any(&mut self) -> Option<Token> {
             None.or_else(|| self.comment())
-                .or_else(|| self.keyword())
                 .or_else(|| self.identifier())
                 .or_else(|| self.literal())
                 .or_else(|| self.delimiter())
                 .or_else(|| self.punctuation())
                 .or_else(|| self.invalid())
         }
-        /// Attempts to produce a Keyword
-        pub fn keyword(&mut self) -> Option<Token> {
-            None.or_else(|| self.kw_break())
-                .or_else(|| self.kw_else())
-                .or_else(|| self.kw_false())
-                .or_else(|| self.kw_for())
-                .or_else(|| self.kw_fn())
-                .or_else(|| self.kw_if())
-                .or_else(|| self.kw_in())
-                .or_else(|| self.kw_let())
-                .or_else(|| self.kw_true())
-                .or_else(|| self.kw_while())
         }
-        /// Attempts to produce a [Type::LitString], [Type::LitFloat], or [Type::LitInteger]
+        /// Attempts to produce a [Type::String], [Type::Float], or [Type::Integer]
         pub fn literal(&mut self) -> Option<Token> {
             None.or_else(|| self.string())
                 .or_else(|| self.character())
@@ -217,23 +243,26 @@ pub mod lexer {
         }
         /// Evaluates punctuation rules
         pub fn punctuation(&mut self) -> Option<Token> {
-            None.or_else(|| self.lsh())
-                .or_else(|| self.rsh())
-                .or_else(|| self.and_and())
-                .or_else(|| self.or_or())
+            None.or_else(|| self.amp_amp())
+                .or_else(|| self.bar_bar())
                 .or_else(|| self.not_not())
                 .or_else(|| self.cat_ear())
                 .or_else(|| self.eq_eq())
+                .or_else(|| self.gt_eq())
+                .or_else(|| self.lt_eq())
                 .or_else(|| self.not_eq())
+                .or_else(|| self.lsh_eq())
+                .or_else(|| self.rsh_eq())
                 .or_else(|| self.star_eq())
                 .or_else(|| self.div_eq())
+                .or_else(|| self.rem_eq())
                 .or_else(|| self.add_eq())
                 .or_else(|| self.sub_eq())
                 .or_else(|| self.and_eq())
                 .or_else(|| self.or_eq())
                 .or_else(|| self.xor_eq())
-                .or_else(|| self.lsh_eq())
-                .or_else(|| self.rsh_eq())
+                .or_else(|| self.lsh())
+                .or_else(|| self.rsh())
                 .or_else(|| self.arrow())
                 .or_else(|| self.fatarrow())
                 .or_else(|| self.semi())
@@ -270,40 +299,13 @@ pub mod lexer {
         pub fn comment(&mut self) -> Option<Token> {
             self.map_rule(|r| r.comment(), Type::Comment)
         }
-        // keywords
-        pub fn kw_break(&mut self) -> Option<Token> {
-            self.map_rule(|r| r.str("break"), Type::KwBreak)
-        }
-        pub fn kw_else(&mut self) -> Option<Token> {
-            self.map_rule(|r| r.str("else"), Type::KwElse)
-        }
-        pub fn kw_false(&mut self) -> Option<Token> {
-            self.map_rule(|r| r.str("false"), Type::KwFalse)
-        }
-        pub fn kw_for(&mut self) -> Option<Token> {
-            self.map_rule(|r| r.str("for"), Type::KwFor)
-        }
-        pub fn kw_fn(&mut self) -> Option<Token> {
-            self.map_rule(|r| r.str("fn"), Type::KwFn)
-        }
-        pub fn kw_if(&mut self) -> Option<Token> {
-            self.map_rule(|r| r.str("if"), Type::KwIf)
-        }
-        pub fn kw_in(&mut self) -> Option<Token> {
-            self.map_rule(|r| r.str("in"), Type::KwIn)
-        }
-        pub fn kw_let(&mut self) -> Option<Token> {
-            self.map_rule(|r| r.str("let"), Type::KwLet)
-        }
-        pub fn kw_true(&mut self) -> Option<Token> {
-            self.map_rule(|r| r.str("true"), Type::KwTrue)
-        }
-        pub fn kw_while(&mut self) -> Option<Token> {
-            self.map_rule(|r| r.str("while"), Type::KwWhile)
-        }
         // identifiers
         pub fn identifier(&mut self) -> Option<Token> {
             self.map_rule(|r| r.identifier(), Type::Identifier)
+                .map(|token| match self.text[token.range()].parse() {
+                    Ok(kw) => token.cast(Type::Keyword(kw)),
+                    Err(_) => token,
+                })
         }
         // literals
         pub fn integer(&mut self) -> Option<Token> {
@@ -313,10 +315,13 @@ pub mod lexer {
             self.map_rule(|r| r.float(), Type::Float)
         }
         pub fn string(&mut self) -> Option<Token> {
+            // TODO: count lines and columns properly within string
             self.map_rule(|r| r.string(), Type::String)
+                .map(|t| t.rebound(t.head + 1, t.tail - 1))
         }
         pub fn character(&mut self) -> Option<Token> {
             self.map_rule(|r| r.character(), Type::Character)
+                .map(|t| t.rebound(t.head + 1, t.tail - 1))
         }
         // delimiters
         pub fn l_brack(&mut self) -> Option<Token> {
@@ -344,11 +349,11 @@ pub mod lexer {
         pub fn rsh(&mut self) -> Option<Token> {
             self.map_rule(|r| r.str(">>"), Type::Rsh)
         }
-        pub fn and_and(&mut self) -> Option<Token> {
-            self.map_rule(|r| r.str("&&"), Type::AndAnd)
+        pub fn amp_amp(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("&&"), Type::AmpAmp)
         }
-        pub fn or_or(&mut self) -> Option<Token> {
-            self.map_rule(|r| r.str("||"), Type::OrOr)
+        pub fn bar_bar(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("||"), Type::BarBar)
         }
         pub fn not_not(&mut self) -> Option<Token> {
             self.map_rule(|r| r.str("!!"), Type::NotNot)
@@ -359,6 +364,12 @@ pub mod lexer {
         pub fn eq_eq(&mut self) -> Option<Token> {
             self.map_rule(|r| r.str("=="), Type::EqEq)
         }
+        pub fn gt_eq(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str(">="), Type::GtEq)
+        }
+        pub fn lt_eq(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("<="), Type::LtEq)
+        }
         pub fn not_eq(&mut self) -> Option<Token> {
             self.map_rule(|r| r.str("!="), Type::NotEq)
         }
@@ -367,6 +378,9 @@ pub mod lexer {
         }
         pub fn div_eq(&mut self) -> Option<Token> {
             self.map_rule(|r| r.str("/="), Type::DivEq)
+        }
+        pub fn rem_eq(&mut self) -> Option<Token> {
+            self.map_rule(|r| r.str("%="), Type::RemEq)
         }
         pub fn add_eq(&mut self) -> Option<Token> {
             self.map_rule(|r| r.str("+="), Type::AddEq)
@@ -464,6 +478,7 @@ pub mod lexer {
         }
     }
 
+    // TODO: use real, functional parser-combinators here to produce tokens
     /// A lexer [Rule] matches patterns in text in a declarative manner
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct Rule<'t> {
@@ -761,50 +776,6 @@ mod tests {
                 assert_whole_input_is_token("fn main() {}", Lexer::comment, Type::Comment);
             }
         }
-        mod keyword {
-            use super::*;
-            #[test]
-            fn kw_break() {
-                assert_whole_input_is_token("break", Lexer::kw_break, Type::KwBreak);
-            }
-            #[test]
-            fn kw_else() {
-                assert_whole_input_is_token("else", Lexer::kw_else, Type::KwElse);
-                assert_has_type_and_range("  else  ", Lexer::kw_else, Type::KwElse, 2..6);
-            }
-            #[test]
-            fn kw_false() {
-                assert_whole_input_is_token("false", Lexer::kw_false, Type::KwFalse);
-            }
-            #[test]
-            fn kw_for() {
-                assert_whole_input_is_token("for", Lexer::kw_for, Type::KwFor);
-            }
-            #[test]
-            fn kw_fn() {
-                assert_whole_input_is_token("fn", Lexer::kw_fn, Type::KwFn);
-            }
-            #[test]
-            fn kw_if() {
-                assert_whole_input_is_token("if", Lexer::kw_if, Type::KwIf);
-            }
-            #[test]
-            fn kw_in() {
-                assert_whole_input_is_token("in", Lexer::kw_in, Type::KwIn);
-            }
-            #[test]
-            fn kw_let() {
-                assert_whole_input_is_token("let", Lexer::kw_let, Type::KwLet);
-            }
-            #[test]
-            fn kw_true() {
-                assert_whole_input_is_token("true", Lexer::kw_true, Type::KwTrue);
-            }
-            #[test]
-            fn kw_while() {
-                assert_whole_input_is_token("while", Lexer::kw_while, Type::KwWhile);
-            }
-        }
         mod identifier {
             use super::*;
 
@@ -835,8 +806,8 @@ mod tests {
             fn literal_class() {
                 assert_whole_input_is_token("1_00000", Lexer::literal, Type::Integer);
                 assert_whole_input_is_token("1.00000", Lexer::literal, Type::Float);
-                assert_whole_input_is_token("\"1.0\"", Lexer::literal, Type::String);
-                assert_whole_input_is_token("'\"'", Lexer::literal, Type::Character);
+                assert_has_type_and_range("\"1.0\"", Lexer::literal, Type::String, 1..4);
+                assert_has_type_and_range("'\"'", Lexer::literal, Type::Character, 1..2);
             }
             mod integer {
                 use super::*;
@@ -894,18 +865,19 @@ mod tests {
                 use super::*;
                 #[test]
                 fn empty_string() {
-                    assert_whole_input_is_token("\"\"", Lexer::string, Type::String);
+                    assert_has_type_and_range("\"\"", Lexer::string, Type::String, 1..1);
                 }
                 #[test]
                 fn unicode_string() {
-                    assert_whole_input_is_token("\"I 💙 🦈!\"", Lexer::string, Type::String);
+                    assert_has_type_and_range("\"I 💙 🦈!\"", Lexer::string, Type::String, 1..13);
                 }
                 #[test]
                 fn escape_string() {
-                    assert_whole_input_is_token(
+                    assert_has_type_and_range(
                         "\" \\\"This is a quote\\\" \"",
                         Lexer::string,
                         Type::String,
+                        1..22
                     );
                 }
             }
@@ -913,22 +885,22 @@ mod tests {
                 use super::*;
                 #[test]
                 fn plain_char() {
-                    assert_whole_input_is_token("'A'", Lexer::character, Type::Character);
-                    assert_whole_input_is_token("'a'", Lexer::character, Type::Character);
-                    assert_whole_input_is_token("'#'", Lexer::character, Type::Character);
+                    assert_has_type_and_range("'A'", Lexer::character, Type::Character, 1..2);
+                    assert_has_type_and_range("'a'", Lexer::character, Type::Character, 1..2);
+                    assert_has_type_and_range("'#'", Lexer::character, Type::Character, 1..2);
                 }
                 #[test]
                 fn unicode_char() {
-                    assert_whole_input_is_token("'ε'", Lexer::character, Type::Character);
+                    assert_has_type_and_range("'ε'", Lexer::character, Type::Character, 1..3);
                 }
                 #[test]
                 fn escaped_char() {
-                    assert_whole_input_is_token("'\\n'", Lexer::character, Type::Character);
+                    assert_has_type_and_range("'\\n'", Lexer::character, Type::Character, 1..3);
                 }
                 #[test]
                 #[should_panic]
                 fn no_char() {
-                    assert_whole_input_is_token("''", Lexer::character, Type::Character);
+                    assert_has_type_and_range("''", Lexer::character, Type::Character, 1..1);
                 }
             }
         }
@@ -983,12 +955,12 @@ mod tests {
                     assert_whole_input_is_token(">>", Lexer::rsh, Type::Rsh)
                 }
                 #[test]
-                fn and_and() {
-                    assert_whole_input_is_token("&&", Lexer::and_and, Type::AndAnd)
+                fn amp_amp() {
+                    assert_whole_input_is_token("&&", Lexer::amp_amp, Type::AmpAmp)
                 }
                 #[test]
-                fn or_or() {
-                    assert_whole_input_is_token("||", Lexer::or_or, Type::OrOr)
+                fn bar_bar() {
+                    assert_whole_input_is_token("||", Lexer::bar_bar, Type::BarBar)
                 }
                 #[test]
                 fn not_not() {
@@ -1001,6 +973,14 @@ mod tests {
                 #[test]
                 fn eq_eq() {
                     assert_whole_input_is_token("==", Lexer::eq_eq, Type::EqEq)
+                }
+                #[test]
+                fn gt_eq() {
+                    assert_whole_input_is_token(">=", Lexer::gt_eq, Type::GtEq)
+                }
+                #[test]
+                fn lt_eq() {
+                    assert_whole_input_is_token("<=", Lexer::lt_eq, Type::LtEq)
                 }
                 #[test]
                 fn not_eq() {
