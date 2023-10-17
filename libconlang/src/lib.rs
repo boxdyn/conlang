@@ -1052,7 +1052,6 @@ pub mod lexer {
                 .or_else(|| self.punctuation())
                 .or_else(|| self.invalid())
         }
-        }
         /// Attempts to produce a [Type::String], [Type::Float], or [Type::Integer]
         pub fn literal(&mut self) -> Option<Token> {
             None.or_else(|| self.string())
