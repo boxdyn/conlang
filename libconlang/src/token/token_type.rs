@@ -85,3 +85,23 @@ impl Display for Keyword {
         }
     }
 }
+impl std::str::FromStr for Keyword {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "break" => Self::Break,
+            "continue" => Self::Continue,
+            "else" => Self::Else,
+            "false" => Self::False,
+            "for" => Self::For,
+            "fn" => Self::Fn,
+            "if" => Self::If,
+            "in" => Self::In,
+            "let" => Self::Let,
+            "return" => Self::Return,
+            "true" => Self::True,
+            "while" => Self::While,
+            _ => Err(())?,
+        })
+    }
+}
