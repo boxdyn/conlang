@@ -115,8 +115,8 @@ pub mod token {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub struct Token {
         ty: Type,
-        head: usize,
-        tail: usize,
+        pub head: usize,
+        pub tail: usize,
         line: usize,
         col: usize,
     }
@@ -127,6 +127,7 @@ pub mod token {
         pub fn cast(self, ty: Type) -> Self {
             Self { ty, ..self }
         }
+        // Hack to work around
         pub fn rebound(self, head: usize, tail: usize) -> Self {
             Self { head, tail, ..self }
         }
