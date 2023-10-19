@@ -1,10 +1,12 @@
 //! Parses [tokens](super::token) into an [AST](super::ast)
+use std::vec;
+
 use super::{
     ast::preamble::*,
     lexer::Lexer,
     token::{Keyword, Token, Type},
 };
-use error::{Error, *};
+use error::{Error, Reason::*, *};
 
 mod error {
     use super::{Token, Type};
@@ -15,6 +17,7 @@ mod error {
         NotIdentifier,
         NotLiteral,
         NotString,
+        NotChar,
         NotBool,
         NotFloat,
         FloatExponentOverflow,
@@ -38,13 +41,16 @@ mod error {
     macro error_impl($($fn:ident$(($($p:ident: $t:ty),*))?: $reason:expr),*$(,)?) {$(
     /// Creates an [Error] with this [Reason]:
     #[doc = concat!("[`", stringify!($reason), "`]")]
-    pub fn $fn($($($p : $t),*)?) -> Self {
-        Self { reason: $reason$(($($p)*))?, start: None }
-    }
-)*}
+        pub fn $fn($($($p : $t),*)?) -> Self {
+            Self { reason: $reason$(($($p)*))?, start: None }
+        }
+    )*}
     impl Error {
         pub fn token(self, start: Token) -> Self {
             Self { start: Some(start), ..self }
+        }
+        pub fn maybe_token(self, start: Option<Token>) -> Self {
+            Self { start, ..self }
         }
         pub fn start(&self) -> Option<Token> {
             self.start
@@ -57,6 +63,7 @@ mod error {
             not_identifier: NotIdentifier,
             not_literal: NotLiteral,
             not_string: NotString,
+            not_char: NotChar,
             not_bool: NotBool,
             not_float: NotFloat,
             float_exponent_overflow: FloatExponentOverflow,
@@ -113,14 +120,6 @@ impl<'t> Parser<'t> {
     pub fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.curr)
     }
-    /// Look ahead `n` tokens
-    pub fn ahead(&self, n: usize) -> Option<&Token> {
-        self.tokens.get(self.curr.wrapping_add(n))
-    }
-    /// Look behind `n` tokens
-    pub fn behind(&self, n: usize) -> Option<&Token> {
-        self.tokens.get(self.curr.wrapping_sub(n))
-    }
     /// Records the current position on the panic stack
     pub fn mark(&mut self) -> &mut Self {
         self.panic_stack.push(self.curr);
@@ -175,9 +174,9 @@ impl<'t> Parser<'t> {
     fn delimited<F, R>(&mut self, lhs: Type, mid: F, rhs: Type) -> PResult<R>
     where F: Fn(&mut Self) -> PResult<R> {
         self.consume_type(lhs)?;
-        let out = mid(self);
+        let out = mid(self)?;
         self.consume_type(rhs)?;
-        out
+        Ok(out)
     }
 }
 macro ptodo_err($self:expr $(, $t:expr)*) {
@@ -195,7 +194,10 @@ fn check_eof(t: Option<&Token>) -> PResult<&Token> {
 /// # Terminals and Pseudo-Terminals
 impl<'t> Parser<'t> {
     pub fn identifier(&mut self) -> PResult<Identifier> {
-        let range = self.matches(Type::Identifier)?.range();
+        let range = self
+            .matches(Type::Identifier)
+            .map_err(|e| Error::not_identifier().maybe_token(e.start()))?
+            .range();
         Ok(Identifier(self.consume().text[range].into()))
     }
     pub fn literal(&mut self) -> PResult<literal::Literal> {
@@ -204,7 +206,7 @@ impl<'t> Parser<'t> {
         let tok = check_eof(self.peek())?;
         match tok.ty() {
             Type::Float => self.float().map(Float),
-            Type::Integer => self.int().map(Int),
+            Type::Integer => self.int::<10>().map(Int),
             Type::String => self.string().map(String),
             Type::Character => self.char().map(Char),
             Type::Keyword(True | False) => self.bool().map(Bool),
@@ -227,7 +229,11 @@ impl<'t> Parser<'t> {
         Ok(self.consume().text[range].into())
     }
     pub fn char(&mut self) -> PResult<char> {
-        ptodo!(self)
+        let token = *self.matches(Type::Character)?;
+        self.consume().text[&token]
+            .chars()
+            .next()
+            .ok_or(Error::not_char().token(token))
     }
     pub fn bool(&mut self) -> PResult<bool> {
         use Keyword::{False, True};
@@ -245,26 +251,41 @@ impl<'t> Parser<'t> {
 impl<'t> Parser<'t> {
     pub fn expr(&mut self) -> PResult<expression::Expr> {
         use expression::Expr;
-        self.flow()
-            .map(Expr::Flow)
-            .or_else(|_| self.ignore().map(Expr::Ignore))
+        self.ignore().map(Expr::Ignore)
+    }
+    pub fn if_not_expr(&mut self, matches: Type) -> PResult<Option<expression::Expr>> {
+        if check_eof(self.peek())?.ty() == matches {
+            Ok(None)
+        } else {
+            Some(self.expr()).transpose()
+        }
     }
     pub fn block(&mut self) -> PResult<expression::Block> {
-        self.delimited(Type::LCurly, Parser::expr, Type::RCurly)
-            .map(|e| expression::Block { expr: Box::new(e) })
+        self.delimited(Type::LCurly, |p| p.if_not_expr(Type::RCurly), Type::RCurly)
+            .map(|e| expression::Block { expr: e.map(Box::new) })
     }
     pub fn group(&mut self) -> PResult<expression::Group> {
-        self.delimited(Type::LParen, Parser::expr, Type::RParen)
-            .map(|e| expression::Group { expr: Box::new(e) })
+        let t = check_eof(self.consume_type(Type::LParen)?.peek())?;
+        match t.ty() {
+            Type::RParen => {
+                self.consume();
+                Ok(expression::Group { expr: None })
+            }
+            _ => {
+                let out = self.expr().map(|expr| expression::Group {expr: Some(expr.into())});
+                self.consume_type(Type::RParen)?;
+                out
+            }
+        }
     }
-    pub fn r#final(&mut self) -> PResult<expression::Final> {
-        use expression::Final;
+    pub fn primary(&mut self) -> PResult<expression::Primary> {
+        use expression::Primary;
         self.identifier()
-            .map(Final::Identifier)
-            .or_else(|_| self.literal().map(Final::Literal))
-            .or_else(|_| self.block().map(Final::Block))
-            .or_else(|_| self.group().map(Final::Group))
-            .or_else(|_| self.branch().map(Final::Branch))
+            .map(Primary::Identifier)
+            .or_else(|_| self.literal().map(Primary::Literal))
+            .or_else(|_| self.block().map(Primary::Block))
+            .or_else(|_| self.group().map(Primary::Group))
+            .or_else(|_| self.flow().map(Primary::Branch))
     }
 }
 
@@ -274,7 +295,7 @@ impl<'t> Parser<'t> {
 /// ```
 /// # Examples
 /// ```rust,ignore
-/// math_impl!{
+/// binary!{
 ///     function_name: ret::Value = parse_operands, parse_operators;
 /// }
 /// ```
@@ -282,18 +303,18 @@ impl<'t> Parser<'t> {
 /// ```rust,ignore
 /// pub fn function_name(&mut self) -> PResult<ret::Value> { ... }
 /// ```
-macro math_impl ($($f: ident: $Ret:path = $a:ident, $b:ident);*$(;)?) {$(
+macro binary ($($f:ident: $Ret:ty = $a:ident, $b:ident);*$(;)?) {$(
     pub fn $f (&mut self) -> PResult<$Ret> {
         let (first, mut others) = (self.$a()?, vec![]);
         while let Some(op) = self.$b() {
             others.push((op, self.$a()?));
         }
-        Ok($Ret(first, others))
+        Ok(<$Ret>::new(first, others))
     }
 )*}
 /// # [Arithmetic and Logical Subexpressions](math)
 impl<'t> Parser<'t> {
-    math_impl! {
+    binary! {
         //name   returns         operands operators
         ignore:  math::Ignore  = assign,  ignore_op;
         assign:  math::Assign  = compare, assign_op;
@@ -309,7 +330,7 @@ impl<'t> Parser<'t> {
         while let Some(op) = self.unary_op() {
             ops.push(op)
         }
-        Ok(math::Unary(ops, self.r#final()?))
+        Ok(math::Unary(ops, self.primary()?))
     }
 }
 macro operator_impl($($(#[$m:meta])*$f:ident: $Ret:ty),*$(,)*) {$(
@@ -335,19 +356,22 @@ impl<'t> Parser<'t> {
 }
 /// # [Control Flow](control)
 impl<'t> Parser<'t> {
-    pub fn branch(&mut self) -> PResult<control::Branch> {
-        use control::Branch;
-        use Keyword::{For, If, While};
+    pub fn flow(&mut self) -> PResult<control::Flow> {
+        use control::Flow;
+        use Keyword::{Break, Continue, For, If, Return, While};
         let token = check_eof(self.peek())?;
         match token.ty() {
-            Type::Keyword(While) => self.parse_while().map(Branch::While),
-            Type::Keyword(For) => self.parse_for().map(Branch::For),
-            Type::Keyword(If) => self.parse_if().map(Branch::If),
+            Type::Keyword(While) => self.parse_while().map(Flow::While),
+            Type::Keyword(For) => self.parse_for().map(Flow::For),
+            Type::Keyword(If) => self.parse_if().map(Flow::If),
+            Type::Keyword(Break) => self.parse_break().map(Flow::Break),
+            Type::Keyword(Return) => self.parse_return().map(Flow::Return),
+            Type::Keyword(Continue) => self.parse_continue().map(Flow::Continue),
             _ => Err(Error::not_branch().token(*token)),
         }
     }
     pub fn parse_if(&mut self) -> PResult<control::If> {
-        self.consume_type(Type::Keyword(Keyword::If))?;
+        self.keyword(Keyword::If)?;
         Ok(control::If {
             cond: self.expr()?.into(),
             body: self.block()?,
@@ -355,7 +379,7 @@ impl<'t> Parser<'t> {
         })
     }
     pub fn parse_while(&mut self) -> PResult<control::While> {
-        self.consume_type(Type::Keyword(Keyword::While))?;
+        self.keyword(Keyword::While)?;
         Ok(control::While {
             cond: self.expr()?.into(),
             body: self.block()?,
@@ -373,21 +397,10 @@ impl<'t> Parser<'t> {
     }
     pub fn parse_else(&mut self) -> PResult<Option<control::Else>> {
         // it's fine for `else` to be missing entirely
-        match self.keyword(Keyword::Else) {
-            Ok(_) => Ok(Some(control::Else { block: self.block()? })),
-            Err(_) => Ok(None),
-        }
-    }
-    pub fn flow(&mut self) -> PResult<control::Flow> {
-        use control::Flow;
-        use Keyword::{Break, Continue, Return};
-        let token = check_eof(self.peek())?;
-        match token.ty() {
-            Type::Keyword(Break) => self.parse_break().map(Flow::Break),
-            Type::Keyword(Return) => self.parse_return().map(Flow::Return),
-            Type::Keyword(Continue) => self.parse_continue().map(Flow::Continue),
-            _ => Err(Error::not_control_flow().token(*token)),
-        }
+        self.keyword(Keyword::Else)
+            .ok()
+            .map(|p| Ok(control::Else { block: p.block()? }))
+            .transpose()
     }
     pub fn parse_break(&mut self) -> PResult<control::Break> {
         Ok(control::Break { expr: self.keyword(Keyword::Break)?.expr()?.into() })

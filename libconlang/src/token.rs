@@ -132,3 +132,10 @@ impl Token {
         self.head..self.tail
     }
 }
+
+impl std::ops::Index<&Token> for str {
+    type Output = str;
+    fn index(&self, index: &Token) -> &Self::Output {
+        &self[index.range()]
+    }
+}

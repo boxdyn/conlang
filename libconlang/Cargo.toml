@@ -8,5 +8,5 @@ license.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lerox ={ path = "../lerox" }
+lerox = { path = "../lerox" }
 unicode-xid = "0.2.4"

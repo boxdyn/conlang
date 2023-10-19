@@ -31,10 +31,6 @@ mod visitor {
         *,
     };
     /// [Walk] is the lexical inverse of [Visitor]
-    ///
-    /// # Examples
-    /// ```rust,ignore
-    /// ```
     pub trait Walk<T: Visitor<R> + ?Sized, R> {
         ///
         fn walk(&self, visitor: &mut T) -> R;
@@ -43,7 +39,7 @@ mod visitor {
         use super::*;
         macro_rules! impl_walk {
             ($($T:ty => $f:ident),*$(,)?) => {
-                $(impl<T: Visitor<R>, R> Walk<T, R> for $T {
+                $(impl<T: Visitor<R> + ?Sized, R> Walk<T, R> for $T {
                     fn walk(&self, visitor: &mut T) -> R {
                         visitor.$f(self)
                     }
@@ -59,10 +55,10 @@ mod visitor {
             // Identifier
             Identifier => visit_identifier,
             // ast::literal
-            &str  => visit_string_literal,
+            str   => visit_string_literal,
             char  => visit_char_literal,
             bool  => visit_bool_literal,
-            u128   => visit_int_literal,
+            u128  => visit_int_literal,
             Float => visit_float_literal,
             // ast::math
             Ignore  => visit_ignore,
@@ -91,25 +87,29 @@ mod visitor {
             Else  => visit_else,
             // ast::control::Flow
             Continue => visit_continue,
-            Return   =>visit_return,
+            Return   => visit_return,
             Break    => visit_break,
+        }
+        impl<T: Visitor<R> + ?Sized, R> Walk<T, R> for () {
+            fn walk(&self, visitor: &mut T) -> R {
+                visitor.visit_empty()
+            }
         }
         impl<T: Visitor<R> + ?Sized, R> Walk<T, R> for Expr {
             fn walk(&self, visitor: &mut T) -> R {
                 match self {
-                    Expr::Flow(f) => visitor.visit_control_flow(f),
                     Expr::Ignore(i) => visitor.visit_ignore(i),
                 }
             }
         }
-        impl<T: Visitor<R> + ?Sized, R> Walk<T, R> for Final {
+        impl<T: Visitor<R> + ?Sized, R> Walk<T, R> for Primary {
             fn walk(&self, visitor: &mut T) -> R {
                 match self {
-                    Final::Identifier(i) => visitor.visit_identifier(i),
-                    Final::Literal(l) => visitor.visit_literal(l),
-                    Final::Block(b) => visitor.visit_block(b),
-                    Final::Group(g) => visitor.visit_group(g),
-                    Final::Branch(b) => visitor.visit_branch_expr(b),
+                    Primary::Identifier(i) => visitor.visit_identifier(i),
+                    Primary::Literal(l) => visitor.visit_literal(l),
+                    Primary::Block(b) => visitor.visit_block(b),
+                    Primary::Group(g) => visitor.visit_group(g),
+                    Primary::Branch(b) => visitor.visit_branch_expr(b),
                 }
             }
         }
@@ -124,18 +124,12 @@ mod visitor {
                 }
             }
         }
-        impl<T: Visitor<R> + ?Sized, R> Walk<T, R> for Branch {
-            fn walk(&self, visitor: &mut T) -> R {
-                match self {
-                    Branch::While(w) => visitor.visit_while(w),
-                    Branch::If(i) => visitor.visit_if(i),
-                    Branch::For(f) => visitor.visit_for(f),
-                }
-            }
-        }
         impl<T: Visitor<R> + ?Sized, R> Walk<T, R> for Flow {
             fn walk(&self, visitor: &mut T) -> R {
                 match self {
+                    Flow::While(w) => visitor.visit_while(w),
+                    Flow::If(i) => visitor.visit_if(i),
+                    Flow::For(f) => visitor.visit_for(f),
                     Flow::Continue(c) => visitor.visit_continue(c),
                     Flow::Return(r) => visitor.visit_return(r),
                     Flow::Break(b) => visitor.visit_break(b),
@@ -157,36 +151,60 @@ mod visitor {
         // Block expression
         /// Visit a [Block] expression
         fn visit_block(&mut self, expr: &Block) -> R {
-            self.visit_expr(&expr.expr)
+            match &expr.expr {
+                Some(expr) => self.visit_expr(expr),
+                None => self.visit_empty(),
+            }
         }
         /// Visit a [Group] expression
         fn visit_group(&mut self, expr: &Group) -> R {
-            self.visit_expr(&expr.expr)
+            match &expr.expr {
+                Some(expr) => self.visit_expr(expr),
+                None => self.visit_empty(),
+            }
         }
 
         // Math expression
+        fn visit_binary<F, Op>(&mut self, expr: &Binary<F, (Op, F)>) -> R
+        where F: Walk<Self, R>, Op: Walk<Self, R>;
         /// Visit an [Ignore] expression
-        fn visit_ignore(&mut self, expr: &Ignore) -> R;
+        fn visit_ignore(&mut self, expr: &Ignore) -> R {
+            self.visit_binary(expr)
+        }
         /// Visit an [Assign] expression
-        fn visit_assign(&mut self, expr: &Assign) -> R;
+        fn visit_assign(&mut self, expr: &Assign) -> R {
+            self.visit_binary(expr)
+        }
         /// Visit a [Compare] expression
-        fn visit_compare(&mut self, expr: &Compare) -> R;
+        fn visit_compare(&mut self, expr: &Compare) -> R {
+            self.visit_binary(expr)
+        }
         /// Visit a [Logic] expression
-        fn visit_logic(&mut self, expr: &Logic) -> R;
+        fn visit_logic(&mut self, expr: &Logic) -> R {
+            self.visit_binary(expr)
+        }
         /// Visit a [Bitwise] expression
-        fn visit_bitwise(&mut self, expr: &Bitwise) -> R;
+        fn visit_bitwise(&mut self, expr: &Bitwise) -> R {
+            self.visit_binary(expr)
+        }
         /// Visit a [Shift] expression
-        fn visit_shift(&mut self, expr: &Shift) -> R;
+        fn visit_shift(&mut self, expr: &Shift) -> R {
+            self.visit_binary(expr)
+        }
         /// Visit a [Term] expression
-        fn visit_term(&mut self, expr: &Term) -> R;
+        fn visit_term(&mut self, expr: &Term) -> R {
+            self.visit_binary(expr)
+        }
         /// Visit a [Factor] expression
-        fn visit_factor(&mut self, expr: &Factor) -> R;
+        fn visit_factor(&mut self, expr: &Factor) -> R {
+            self.visit_binary(expr)
+        }
         /// Visit a [Unary] expression
         fn visit_unary(&mut self, expr: &Unary) -> R;
-        /// Visit a [Final] expression
+        /// Visit a [Primary] expression
         ///
-        /// [Final] := [Identifier] | [Literal] | [Block] | [Branch]
-        fn visit_final(&mut self, expr: &Final) -> R {
+        /// [Primary] := [Identifier] | [Literal] | [Block] | [Flow]
+        fn visit_primary(&mut self, expr: &Primary) -> R {
             expr.walk(self)
         }
         // Math operators
@@ -209,10 +227,10 @@ mod visitor {
         /// Visit a [Unary] [operator](operator::Unary)
         fn visit_unary_op(&mut self, op: &operator::Unary) -> R;
 
-        /// Visit a [Branch] expression.
+        /// Visit a [Flow] expression.
         ///
-        /// [Branch] := [While] | [If] | [For]
-        fn visit_branch_expr(&mut self, expr: &Branch) -> R {
+        /// [Flow] := [While] | [If] | [For]
+        fn visit_branch_expr(&mut self, expr: &Flow) -> R {
             expr.walk(self)
         }
         /// Visit an [If] expression
@@ -223,12 +241,6 @@ mod visitor {
         fn visit_for(&mut self, expr: &For) -> R;
         /// Visit an [Else] expression
         fn visit_else(&mut self, expr: &Else) -> R;
-        /// Visit a [Control Flow](control::Flow) expression
-        ///
-        /// [`Flow`] := [`Continue`] | [`Return`] | [`Break`]
-        fn visit_control_flow(&mut self, expr: &control::Flow) -> R {
-            expr.walk(self)
-        }
         /// Visit a [Continue] expression
         fn visit_continue(&mut self, expr: &Continue) -> R;
         /// Visit a [Break] expression
@@ -236,12 +248,12 @@ mod visitor {
         /// Visit a [Return] expression
         fn visit_return(&mut self, expr: &Return) -> R;
 
-        // final symbols
+        // primary symbols
         /// Visit an [Identifier]
         fn visit_identifier(&mut self, ident: &Identifier) -> R;
         /// Visit a [Literal]
         ///
-        /// [Literal] := [String] | [char] | [bool] | [Float] | [Int]
+        /// [Literal] := [String] | [char] | [bool] | [Float] | [u128]
         fn visit_literal(&mut self, literal: &Literal) -> R {
             literal.walk(self)
         }
@@ -253,8 +265,10 @@ mod visitor {
         fn visit_bool_literal(&mut self, bool: &bool) -> R;
         /// Visit a [floating point](Float) literal
         fn visit_float_literal(&mut self, float: &Float) -> R;
-        /// Visit an [integer](Int) literal
+        /// Visit an [integer](u128) literal
         fn visit_int_literal(&mut self, int: &u128) -> R;
+        /// Visit an Empty literal
+        fn visit_empty(&mut self) -> R;
     }
 }
 /// Marks the root of a tree
@@ -283,8 +297,7 @@ pub mod todo {
     //! - [ ] Store token spans in AST
     pub mod path {
         //! Path support
-        //! - [ ] Add namespace syntax (i.e. `::crate::foo::bar` | `foo::bar::Baz` |
-        //!   `foo::bar::*`)
+        //! - [ ] Add namespace syntax (i.e. `::crate::foo::bar` | `foo::bar::Baz` | `foo::bar::*`)
         //!
         //! Path resolution will be vital to the implementation of structs, enums, impl blocks,
         //! traits, modules, etc.
@@ -330,7 +343,7 @@ pub mod literal {
 
     /// Represents a literal value
     /// # Syntax
-    /// [`Literal`] := [`String`] | [`char`] | [`bool`] | [`Float`] | [`Int`]
+    /// [`Literal`] := [`String`] | [`char`] | [`bool`] | [`Float`] | [`u128`]
     #[derive(Clone, Debug)]
     pub enum Literal {
         /// Represents a literal string value
@@ -353,7 +366,7 @@ pub mod literal {
         Float(Float),
         /// Represents a literal integer value
         /// # Syntax
-        /// [`Int`] := [`INTEGER`](crate::token::Type::Integer)
+        /// [`u128`] := [`INTEGER`](crate::token::Type::Integer)
         Int(u128),
     }
 
@@ -378,28 +391,27 @@ pub mod expression {
     //!
     //! |  # |              Node | Function                                      
     //! |----|------------------:|:----------------------------------------------
-    //! |  0 |           [`Expr`]| Contains an expression
-    //! |  1 |  [`control::Flow`]| Unconditional branches (`return`, `break`, `continue`)
-    //! |  2 |   [`math::Ignore`]| Ignores the preceding sub-expression's result
-    //! |  3 |   [`math::Assign`]| Assignment
-    //! |  4 |  [`math::Compare`]| Value Comparison
-    //! |  5 |    [`math::Logic`]| Boolean And, Or, Xor
-    //! |  6 |  [`math::Bitwise`]| Bitwise And, Or, Xor
-    //! |  7 |    [`math::Shift`]| Shift Left/Right
-    //! |  8 |     [`math::Term`]| Add, Subtract
-    //! |  9 |   [`math::Factor`]| Multiply, Divide, Remainder
-    //! | 10 |    [`math::Unary`]| Unary Dereference, Reference, Negate, Not
-    //! | 11 |[`control::Branch`]| Conditional branches (`if`, `while`, `for`), `else`
-    //! | 12 |          [`Group`]| Group expressions `(` [Expr] `)`
-    //! | 12 |          [`Block`]| Block expressions `{` [Expr] `}`
-    //! | 12 |          [`Final`]| Contains an [Identifier], [Literal](literal::Literal), [Block], or [Branch](control::Branch)
+    //! |  0 |          [`Expr`] | Contains an expression
+    //! |  1 |  [`math::Ignore`] | Ignores the preceding sub-expression's result
+    //! |  2 |  [`math::Assign`] | Assignment
+    //! |  3 | [`math::Compare`] | Value Comparison
+    //! |  4 |   [`math::Logic`] | Boolean And, Or, Xor
+    //! |  5 | [`math::Bitwise`] | Bitwise And, Or, Xor
+    //! |  6 |   [`math::Shift`] | Shift Left/Right
+    //! |  7 |    [`math::Term`] | Add, Subtract
+    //! |  8 |  [`math::Factor`] | Multiply, Divide, Remainder
+    //! |  9 |   [`math::Unary`] | Unary Dereference, Reference, Negate, Not
+    //! | 10 | [`control::Flow`] | Branch expressions (`if`, `while`, `for`, `return`, `break`, `continue`), `else`
+    //! | 10 |         [`Group`] | Group expressions `(` [Expr]? `)` /* Can evaluate to Empty! */
+    //! | 10 |         [`Block`] | Block expressions `{` [Expr] `}`
+    //! | 10 |       [`Primary`] | Contains an [Identifier], [Literal](literal::Literal), [Block], or [Flow](control::Flow)
     //!
     //! ## Syntax
     //! ```ignore
     //! Expr  := control::Flow | math::Ignore
     //! Block := '{' Expr '}'
-    //! Group := '(' Expr ')'
-    //! Final := Identifier | Literal | Block | control::Branch
+    //! Group := '(' Expr? ')'
+    //! Primary := Identifier | Literal | Block | control::Branch
     //! ```
     //! See [control] and [math] for their respective production rules.
     use super::*;
@@ -407,28 +419,27 @@ pub mod expression {
     /// Contains an expression
     ///
     /// # Syntax
-    /// [`Expr`] := [`control::Flow`] | [`math::Ignore`]
+    /// [`Expr`] := [`math::Ignore`]
     #[derive(Clone, Debug)]
     pub enum Expr {
-        Flow(control::Flow),
         Ignore(math::Ignore),
     }
 
-    /// A [Final] Expression is the expression with the highest precedence (i.e. the deepest
+    /// A [Primary] Expression is the expression with the highest precedence (i.e. the deepest
     /// derivation)
     /// # Syntax
-    /// [`Final`] :=
+    /// [`Primary`] :=
     ///     [`IDENTIFIER`](Identifier)
     ///   | [`Literal`](literal::Literal)
     ///   | [`Block`]
-    ///   | [`Branch`](control::Branch)
+    ///   | [`Branch`](control::Flow)
     #[derive(Clone, Debug)]
-    pub enum Final {
+    pub enum Primary {
         Identifier(Identifier),
         Literal(literal::Literal),
         Block(Block),
         Group(Group),
-        Branch(control::Branch),
+        Branch(control::Flow),
     }
 
     /// Contains a Block Expression
@@ -436,15 +447,15 @@ pub mod expression {
     /// [`Block`] := `'{'` [`Expr`] `'}'`
     #[derive(Clone, Debug)]
     pub struct Block {
-        pub expr: Box<Expr>,
+        pub expr: Option<Box<Expr>>,
     }
 
     /// Contains a Parenthesized Expression
     /// # Syntax
-    /// [`Group`] := `'('` [`Expr`] `')'`
+    /// [`Group`] := `'('` [`Expr`]? `')'`
     #[derive(Clone, Debug)]
     pub struct Group {
-        pub expr: Box<Expr>,
+        pub expr: Option<Box<Expr>>,
     }
 
     pub mod math {
@@ -481,70 +492,82 @@ pub mod expression {
         //! Shift   := Term    (ShiftOp   Term   )*
         //! Term    := Factor  (TermOp    Factor )*
         //! Factor  := Unary   (FactorOp  Unary  )*
-        //! Unary   := (UnaryOp)* Final
+        //! Unary   := (UnaryOp)* Primary
         //! ```
         use super::*;
 
-        /// Ignores the result of the left sub-expression.
+        /// The template for [Binary] operations.
+        /// # Syntax
+        /// [`Binary`] := `First` (`Other`)*
+        #[derive(Clone, Debug)]
+        pub struct Binary<First, Other> {
+            pub first: Box<First>,
+            pub other: Vec<Other>,
+        }
+        impl<First, Other> Binary<First, Other> {
+            pub fn new(first: First, other: Vec<Other>) -> Self {
+                Self { first: Box::new(first), other }
+            }
+            pub fn first(&self) -> &First {
+                &self.first
+            }
+            pub fn other(&self) -> &[Other] {
+                &self.other
+            }
+        }
+
+        /// Ignores the result of the leading sub-expression.
         /// Great if you only want the side-effects.
         /// # Syntax
         /// [`Ignore`] := [`Assign`] ([`operator::Ignore`] [`Assign`])*
-        #[derive(Clone, Debug)]
-        pub struct Ignore(pub Assign, pub Vec<(operator::Ignore, Assign)>);
+        pub type Ignore = Binary<Assign, (operator::Ignore, Assign)>;
 
-        /// Assigns the result of the right sub-expression to the left sub-expression.
+        /// Assigns the result of the trailing sub-expression to the leading sub-expression.
         /// Resolves to the Empty type.
         /// # Syntax
         /// [`Assign`] := [`Compare`] ([`operator::Assign`] [`Compare`])?
-        #[derive(Clone, Debug)]
-        pub struct Assign(pub Compare, pub Vec<(operator::Assign, Compare)>);
+        pub type Assign = Binary<Compare, (operator::Assign, Compare)>;
 
-        /// Compares the values of the right and left sub-expressions,
+        /// Compares the values of the trailing and leading sub-expressions,
         /// and resolves to a boolean.
         /// # Syntax
         /// [`Compare`] := [`Logic`] ([`operator::Compare`] [`Logic`])*
-        #[derive(Clone, Debug)]
-        pub struct Compare(pub Logic, pub Vec<(operator::Compare, Logic)>);
+        pub type Compare = Binary<Logic, (operator::Compare, Logic)>;
 
-        /// Performs a boolean logic operation on the left and right sub-expressions.
+        /// Performs a boolean logic operation on the leading and trailing sub-expressions.
         /// # Syntax
         /// [`Logic`] := [`Bitwise`] ([`operator::Logic`] [`Bitwise`])*
-        #[derive(Clone, Debug)]
-        pub struct Logic(pub Bitwise, pub Vec<(operator::Logic, Bitwise)>);
+        pub type Logic = Binary<Bitwise, (operator::Logic, Bitwise)>;
 
-        /// Performs a bitwise opration on the left and right sub-expressions.
+        /// Performs a bitwise opration on the leading and trailing sub-expressions.
         /// # Syntax
         /// [`Bitwise`] := [`Shift`] ([`operator::Bitwise`] [`Shift`])*
-        #[derive(Clone, Debug)]
-        pub struct Bitwise(pub Shift, pub Vec<(operator::Bitwise, Shift)>);
+        pub type Bitwise = Binary<Shift, (operator::Bitwise, Shift)>;
 
-        /// Shifts the left sub-expression by the right sub-expression
+        /// Shifts the leading sub-expression by the trailing sub-expression
         /// # Syntax
         /// [`Shift`] := [`Term`] ([`operator::Shift`] [`Term`])*
-        #[derive(Clone, Debug)]
-        pub struct Shift(pub Term, pub Vec<(operator::Shift, Term)>);
+        pub type Shift = Binary<Term, (operator::Shift, Term)>;
 
-        /// Adds or subtracts the right sub-expression from the left sub-expression
+        /// Adds or subtracts the trailing sub-expression from the leading sub-expression
         /// # Syntax
         /// [`Term`] := [`Factor`] ([`operator::Term`] [`Factor`])*
-        #[derive(Clone, Debug)]
-        pub struct Term(pub Factor, pub Vec<(operator::Term, Factor)>);
+        pub type Term = Binary<Factor, (operator::Term, Factor)>;
 
-        /// Multiplies, Divides, or finds the remainder of the right sub-expression
-        /// from the left sub-expression
+        /// Multiplies, Divides, or finds the remainder of the trailing sub-expression
+        /// from the leading sub-expression
         /// # Syntax
         /// [`Factor`] := [`Unary`] ([`operator::Factor`] [`Unary`])*
-        #[derive(Clone, Debug)]
-        pub struct Factor(pub Unary, pub Vec<(operator::Factor, Unary)>);
+        pub type Factor = Binary<Unary, (operator::Factor, Unary)>;
 
-        /// Performs a unary operation on the right sub-expression.
+        /// Performs a unary operation on the trailing sub-expression.
         /// # Syntax
-        /// [`Unary`] := ([`operator::Unary`])* [`Final`]
+        /// [`Unary`] := ([`operator::Unary`])* [`Primary`]
         #[derive(Clone, Debug)]
-        pub struct Unary(pub Vec<operator::Unary>, pub Final);
+        pub struct Unary(pub Vec<operator::Unary>, pub Primary);
 
         pub mod operator {
-            //! | # | Operators                             | Associativity
+            //! | # | [Operators](Operator)                 | Associativity
             //! |---|---------------------------------------|--------------
             //! | 0 | ([Unary]) `*`, `&`, `-`, `!`          | Left to Right
             //! | 1 | `*`, `/`, `%`                         | Left to Right
@@ -560,29 +583,29 @@ pub mod expression {
             //! | 8 | `;`                                   |
             use crate::token::Type;
             /// Defines an operator enum and a conversion
-            macro operator ($($(#[$doc:meta])* $T:ident {
-                $( $v:ident := $tty:pat ),*$(,)?
-            })*) {$(
-                #[doc = concat!("[`",stringify!($T),"`](super::",stringify!($T),") operators")]
+            macro operator ($(
+                $(#[$doc:meta])* $T:ident { $( $v:ident := $tty:pat ),*$(,)? }
+            )*) {
+                $(#[doc = concat!("[`",stringify!($T),"`](super::",stringify!($T),") operators")]
                 $(#[$doc])* #[derive(Clone, Copy, Debug, PartialEq, Eq)]
                 pub enum $T { $($v,)* }
                 impl From<Type> for Option<$T> {
                     fn from(value: Type) -> Option<$T> {
                         match value { $($tty => Some(<$T>::$v),)* _ => None }
                     }
-                }
-            )*}
-
+                })*
+            }
             operator! {
-                /// (`*`, `&`, `-`, `!`)
+                /// (`*`, `&`, `-`, `!`, `@`, `#`, `~`)
                 Unary {
-                    Deref := Type::Star,
-                    Ref   := Type::Amp,
-                    Neg   := Type::Minus,
-                    Not   := Type::Bang,
-                    At    := Type::At,
-                    Hash  := Type::Hash,
-                    Tilde := Type::Tilde,
+                    RefRef := Type::AmpAmp,
+                    Deref  := Type::Star,
+                    Ref    := Type::Amp,
+                    Neg    := Type::Minus,
+                    Not    := Type::Bang,
+                    At     := Type::At,
+                    Hash   := Type::Hash,
+                    Tilde  := Type::Tilde,
                 }
                 /// (`*`, `/`, `%`)
                 Factor {
@@ -685,28 +708,23 @@ pub mod expression {
         //! [4]: Else
         //! [5]: Break
         //! [6]: Return
-        //! [7]: Flow::Continue
+        //! [7]: Continue
         use super::*;
 
-        /// Contains a [ConditionalBranch Expression](control).
+        /// Contains a [Control Flow Expression](control).
         ///
-        /// [While], [If], [For]
-        #[derive(Clone, Debug)]
-        pub enum Branch {
-            While(While),
-            If(If),
-            For(For),
-        }
-
-        /// Contains an [Unconditional Branch Expression](control).
+        /// See the module-level documentation for more information.
         ///
-        /// [Continue](Flow::Continue), [Return], [Break]
+        /// [While], [If], [For], [Continue], [Return], or [Break]
         #[derive(Clone, Debug)]
         pub enum Flow {
-            /// Represents a [`continue` expression](Flow::Continue)
-            ///
-            /// # Syntax
-            /// [`Flow::Continue`] := `"continue"`
+            /// Represents a [`while` expression](While)
+            While(While),
+            /// Represents a [`if` expression](If)
+            If(If),
+            /// Represents a [`for` expression](For)
+            For(For),
+            /// Represents a [`continue` expression](Continue)
             Continue(Continue),
             /// Represents a [`return` expression](Return)
             Return(Return),

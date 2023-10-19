@@ -1,55 +1,48 @@
-# Conlang Expression Grammar
-Start       = Expr
+(* Conlang Expression Grammar *)
+Start       = Expr ;
 
-# literal
-Literal     = String | Char | Float | Int | Bool
-String      = STRING
-Float       = FLOAT
-Char        = CHARACTER
-Bool        = "true" | "false"
-Int         = INTEGER
+(* literal *)
+Literal     = STRING | CHARACTER | FLOAT | INTEGER | Bool ;
+Bool        = "true" | "false" ;
+Identifier  = IDENTIFIER ;
+(* # Expressions *)
+(* expression *)
+Expr        = Ignore
+Block       = '{' Expr? '}' ;
+Group       = '(' Expr? ')' ;
+Primary     = Item | Identifier | Literal
+              | Block | Group | Branch ;
 
-Identifier  = IDENTIFIER
+(* expression::math *)
+Ignore      = Assign  (IgnoreOp  Assign )* ;
+Assign      = Compare (AssignOp  Compare)* ;
+Compare     = Logic   (CompareOp Logic  )* ;
+Logic       = Bitwise (LogicOp   Bitwise)* ;
+Bitwise     = Shift   (BitwiseOp Shift  )* ;
+Shift       = Term    (ShiftOp   Term   )* ;
+Term        = Factor  (TermOp    Factor )* ;
+Factor      = Unary   (FactorOp  Unary  )* ;
+Unary       = (UnaryOp)* Primary ;
 
-# Expressions
-Expr        = Flow | Ignore
-Block       = '{' Expr '}'
-Group       = '(' Expr ')'
-Final       = Identifier | Literal | 
-              Block | Group | Branch
-
-# expression::math
-Ignore      = Assign  (IgnoreOp  Assign )*
-Assign      = Compare (AssignOp  Compare)*
-Compare     = Logic   (CompareOp Logic  )*
-Logic       = Bitwise (LogicOp   Bitwise)*
-Bitwise     = Shift   (BitwiseOp Shift  )*
-Shift       = Term    (ShiftOp   Term   )*
-Term        = Factor  (TermOp    Factor )*
-Factor      = Unary   (FactorOp  Unary  )*
-Unary       = (UnaryOp)* Final
-
-# expression::math::operator
-IgnoreOp    =  ';'
-CompareOp   =  '<' | "<=" | "==" | "!=" | ">=" | '>'
+(* expression::math::operator *)
+IgnoreOp    =  ';' ;
+CompareOp   =  '<' | "<=" | "==" | "!=" | ">=" | '>' ;
 AssignOp    =  '=' | "+=" | "-=" | "*=" | "/=" |
-              "&=" | "|=" | "^=" |"<<=" |">>="
-LogicOp     = "&&" | "||" | "^^"
+              "&=" | "|=" | "^=" |"<<=" |">>=" ;
+LogicOp     = "&&" | "||" | "^^" ;
 
-BitwiseOp   =  '&' | '|' | '^'
-ShiftOp     = "<<" | ">>"
-TermOp      =  '+' | '-'
-FactorOp    =  '*' | '/' | '%'
-UnaryOp     =  '*' | '&' | '-' | '!'
+BitwiseOp   =  '&' | '|' | '^' ;
+ShiftOp     = "<<" | ">>";
+TermOp      =  '+' | '-' ;
+FactorOp    =  '*' | '/' | '%' ;
+UnaryOp     =  '*' | '&' | '-' | '!' ;
 
-# expression::control
-Branch      = While | If | For
-If          = "if"    Expr Block (Else)?
-While       = "while" Expr Block (Else)?
-For         = "for"   Identifier "in" Expr Block (Else)?
-Else        = "else"  Block
-
-Flow        = Break | Return | Continue
-Break       = "break"  Expr
-Return      = "return" Expr
-Continue    = "continue"
+(* expression::control *)
+Branch      = While | If | For | Break | Return | Continue ;
+If          = "if"    Expr Block (Else)? ;
+While       = "while" Expr Block (Else)? ;
+For         = "for"   Identifier "in" Expr Block (Else)? ;
+Else        = "else"  Block ;
+Break       = "break"  Expr ;
+Return      = "return" Expr ;
+Continue    = "continue" ;
