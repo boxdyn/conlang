@@ -16,59 +16,59 @@ pub enum Type {
     Float,
     String,
     Character,
-    // Delimiters
-    LCurly,
-    RCurly,
-    LBrack,
-    RBrack,
-    LParen,
-    RParen,
-    // Compound punctuation
-    Lsh,
-    Rsh,
-    AmpAmp,
-    BarBar,
-    NotNot,
-    CatEar,
-    EqEq,
-    GtEq,
-    LtEq,
-    NotEq,
-    StarEq,
-    DivEq,
-    RemEq,
-    AddEq,
-    SubEq,
-    AndEq,
-    OrEq,
-    XorEq,
-    LshEq,
-    RshEq,
-    Arrow,
-    FatArrow,
-    // Simple punctuation
-    Semi,
-    Dot,
-    Star,
-    Div,
-    Plus,
-    Minus,
-    Rem,
-    Bang,
-    Eq,
-    Lt,
-    Gt,
-    Amp,
-    Bar,
-    Xor,
-    Hash,
-    At,
-    Colon,
-    Backslash,
-    Question,
-    Comma,
-    Tilde,
-    Grave,
+    // Delimiters and punctuation
+    LCurly,    // {
+    RCurly,    // }
+    LBrack,    // [
+    RBrack,    // ]
+    LParen,    // (
+    RParen,    // )
+    Amp,       // &
+    AmpAmp,    // &&
+    AmpEq,     // &=
+    Arrow,     // ->
+    At,        // @
+    Backslash, // \
+    Bang,      // !
+    BangBang,  // !!
+    BangEq,    // !=
+    Bar,       // |
+    BarBar,    // ||
+    BarEq,     // |=
+    Colon,     // :
+    Comma,     // ,
+    Dot,       // .
+    DotDot,    // ..
+    DotDotEq,  // ..=
+    Eq,        // =
+    EqEq,      // ==
+    FatArrow,  // =>
+    Grave,     // `
+    Gt,        // >
+    GtEq,      // >=
+    GtGt,      // >>
+    GtGtEq,    // >>=
+    Hash,      // #
+    Lt,        // <
+    LtEq,      // <=
+    LtLt,      // <<
+    LtLtEq,    // <<=
+    Minus,     // -
+    MinusEq,   // -=
+    Plus,      // +
+    PlusEq,    // +=
+    Question,  // ?
+    Rem,       // %
+    RemEq,     // %=
+    Semi,      // ;
+    Slash,     // /
+    SlashEq,   // /=
+    Star,      // *
+    StarEq,    // *=
+    Tilde,     // ~
+    Xor,       // ^
+    XorEq,     // ^=
+    XorXor,    // ^^
 }
 
 /// Represents a reserved word.

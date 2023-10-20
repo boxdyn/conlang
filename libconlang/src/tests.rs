@@ -90,11 +90,7 @@ mod lexer {
 
         #[test]
         fn identifier() {
-            assert_whole_input_is_token(
-                "valid_identifier",
-                Lexer::identifier,
-                Type::Identifier,
-            );
+            assert_whole_input_is_token("valid_identifier", Lexer::identifier, Type::Identifier);
             assert_whole_input_is_token("_0", Lexer::identifier, Type::Identifier);
             assert_whole_input_is_token("_", Lexer::identifier, Type::Identifier);
         }
@@ -129,12 +125,7 @@ mod lexer {
             #[test]
             fn base16() {
                 assert_has_type_and_range("0x1234", Lexer::integer, Type::Integer, 0..6);
-                assert_has_type_and_range(
-                    "0x1234 \"hello\"",
-                    Lexer::integer,
-                    Type::Integer,
-                    0..6,
-                );
+                assert_has_type_and_range("0x1234 \"hello\"", Lexer::integer, Type::Integer, 0..6);
             }
             #[test]
             fn base10() {
@@ -186,7 +177,7 @@ mod lexer {
                     "\" \\\"This is a quote\\\" \"",
                     Lexer::string,
                     Type::String,
-                    1..22
+                    1..22,
                 );
             }
         }
@@ -254,14 +245,21 @@ mod lexer {
         use super::*;
         mod compound {
             use super::*;
-
             #[test]
-            fn lsh() {
-                assert_whole_input_is_token("<<", Lexer::lsh, Type::Lsh)
+            fn dot_dot() {
+                assert_whole_input_is_token("..", Lexer::dot_dot, Type::DotDot)
             }
             #[test]
-            fn rsh() {
-                assert_whole_input_is_token(">>", Lexer::rsh, Type::Rsh)
+            fn dot_dot_eq() {
+                assert_whole_input_is_token("..=", Lexer::dot_dot_eq, Type::DotDotEq)
+            }
+            #[test]
+            fn lt_lt() {
+                assert_whole_input_is_token("<<", Lexer::lt_lt, Type::LtLt)
+            }
+            #[test]
+            fn gt_gt() {
+                assert_whole_input_is_token(">>", Lexer::gt_gt, Type::GtGt)
             }
             #[test]
             fn amp_amp() {
@@ -272,12 +270,12 @@ mod lexer {
                 assert_whole_input_is_token("||", Lexer::bar_bar, Type::BarBar)
             }
             #[test]
-            fn not_not() {
-                assert_whole_input_is_token("!!", Lexer::not_not, Type::NotNot)
+            fn bang_bang() {
+                assert_whole_input_is_token("!!", Lexer::bang_bang, Type::BangBang)
             }
             #[test]
-            fn cat_ear() {
-                assert_whole_input_is_token("^^", Lexer::cat_ear, Type::CatEar)
+            fn xor_xor() {
+                assert_whole_input_is_token("^^", Lexer::xor_xor, Type::XorXor)
             }
             #[test]
             fn eq_eq() {
@@ -292,44 +290,44 @@ mod lexer {
                 assert_whole_input_is_token("<=", Lexer::lt_eq, Type::LtEq)
             }
             #[test]
-            fn not_eq() {
-                assert_whole_input_is_token("!=", Lexer::not_eq, Type::NotEq)
+            fn bang_eq() {
+                assert_whole_input_is_token("!=", Lexer::bang_eq, Type::BangEq)
             }
             #[test]
             fn star_eq() {
                 assert_whole_input_is_token("*=", Lexer::star_eq, Type::StarEq)
             }
             #[test]
-            fn div_eq() {
-                assert_whole_input_is_token("/=", Lexer::div_eq, Type::DivEq)
+            fn slash_eq() {
+                assert_whole_input_is_token("/=", Lexer::slash_eq, Type::SlashEq)
             }
             #[test]
-            fn add_eq() {
-                assert_whole_input_is_token("+=", Lexer::add_eq, Type::AddEq)
+            fn plus_eq() {
+                assert_whole_input_is_token("+=", Lexer::plus_eq, Type::PlusEq)
             }
             #[test]
-            fn sub_eq() {
-                assert_whole_input_is_token("-=", Lexer::sub_eq, Type::SubEq)
+            fn minus_eq() {
+                assert_whole_input_is_token("-=", Lexer::minus_eq, Type::MinusEq)
             }
             #[test]
-            fn and_eq() {
-                assert_whole_input_is_token("&=", Lexer::and_eq, Type::AndEq)
+            fn amp_eq() {
+                assert_whole_input_is_token("&=", Lexer::amp_eq, Type::AmpEq)
             }
             #[test]
-            fn or_eq() {
-                assert_whole_input_is_token("|=", Lexer::or_eq, Type::OrEq)
+            fn bar_eq() {
+                assert_whole_input_is_token("|=", Lexer::bar_eq, Type::BarEq)
             }
             #[test]
             fn xor_eq() {
                 assert_whole_input_is_token("^=", Lexer::xor_eq, Type::XorEq)
             }
             #[test]
-            fn lsh_eq() {
-                assert_whole_input_is_token("<<=", Lexer::lsh_eq, Type::LshEq)
+            fn lt_lt_eq() {
+                assert_whole_input_is_token("<<=", Lexer::lt_lt_eq, Type::LtLtEq)
             }
             #[test]
-            fn rsh_eq() {
-                assert_whole_input_is_token(">>=", Lexer::rsh_eq, Type::RshEq)
+            fn gt_gt_eq() {
+                assert_whole_input_is_token(">>=", Lexer::gt_gt_eq, Type::GtGtEq)
             }
         }
 
@@ -337,10 +335,11 @@ mod lexer {
             use super::*;
             #[test]
             fn punctuation_class() {
+                // go from least to most specific
                 assert_whole_input_is_token(";", Lexer::punctuation, Type::Semi);
                 assert_whole_input_is_token(".", Lexer::punctuation, Type::Dot);
                 assert_whole_input_is_token("*", Lexer::punctuation, Type::Star);
-                assert_whole_input_is_token("/", Lexer::punctuation, Type::Div);
+                assert_whole_input_is_token("/", Lexer::punctuation, Type::Slash);
                 assert_whole_input_is_token("+", Lexer::punctuation, Type::Plus);
                 assert_whole_input_is_token("-", Lexer::punctuation, Type::Minus);
                 assert_whole_input_is_token("%", Lexer::punctuation, Type::Rem);
@@ -359,6 +358,27 @@ mod lexer {
                 assert_whole_input_is_token("~", Lexer::punctuation, Type::Tilde);
                 assert_whole_input_is_token("`", Lexer::punctuation, Type::Grave);
                 assert_whole_input_is_token("\\", Lexer::punctuation, Type::Backslash);
+                assert_whole_input_is_token("<<", Lexer::punctuation, Type::LtLt);
+                assert_whole_input_is_token(">>", Lexer::punctuation, Type::GtGt);
+                assert_whole_input_is_token("&&", Lexer::punctuation, Type::AmpAmp);
+                assert_whole_input_is_token("||", Lexer::punctuation, Type::BarBar);
+                assert_whole_input_is_token("!!", Lexer::punctuation, Type::BangBang);
+                assert_whole_input_is_token("^^", Lexer::punctuation, Type::XorXor);
+                assert_whole_input_is_token("==", Lexer::punctuation, Type::EqEq);
+                assert_whole_input_is_token(">=", Lexer::punctuation, Type::GtEq);
+                assert_whole_input_is_token("<=", Lexer::punctuation, Type::LtEq);
+                assert_whole_input_is_token("!=", Lexer::punctuation, Type::BangEq);
+                assert_whole_input_is_token("*=", Lexer::punctuation, Type::StarEq);
+                assert_whole_input_is_token("/=", Lexer::punctuation, Type::SlashEq);
+                assert_whole_input_is_token("+=", Lexer::punctuation, Type::PlusEq);
+                assert_whole_input_is_token("-=", Lexer::punctuation, Type::MinusEq);
+                assert_whole_input_is_token("&=", Lexer::punctuation, Type::AmpEq);
+                assert_whole_input_is_token("|=", Lexer::punctuation, Type::BarEq);
+                assert_whole_input_is_token("^=", Lexer::punctuation, Type::XorEq);
+                assert_whole_input_is_token("..", Lexer::punctuation, Type::DotDot);
+                assert_whole_input_is_token("..=", Lexer::punctuation, Type::DotDotEq);
+                assert_whole_input_is_token("<<=", Lexer::punctuation, Type::LtLtEq);
+                assert_whole_input_is_token(">>=", Lexer::punctuation, Type::GtGtEq);
             }
             // individual functions below
             #[test]
@@ -374,8 +394,8 @@ mod lexer {
                 assert_whole_input_is_token("*", Lexer::star, Type::Star)
             }
             #[test]
-            fn div() {
-                assert_whole_input_is_token("/", Lexer::div, Type::Div)
+            fn slash() {
+                assert_whole_input_is_token("/", Lexer::slash, Type::Slash)
             }
             #[test]
             fn plus() {
@@ -383,7 +403,7 @@ mod lexer {
             }
             #[test]
             fn minus() {
-                assert_whole_input_is_token("-", Lexer::sub, Type::Minus)
+                assert_whole_input_is_token("-", Lexer::minus, Type::Minus)
             }
             #[test]
             fn rem() {
@@ -406,11 +426,11 @@ mod lexer {
                 assert_whole_input_is_token(">", Lexer::gt, Type::Gt)
             }
             #[test]
-            fn and() {
+            fn amp() {
                 assert_whole_input_is_token("&", Lexer::amp, Type::Amp)
             }
             #[test]
-            fn or() {
+            fn bar() {
                 assert_whole_input_is_token("|", Lexer::bar, Type::Bar)
             }
             #[test]

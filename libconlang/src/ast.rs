@@ -609,7 +609,7 @@ pub mod expression {
                 /// (`*`, `/`, `%`)
                 Factor {
                     Mul := Type::Star,
-                    Div := Type::Div,
+                    Div := Type::Slash,
                     Rem := Type::Rem,
                 }
                 /// (`+`, `-`)
@@ -619,8 +619,8 @@ pub mod expression {
                 }
                 /// (`<<`, `>>`)
                 Shift {
-                    Lsh := Type::Lsh,
-                    Rsh := Type::Rsh,
+                    Lsh := Type::LtLt,
+                    Rsh := Type::GtGt,
                 }
                 /// (`&`, `|`, `^`)
                 Bitwise {
@@ -632,14 +632,14 @@ pub mod expression {
                 Logic {
                     LogAnd := Type::AmpAmp,
                     LogOr := Type::BarBar,
-                    LogXor := Type::CatEar,
+                    LogXor := Type::XorXor,
                 }
                 /// (`<`, `<=`, `==`, `!=`, `>=`, `>`)
                 Compare {
                     Less := Type::Lt,
                     LessEq := Type::LtEq,
                     Equal := Type::EqEq,
-                    NotEq := Type::NotEq,
+                    NotEq := Type::BangEq,
                     GreaterEq := Type::GtEq,
                     Greater := Type::Gt,
                 }
@@ -647,15 +647,15 @@ pub mod expression {
                 ///  `&=`, `|=`, `^=`, `<<=`, `>>=`)
                 Assign {
                     Assign := Type::Eq,
-                    AddAssign := Type::AddEq,
-                    SubAssign := Type::SubEq,
+                    AddAssign := Type::PlusEq,
+                    SubAssign := Type::MinusEq,
                     MulAssign := Type::StarEq,
-                    DivAssign := Type::DivEq,
-                    BitAndAssign := Type::AndEq,
-                    BitOrAssign := Type::OrEq,
+                    DivAssign := Type::SlashEq,
+                    BitAndAssign := Type::AmpEq,
+                    BitOrAssign := Type::BarEq,
                     BitXorAssign := Type::XorEq,
-                    ShlAssign := Type::LshEq,
-                    ShrAssign := Type::RshEq,
+                    ShlAssign := Type::LtLtEq,
+                    ShrAssign := Type::GtGtEq,
                 }
                 /// (`;`)
                 Ignore {

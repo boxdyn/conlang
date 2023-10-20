@@ -8,8 +8,8 @@ Identifier  = IDENTIFIER ;
 
 (* # Expressions *)
 (* expression *)
-Block       = '{' Expr? '}' ;
 Expr        = Ignore ;
+Block       = '{' Stmt* Expr? '}' ;
 Group       = '(' Expr? ')' ;
 Primary     = Item | Identifier | Literal
               | Block | Group | Branch ;
@@ -30,6 +30,7 @@ IgnoreOp    =  ';' ;
 AssignOp    =  '=' | "+=" | "-=" | "*=" | "/=" |
               "&=" | "|=" | "^=" |"<<=" |">>=" ;
 CompareOp   =  '<' | "<=" | "==" | "!=" | ">=" | '>' ;
+RangeOp     = ".." | "..=" ;
 LogicOp     = "&&" | "||" | "^^" ;
 
 BitwiseOp   =  '&' | '|' | '^' ;

@@ -104,53 +104,55 @@ impl<'t> Lexer<'t> {
     }
     /// Evaluates punctuation rules
     pub fn punctuation(&mut self) -> Option<Token> {
-        None.or_else(|| self.amp_amp())
-            .or_else(|| self.bar_bar())
-            .or_else(|| self.not_not())
-            .or_else(|| self.cat_ear())
-            .or_else(|| self.eq_eq())
-            .or_else(|| self.gt_eq())
-            .or_else(|| self.lt_eq())
-            .or_else(|| self.not_eq())
-            .or_else(|| self.lsh_eq())
-            .or_else(|| self.rsh_eq())
-            .or_else(|| self.star_eq())
-            .or_else(|| self.div_eq())
-            .or_else(|| self.rem_eq())
-            .or_else(|| self.add_eq())
-            .or_else(|| self.sub_eq())
-            .or_else(|| self.and_eq())
-            .or_else(|| self.or_eq())
-            .or_else(|| self.xor_eq())
-            .or_else(|| self.lsh())
-            .or_else(|| self.rsh())
-            .or_else(|| self.arrow())
-            .or_else(|| self.fatarrow())
-            .or_else(|| self.semi())
-            .or_else(|| self.dot())
-            .or_else(|| self.star())
-            .or_else(|| self.div())
-            .or_else(|| self.plus())
-            .or_else(|| self.sub())
-            .or_else(|| self.rem())
-            .or_else(|| self.bang())
-            .or_else(|| self.eq())
-            .or_else(|| self.lt())
-            .or_else(|| self.gt())
-            .or_else(|| self.amp())
-            .or_else(|| self.bar())
-            .or_else(|| self.xor())
-            .or_else(|| self.hash())
-            .or_else(|| self.at())
-            .or_else(|| self.colon())
-            .or_else(|| self.backslash())
-            .or_else(|| self.question())
-            .or_else(|| self.comma())
-            .or_else(|| self.tilde())
-            .or_else(|| self.grave())
+        None.or_else(|| self.amp_amp()) //      &&
+            .or_else(|| self.amp_eq()) //       &=
+            .or_else(|| self.amp()) //          &
+            .or_else(|| self.at()) //           @
+            .or_else(|| self.backslash()) //    \
+            .or_else(|| self.bang_bang()) //    !!
+            .or_else(|| self.bang_eq()) //      !=
+            .or_else(|| self.bang()) //         !
+            .or_else(|| self.bar_bar()) //      ||
+            .or_else(|| self.bar_eq()) //       |=
+            .or_else(|| self.bar()) //          |
+            .or_else(|| self.colon()) //        :
+            .or_else(|| self.comma()) //        ,
+            .or_else(|| self.dot_dot_eq()) //   ..=
+            .or_else(|| self.dot_dot()) //      ..
+            .or_else(|| self.dot()) //          .
+            .or_else(|| self.eq_eq()) //        ==
+            .or_else(|| self.fatarrow()) //     =>
+            .or_else(|| self.eq()) //           =
+            .or_else(|| self.grave()) //        `
+            .or_else(|| self.gt_eq()) //        >=
+            .or_else(|| self.gt_gt_eq()) //     >>=
+            .or_else(|| self.gt_gt()) //        >>
+            .or_else(|| self.gt()) //           >
+            .or_else(|| self.hash()) //         #
+            .or_else(|| self.lt_eq()) //        <=
+            .or_else(|| self.lt_lt_eq()) //     <<=
+            .or_else(|| self.lt_lt()) //        <<
+            .or_else(|| self.lt()) //           <
+            .or_else(|| self.minus_eq()) //     -=
+            .or_else(|| self.arrow()) //        ->
+            .or_else(|| self.minus()) //        -
+            .or_else(|| self.plus_eq()) //      +=
+            .or_else(|| self.plus()) //         +
+            .or_else(|| self.question()) //     ?
+            .or_else(|| self.rem_eq()) //       %=
+            .or_else(|| self.rem()) //          %
+            .or_else(|| self.semi()) //         ;
+            .or_else(|| self.slash_eq()) //     /=
+            .or_else(|| self.slash()) //        /
+            .or_else(|| self.star_eq()) //      *=
+            .or_else(|| self.star()) //         *
+            .or_else(|| self.tilde()) //        ~
+            .or_else(|| self.xor_eq()) //       ^=
+            .or_else(|| self.xor_xor()) //      ^^
+            .or_else(|| self.xor()) //          ^
     }
     pub fn unary_op(&mut self) -> Option<Token> {
-        self.bang().or_else(|| self.sub())
+        self.bang().or_else(|| self.minus())
     }
     // functions for lexing individual tokens
     pub fn invalid(&mut self) -> Option<Token> {
@@ -204,11 +206,11 @@ impl<'t> Lexer<'t> {
         self.map_rule(|r| r.char(')'), Type::RParen)
     }
     // compound punctuation
-    pub fn lsh(&mut self) -> Option<Token> {
-        self.map_rule(|r| r.str("<<"), Type::Lsh)
+    pub fn lt_lt(&mut self) -> Option<Token> {
+        self.map_rule(|r| r.str("<<"), Type::LtLt)
     }
-    pub fn rsh(&mut self) -> Option<Token> {
-        self.map_rule(|r| r.str(">>"), Type::Rsh)
+    pub fn gt_gt(&mut self) -> Option<Token> {
+        self.map_rule(|r| r.str(">>"), Type::GtGt)
     }
     pub fn amp_amp(&mut self) -> Option<Token> {
         self.map_rule(|r| r.str("&&"), Type::AmpAmp)
@@ -216,11 +218,11 @@ impl<'t> Lexer<'t> {
     pub fn bar_bar(&mut self) -> Option<Token> {
         self.map_rule(|r| r.str("||"), Type::BarBar)
     }
-    pub fn not_not(&mut self) -> Option<Token> {
-        self.map_rule(|r| r.str("!!"), Type::NotNot)
+    pub fn bang_bang(&mut self) -> Option<Token> {
+        self.map_rule(|r| r.str("!!"), Type::BangBang)
     }
-    pub fn cat_ear(&mut self) -> Option<Token> {
-        self.map_rule(|r| r.str("^^"), Type::CatEar)
+    pub fn xor_xor(&mut self) -> Option<Token> {
+        self.map_rule(|r| r.str("^^"), Type::XorXor)
     }
     pub fn eq_eq(&mut self) -> Option<Token> {
         self.map_rule(|r| r.str("=="), Type::EqEq)
@@ -231,38 +233,44 @@ impl<'t> Lexer<'t> {
     pub fn lt_eq(&mut self) -> Option<Token> {
         self.map_rule(|r| r.str("<="), Type::LtEq)
     }
-    pub fn not_eq(&mut self) -> Option<Token> {
-        self.map_rule(|r| r.str("!="), Type::NotEq)
+    pub fn bang_eq(&mut self) -> Option<Token> {
+        self.map_rule(|r| r.str("!="), Type::BangEq)
     }
     pub fn star_eq(&mut self) -> Option<Token> {
         self.map_rule(|r| r.str("*="), Type::StarEq)
     }
-    pub fn div_eq(&mut self) -> Option<Token> {
-        self.map_rule(|r| r.str("/="), Type::DivEq)
+    pub fn slash_eq(&mut self) -> Option<Token> {
+        self.map_rule(|r| r.str("/="), Type::SlashEq)
     }
     pub fn rem_eq(&mut self) -> Option<Token> {
         self.map_rule(|r| r.str("%="), Type::RemEq)
     }
-    pub fn add_eq(&mut self) -> Option<Token> {
-        self.map_rule(|r| r.str("+="), Type::AddEq)
+    pub fn plus_eq(&mut self) -> Option<Token> {
+        self.map_rule(|r| r.str("+="), Type::PlusEq)
     }
-    pub fn sub_eq(&mut self) -> Option<Token> {
-        self.map_rule(|r| r.str("-="), Type::SubEq)
+    pub fn minus_eq(&mut self) -> Option<Token> {
+        self.map_rule(|r| r.str("-="), Type::MinusEq)
     }
-    pub fn and_eq(&mut self) -> Option<Token> {
-        self.map_rule(|r| r.str("&="), Type::AndEq)
+    pub fn amp_eq(&mut self) -> Option<Token> {
+        self.map_rule(|r| r.str("&="), Type::AmpEq)
     }
-    pub fn or_eq(&mut self) -> Option<Token> {
-        self.map_rule(|r| r.str("|="), Type::OrEq)
+    pub fn bar_eq(&mut self) -> Option<Token> {
+        self.map_rule(|r| r.str("|="), Type::BarEq)
     }
     pub fn xor_eq(&mut self) -> Option<Token> {
         self.map_rule(|r| r.str("^="), Type::XorEq)
     }
-    pub fn lsh_eq(&mut self) -> Option<Token> {
-        self.map_rule(|r| r.str("<<="), Type::LshEq)
+    pub fn lt_lt_eq(&mut self) -> Option<Token> {
+        self.map_rule(|r| r.str("<<="), Type::LtLtEq)
     }
-    pub fn rsh_eq(&mut self) -> Option<Token> {
-        self.map_rule(|r| r.str(">>="), Type::RshEq)
+    pub fn gt_gt_eq(&mut self) -> Option<Token> {
+        self.map_rule(|r| r.str(">>="), Type::GtGtEq)
+    }
+    pub fn dot_dot_eq(&mut self) -> Option<Token> {
+        self.map_rule(|r| r.str("..="), Type::DotDotEq)
+    }
+    pub fn dot_dot(&mut self) -> Option<Token> {
+        self.map_rule(|r| r.str(".."), Type::DotDot)
     }
     pub fn arrow(&mut self) -> Option<Token> {
         self.map_rule(|r| r.str("->"), Type::Arrow)
@@ -280,13 +288,13 @@ impl<'t> Lexer<'t> {
     pub fn star(&mut self) -> Option<Token> {
         self.map_rule(|r| r.char('*'), Type::Star)
     }
-    pub fn div(&mut self) -> Option<Token> {
-        self.map_rule(|r| r.char('/'), Type::Div)
+    pub fn slash(&mut self) -> Option<Token> {
+        self.map_rule(|r| r.char('/'), Type::Slash)
     }
     pub fn plus(&mut self) -> Option<Token> {
         self.map_rule(|r| r.char('+'), Type::Plus)
     }
-    pub fn sub(&mut self) -> Option<Token> {
+    pub fn minus(&mut self) -> Option<Token> {
         self.map_rule(|r| r.char('-'), Type::Minus)
     }
     pub fn rem(&mut self) -> Option<Token> {
