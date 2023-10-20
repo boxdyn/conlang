@@ -97,9 +97,7 @@ mod visitor {
         }
         impl<T: Visitor<R> + ?Sized, R> Walk<T, R> for Expr {
             fn walk(&self, visitor: &mut T) -> R {
-                match self {
-                    Expr::Ignore(i) => visitor.visit_ignore(i),
-                }
+                visitor.visit_ignore(&self.ignore)
             }
         }
         impl<T: Visitor<R> + ?Sized, R> Walk<T, R> for Primary {
@@ -157,10 +155,10 @@ mod visitor {
             }
         }
         /// Visit a [Group] expression
-        fn visit_group(&mut self, expr: &Group) -> R {
-            match &expr.expr {
-                Some(expr) => self.visit_expr(expr),
-                None => self.visit_empty(),
+        fn visit_group(&mut self, group: &Group) -> R {
+            match group {
+                Group::Expr(expr) => self.visit_expr(expr),
+                Group::Empty => self.visit_empty(),
             }
         }
 
@@ -421,8 +419,8 @@ pub mod expression {
     /// # Syntax
     /// [`Expr`] := [`math::Ignore`]
     #[derive(Clone, Debug)]
-    pub enum Expr {
-        Ignore(math::Ignore),
+    pub struct Expr {
+        pub ignore: math::Ignore,
     }
 
     /// A [Primary] Expression is the expression with the highest precedence (i.e. the deepest
@@ -454,8 +452,9 @@ pub mod expression {
     /// # Syntax
     /// [`Group`] := `'('` [`Expr`]? `')'`
     #[derive(Clone, Debug)]
-    pub struct Group {
-        pub expr: Option<Box<Expr>>,
+    pub enum Group {
+        Expr(Box<Expr>),
+        Empty,
     }
 
     pub mod math {

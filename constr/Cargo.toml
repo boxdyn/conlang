@@ -1,13 +1,10 @@
 [package]
-name = "conlang"
-authors.workspace = true
+name = "constr"
 version.workspace = true
+authors.workspace = true
 edition.workspace = true
 license.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lerox = { path = "../lerox" }
-constr = { path = "../constr" }
-unicode-xid = "0.2.4"

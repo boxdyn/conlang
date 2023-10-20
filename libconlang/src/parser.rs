@@ -6,10 +6,12 @@ use super::{
     lexer::Lexer,
     token::{Keyword, Token, Type},
 };
+use constr::ConstrTools;
 use error::{Error, Reason::*, *};
 
-mod error {
+pub mod error {
     use super::{Token, Type};
+    use std::fmt::Display;
 
     #[derive(Clone, Debug, Default, PartialEq, Eq)]
     pub enum Reason {
@@ -31,6 +33,32 @@ mod error {
         Unspecified,
     }
     use Reason::*;
+
+    impl Display for Reason {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Self::Expected(t) => write!(f, "Expected {t}"),
+                Self::NotIdentifier => Display::fmt("Not an identifier", f),
+                Self::NotLiteral => Display::fmt("Not a literal", f),
+                Self::NotString => Display::fmt("Not a string", f),
+                Self::NotChar => Display::fmt("Not a char", f),
+                Self::NotBool => Display::fmt("Not a bool", f),
+                Self::NotFloat => Display::fmt("Not a float", f),
+                Self::FloatExponentOverflow => Display::fmt("Float exponent too large", f),
+                Self::FloatMantissaOverflow => Display::fmt("Float mantissa too large", f),
+                Self::NotInt => Display::fmt("Not an integer", f),
+                Self::IntOverflow => Display::fmt("Integer too large", f),
+                Self::NotControlFlow => Display::fmt("Control flow expression was incomplete", f),
+                Self::NotBranch => Display::fmt("Branch expression was incomplete", f),
+                Self::EndOfFile => Display::fmt("Got end of file", f),
+                Self::Unspecified => Display::fmt(
+                    "Unspecified error. You are permitted to slap the code author.",
+                    f,
+                ),
+            }
+        }
+    }
+
     /// [Parser] [Result]
     pub type PResult<T> = Result<T, Error>;
     #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -38,6 +66,16 @@ mod error {
         reason: Reason,
         start: Option<Token>,
     }
+
+    impl Display for Error {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            if let Some(token) = self.start {
+                write!(f, "{}:{}: ", token.line(), token.col())?;
+            }
+            write!(f, "{}", self.reason)
+        }
+    }
+
     macro error_impl($($fn:ident$(($($p:ident: $t:ty),*))?: $reason:expr),*$(,)?) {$(
     /// Creates an [Error] with this [Reason]:
     #[doc = concat!("[`", stringify!($reason), "`]")]
@@ -102,9 +140,14 @@ impl<'t> Parser<'t> {
     pub fn new(tokens: Vec<Token>, text: &'t str) -> Self {
         Self { tokens, text, panic_stack: vec![], curr: 0 }
     }
+    /// Parse the [start of an AST](Start)
+    pub fn parse(&mut self) -> PResult<Start> {
+        self.consume_comments();
+        Ok(Start(self.expr()?))
+    }
     /// Consumes any consecutive comments
     fn consume_comments(&mut self) -> &mut Self {
-        while let Some(Type::Comment) = self.peek().map(|t| t.ty()) {
+        while let Ok(Type::Comment) = self.peek().map(|t| t.ty()) {
             self.curr += 1;
         }
         self
@@ -117,8 +160,8 @@ impl<'t> Parser<'t> {
         self
     }
     /// Peek at the current token
-    pub fn peek(&self) -> Option<&Token> {
-        self.tokens.get(self.curr)
+    pub fn peek(&self) -> PResult<&Token> {
+        self.tokens.get(self.curr).ok_or(Error::end_of_file())
     }
     /// Records the current position on the panic stack
     pub fn mark(&mut self) -> &mut Self {
@@ -137,11 +180,6 @@ impl<'t> Parser<'t> {
             self.curr = v;
         }
         out
-    }
-    /// Parse the [start of an AST](Start)
-    pub fn parse(&mut self) -> PResult<Start> {
-        self.consume_comments();
-        Ok(Start(self.expr()?))
     }
 }
 /// Helpers
@@ -187,23 +225,19 @@ macro ptodo($self:expr $(, $t:expr)*) {
     $($t;)*
     Err(ptodo_err!($self))
 }
-fn check_eof(t: Option<&Token>) -> PResult<&Token> {
-    t.ok_or(Error::end_of_file())
-}
 
 /// # Terminals and Pseudo-Terminals
 impl<'t> Parser<'t> {
     pub fn identifier(&mut self) -> PResult<Identifier> {
-        let range = self
+        let token = *self
             .matches(Type::Identifier)
-            .map_err(|e| Error::not_identifier().maybe_token(e.start()))?
-            .range();
-        Ok(Identifier(self.consume().text[range].into()))
+            .map_err(|e| Error::not_identifier().maybe_token(e.start()))?;
+        Ok(Identifier(self.consume().text[&token].into()))
     }
     pub fn literal(&mut self) -> PResult<literal::Literal> {
         use literal::Literal::*;
         use Keyword::{False, True};
-        let tok = check_eof(self.peek())?;
+        let tok = self.peek()?;
         match tok.ty() {
             Type::Float => self.float().map(Float),
             Type::Integer => self.int::<10>().map(Int),
@@ -216,28 +250,29 @@ impl<'t> Parser<'t> {
     pub fn float(&mut self) -> PResult<literal::Float> {
         ptodo!(self)
     }
-    pub fn int(&mut self) -> PResult<u128> {
-        #[cfg(debug_assertions)]
-        eprintln!("/* TODO: parse integer literals from other bases */");
+    pub fn int<const BASE: u32>(&mut self) -> PResult<u128> {
         let token = *self.matches(Type::Integer)?;
-        self.consume().text[token.range()]
-            .parse()
+        u128::from_str_radix(&self.consume().text[&token], BASE)
             .map_err(|_| Error::not_int().token(token))
     }
     pub fn string(&mut self) -> PResult<String> {
-        let range = self.matches(Type::String)?.range();
-        Ok(self.consume().text[range].into())
+        let range = self
+            .matches(Type::String)
+            .map_err(|e| e.reason(NotString))?
+            .range();
+        Ok(self.consume().text[range].chars().unescape().collect())
     }
     pub fn char(&mut self) -> PResult<char> {
         let token = *self.matches(Type::Character)?;
         self.consume().text[&token]
             .chars()
+            .unescape()
             .next()
             .ok_or(Error::not_char().token(token))
     }
     pub fn bool(&mut self) -> PResult<bool> {
         use Keyword::{False, True};
-        let token = check_eof(self.peek())?;
+        let token = self.peek()?;
         let out = match token.ty() {
             Type::Keyword(False) => false,
             Type::Keyword(True) => true,
@@ -251,10 +286,10 @@ impl<'t> Parser<'t> {
 impl<'t> Parser<'t> {
     pub fn expr(&mut self) -> PResult<expression::Expr> {
         use expression::Expr;
-        self.ignore().map(Expr::Ignore)
+        Ok(Expr { ignore: self.ignore()? })
     }
     pub fn if_not_expr(&mut self, matches: Type) -> PResult<Option<expression::Expr>> {
-        if check_eof(self.peek())?.ty() == matches {
+        if self.peek()?.ty() == matches {
             Ok(None)
         } else {
             Some(self.expr()).transpose()
@@ -265,14 +300,15 @@ impl<'t> Parser<'t> {
             .map(|e| expression::Block { expr: e.map(Box::new) })
     }
     pub fn group(&mut self) -> PResult<expression::Group> {
-        let t = check_eof(self.consume_type(Type::LParen)?.peek())?;
+        use expression::Group;
+        let t = self.consume_type(Type::LParen)?.peek()?;
         match t.ty() {
             Type::RParen => {
                 self.consume();
-                Ok(expression::Group { expr: None })
+                Ok(Group::Empty)
             }
             _ => {
-                let out = self.expr().map(|expr| expression::Group {expr: Some(expr.into())});
+                let out = self.expr().map(|expr| Group::Expr(expr.into()));
                 self.consume_type(Type::RParen)?;
                 out
             }
@@ -335,7 +371,7 @@ impl<'t> Parser<'t> {
 }
 macro operator_impl($($(#[$m:meta])*$f:ident: $Ret:ty),*$(,)*) {$(
     $(#[$m])* pub fn $f(&mut self) -> Option<$Ret> {
-        let out: Option<$Ret> = self.peek()?.ty().into();
+        let out: Option<$Ret> = self.peek().ok()?.ty().into();
         if out.is_some() { self.consume(); }
         out
     }
@@ -359,7 +395,7 @@ impl<'t> Parser<'t> {
     pub fn flow(&mut self) -> PResult<control::Flow> {
         use control::Flow;
         use Keyword::{Break, Continue, For, If, Return, While};
-        let token = check_eof(self.peek())?;
+        let token = self.peek()?;
         match token.ty() {
             Type::Keyword(While) => self.parse_while().map(Flow::While),
             Type::Keyword(For) => self.parse_for().map(Flow::For),

@@ -41,25 +41,11 @@ fn take_stdin() -> Result<(), Box<dyn Error>> {
 }
 
 fn parse(file: &str, path: Option<&Path>) {
+    use conlang::parser::error::Error;
     match Parser::from(Lexer::new(file)).parse() {
         Ok(ast) => ast.print(),
-        Err(e) => {
-            println!("{e:?}");
-            if let Some(t) = e.start() {
-                print_token(path, file, t)
-            }
-        }
+        Err(e) if e.start().is_some() => println!("{:?}:{}", path.unwrap_or(Path::new("-")), e),
+        Err(e) => println!("{e}"),
     }
     println!();
-}
-
-fn print_token(path: Option<&Path>, file: &str, t: conlang::token::Token) {
-    let path = path.unwrap_or(Path::new(""));
-    println!(
-        "{path:?}:{:02}:{:02}: {} ({})",
-        t.line(),
-        t.col(),
-        &file[t.range()],
-        t.ty(),
-    )
 }

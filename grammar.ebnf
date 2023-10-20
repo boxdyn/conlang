@@ -5,10 +5,11 @@ Start       = Expr ;
 Literal     = STRING | CHARACTER | FLOAT | INTEGER | Bool ;
 Bool        = "true" | "false" ;
 Identifier  = IDENTIFIER ;
+
 (* # Expressions *)
 (* expression *)
-Expr        = Ignore
 Block       = '{' Expr? '}' ;
+Expr        = Ignore ;
 Group       = '(' Expr? ')' ;
 Primary     = Item | Identifier | Literal
               | Block | Group | Branch ;
@@ -26,9 +27,9 @@ Unary       = (UnaryOp)* Primary ;
 
 (* expression::math::operator *)
 IgnoreOp    =  ';' ;
-CompareOp   =  '<' | "<=" | "==" | "!=" | ">=" | '>' ;
 AssignOp    =  '=' | "+=" | "-=" | "*=" | "/=" |
               "&=" | "|=" | "^=" |"<<=" |">>=" ;
+CompareOp   =  '<' | "<=" | "==" | "!=" | ">=" | '>' ;
 LogicOp     = "&&" | "||" | "^^" ;
 
 BitwiseOp   =  '&' | '|' | '^' ;

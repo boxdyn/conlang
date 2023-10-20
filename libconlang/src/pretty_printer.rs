@@ -233,10 +233,7 @@ impl<W: Write> Visitor<IOResult<()>> for Printer<W> {
 
     fn visit_group(&mut self, expr: &expression::Group) -> IOResult<()> {
         self.put('(')?.space()?;
-        match &expr.expr {
-            Some(expr) => expr.walk(self),
-            None => ().walk(self),
-        }?;
+        expr.walk(self)?;
         self.space()?.put(')').map(drop)
     }
 }
