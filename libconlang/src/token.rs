@@ -2,7 +2,7 @@
 use std::ops::Range;
 
 mod token_type;
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
     // Invalid syntax
     Invalid,
@@ -72,7 +72,7 @@ pub enum Type {
 }
 
 /// Represents a reserved word.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Keyword {
     Break,
     Continue,
@@ -88,16 +88,16 @@ pub enum Keyword {
     While,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Token {
     ty: Type,
     pub head: usize,
     pub tail: usize,
-    line: usize,
-    col: usize,
+    line: u32,
+    col: u32,
 }
 impl Token {
-    pub fn new(ty: Type, head: usize, tail: usize, line: usize, col: usize) -> Self {
+    pub fn new(ty: Type, head: usize, tail: usize, line: u32, col: u32) -> Self {
         Self { ty, head, tail, line, col }
     }
     /// Cast this [Token] to a new [Type]
@@ -109,11 +109,11 @@ impl Token {
         Self { head, tail, ..self }
     }
     /// Gets the line from this token
-    pub fn line(&self) -> usize {
+    pub fn line(&self) -> u32 {
         self.line
     }
     /// Gets the column from this token
-    pub fn col(&self) -> usize {
+    pub fn col(&self) -> u32 {
         self.col
     }
     pub fn is_empty(&self) -> bool {

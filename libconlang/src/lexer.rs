@@ -23,8 +23,8 @@ impl<'t> IntoIterator for Lexer<'t> {
 pub struct Lexer<'t> {
     text: &'t str,
     cursor: usize,
-    line: usize,
-    col: usize,
+    line: u32,
+    col: u32,
 }
 /// Implements the non-terminals of a language
 impl<'t> Lexer<'t> {
@@ -41,12 +41,12 @@ impl<'t> Lexer<'t> {
     #[inline]
     fn count_len(&mut self, len: usize) -> &mut Self {
         self.cursor += len;
-        self.col += len;
+        self.col += len as u32;
         self
     }
     /// Counts a line
     #[inline]
-    fn count_line(&mut self, lines: usize) -> &mut Self {
+    fn count_line(&mut self, lines: u32) -> &mut Self {
         self.line += lines;
         self.col = 1;
         self
