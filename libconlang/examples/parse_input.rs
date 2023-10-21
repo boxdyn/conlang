@@ -3,7 +3,7 @@
 use conlang::{lexer::Lexer, parser::Parser, pretty_printer::PrettyPrintable, token::Token};
 use std::{
     error::Error,
-    io::{stdin, IsTerminal, Read},
+    io::{stdin, stdout, IsTerminal, Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -30,9 +30,18 @@ impl Config {
 }
 
 fn take_stdin() -> Result<(), Box<dyn Error>> {
+    const PROMPT: &str = "> ";
     if stdin().is_terminal() {
+        print!("{PROMPT}");
+        stdout().flush()?;
         for line in stdin().lines() {
-            parse(&line?, None)
+            let line = line?;
+            if !line.is_empty() {
+                parse(&line, None);
+                println!();
+            }
+            print!("{PROMPT}");
+            stdout().flush()?;
         }
     } else {
         parse(&std::io::read_to_string(stdin())?, None)
@@ -44,8 +53,8 @@ fn parse(file: &str, path: Option<&Path>) {
     use conlang::parser::error::Error;
     match Parser::from(Lexer::new(file)).parse() {
         Ok(ast) => ast.print(),
-        Err(e) if e.start().is_some() => println!("{:?}:{}", path.unwrap_or(Path::new("-")), e),
-        Err(e) => println!("{e}"),
+        Err(e) if e.start().is_some() => print!("{:?}:{}", path.unwrap_or(Path::new("-")), e),
+        Err(e) => print!("{e}"),
     }
     println!();
 }

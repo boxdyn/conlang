@@ -63,135 +63,111 @@ macro visit_operator($self:ident.$op:expr) {
     $self.space()?.put($op)?.space().map(drop)
 }
 impl<W: Write> Visitor<IOResult<()>> for Printer<W> {
-    fn visit_binary<F, Op>(&mut self, expr: &math::Binary<F, (Op, F)>) -> IOResult<()>
-    where
-        F: Walk<Self, IOResult<()>>,
-        Op: Walk<Self, IOResult<()>>,
-    {
-        expr.first().walk(self)?;
-        for (op, target) in expr.other() {
-            op.walk(self)?;
-            target.walk(self)?;
+    fn visit_operation(&mut self, expr: &math::Operation) -> IOResult<()> {
+        use math::Operation;
+        match expr {
+            Operation::Binary { first, other } => {
+                self.put('(')?.visit_operation(first)?;
+                for (op, other) in other {
+                    self.visit_binary_op(op)?;
+                    self.visit_operation(other)?;
+                }
+                self.put(')').map(drop)
+            }
+            Operation::Unary { operators, operand } => {
+                for op in operators {
+                    self.visit_unary_op(op)?;
+                }
+                self.visit_primary(operand)
+            }
         }
-        Ok(())
     }
-
-    fn visit_unary(&mut self, expr: &math::Unary) -> IOResult<()> {
-        for op in &expr.0 {
-            op.walk(self)?;
-        }
-        expr.1.walk(self)
-    }
-    fn visit_ignore_op(&mut self, _op: &operator::Ignore) -> IOResult<()> {
-        self.put(";")?.newline().map(drop)
-    }
-    fn visit_compare_op(&mut self, op: &operator::Compare) -> IOResult<()> {
+    fn visit_binary_op(&mut self, op: &operator::Binary) -> IOResult<()> {
+        use operator::Binary;
         visit_operator!(self.match op {
-            operator::Compare::Less => "<",
-            operator::Compare::LessEq => "<=",
-            operator::Compare::Equal => "==",
-            operator::Compare::NotEq => "!=",
-            operator::Compare::GreaterEq => ">=",
-            operator::Compare::Greater => ">",
-        })
-    }
-    fn visit_assign_op(&mut self, op: &operator::Assign) -> IOResult<()> {
-        visit_operator!( self.match op {
-            operator::Assign::Assign => "=",
-            operator::Assign::AddAssign => "+=",
-            operator::Assign::SubAssign => "-=",
-            operator::Assign::MulAssign => "*=",
-            operator::Assign::DivAssign => "/=",
-            operator::Assign::BitAndAssign => "&=",
-            operator::Assign::BitOrAssign => "|=",
-            operator::Assign::BitXorAssign => "^=",
-            operator::Assign::ShlAssign => "<<=",
-            operator::Assign::ShrAssign => ">>=",
-        })
-    }
-    fn visit_logic_op(&mut self, op: &operator::Logic) -> IOResult<()> {
-        visit_operator!(self.match op {
-            operator::Logic::LogAnd => "&&",
-            operator::Logic::LogOr => "||",
-            operator::Logic::LogXor => "^^",
-        })
-    }
-    fn visit_bitwise_op(&mut self, op: &operator::Bitwise) -> IOResult<()> {
-        visit_operator!(self.match op {
-            operator::Bitwise::BitAnd => "&",
-            operator::Bitwise::BitOr => "|",
-            operator::Bitwise::BitXor => "^",
-        })
-    }
-    fn visit_shift_op(&mut self, op: &operator::Shift) -> IOResult<()> {
-        visit_operator!(self.match op {
-            operator::Shift::Lsh => "<<",
-            operator::Shift::Rsh => ">>",
-        })
-    }
-    fn visit_term_op(&mut self, op: &operator::Term) -> IOResult<()> {
-        visit_operator!(self.match op {
-            operator::Term::Add => "+",
-            operator::Term::Sub => "-",
-        })
-    }
-    fn visit_factor_op(&mut self, op: &operator::Factor) -> IOResult<()> {
-        visit_operator!(self.match op {
-            operator::Factor::Mul => "*",
-            operator::Factor::Div => "/",
-            operator::Factor::Rem => "%",
+            Binary::Mul => "*",
+            Binary::Div => "/",
+            Binary::Rem => "%",
+            Binary::Add => "+",
+            Binary::Sub => "-",
+            Binary::Lsh => "<<",
+            Binary::Rsh => ">>",
+            Binary::BitAnd => "&",
+            Binary::BitOr => "|",
+            Binary::BitXor => "^",
+            Binary::LogAnd => "&&",
+            Binary::LogOr => "||",
+            Binary::LogXor => "^^",
+            Binary::Less => "<",
+            Binary::LessEq => "<=",
+            Binary::Equal => "==",
+            Binary::NotEq => "!=",
+            Binary::GreaterEq => ">=",
+            Binary::Greater => ">",
+            Binary::Assign => "=",
+            Binary::AddAssign => "+=",
+            Binary::SubAssign => "-=",
+            Binary::MulAssign => "*=",
+            Binary::DivAssign => "/=",
+            Binary::RemAssign => "%=",
+            Binary::BitAndAssign => "&=",
+            Binary::BitOrAssign => "|=",
+            Binary::BitXorAssign => "^=",
+            Binary::ShlAssign => "<<=",
+            Binary::ShrAssign => ">>=",
+            Binary::Ignore => ";",
         })
     }
     fn visit_unary_op(&mut self, op: &operator::Unary) -> IOResult<()> {
+        use operator::Unary;
         self.put(match op {
-            operator::Unary::RefRef => "&&",
-            operator::Unary::Deref => "*",
-            operator::Unary::Ref => "&",
-            operator::Unary::Neg => "-",
-            operator::Unary::Not => "!",
-            operator::Unary::At => "@",
-            operator::Unary::Hash => "#",
-            operator::Unary::Tilde => "~",
+            Unary::RefRef => "&&",
+            Unary::Deref => "*",
+            Unary::Ref => "&",
+            Unary::Neg => "-",
+            Unary::Not => "!",
+            Unary::At => "@",
+            Unary::Hash => "#",
+            Unary::Tilde => "~",
         })
         .map(drop)
     }
-
     fn visit_if(&mut self, expr: &control::If) -> IOResult<()> {
-        expr.cond.walk(self.put("if")?.space()?)?;
-        expr.body.walk(self.space()?)?;
-        if let Some(e) = &expr.else_ {
-            e.walk(self)?
+        self.put("while")?.space()?.visit_expr(&expr.cond)?;
+        self.space()?.visit_block(&expr.body)?;
+        match &expr.else_ {
+            Some(e) => self.visit_else(e),
+            None => Ok(()),
         }
-        Ok(())
     }
     fn visit_while(&mut self, expr: &control::While) -> IOResult<()> {
-        expr.cond.walk(self.put("while")?.space()?)?;
-        expr.body.walk(self.space()?)?;
-        if let Some(e) = &expr.else_ {
-            e.walk(self)?
+        self.put("while")?.space()?.visit_expr(&expr.cond)?;
+        self.space()?.visit_block(&expr.body)?;
+        match &expr.else_ {
+            Some(e) => self.visit_else(e),
+            None => Ok(()),
         }
-        Ok(())
     }
     fn visit_for(&mut self, expr: &control::For) -> IOResult<()> {
-        expr.var.walk(self.put("for")?.space()?)?;
-        expr.iter.walk(self.space()?.put("in")?.space()?)?;
-        expr.body.walk(self.space()?)?;
-        if let Some(e) = &expr.else_ {
-            e.walk(self)?
+        self.put("for")?.space()?.visit_identifier(&expr.var)?;
+        self.space()?.put("in")?.space()?.visit_expr(&expr.iter)?;
+        self.space()?.visit_block(&expr.body)?;
+        match &expr.else_ {
+            Some(e) => self.visit_else(e),
+            None => Ok(()),
         }
-        Ok(())
     }
     fn visit_else(&mut self, expr: &control::Else) -> IOResult<()> {
-        expr.block.walk(self.space()?.put("else")?.space()?)
+        self.space()?.put("else")?.space()?.visit_block(&expr.block)
     }
-    fn visit_continue(&mut self, _expr: &control::Continue) -> IOResult<()> {
+    fn visit_continue(&mut self, _: &control::Continue) -> IOResult<()> {
         self.put("continue").map(drop)
     }
-    fn visit_break(&mut self, expr: &control::Break) -> IOResult<()> {
-        expr.expr.walk(self.put("break")?.space()?)
+    fn visit_break(&mut self, brk: &control::Break) -> IOResult<()> {
+        self.put("break")?.space()?.visit_expr(&brk.expr)
     }
-    fn visit_return(&mut self, expr: &control::Return) -> IOResult<()> {
-        expr.expr.walk(self.put("return")?.space()?)
+    fn visit_return(&mut self, ret: &control::Return) -> IOResult<()> {
+        self.put("return")?.space()?.visit_expr(&ret.expr)
     }
 
     fn visit_identifier(&mut self, ident: &Identifier) -> IOResult<()> {
@@ -220,15 +196,9 @@ impl<W: Write> Visitor<IOResult<()>> for Printer<W> {
     }
 
     fn visit_block(&mut self, expr: &expression::Block) -> IOResult<()> {
-        self.put('{')?;
-        match &expr.expr {
-            Some(expr) => {
-                expr.walk(self.indent().newline()?)?;
-                self.dedent().newline()?;
-            }
-            None => ().walk(self.space()?)?,
-        }
-        self.put('}').map(drop)
+        self.put('{')?.indent().newline()?;
+        expr.walk(self)?;
+        self.dedent().newline()?.put('}').map(drop)
     }
 
     fn visit_group(&mut self, expr: &expression::Group) -> IOResult<()> {
