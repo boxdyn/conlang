@@ -9,6 +9,7 @@ pub trait ConstrTools {
     where Self: Iterator<Item = char> + Sized {
         UnescapeString::new(self)
     }
+    /// Parse an integer
     fn parse_int<O>(self) -> ParseInt<Self, O>
     where Self: Iterator<Item = char> + Sized {
         ParseInt::new(self)
@@ -44,13 +45,26 @@ pub mod unescape_string {
                 'b' => '\x08',
                 'f' => '\x0c',
                 'n' => '\n',
+                'r' => '\r',
                 't' => '\t',
                 'x' => self.hex_digits::<2>()?,
-                'u' => self.hex_digits::<4>()?,
-                'U' => self.hex_digits::<8>()?,
+                'u' => self.unicode()?,
                 '0' => '\0',
                 byte => byte,
             })
+        }
+        fn unicode(&mut self) -> Option<char> {
+            let mut out = 0;
+            let Some('{') = self.inner.next() else {
+                return None;
+            };
+            for c in self.inner.by_ref() {
+                match c {
+                    '}' => return char::from_u32(out),
+                    _ => out = (out << 4) + super::base::<16>(c)? as u32,
+                }
+            }
+            None
         }
         fn hex_digits<const DIGITS: u32>(&mut self) -> Option<char> {
             let mut out = 0;
@@ -155,6 +169,7 @@ mod tests {
             a_bell = ["\\a" => "\x07", "Ring the \\abell" => "Ring the \x07bell"];
             b_backspace = ["\\b" => "\x08"];
             f_feed = ["\\f" => "\x0c"];
+            r_return = ["\\r" => "\r"];
             t_tab = ["\\t" => "\t"];
             _0_nul = ["\\0" => "\0"];
             x_hex = [
@@ -163,6 +178,10 @@ mod tests {
                 "\\x7f" => "\x7f",
                 "\\x80" => "\u{80}",
                 "\\xD0" => "\u{D0}",
+            ];
+            u_unicode = [
+                "\\u{41}" => "A",
+                "\\u{1f988}" => "🦈",
             ];
         }
         macro test_unescape ($($f:ident = [$($test:expr => $expect:expr),*$(,)?];)*) {$(
