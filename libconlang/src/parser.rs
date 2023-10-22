@@ -1,12 +1,10 @@
 //! Parses [tokens](super::token) into an [AST](super::ast)
-use std::vec;
 
 use super::{
     ast::preamble::*,
     lexer::Lexer,
-    token::{Keyword, Token, Type},
+    token::{Keyword, Token, TokenData, Type},
 };
-use constr::ConstrTools;
 use error::{Error, Reason::*, *};
 
 pub mod error {
@@ -16,6 +14,7 @@ pub mod error {
     #[derive(Clone, Debug, Default, PartialEq, Eq)]
     pub enum Reason {
         Expected(Type),
+        Unexpected(Type),
         NotIdentifier,
         NotOperator,
         NotLiteral,
@@ -29,7 +28,6 @@ pub mod error {
         IntOverflow,
         NotBranch,
         IncompleteBranch,
-        AllElseFailed,
         EndOfFile,
         PanicStackUnderflow,
         #[default]
@@ -41,6 +39,7 @@ pub mod error {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 Self::Expected(t) => write!(f, "Expected {t}"),
+                Self::Unexpected(t) => write!(f, "Unexpected {t} in bagging area"),
                 Self::NotIdentifier => "Not an identifier".fmt(f),
                 Self::NotOperator => "Not an operator".fmt(f),
                 Self::NotLiteral => "Not a literal".fmt(f),
@@ -54,7 +53,6 @@ pub mod error {
                 Self::IntOverflow => "Integer too large".fmt(f),
                 Self::IncompleteBranch => "Branch expression was incomplete".fmt(f),
                 Self::NotBranch => "Expected branch expression".fmt(f),
-                Self::AllElseFailed => "Did not match any rule".fmt(f),
                 Self::EndOfFile => "Got end of file".fmt(f),
                 Self::PanicStackUnderflow => "Could not recover from panic".fmt(f),
                 Self::Unspecified => {
@@ -66,7 +64,7 @@ pub mod error {
 
     /// [Parser](super::Parser) [Result]
     pub type PResult<T> = Result<T, Error>;
-    #[derive(Clone, Debug, Default, PartialEq, Eq)]
+    #[derive(Clone, Debug, Default, PartialEq)]
     pub struct Error {
         reason: Reason,
         start: Option<Token>,
@@ -74,7 +72,7 @@ pub mod error {
 
     impl Display for Error {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            if let Some(token) = self.start {
+            if let Some(token) = &self.start {
                 write!(f, "{}:{}: ", token.line(), token.col())?;
             }
             write!(f, "{}", self.reason)
@@ -95,14 +93,15 @@ pub mod error {
         pub fn maybe_token(self, start: Option<Token>) -> Self {
             Self { start, ..self }
         }
-        pub fn start(&self) -> Option<Token> {
-            self.start
+        pub fn start(&self) -> Option<&Token> {
+            self.start.as_ref()
         }
         pub fn reason(self, reason: Reason) -> Self {
             Self { reason, ..self }
         }
         error_impl! {
             expected(e: Type): Expected,
+            unexpected(e: Type): Unexpected,
             not_identifier: NotIdentifier,
             not_operator: NotOperator,
             not_literal: NotLiteral,
@@ -115,7 +114,6 @@ pub mod error {
             not_int: NotInt,
             int_overflow: IntOverflow,
             not_branch: NotBranch,
-            all_else_failed: AllElseFailed,
             end_of_file: EndOfFile,
             panic_underflow: PanicStackUnderflow,
             unspecified: Unspecified,
@@ -125,27 +123,32 @@ pub mod error {
 
 /// The Parser performs recursive descent on the AST's grammar
 /// using a provided [Lexer].
-pub struct Parser<'t> {
+pub struct Parser {
     tokens: Vec<Token>,
     panic_stack: Vec<usize>,
-    text: &'t str,
     curr: usize,
 }
-impl<'t> From<Lexer<'t>> for Parser<'t> {
+impl<'t> From<Lexer<'t>> for Parser {
     fn from(value: Lexer<'t>) -> Self {
-        let (tokens, text) = value.consume();
-        Self::new(tokens, text)
+        let mut tokens = vec![];
+        for result in value {
+            match result {
+                Ok(t) => tokens.push(t),
+                Err(e) => println!("{e}"),
+            }
+        }
+        Self::new(tokens)
     }
 }
 
-impl<'t> Parser<'t> {
+impl Parser {
     /// Create a new [Parser] from a list of [Tokens][1]
     /// and the [text](str) used to generate that list
     /// (as [Tokens][1] do not store their strings)
     ///
     /// [1]: Token
-    pub fn new(tokens: Vec<Token>, text: &'t str) -> Self {
-        Self { tokens, text, panic_stack: vec![], curr: 0 }
+    pub fn new(tokens: Vec<Token>) -> Self {
+        Self { tokens, panic_stack: vec![], curr: 0 }
     }
     /// Parse the [start of an AST](Start)
     pub fn parse(&mut self) -> PResult<Start> {
@@ -170,7 +173,7 @@ impl<'t> Parser<'t> {
     pub fn peek(&self) -> PResult<&Token> {
         self.tokens
             .get(self.curr)
-            .ok_or(Error::end_of_file().maybe_token(self.tokens.last().copied()))
+            .ok_or(Error::end_of_file().maybe_token(self.tokens.last().cloned()))
     }
     /// Records the current position on the panic stack
     pub fn mark(&mut self) -> &mut Self {
@@ -198,7 +201,7 @@ impl<'t> Parser<'t> {
     }
 }
 /// Helpers
-impl<'t> Parser<'t> {
+impl Parser {
     fn consume_type(&mut self, t: Type) -> PResult<&mut Self> {
         self.matches(t)?;
         Ok(self.consume())
@@ -207,17 +210,17 @@ impl<'t> Parser<'t> {
         if self.curr < self.tokens.len() {
             Ok(self)
         } else {
-            Err(Error::end_of_file().maybe_token(self.tokens.last().copied()))
+            Err(Error::end_of_file().maybe_token(self.tokens.last().cloned()))
         }
     }
     fn todo_error(&mut self, l: u32, c: u32, s: &str) -> Error {
         eprintln!("TODO: {s}:{l}:{c}");
-        Error::unspecified().token(*self.peek().unwrap())
+        Error::unspecified().token(self.peek().unwrap().clone())
     }
     fn matches(&mut self, e: Type) -> PResult<&Token> {
         let t = self.check_eof()?.peek().expect("self should not be eof");
         if t.ty() != e {
-            Err(Error::expected(e).token(*t))?
+            Err(Error::expected(e).token(t.clone()))?
         }
         Ok(t)
     }
@@ -250,51 +253,54 @@ macro ptodo($self:expr $(, $t:expr)*) {
 }
 
 /// # Terminals and Pseudo-Terminals
-impl<'t> Parser<'t> {
+impl Parser {
     fn identifier(&mut self) -> PResult<Identifier> {
-        let token = *self
-            .matches(Type::Identifier)
-            .map_err(|e| Error::not_identifier().maybe_token(e.start()))?;
-        Ok(Identifier(self.consume().text[&token].into()))
+        let out = match self.matches(Type::Identifier)?.data() {
+            TokenData::Identifier(id) => Identifier(id.to_string()),
+            _ => Err(Error::not_identifier())?,
+        };
+        self.consume();
+        Ok(out)
     }
     fn literal(&mut self) -> PResult<literal::Literal> {
         use literal::Literal::*;
         use Keyword::{False, True};
-        let tok = self.peek()?;
-        match tok.ty() {
+        let token = self.peek()?;
+        match token.ty() {
             Type::Float => self.float().map(Float),
             Type::Integer => self.int().map(Int),
             Type::String => self.string().map(String),
             Type::Character => self.char().map(Char),
             Type::Keyword(True | False) => self.bool().map(Bool),
-            _ => Err(Error::not_literal().token(*tok)),
+            _ => Err(Error::not_literal().token(token.clone())),
         }
     }
     fn float(&mut self) -> PResult<literal::Float> {
         ptodo!(self)
     }
     fn int(&mut self) -> PResult<u128> {
-        let token = *self.matches(Type::Integer)?;
-        self.consume().text[&token]
-            .chars()
-            .parse_int::<u128>()
-            .next()
-            .ok_or(Error::not_int().token(token))
+        let out = match self.matches(Type::Integer)?.data() {
+            TokenData::Integer(i) => *i,
+            _ => Err(Error::not_int())?,
+        };
+        self.consume();
+        Ok(out)
     }
     fn string(&mut self) -> PResult<String> {
-        let range = self
-            .matches(Type::String)
-            .map_err(|e| e.reason(NotString))?
-            .range();
-        Ok(self.consume().text[range].chars().unescape().collect())
+        let out = match self.matches(Type::String)?.data() {
+            TokenData::String(s) => s.clone(),
+            _ => Err(Error::not_string())?,
+        };
+        self.consume();
+        Ok(out)
     }
     fn char(&mut self) -> PResult<char> {
-        let token = *self.matches(Type::Character)?;
-        self.consume().text[&token]
-            .chars()
-            .unescape()
-            .next()
-            .ok_or(Error::not_char().token(token))
+        let out = match self.matches(Type::Character)?.data() {
+            TokenData::Character(c) => *c,
+            _ => Err(Error::not_char())?,
+        };
+        self.consume();
+        Ok(out)
     }
     fn bool(&mut self) -> PResult<bool> {
         use Keyword::{False, True};
@@ -302,14 +308,14 @@ impl<'t> Parser<'t> {
         let out = match token.ty() {
             Type::Keyword(False) => false,
             Type::Keyword(True) => true,
-            _ => Err(Error::not_bool().token(*token))?,
+            _ => Err(Error::not_bool().token(token.clone()))?,
         };
         self.consume();
         Ok(out)
     }
 }
 /// Expressions
-impl<'t> Parser<'t> {
+impl Parser {
     fn expr(&mut self) -> PResult<expression::Expr> {
         use expression::Expr;
         Ok(Expr { ignore: self.ignore()? })
@@ -335,7 +341,7 @@ impl<'t> Parser<'t> {
     }
     fn primary(&mut self) -> PResult<expression::Primary> {
         use expression::Primary;
-        let token = *self.peek()?;
+        let token = self.peek()?;
         match token.ty() {
             Type::Identifier => self.identifier().map(Primary::Identifier),
             Type::String
@@ -346,7 +352,7 @@ impl<'t> Parser<'t> {
             Type::LCurly => self.block().map(Primary::Block),
             Type::LParen => self.group().map(Primary::Group),
             Type::Keyword(_) => self.flow().map(Primary::Branch),
-            _ => Err(Error::all_else_failed().token(token))?,
+            e => Err(Error::unexpected(e).token(token.clone()))?,
         }
     }
 }
@@ -377,7 +383,7 @@ macro binary ($($f:ident = $a:ident, $b:ident);*$(;)?) {$(
     }
 )*}
 /// # [Arithmetic and Logical Subexpressions](math)
-impl<'t> Parser<'t> {
+impl Parser {
     binary! {
         //name    operands operators
         ignore  = assign,  ignore_op;
@@ -400,18 +406,19 @@ impl<'t> Parser<'t> {
 }
 macro operator_impl ($($(#[$m:meta])* $f:ident : {$($type:pat => $op:ident),*$(,)?})*) {
     $($(#[$m])* fn $f(&mut self) -> PResult<operator::Binary> {
+
         use operator::Binary;
-        let token = *self.peek()?;
+        let token = self.peek()?;
         let out = Ok(match token.ty() {
             $($type => Binary::$op,)*
-            _ => Err(Error::not_operator().token(token))?,
+            _ => Err(Error::not_operator().token(token.clone()))?,
         });
         self.consume();
         out
     })*
 }
 /// # [Operators](operator)
-impl<'t> Parser<'t> {
+impl Parser {
     operator_impl! {
         factor_op: {
             Type::Star => Mul,
@@ -465,7 +472,7 @@ impl<'t> Parser<'t> {
     /// Parse a [unary operator](operator::Unary)
     fn unary_op(&mut self) -> PResult<operator::Unary> {
         use operator::Unary;
-        let token = *self.peek()?;
+        let token = self.peek()?;
         let out = Ok(match token.ty() {
             Type::AmpAmp => Unary::RefRef,
             Type::Amp => Unary::Ref,
@@ -475,18 +482,18 @@ impl<'t> Parser<'t> {
             Type::At => Unary::At,
             Type::Hash => Unary::Hash,
             Type::Tilde => Unary::Tilde,
-            _ => Err(Error::not_operator().token(token))?,
+            _ => Err(Error::not_operator().token(token.clone()))?,
         });
         self.consume();
         out
     }
 }
 /// # [Control Flow](control)
-impl<'t> Parser<'t> {
+impl Parser {
     fn flow(&mut self) -> PResult<control::Flow> {
         use control::Flow;
         use Keyword::{Break, Continue, For, If, Return, While};
-        let token = *self.peek()?;
+        let token = self.peek()?;
         match token.ty() {
             Type::Keyword(While) => self.parse_while().map(Flow::While),
             Type::Keyword(For) => self.parse_for().map(Flow::For),
@@ -494,9 +501,9 @@ impl<'t> Parser<'t> {
             Type::Keyword(Break) => self.parse_break().map(Flow::Break),
             Type::Keyword(Return) => self.parse_return().map(Flow::Return),
             Type::Keyword(Continue) => self.parse_continue().map(Flow::Continue),
-            _ => Err(Error::all_else_failed().token(token)),
+            e => Err(Error::unexpected(e).token(token.clone()))?,
         }
-        .map_err(|e| e.reason(IncompleteBranch).token(token))
+        .map_err(|e| e.reason(IncompleteBranch))
     }
     fn parse_if(&mut self) -> PResult<control::If> {
         self.keyword(Keyword::If)?;

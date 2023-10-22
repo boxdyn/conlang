@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         take_stdin()?;
     } else {
         for path in conf.paths.iter().map(PathBuf::as_path) {
-            lex_tokens(&std::fs::read_to_string(path)?, Some(path));
+            lex_tokens(&std::fs::read_to_string(path)?, Some(path))?;
         }
     }
     Ok(())
@@ -32,29 +32,37 @@ impl Config {
 fn take_stdin() -> Result<(), Box<dyn Error>> {
     if stdin().is_terminal() {
         for line in stdin().lines() {
-            lex_tokens(&line?, None)
+            lex_tokens(&line?, None)?
         }
     } else {
-        lex_tokens(&std::io::read_to_string(stdin())?, None)
+        lex_tokens(&std::io::read_to_string(stdin())?, None)?
     }
     Ok(())
 }
 
-fn lex_tokens(file: &str, path: Option<&Path>) {
+fn lex_tokens(file: &str, path: Option<&Path>) -> Result<(), Box<dyn Error>> {
     for token in Lexer::new(file) {
+        let token = match token {
+            Ok(t) => t,
+            Err(e) => {
+                println!("{e:?}");
+                break;
+            },
+        };
         if let Some(path) = path {
             print!("{path:?}:")
         }
-        print_token(file, token);
+        print_token(token);
     }
+    Ok(())
 }
 
-fn print_token(line: &str, t: conlang::token::Token) {
+fn print_token(t: conlang::token::Token) {
     println!(
-        "{:02}:{:02}: {:#19} │{}│",
+        "{:02}:{:02}: {:#19} │{:?}│",
         t.line(),
         t.col(),
         t.ty(),
-        &line[t.range()]
+        t.data(),
     )
 }

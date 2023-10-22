@@ -1,5 +1,4 @@
 //! Stores a component of a file as a type and span
-use std::ops::Range;
 
 mod token_type;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -88,54 +87,60 @@ pub enum Keyword {
     While,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq)]
+pub enum TokenData {
+    Identifier(Box<str>),
+    String(String),
+    Character(char),
+    Integer(u128),
+    Float(f64),
+    None,
+}
+from! {
+    value: &str => Self::Identifier(value.into()),
+    value: String => Self::String(value),
+    value: u128 => Self::Integer(value),
+    value: f64 => Self::Float(value),
+    value: char => Self::Character(value),
+    _v:    () => Self::None,
+}
+macro from($($value:ident: $src:ty => $dst:expr),*$(,)?) {
+    $(impl From<$src> for TokenData {
+        fn from($value: $src) -> Self { $dst }
+    })*
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct Token {
     ty: Type,
-    pub head: usize,
-    pub tail: usize,
+    data: TokenData,
     line: u32,
     col: u32,
 }
 impl Token {
-    pub fn new(ty: Type, head: usize, tail: usize, line: u32, col: u32) -> Self {
-        Self { ty, head, tail, line, col }
+    /// Creates a new [Token] out of a [Type], [TokenData], line, and column.
+    pub fn new(ty: Type, data: impl Into<TokenData>, line: u32, col: u32) -> Self {
+        Self { ty, data: data.into(), line, col }
     }
-    /// Cast this [Token] to a new [Type]
+    /// Casts this token to a new [Type]
     pub fn cast(self, ty: Type) -> Self {
         Self { ty, ..self }
     }
-    /// Hack to work around the current [lexer's design limitations](crate::lexer)
-    pub fn rebound(self, head: usize, tail: usize) -> Self {
-        Self { head, tail, ..self }
-    }
-    /// Gets the line from this token
-    pub fn line(&self) -> u32 {
-        self.line
-    }
-    /// Gets the column from this token
-    pub fn col(&self) -> u32 {
-        self.col
-    }
-    pub fn is_empty(&self) -> bool {
-        self.tail == self.head
-    }
-    /// Gets the length of the token, in bytes
-    pub fn len(&self) -> usize {
-        self.tail - self.head
-    }
-    /// Gets the [Type] of the token
+    /// Gets the [Type] of this token
     pub fn ty(&self) -> Type {
         self.ty
     }
-    /// Gets the exclusive range of the token
-    pub fn range(&self) -> Range<usize> {
-        self.head..self.tail
+    /// Gets the [TokenData] of this token
+    pub fn data(&self) -> &TokenData {
+        &self.data
     }
-}
-
-impl std::ops::Index<&Token> for str {
-    type Output = str;
-    fn index(&self, index: &Token) -> &Self::Output {
-        &self[index.range()]
+    pub fn into_data(self) -> TokenData {
+        self.data
+    }
+    pub fn line(&self) -> u32 {
+        self.line
+    }
+    pub fn col(&self) -> u32 {
+        self.col
     }
 }
