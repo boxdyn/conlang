@@ -1,5 +1,5 @@
 # Conlang: Expression-Oriented Programming Language
-This project began out of a desire to merge functional-style control flow expressions 
+This project began out of a desire to merge Rust-style control flow expressions 
 with Python's fun for-else/while-else syntax. I fully intend to devote my spare time
 to conlang for the forseeable future, and I livestream development on Twitch for one 
 Friday each month.
@@ -18,14 +18,15 @@ Friday each month.
   - [ ] Function definition statements
 
 ## Short Goals:
-- [ ] `for` loops and `while` loops can be used on the right-hand side of an assignment
+- [ ] `for` loops and `while` loops can be used on the trailing side of an assignment
+- [ ] Tree-walk interpreter for prototyping and debugging
 - [ ] Data structures and sum-type enums
 - [ ] Expression type-checker
 - [ ] Trait/Interface system
-- [ ] Tree-walk interpreter for prototyping and debugging
-- [ ] Three-reference bytecode VM for standard library development
+- [ ] Three-address bytecode VM for standard library development
 
 ## Long Goals:
-- [ ] Semicolons are NEVER given special treatment
+- [ ] Minimize the number of kinds of statements
 - [ ] Compile to LLVM IR
 - [ ] Create a standard library for the language, with Rust-like abstractions.
+- [ ] Port the compiler to Conlang
