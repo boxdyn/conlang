@@ -98,6 +98,8 @@ impl<W: Write> Visitor<IOResult<()>> for Printer<W> {
             Binary::LogAnd => "&&",
             Binary::LogOr => "||",
             Binary::LogXor => "^^",
+            Binary::RangeExc => "..",
+            Binary::RangeInc => "..=",
             Binary::Less => "<",
             Binary::LessEq => "<=",
             Binary::Equal => "==",

@@ -388,7 +388,8 @@ impl Parser {
         //name    operands operators
         ignore  = assign,  ignore_op;
         assign  = compare, assign_op;
-        compare = logic,   compare_op;
+        compare = range,   compare_op;
+        range   = logic,   range_op;
         logic   = bitwise, logic_op;
         bitwise = shift,   bitwise_op;
         shift   = term,    shift_op;
@@ -442,6 +443,10 @@ impl Parser {
             Type::AmpAmp => LogAnd,
             Type::BarBar => LogOr,
             Type::XorXor => LogXor,
+        }
+        range_op: {
+            Type::DotDot => RangeExc,
+            Type::DotDotEq => RangeInc,
         }
         compare_op: {
             Type::Lt => Less,

@@ -603,6 +603,12 @@ pub mod expression {
                 /// `^^`: **Non-short-circuiting** logical XOR
                 LogXor,
 
+                // Range operators
+                /// `..`: Exclusive range
+                RangeExc,
+                /// `..=`: Inclusive range
+                RangeInc,
+
                 // Comparison operators
                 /// `<`: Less-than Comparison
                 Less,
