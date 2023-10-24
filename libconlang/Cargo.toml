@@ -1,13 +1,15 @@
 [package]
 name = "conlang"
+description = "The Conlang Programming Language"
+keywords = ["interpreter", "programming", "language"]
 authors.workspace = true
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+registry.workspace = true
+repository.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lerox = { path = "../lerox" }
-constr = { path = "../constr" }
 unicode-xid = "0.2.4"
