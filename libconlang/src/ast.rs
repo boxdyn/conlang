@@ -285,7 +285,7 @@ pub struct Start(pub expression::Expr);
 
 /// An Identifier stores the name of an item
 /// # Syntax
-/// [`Identifier`] := [`IDENTIFIER`](crate::token::Type::Identifier)
+/// [`Identifier`] := [`IDENTIFIER`](crate::token::token_type::Type::Identifier)
 #[derive(Clone, Debug, Hash)]
 pub struct Identifier(pub String);
 
@@ -354,31 +354,31 @@ pub mod literal {
     pub enum Literal {
         /// Represents a literal string value
         /// # Syntax
-        /// [`Literal::String`] := [`STRING`](crate::token::Type::String)
+        /// [`Literal::String`] := [`STRING`](crate::token::token_type::Type::String)
         String(String),
         /// Represents a literal [char] value
         /// # Syntax
-        /// [`Literal::Char`] := [`CHARACTER`](crate::token::Type::Character)
+        /// [`Literal::Char`] := [`CHARACTER`](crate::token::token_type::Type::Character)
         Char(char),
         /// Represents a literal [bool] value
         /// # Syntax
         /// [`Literal::Bool`] :=
-        ///     [`TRUE`](crate::token::Keyword::True)
-        ///   | [`FALSE`](crate::token::Keyword::False)
+        ///     [`TRUE`](crate::token::token_type::Keyword::True)
+        ///   | [`FALSE`](crate::token::token_type::Keyword::False)
         Bool(bool),
         /// Represents a literal float value
         /// # Syntax
-        /// [`Float`] := [`FLOAT`](crate::token::Type::Float)
+        /// [`Float`] := [`FLOAT`](crate::token::token_type::Type::Float)
         Float(Float),
         /// Represents a literal integer value
         /// # Syntax
-        /// [`u128`] := [`INTEGER`](crate::token::Type::Integer)
+        /// [`u128`] := [`INTEGER`](crate::token::token_type::Type::Integer)
         Int(u128),
     }
 
     /// Represents a literal float value
     /// # Syntax
-    /// [`Float`] := [`FLOAT`](crate::token::Type::Float)
+    /// [`Float`] := [`FLOAT`](crate::token::token_type::Type::Float)
     #[derive(Clone, Debug)]
     pub struct Float {
         pub sign: bool,

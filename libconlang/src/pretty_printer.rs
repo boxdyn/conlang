@@ -1,10 +1,14 @@
+//! A [Printer] pretty-prints a Conlang [syntax tree](crate::ast)
 use super::ast::preamble::*;
 use std::{
     fmt::Display,
     io::{stdout, Result as IOResult, StdoutLock, Write},
 };
+/// Prettily prints this node
 pub trait PrettyPrintable {
+    /// Prettily prints this node
     fn print(&self);
+    /// Prettily writes this node into the given [Writer](Write)
     fn write(&self, into: impl Write) -> IOResult<()>;
 }
 impl PrettyPrintable for Start {
@@ -16,6 +20,7 @@ impl PrettyPrintable for Start {
     }
 }
 
+/// Prints a Conlang [syntax tree](crate::ast) into a [Writer](Write)
 #[derive(Debug)]
 pub struct Printer<W: Write> {
     level: u32,

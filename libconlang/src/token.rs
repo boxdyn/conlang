@@ -17,7 +17,7 @@ use token_data::Data;
 use token_type::Type;
 
 /// Contains a single unit of lexical information,
-/// and an optional bit of [data](TokenData)
+/// and an optional bit of [Data]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Token {
     ty: Type,

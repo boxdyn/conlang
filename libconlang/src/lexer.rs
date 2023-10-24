@@ -1,5 +1,5 @@
 //! Converts a text file into tokens
-use crate::token::{Keyword, Token, TokenData, Type};
+use crate::token::preamble::*;
 use std::{
     iter::Peekable,
     str::{Chars, FromStr},
@@ -7,12 +7,13 @@ use std::{
 use unicode_xid::UnicodeXID;
 
 pub mod lexer_iter {
+    //! Iterator over a [`Lexer`], returning [`LResult<Token>`]s
     use super::{
         error::{LResult, Reason},
         Lexer, Token,
     };
 
-    /// Fallible iterator over a [Lexer], returning optional [LResult<Token>]s
+    /// Iterator over a [`Lexer`], returning [`LResult<Token>`]s
     pub struct LexerIter<'t> {
         lexer: Lexer<'t>,
     }
@@ -40,6 +41,31 @@ pub mod lexer_iter {
     }
 }
 
+/// The Lexer iterates over the characters in a body of text, searching for [Tokens](Token).
+/// 
+/// # Examples
+/// ```rust
+///# use conlang::lexer::Lexer;
+/// // Read in your code from somewhere
+/// let some_code = "
+/// fn main () {
+///     // TODO: code goes here!
+/// }
+/// ";
+/// // Create a lexer over your code
+/// let mut lexer = Lexer::new(some_code);
+/// // Scan for a single token
+/// let first_token = lexer.scan().unwrap();
+/// println!("{first_token:?}");
+/// // Loop over all the rest of the tokens
+/// for token in lexer {
+///#    let token: Result<_,()> = Ok(token.unwrap());
+///     match token {
+///         Ok(token) => println!("{token:?}"),
+///         Err(e) => eprintln!("{e:?}"),
+///     }
+/// }
+/// ```
 #[derive(Clone, Debug)]
 pub struct Lexer<'t> {
     iter: Peekable<Chars<'t>>,
@@ -50,6 +76,7 @@ pub struct Lexer<'t> {
 }
 
 impl<'t> Lexer<'t> {
+    /// Creates a new [Lexer] over a [str]
     pub fn new(text: &'t str) -> Self {
         Self {
             iter: text.chars().peekable(),
@@ -59,6 +86,7 @@ impl<'t> Lexer<'t> {
             current_loc: (1, 1),
         }
     }
+    /// Scans through the text, searching for the next [Token]
     pub fn scan(&mut self) -> LResult<Token> {
         match self.skip_whitespace().peek()? {
             '{' => self.consume()?.produce(Type::LCurly, ()),
@@ -98,11 +126,11 @@ impl<'t> Lexer<'t> {
             e => Err(Error::unexpected_char(e, self.line(), self.col())),
         }
     }
-    /// Gets the line of the next token
+    /// Returns the current line
     pub fn line(&self) -> u32 {
         self.start_loc.0
     }
-    /// Gets the column of the next token
+    /// Returns the current column
     pub fn col(&self) -> u32 {
         self.start_loc.1
     }
@@ -403,8 +431,10 @@ impl<'t> Lexer<'t> {
 
 use error::{Error, LResult, Reason};
 pub mod error {
+    //! [Error] type for the [Lexer](super::Lexer)
     use std::fmt::Display;
 
+    /// Result type with [Err] = [Error]
     pub type LResult<T> = Result<T, Error>;
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct Error {
@@ -415,14 +445,25 @@ pub mod error {
     /// The reason for the [Error]
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Reason {
+        /// Found an opening delimiter of type [char], but not the expected closing delimiter
         UnmatchedDelimiters(char),
+        /// Found a character that doesn't belong to any [Type](crate::token::token_type::Type)
         UnexpectedChar(char),
+        /// Found a character that's not valid in identifiers while looking for an identifier
         NotIdentifier(char),
+        /// Found a character that's not valid in an escape sequence while looking for an escape
+        /// sequence
         UnknownEscape(char),
+        /// Escape sequence contains invalid hexadecimal digit or unmatched braces
         InvalidEscape(char),
+        /// Character is not a valid digit in the requested base
         InvalidDigit(char),
+        /// Base conversion requested, but the base character was not in the set of known
+        /// characters
         UnknownBase(char),
+        /// Unicode escape does not map to a valid unicode code-point
         BadUnicode(u32),
+        /// Reached end of input
         EndOfFile,
     }
     error_impl! {
@@ -441,7 +482,11 @@ pub mod error {
         pub(super) fn mask_reason(self, reason: Reason) -> Self {
             Self { reason, ..self }
         }
-        /// Gets the (line, col) where the error happened
+        /// Returns the [Reason] for this error
+        pub fn reason(&self) -> &Reason {
+            &self.reason
+        }
+        /// Returns the (line, col) where the error happened
         pub fn location(&self) -> (u32, u32) {
             (self.line, self.col)
         }
