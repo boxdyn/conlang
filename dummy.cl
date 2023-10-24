@@ -8,9 +8,9 @@ fn main() {
 
     // An if expression is like the ternary conditional operator in C
     let y = if x < 50 {
-        0
+        "\u{1f988}"
     } else {
-        x
+        "x"
     };
     
     // A `while` expression is like the while-else construct in Python,
