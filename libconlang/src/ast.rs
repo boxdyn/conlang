@@ -24,7 +24,8 @@ pub mod preamble {
     };
 }
 
-mod visitor {
+pub mod visitor {
+    //! A [`Visitor`] visits every kind of node in the [Abstract Syntax Tree](super). Nodes, conversely are [`Walkers`](Walk) for Visitors which return a [`Result<(), E>`](Result)
     use super::{
         expression::{
             control::*,
@@ -34,12 +35,12 @@ mod visitor {
         literal::*,
         *,
     };
-    /// [Walk] traverses the AST, calling [`Visitor::visit_*()`](Visitor) on all the nodes
+    /// A [Walker](Walk) is a node in the AST, and calls [`Visitor::visit_*()`](Visitor) on all its children
     pub trait Walk<T: Visitor<R> + ?Sized, R> {
         /// Traverses the children of this node in order, calling the appropriate [Visitor] function
         fn walk(&self, visitor: &mut T) -> R;
     }
-    pub mod walker {
+    mod walker {
         use super::*;
         macro leaf($($T:ty),*$(,)?) {$(
             impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for $T {
@@ -174,6 +175,7 @@ mod visitor {
         }
     }
 
+    /// A Visitor traverses every kind of node in the [Abstract Syntax Tree](super)
     pub trait Visitor<R> {
         /// Visit the start of an AST
         fn visit(&mut self, start: &Start) -> R {

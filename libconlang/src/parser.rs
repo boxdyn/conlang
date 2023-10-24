@@ -76,9 +76,10 @@ pub mod error {
     }
 
     macro error_impl($($fn:ident$(($($p:ident: $t:ty),*))?: $reason:expr),*$(,)?) {$(
-    /// Creates an [Error] with this [Reason]:
-    #[doc = concat!("[`", stringify!($reason), "`]")]
-        pub fn $fn($($($p : $t),*)?) -> Self {
+        /// Creates an [Error] with this [Reason]:
+        #[doc = concat!("[`", stringify!($reason), "`]")]
+        #[allow(dead_code)]
+        pub(crate) fn $fn($($($p : $t),*)?) -> Self {
             Self { reason: $reason$(($($p)*))?, start: None }
         }
     )*}
@@ -160,7 +161,7 @@ impl Parser {
     }
     /// Consume the current token
     #[inline]
-    pub fn consume(&mut self) -> &mut Self {
+    fn consume(&mut self) -> &mut Self {
         self.curr += 1;
         self.consume_comments();
         self
@@ -172,22 +173,22 @@ impl Parser {
             .ok_or(Error::end_of_file().maybe_token(self.tokens.last().cloned()))
     }
     /// Records the current position on the panic stack
-    pub fn mark(&mut self) -> &mut Self {
+    fn mark(&mut self) -> &mut Self {
         self.panic_stack.push(self.curr);
         self
     }
     /// Erases a recorded position from the panic stack
-    pub fn unmark(&mut self) -> &mut Self {
+    fn unmark(&mut self) -> &mut Self {
         self.panic_stack.pop();
         self
     }
     /// Unwinds the panic stack one step
-    pub fn unwind(&mut self) -> PResult<&mut Self> {
+    fn unwind(&mut self) -> PResult<&mut Self> {
         let v = self.panic_stack.pop().ok_or(Error::panic_underflow())?;
         self.curr = v;
         Ok(self)
     }
-    pub fn advance_until(&mut self, t: Type) -> PResult<&mut Self> {
+    fn advance_until(&mut self, t: Type) -> PResult<&mut Self> {
         while self.matches(t).is_err() {
             self.check_eof()
                 .map_err(|e| e.reason(Expected(t)))?
