@@ -59,7 +59,7 @@ fn lex_tokens(file: &str, path: Option<&Path>) -> Result<(), Box<dyn Error>> {
 
 fn print_token(t: conlang::token::Token) {
     println!(
-        "{:02}:{:02}: {:#19} │{:?}│",
+        "{:02}:{:02}: {:#19} │{}│",
         t.line(),
         t.col(),
         t.ty(),
