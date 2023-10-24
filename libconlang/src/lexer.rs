@@ -117,7 +117,7 @@ impl<'t> Lexer<'t> {
             .copied()
             .ok_or(Error::end_of_file(self.line(), self.col()))
     }
-    fn produce(&mut self, ty: Type, data: impl Into<TokenData>) -> LResult<Token> {
+    fn produce(&mut self, ty: Type, data: impl Into<Data>) -> LResult<Token> {
         let loc = self.start_loc;
         self.start_loc = self.current_loc;
         self.start = self.current;
@@ -284,7 +284,7 @@ impl<'t> Lexer<'t> {
         if let Ok(keyword) = Keyword::from_str(&out) {
             self.produce(Type::Keyword(keyword), ())
         } else {
-            self.produce(Type::Identifier, TokenData::Identifier(out.into()))
+            self.produce(Type::Identifier, Data::Identifier(out.into()))
         }
     }
     fn xid_start(&mut self) -> LResult<char> {

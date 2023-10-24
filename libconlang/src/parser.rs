@@ -1,10 +1,6 @@
 //! Parses [tokens](super::token) into an [AST](super::ast)
 
-use super::{
-    ast::preamble::*,
-    lexer::Lexer,
-    token::{Keyword, Token, TokenData, Type},
-};
+use super::{ast::preamble::*, lexer::Lexer, token::preamble::*};
 use error::{Error, Reason::*, *};
 
 pub mod error {
@@ -256,7 +252,7 @@ macro ptodo($self:expr $(, $t:expr)*) {
 impl Parser {
     fn identifier(&mut self) -> PResult<Identifier> {
         let out = match self.matches(Type::Identifier)?.data() {
-            TokenData::Identifier(id) => Identifier(id.to_string()),
+            Data::Identifier(id) => Identifier(id.to_string()),
             _ => Err(Error::not_identifier())?,
         };
         self.consume();
@@ -280,7 +276,7 @@ impl Parser {
     }
     fn int(&mut self) -> PResult<u128> {
         let out = match self.matches(Type::Integer)?.data() {
-            TokenData::Integer(i) => *i,
+            Data::Integer(i) => *i,
             _ => Err(Error::not_int())?,
         };
         self.consume();
@@ -288,7 +284,7 @@ impl Parser {
     }
     fn string(&mut self) -> PResult<String> {
         let out = match self.matches(Type::String)?.data() {
-            TokenData::String(s) => s.clone(),
+            Data::String(s) => s.clone(),
             _ => Err(Error::not_string())?,
         };
         self.consume();
@@ -296,7 +292,7 @@ impl Parser {
     }
     fn char(&mut self) -> PResult<char> {
         let out = match self.matches(Type::Character)?.data() {
-            TokenData::Character(c) => *c,
+            Data::Character(c) => *c,
             _ => Err(Error::not_char())?,
         };
         self.consume();

@@ -8,7 +8,7 @@ mod lexer {
     #[allow(unused_imports)]
     use crate::{
         lexer::Lexer,
-        token::{Token, TokenData, Keyword, Type},
+        token::preamble::*,
     };
 
     macro test_lexer_output_type  ($($f:ident {$($test:expr => $expect:expr),*$(,)?})*) {$(
@@ -45,7 +45,7 @@ mod lexer {
     mod ident {
         use super::*;
         macro ident ($($id:literal),*) {
-            [$(TokenData::Identifier($id.into())),*]
+            [$(Data::Identifier($id.into())),*]
         }
         test_lexer_data_type! {
             underscore { "_ _" => ident!["_", "_"] }

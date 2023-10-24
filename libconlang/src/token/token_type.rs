@@ -1,6 +1,92 @@
-//! Trait impls and helper functions for [Type] and [Keyword]
-use super::{Keyword, Type};
-use std::fmt::Display;
+//! Stores a [Token's](super::Token) lexical information
+use std::{fmt::Display, str::FromStr};
+
+/// Stores a [Token's](super::Token) lexical information
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Type {
+    // Invalid syntax
+    Invalid,
+    // Any kind of comment
+    Comment,
+    // Any identifier
+    Identifier,
+    Keyword(Keyword),
+    // Literals
+    Integer,
+    Float,
+    String,
+    Character,
+    // Delimiters and punctuation
+    LCurly,    // {
+    RCurly,    // }
+    LBrack,    // [
+    RBrack,    // ]
+    LParen,    // (
+    RParen,    // )
+    Amp,       // &
+    AmpAmp,    // &&
+    AmpEq,     // &=
+    Arrow,     // ->
+    At,        // @
+    Backslash, // \
+    Bang,      // !
+    BangBang,  // !!
+    BangEq,    // !=
+    Bar,       // |
+    BarBar,    // ||
+    BarEq,     // |=
+    Colon,     // :
+    Comma,     // ,
+    Dot,       // .
+    DotDot,    // ..
+    DotDotEq,  // ..=
+    Eq,        // =
+    EqEq,      // ==
+    FatArrow,  // =>
+    Grave,     // `
+    Gt,        // >
+    GtEq,      // >=
+    GtGt,      // >>
+    GtGtEq,    // >>=
+    Hash,      // #
+    Lt,        // <
+    LtEq,      // <=
+    LtLt,      // <<
+    LtLtEq,    // <<=
+    Minus,     // -
+    MinusEq,   // -=
+    Plus,      // +
+    PlusEq,    // +=
+    Question,  // ?
+    Rem,       // %
+    RemEq,     // %=
+    Semi,      // ;
+    Slash,     // /
+    SlashEq,   // /=
+    Star,      // *
+    StarEq,    // *=
+    Tilde,     // ~
+    Xor,       // ^
+    XorEq,     // ^=
+    XorXor,    // ^^
+}
+
+/// Represents a reserved word.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Keyword {
+    Break,
+    Continue,
+    Else,
+    False,
+    For,
+    Fn,
+    If,
+    In,
+    Let,
+    Return,
+    True,
+    While,
+}
 
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -87,8 +173,9 @@ impl Display for Keyword {
         }
     }
 }
-impl std::str::FromStr for Keyword {
-    type Err = (); // If an identifier isn't a keyword, that's okay.
+impl FromStr for Keyword {
+    /// [FromStr] can only fail when an identifier isn't a keyword
+    type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
             "break" => Self::Break,
