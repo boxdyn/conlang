@@ -5,9 +5,9 @@
 //!
 //! ## Syntax
 //! [`Start`]`      := `[`Program`]  \
-//! [`Program`]    := [`statement::Stmt`]* EOI  \
-//! [`Identifier`] := [`IDENTIFIER`](crate::token::token_type::Type::Identifier)
-//! 
+//! [`Program`]`    := `[`statement::Stmt`]`* EOI`  \
+//! [`Identifier`]` := `[`IDENTIFIER`](crate::token::token_type::Type::Identifier)
+//!
 //! See [statement], [literal], and [expression] for more information.
 
 pub mod preamble {
@@ -17,28 +17,28 @@ pub mod preamble {
             self, control,
             math::{self, operator},
         },
-        literal, statement::Stmt,
+        literal,
+        statement::Stmt,
         visitor::{Visitor, Walk},
         Identifier, Program, Start,
     };
 }
 
-
 /// Marks the root of a tree
 /// # Syntax
-/// [`Start`] := [`Program`]
+/// [`Start`]` := `[`Program`]
 #[derive(Clone, Debug)]
 pub struct Start(pub Program);
 
 /// Contains an entire Conlang program
 /// # Syntax
-/// [`Program`] := [`statement::Stmt`]*
+/// [`Program`]` := `[`statement::Stmt`]`* EOI`
 #[derive(Clone, Debug)]
 pub struct Program(pub Vec<statement::Stmt>);
 
 /// An Identifier stores the name of an item
 /// # Syntax
-/// [`Identifier`] := [`IDENTIFIER`](crate::token::token_type::Type::Identifier)
+/// [`Identifier`]` := `[`IDENTIFIER`](crate::token::token_type::Type::Identifier)
 #[derive(Clone, Debug, Hash)]
 pub struct Identifier(pub String);
 
@@ -102,16 +102,16 @@ pub mod literal {
 
     /// Represents a literal value
     /// # Syntax
-    /// [`Literal`] := [`String`] | [`char`] | [`bool`] | [`Float`] | [`u128`]
+    /// [`Literal`]` := `[`String`]` | `[`char`]` | `[`bool`]` | `[`Float`]` | `[`u128`]
     #[derive(Clone, Debug)]
     pub enum Literal {
         /// Represents a literal string value
         /// # Syntax
-        /// [`Literal::String`] := [`STRING`](crate::token::token_type::Type::String)
+        /// [`Literal::String`]` := `[`STRING`](crate::token::token_type::Type::String)
         String(String),
         /// Represents a literal [char] value
         /// # Syntax
-        /// [`Literal::Char`] := [`CHARACTER`](crate::token::token_type::Type::Character)
+        /// [`Literal::Char`]` := `[`CHARACTER`](crate::token::token_type::Type::Character)
         Char(char),
         /// Represents a literal [bool] value
         /// # Syntax
@@ -121,17 +121,17 @@ pub mod literal {
         Bool(bool),
         /// Represents a literal float value
         /// # Syntax
-        /// [`Float`] := [`FLOAT`](crate::token::token_type::Type::Float)
+        /// [`Float`]` := `[`FLOAT`](crate::token::token_type::Type::Float)
         Float(Float),
         /// Represents a literal integer value
         /// # Syntax
-        /// [`u128`] := [`INTEGER`](crate::token::token_type::Type::Integer)
+        /// [`u128`]` := `[`INTEGER`](crate::token::token_type::Type::Integer)
         Int(u128),
     }
 
     /// Represents a literal float value
     /// # Syntax
-    /// [`Float`] := [`FLOAT`](crate::token::token_type::Type::Float)
+    /// [`Float`]` := `[`FLOAT`](crate::token::token_type::Type::Float)
     #[derive(Clone, Debug)]
     pub struct Float {
         pub sign: bool,
@@ -143,16 +143,16 @@ pub mod literal {
 pub mod statement {
     //! # Statements
     //! A statement is an expression which evaluates to Empty
-    //! 
+    //!
     //! # Syntax
-    //! [`Stmt`] := [`Let`](Stmt::Let) | [`Expr`](Stmt::Expr)
-    //! [`Let`](Stmt::Let) := `"let"` [`Identifier`] (`:` `Type`)? (`=` [`Expr`])? `;`
-    //! [`Expr`](Stmt::Expr) := [`Expr`] `;`
+    //! [`Stmt`]` := `[`Let`](Stmt::Let)` | `[`Expr`](Stmt::Expr)
+    //! [`Let`](Stmt::Let)` := "let"` [`Identifier`] (`:` `Type`)? (`=` [`Expr`])? `;`
+    //! [`Expr`](Stmt::Expr)` := `[`Expr`] `;`
     use super::{expression::Expr, Identifier};
 
     /// Contains a statement
     /// # Syntax
-    /// [`Stmt`] := [`Let`](Stmt::Let) | [`Expr`](Stmt::Expr)
+    /// [`Stmt`]` := `[`Let`](Stmt::Let)` | `[`Expr`](Stmt::Expr)
     #[derive(Clone, Debug)]
     pub enum Stmt {
         /// Contains a variable declaration
@@ -174,42 +174,41 @@ pub mod statement {
 pub mod expression {
     //! # Expressions
     //!
-    //! The [expression] is the backbone of Conlang: everything is an expression.
+    //! The [expression] is the backbone of Conlang: almost everything is an expression.
     //!
     //! ## Grammar
     //! Higher number = higher precedence.
     //!
-    //! |  # |              Node | Function                                      
-    //! |----|------------------:|:----------------------------------------------
-    //! |  0 |          [`Expr`] | Contains an expression
-    //! |  1 |  [`Ignore`](math) | Ignores the preceding sub-expression's result
-    //! |  2 |  [`Assign`](math) | Assignment
-    //! |  3 | [`Compare`](math) | Value Comparison
-    //! |  4 |   [`Logic`](math) | Boolean And, Or, Xor
-    //! |  5 | [`Bitwise`](math) | Bitwise And, Or, Xor
-    //! |  6 |   [`Shift`](math) | Shift Left/Right
-    //! |  7 |    [`Term`](math) | Add, Subtract
-    //! |  8 |  [`Factor`](math) | Multiply, Divide, Remainder
-    //! |  9 |   [`Unary`](math) | Unary Dereference, Reference, Negate, Not
-    //! | 10 | [`control::Flow`] | Branch expressions (`if`, `while`, `for`, `return`, `break`, `continue`), `else`
-    //! | 10 |         [`Group`] | Group expressions `(` [Expr]? `)` /* Can evaluate to Empty! */
-    //! | 10 |         [`Block`] | Block expressions `{` [Expr] `}`
-    //! | 10 |       [`Primary`] | Contains an [Identifier], [Literal](literal::Literal), [Block], [Group], or [Flow](control::Flow)
+    //! | # |              Node | Function                                      
+    //! |---|------------------:|:----------------------------------------------
+    //! | 0 |          [`Expr`] | Contains an expression
+    //! | 1 |  [`Assign`](math) | Assignment
+    //! | 2 | [`Compare`](math) | Value Comparison
+    //! | 3 |   [`Logic`](math) | Boolean And, Or, Xor
+    //! | 4 | [`Bitwise`](math) | Bitwise And, Or, Xor
+    //! | 5 |   [`Shift`](math) | Shift Left/Right
+    //! | 6 |    [`Term`](math) | Add, Subtract
+    //! | 7 |  [`Factor`](math) | Multiply, Divide, Remainder
+    //! | 8 |   [`Unary`](math) | Unary Dereference, Reference, Negate, Not
+    //! | 9 | [`control::Flow`] | Branch expressions (`if`, `while`, `for`, `return`, `break`, `continue`)
+    //! | 9 |         [`Group`] | Group expressions `(` [Expr]? `)` /* Can evaluate to Empty! */
+    //! | 9 |         [`Block`] | Block expressions `{` [Expr] `}`
+    //! | 9 |       [`Primary`] | Contains an [Identifier], [Literal](literal::Literal), [Block], [Group], or [Flow](control::Flow)
     //!
     //! ## Syntax
-    //! ```ignore
-    //! Expr  := control::Flow | math::Ignore
-    //! Block := '{' Expr '}'
-    //! Group := '(' Expr? ')'
-    //! Primary := Identifier | Literal | Block | control::Branch
-    //! ```
+    //! [`Expr`]`  := `[`math::Operation`]  \
+    //! [`Block`]` := '{' `[`Expr`]` '}'`   \
+    //! [`Group`]` := '(' `[`Expr`]`? ')'`  \
+    //! [`Primary`]` := `[`Identifier`]` | `[`Literal`](literal::Literal)` | `[`Block`]` |
+    //! `[`Group`]` | `[`control::Flow`]
+    //!
     //! See [control] and [math] for their respective production rules.
     use super::*;
 
     /// Contains an expression
     ///
     /// # Syntax
-    /// [`Expr`] := [`math::Operation`]
+    /// [`Expr`]` := `[`math::Operation`]
     #[derive(Clone, Debug)]
     pub struct Expr {
         pub ignore: math::Operation,
@@ -218,12 +217,11 @@ pub mod expression {
     /// A [Primary] Expression is the expression with the highest precedence (i.e. the deepest
     /// derivation)
     /// # Syntax
-    /// [`Primary`] :=
-    ///     [`IDENTIFIER`](Identifier)
-    ///   | [`Literal`](literal::Literal)
-    ///   | [`Block`]
-    ///   | [`Group`]
-    ///   | [`Branch`](control::Flow)
+    /// [`Primary`]` := `[`IDENTIFIER`](Identifier)`
+    /// | `[`Literal`](literal::Literal)`
+    /// | `[`Block`]`
+    /// | `[`Group`]`
+    /// | `[`Branch`](control::Flow)
     #[derive(Clone, Debug)]
     pub enum Primary {
         Identifier(Identifier),
@@ -256,35 +254,39 @@ pub mod expression {
         //! ## Precedence Order
         //! Operator associativity is always left-to-right among members of the same group
         //!
-        //! | # |      Name | Operators                             | Associativity
-        //! |---|----------:|:--------------------------------------|---------------
-        //  |   | TODO: Try | `?`                                   |
-        //! | 1 |     Unary | `*` `&` `-` `!`                       | Right
-        //! | 2 |    Factor | `*` `/` `%`                           | Left to Right
-        //! | 3 |      Term | `+` `-`                               | Left to Right
-        //! | 4 |     Shift | `<<` `>>`                             | Left to Right
-        //! | 5 |   Bitwise | `&` <code>&#124;</code>               | Left to Right
-        //! | 6 |     Logic | `&&` <code>&#124;&#124;</code> `^^`   | Left to Right
-        //! | 7 |   Compare | `<` `<=` `==` `!=` `>=` `>`           | Left to Right
-        #![doc = concat!( //|                                       |
-        r"  | 8 |    Assign |", r"`*=`, `/=`, `%=`, `+=`, `-=`, ",//|
-        /*  |   |           |*/ r"`&=`, <code>&#124;=</code>, ",  //|
-        /*  |   |           |*/ r"`^=`, `<<=`, `>>=`",            r"| Right to Left")]
+        //! | # |      Name | Operators                               | Associativity
+        //! |---|----------:|:----------------------------------------|---------------
+        //  |   | TODO: Try | `?`                                     |
+        //! | 1 |     Unary | [`*` `&` `-` `!`][3]                    | Right
+        //! | 2 |    Factor | [`*` `/` `%`][4]                        | Left to Right
+        //! | 3 |      Term | [`+` `-`][4]                            | Left to Right
+        //! | 4 |     Shift | [`<<` `>>`][4]                          | Left to Right
+        //! | 5 |   Bitwise | [`&` <code>&#124;</code>][4]            | Left to Right
+        //! | 6 |     Logic | [`&&` <code>&#124;&#124;</code> `^^`][4]| Left to Right
+        //! | 7 |   Compare | [`<` `<=` `==` `!=` `>=` `>`][4]        | Left to Right
+        #![doc = concat!( //|                                         |
+        r"  | 8 |    Assign | [`*=`, `/=`, `%=`, `+=`, `-=`, ",     //|
+        /*  |   |           |*/ r"`&=`, <code>&#124;=</code>, ",    //|
+        /*  |   |           |*/ r"`^=`, `<<=`, `>>=`][4]",          r"| Left to Right")]
         //!
         //! <!-- Note: '&#124;' == '|' /-->
         //!
         //! ## Syntax
-        //! ```ignore
-        //! /* All precedence levels other than Unary fold into Binary */
-        //! Assign  := Compare (AssignOp  Compare)*
-        //! Compare := Logic   (CompareOp Logic  )*
-        //! Logic   := Bitwise (LogicOp   Bitwise)*
-        //! Bitwise := Shift   (BitwiseOp Shift  )*
-        //! Shift   := Term    (ShiftOp   Term   )*
-        //! Term    := Factor  (TermOp    Factor )*
-        //! Factor  := Unary   (FactorOp  Unary  )*
-        //! Unary   := (UnaryOp)* Primary
-        //! ```
+        //! All precedence levels other than [Unary][1] fold into [Binary][2]
+        //!
+        //! [`Assign`][2]`  := `[`Compare`][2]` (`[`AssignOp`][4]`  `[`Compare`][2]`)*`  \
+        //! [`Compare`][2]` := `[`Logic`][2]`   (`[`CompareOp`][4]` `[`Logic`][2]`  )*`  \
+        //! [`Logic`][2]`   := `[`Bitwise`][2]` (`[`LogicOp`][4]`   `[`Bitwise`][2]`)*`  \
+        //! [`Bitwise`][2]` := `[`Shift`][2]`   (`[`BitwiseOp`][4]` `[`Shift`][2]`  )*`  \
+        //! [`Shift`][2]`   := `[`Term`][2]`    (`[`ShiftOp`][4]`   `[`Term`][2]`   )*`  \
+        //! [`Term`][2]`    := `[`Factor`][2]`  (`[`TermOp`][4]`    `[`Factor`][2]` )*`  \
+        //! [`Factor`][2]`  := `[`Unary`][1]`   (`[`FactorOp`][4]`  `[`Unary`][1]`  )*`  \
+        //! [`Unary`][1]`   := (`[`UnaryOp`][3]`)* `[`Primary`]
+        //!
+        //! [1]: Operation::Unary
+        //! [2]: Operation::Binary
+        //! [3]: operator::Unary
+        //! [4]: operator::Binary
         use super::*;
 
         /// An Operation is a tree of [operands](Primary) and [operators](operator).
@@ -309,22 +311,11 @@ pub mod expression {
         }
 
         pub mod operator {
-            //! | # | [Operators](self)                     | Associativity
-            //! |---|---------------------------------------|--------------
-            //! | 0 |[`*`, `&`, `-`, `!`](Unary)            | Left to Right
-            //! | 1 | `*`, `/`, `%`                         | Left to Right
-            //! | 2 | `+`, `-`                              | Left to Right
-            //! | 3 | `<<`, `>>`                            | Left to Right
-            //! | 4 | `&`, <code>&#124;</code>, `^`         | Left to Right
-            //! | 5 | `&&`, <code>&#124;&#124;</code>, `^^` | Left to Right
-            //! | 6 | `>`. `>=`. `==`. `!=`. `<=`. `<`      | Left to Right
-            #![doc = concat!(
-              r"| 7 |", r"`*=`, `/=`, `%=`, `+=`, `-=`, ",//|
-            /*  |   |*/ r"`&=`, <code>&#124;=</code>, ",  //|
-            /*  |   |*/ r"`^=`, `<<=`, `>>=`, `=`",       r"| Left to Right")]
-            //! | 8 | `,`                                   |
+            //! # [Unary] and [Binary] operators
+            //!
+            //! An Operator represents the action taken during an [operation](super::Operation)
 
-            /// Operators which take a single argument
+            /// # Operators which take a single argument
             ///
             /// (`*`, `&`, `-`, `!`, `@`, `#`, `~`)
             #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -346,52 +337,61 @@ pub mod expression {
                 /// `~`: Undefined
                 Tilde,
             }
-            /// Operators which take two arguments
+            /// # Operators which take two arguments
+            /// ## Term operators:
+            /// [`*`](Binary::Mul), [`/`](Binary::Div), [`%`](Binary::Rem)
+            /// ## Factor operators
+            /// [`+`](Binary::Add), [`-`](Binary::Sub)
+            /// ## Shift operators
+            /// [`<<`](Binary::Lsh), [`>>`](Binary::Rsh)
+            /// ## Bitwise operators
+            /// [`&`](Binary::BitAnd), [`|`](Binary::BitOr), [`^`](Binary::BitXor)
+            /// ## Logic operators
+            /// [`&&`](Binary::LogAnd), [`||`](Binary::LogOr), [`^^`](Binary::LogXor)
+            /// ## Range operators
+            /// [`..`](Binary::RangeExc), [`..=`](Binary::RangeInc)
+            /// ## Comparison operators
+            /// [`<`](Binary::Less), [`<=`](Binary::LessEq), [`==`](Binary::Equal),
+            /// [`!=`](Binary::NotEq), [`>=`](Binary::GreaterEq), [`>`](Binary::Greater),
+            /// ## Assignment operators
+            /// [`=`](Binary::Assign), [`+=`](Binary::AddAssign), [`-=`](Binary::SubAssign),
+            /// [`*=`](Binary::MulAssign), [`/=`](Binary::DivAssign), [`%=`](Binary::RemAssign),
+            /// [`&=`](Binary::BitAndAssign), [`|=`](Binary::BitOrAssign),
+            /// [`^=`](Binary::BitXorAssign) [`<<=`](Binary::ShlAssign),
+            /// [`>>=`](Binary::ShrAssign)
+
             #[derive(Clone, Copy, Debug, PartialEq, Eq)]
             pub enum Binary {
-                // Term operators
                 /// `*`: Multiplication
                 Mul,
                 /// `/`: Division
                 Div,
                 /// `%`: Remainder
                 Rem,
-
-                // Factor operators
                 /// `+`: Addition
                 Add,
                 /// `-`: Subtraction
                 Sub,
-
-                // Shift operators
                 /// `<<`: Left Shift
                 Lsh,
                 /// `>>`: Right Shift
                 Rsh,
-
-                // Bitwise operators
                 /// `&`: Bitwise AND
                 BitAnd,
                 /// `|`: Bitwise OR
                 BitOr,
                 /// `^`: Bitwise XOR
                 BitXor,
-
-                // Logic operators
                 /// `&&`: Short-circuiting logical AND
                 LogAnd,
                 /// `||`: Short-circuiting logical OR
                 LogOr,
                 /// `^^`: **Non-short-circuiting** logical XOR
                 LogXor,
-
-                // Range operators
                 /// `..`: Exclusive range
                 RangeExc,
                 /// `..=`: Inclusive range
                 RangeInc,
-
-                // Comparison operators
                 /// `<`: Less-than Comparison
                 Less,
                 /// `<=`: Less-than or Equal Comparison
@@ -404,8 +404,6 @@ pub mod expression {
                 GreaterEq,
                 /// `>`: Greater-than Comparison
                 Greater,
-
-                // Assignment operators
                 /// `=`: Assignment
                 Assign,
                 /// `+=`: Additive In-place Assignment
@@ -458,15 +456,17 @@ pub mod expression {
         //!
         //! [`continue` expressions][7] skip to the next iteration of a loop
         //! # Syntax
-        //! ```rust,ignore
-        //! Branch := While | If | For
-        //! If     := "if" Expr Block Else?
-        //! While  := "while" Expr Block Else?
-        //! For    := "for" Identifier "in" Expr Block Else?
-        //! Else   := "else" Block
+        //! [`Flow`]`  := `[`While`]` | `[`If`]` | `[`For`]` |
+        //! `[`Break`]` | `[`Return`]` | `[`Continue`]  \
         //!
-        //! Break := "break" Expr
-        //! ```
+        //! [`While`]` := "while" `[`Expr`]` `[`Block`]` `[`Else`]`?`  \
+        //! [`If`]`    := "if"    `[`Expr`]` `[`Block`]` `[`Else`]`?`  \
+        //! [`For`]`   := "for"   `[`Identifier`]` "in" `[`Expr`]` `[`Block`]` `[`Else`]`?`  \
+        //! [`Else`]`  := "else"  `[`Block`]  \
+        //!
+        //! [`Break`]`    := "break" `[`Expr`]  \
+        //! [`Return`]`   := "return" `[`Expr`]  \
+        //! [`Continue`]` := "continue"`
         //!
         //! [1]: If
         //! [2]: While
@@ -830,7 +830,7 @@ pub mod visitor {
 
         /// Visit a [Primary] expression
         ///
-        /// [Primary] := [Identifier] | [Literal] | [Block] | [Flow]
+        /// [`Primary`]` := `[`Identifier`]` | `[`Literal`]` | `[`Block`]` | `[`Flow`]
         fn visit_primary(&mut self, expr: &Primary) -> R {
             match expr {
                 Primary::Identifier(v) => self.visit_identifier(v),
@@ -843,7 +843,8 @@ pub mod visitor {
 
         /// Visit a [Flow] expression.
         ///
-        /// [Flow] := [While] | [If] | [For]
+        /// [`Flow`]` := `[`While`]` | `[`If`]` | `[`For`]`
+        /// | `[`Continue`]` | `[`Return`]` | `[`Break`]
         fn visit_branch_expr(&mut self, expr: &Flow) -> R {
             match expr {
                 Flow::While(e) => self.visit_while(e),
@@ -874,7 +875,7 @@ pub mod visitor {
         fn visit_identifier(&mut self, ident: &Identifier) -> R;
         /// Visit a [Literal]
         ///
-        /// [Literal] := [String] | [char] | [bool] | [Float] | [u128]
+        /// [`Literal`]` := `[`String`]` | `[`char`]` | `[`bool`]` | `[`Float`]` | `[`u128`]
         fn visit_literal(&mut self, literal: &Literal) -> R {
             match literal {
                 Literal::String(l) => self.visit_string_literal(l),
