@@ -7,6 +7,7 @@ pub mod error {
     use super::{Token, Type};
     use std::fmt::Display;
 
+    /// The reason for the [Error]
     #[derive(Clone, Debug, Default, PartialEq, Eq)]
     pub enum Reason {
         Expected(Type),
@@ -60,6 +61,9 @@ pub mod error {
 
     /// [Parser](super::Parser) [Result]
     pub type PResult<T> = Result<T, Error>;
+    /// An error produced by the [Parser](super::Parser).
+    ///
+    /// Contains a [Reason], and, optionally, a start [Token]
     #[derive(Clone, Debug, Default, PartialEq)]
     pub struct Error {
         reason: Reason,
@@ -84,15 +88,19 @@ pub mod error {
         }
     )*}
     impl Error {
+        /// Provides an optional start [Token]
         pub fn token(self, start: Token) -> Self {
             Self { start: Some(start), ..self }
         }
+        /// Optionally sets the start [Token]
         pub fn maybe_token(self, start: Option<Token>) -> Self {
             Self { start, ..self }
         }
+        /// Gets a reference to the start [Token], if there is one
         pub fn start(&self) -> Option<&Token> {
             self.start.as_ref()
         }
+        /// Gets the [Reason] for this error
         pub fn reason(self, reason: Reason) -> Self {
             Self { reason, ..self }
         }
@@ -123,7 +131,7 @@ pub mod error {
 pub struct Parser {
     tokens: Vec<Token>,
     panic_stack: Vec<usize>,
-    curr: usize,
+    cursor: usize,
 }
 impl<'t> From<Lexer<'t>> for Parser {
     fn from(value: Lexer<'t>) -> Self {
@@ -145,7 +153,7 @@ impl Parser {
     ///
     /// [1]: Token
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens, panic_stack: vec![], curr: 0 }
+        Self { tokens, panic_stack: vec![], cursor: 0 }
     }
     /// Parses the [start of an AST](Start)
     pub fn parse(&mut self) -> PResult<Start> {
@@ -156,28 +164,29 @@ impl Parser {
     pub fn parse_expr(&mut self) -> PResult<expression::Expr> {
         self.expr()
     }
+    /// Peeks at the current token
+    pub fn peek(&self) -> PResult<&Token> {
+        self.tokens
+            .get(self.cursor)
+            .ok_or(Error::end_of_file().maybe_token(self.tokens.last().cloned()))
+    }
+    /// Consumes any number of consecutive comments
     fn consume_comments(&mut self) -> &mut Self {
         while let Ok(Type::Comment) = self.peek().map(|t| t.ty()) {
-            self.curr += 1;
+            self.cursor += 1;
         }
         self
     }
-    /// Consume the current token
+    /// Consumes the current token
     #[inline]
     fn consume(&mut self) -> &mut Self {
-        self.curr += 1;
+        self.cursor += 1;
         self.consume_comments();
         self
     }
-    /// Peek at the current token
-    pub fn peek(&self) -> PResult<&Token> {
-        self.tokens
-            .get(self.curr)
-            .ok_or(Error::end_of_file().maybe_token(self.tokens.last().cloned()))
-    }
     /// Records the current position on the panic stack
     fn mark(&mut self) -> &mut Self {
-        self.panic_stack.push(self.curr);
+        self.panic_stack.push(self.cursor);
         self
     }
     /// Erases a recorded position from the panic stack
@@ -188,9 +197,10 @@ impl Parser {
     /// Unwinds the panic stack one step
     fn unwind(&mut self) -> PResult<&mut Self> {
         let v = self.panic_stack.pop().ok_or(Error::panic_underflow())?;
-        self.curr = v;
+        self.cursor = v;
         Ok(self)
     }
+    /// Advances forward until a token with type [`t`](Type) is encountered
     fn advance_until(&mut self, t: Type) -> PResult<&mut Self> {
         while self.matches(t).is_err() {
             self.check_eof()
@@ -202,31 +212,36 @@ impl Parser {
 }
 /// Helpers
 impl Parser {
-    fn consume_type(&mut self, t: Type) -> PResult<&mut Self> {
-        self.matches(t)?;
-        Ok(self.consume())
-    }
+    /// Returns an error if the end of input has been reached
     fn check_eof(&mut self) -> PResult<&mut Self> {
-        if self.curr < self.tokens.len() {
+        if self.cursor < self.tokens.len() {
             Ok(self)
         } else {
             Err(Error::end_of_file().maybe_token(self.tokens.last().cloned()))
         }
     }
-    fn todo_error(&mut self, l: u32, c: u32, s: &str) -> Error {
-        eprintln!("TODO: {s}:{l}:{c}");
-        Error::unspecified().token(self.peek().unwrap().clone())
-    }
-    fn matches(&mut self, e: Type) -> PResult<&Token> {
-        let t = self.check_eof()?.peek().expect("self should not be eof");
-        if t.ty() != e {
-            Err(Error::expected(e).token(t.clone()))?
+    /// Peeks at the next token if it has the expected [Type]
+    fn matches(&mut self, t: Type) -> PResult<&Token> {
+        let token = self.check_eof()?.peek().expect("self should not be eof");
+        if token.ty() != t {
+            Err(Error::expected(t).token(token.clone()))?
         }
-        Ok(t)
+        Ok(token)
     }
+    /// Consumes, without returning, a token with the given [Keyword], or returns an error.
+    /// 
+    /// Useful if you only want to check the existence of a [Keyword]
     fn keyword(&mut self, keyword: Keyword) -> PResult<&mut Self> {
         self.consume_type(Type::Keyword(keyword))
     }
+    /// Consumes, without returning, a token with the given [Type], or returns an error.
+    /// 
+    /// Useful if you only want to check the existence of a token.
+    fn consume_type(&mut self, t: Type) -> PResult<&mut Self> {
+        self.matches(t)?;
+        Ok(self.consume())
+    }
+    /// Parses anything wrapped in `lhs` and `rhs` delimiters.
     fn delimited<F, R>(&mut self, lhs: Type, mid: F, rhs: Type) -> PResult<R>
     where F: Fn(&mut Self) -> PResult<R> {
         self.consume_type(lhs)?.mark();
@@ -242,7 +257,13 @@ impl Parser {
         self.consume_type(rhs)?.unmark();
         Ok(out)
     }
+    #[doc(hidden)]
+    fn todo_error(&mut self, l: u32, c: u32, s: &str) -> Error {
+        eprintln!("TODO: {s}:{l}:{c}");
+        Error::unspecified().token(self.peek().unwrap().clone())
+    }
 }
+/// TODO: Remove `ptodo*`
 macro ptodo_err($self:expr $(, $t:expr)*) {
     $($t;)*
     $self.todo_error(line!(), column!(), file!())
@@ -254,6 +275,7 @@ macro ptodo($self:expr $(, $t:expr)*) {
 
 /// # Terminals and Pseudo-Terminals
 impl Parser {
+    /// Parses an [Identifier]
     fn identifier(&mut self) -> PResult<Identifier> {
         let out = match self.matches(Type::Identifier)?.data() {
             Data::Identifier(id) => Identifier(id.to_string()),
@@ -262,6 +284,7 @@ impl Parser {
         self.consume();
         Ok(out)
     }
+    /// Parses a [Literal](literal::Literal)
     fn literal(&mut self) -> PResult<literal::Literal> {
         use literal::Literal::*;
         use Keyword::{False, True};
@@ -275,9 +298,14 @@ impl Parser {
             _ => Err(Error::not_literal().token(token.clone())),
         }
     }
+    /// Parses a [floating point literal](literal::Float)
     fn float(&mut self) -> PResult<literal::Float> {
         ptodo!(self)
     }
+    /// Parses an [integer literal](u128)
+    ///
+    /// u128 was chosen for this, since it stores the largest integer precision Rust natively
+    /// supports. Conlang doesn't currently plan to support arbitrary-width arithmetic anyway.
     fn int(&mut self) -> PResult<u128> {
         let out = match self.matches(Type::Integer)?.data() {
             Data::Integer(i) => *i,
@@ -286,6 +314,7 @@ impl Parser {
         self.consume();
         Ok(out)
     }
+    /// Parses a [string literal](String)
     fn string(&mut self) -> PResult<String> {
         let out = match self.matches(Type::String)?.data() {
             Data::String(s) => s.clone(),
@@ -294,6 +323,7 @@ impl Parser {
         self.consume();
         Ok(out)
     }
+    /// Parses a [character literal](char)
     fn char(&mut self) -> PResult<char> {
         let out = match self.matches(Type::Character)?.data() {
             Data::Character(c) => *c,
@@ -302,6 +332,7 @@ impl Parser {
         self.consume();
         Ok(out)
     }
+    /// Parses a [boolean literal](bool)
     fn bool(&mut self) -> PResult<bool> {
         use Keyword::{False, True};
         let token = self.peek()?;
@@ -339,14 +370,17 @@ impl Parser {
 }
 /// Expressions
 impl Parser {
+    /// Parses an [expression](expression::Expr)
     fn expr(&mut self) -> PResult<expression::Expr> {
         use expression::Expr;
         Ok(Expr { ignore: self.assign()? })
     }
+    /// Parses a [block expression](expression::Block)
     fn block(&mut self) -> PResult<expression::Block> {
         self.delimited(Type::LCurly, |p| p.expr(), Type::RCurly)
             .map(|e| expression::Block { expr: Box::new(e) })
     }
+    /// Parses a [group expression](expression::Group)
     fn group(&mut self) -> PResult<expression::Group> {
         use expression::Group;
         let t = self.consume_type(Type::LParen)?.peek()?;
@@ -362,6 +396,7 @@ impl Parser {
             }
         }
     }
+    /// Parses a [primary expression](expression::Primary)
     fn primary(&mut self) -> PResult<expression::Primary> {
         use expression::Primary;
         let token = self.peek()?;
@@ -395,6 +430,7 @@ impl Parser {
 /// fn function_name(&mut self) -> PResult<ret::Value> { ... }
 /// ```
 macro binary ($($f:ident = $a:ident, $b:ident);*$(;)?) {$(
+    #[doc = concat!("Parses a(n) [", stringify!($f), " operation](math::Operation::Binary) expression")]
     fn $f (&mut self) -> PResult<math::Operation> {
         let (first, mut others) = (self.$a()?, vec![]);
         while let Ok(op) = self.$b() {
@@ -418,7 +454,7 @@ impl Parser {
         term    = factor,  term_op;
         factor  = unary,   factor_op;
     }
-
+    /// Parses a [unary operation](math::Operation::Unary) expression
     fn unary(&mut self) -> PResult<math::Operation> {
         let mut operators = vec![];
         while let Ok(op) = self.unary_op() {
@@ -442,33 +478,40 @@ macro operator_impl ($($(#[$m:meta])* $f:ident : {$($type:pat => $op:ident),*$(,
 /// # [Operators](operator)
 impl Parser {
     operator_impl! {
+        /// Parses a [factor operator](operator)
         factor_op: {
             Type::Star => Mul,
             Type::Slash => Div,
             Type::Rem => Rem,
         }
+        /// Parses a [term operator](operator)
         term_op: {
             Type::Plus => Add,
             Type::Minus => Sub,
         }
+        /// Parses a [shift operator](operator)
         shift_op: {
             Type::LtLt => Lsh,
             Type::GtGt => Rsh,
         }
+        /// Parses a [bitwise operator](operator)
         bitwise_op: {
             Type::Amp => BitAnd,
             Type::Bar => BitOr,
             Type::Xor => BitXor,
         }
+        /// Parses a [logic operator](operator)
         logic_op: {
             Type::AmpAmp => LogAnd,
             Type::BarBar => LogOr,
             Type::XorXor => LogXor,
         }
+        /// Parses a [range operator](operator)
         range_op: {
             Type::DotDot => RangeExc,
             Type::DotDotEq => RangeInc,
         }
+        /// Parses a [compare operator](operator)
         compare_op: {
             Type::Lt => Less,
             Type::LtEq => LessEq,
@@ -477,6 +520,7 @@ impl Parser {
             Type::GtEq => GreaterEq,
             Type::Gt => Greater,
         }
+        /// Parses an [assign operator](operator)
         assign_op: {
             Type::Eq => Assign,
             Type::PlusEq => AddAssign,
@@ -491,7 +535,7 @@ impl Parser {
             Type::GtGtEq => ShrAssign,
         }
     }
-    /// Parse a [unary operator](operator::Unary)
+    /// Parses a [unary operator](operator::Unary)
     fn unary_op(&mut self) -> PResult<operator::Unary> {
         use operator::Unary;
         let token = self.peek()?;
@@ -512,6 +556,7 @@ impl Parser {
 }
 /// # [Control Flow](control)
 impl Parser {
+    /// Parses a [control flow](control::Flow) expression
     fn flow(&mut self) -> PResult<control::Flow> {
         use control::Flow;
         use Keyword::{Break, Continue, For, If, Return, While};
@@ -527,6 +572,7 @@ impl Parser {
         }
         .map_err(|e| e.reason(IncompleteBranch))
     }
+    /// Parses an [if](control::If) expression
     fn parse_if(&mut self) -> PResult<control::If> {
         self.keyword(Keyword::If)?;
         Ok(control::If {
@@ -535,6 +581,7 @@ impl Parser {
             else_: self.parse_else()?,
         })
     }
+    /// Parses a [while](control::While) expression
     fn parse_while(&mut self) -> PResult<control::While> {
         self.keyword(Keyword::While)?;
         Ok(control::While {
@@ -543,6 +590,7 @@ impl Parser {
             else_: self.parse_else()?,
         })
     }
+    /// Parses a [for](control::For) expression
     fn parse_for(&mut self) -> PResult<control::For> {
         self.keyword(Keyword::For)?;
         Ok(control::For {
@@ -552,6 +600,7 @@ impl Parser {
             else_: self.parse_else()?,
         })
     }
+    /// Parses an [else](control::Else) sub-expression
     fn parse_else(&mut self) -> PResult<Option<control::Else>> {
         // it's fine for `else` to be missing entirely
         self.keyword(Keyword::Else)
@@ -559,12 +608,15 @@ impl Parser {
             .map(|p| Ok(control::Else { block: p.block()? }))
             .transpose()
     }
+    /// Parses a [break](control::Break) expression
     fn parse_break(&mut self) -> PResult<control::Break> {
         Ok(control::Break { expr: self.keyword(Keyword::Break)?.expr()?.into() })
     }
+    /// Parses a [return](control::Return) expression
     fn parse_return(&mut self) -> PResult<control::Return> {
         Ok(control::Return { expr: self.keyword(Keyword::Return)?.expr()?.into() })
     }
+    /// Parses a [continue](control::Continue) expression
     fn parse_continue(&mut self) -> PResult<control::Continue> {
         self.keyword(Keyword::Continue)?;
         Ok(control::Continue)
