@@ -1,5 +1,5 @@
 [workspace]
-members = ["libconlang", "lerox", "constr"]
+members = ["libconlang"]
 resolver = "2"
 
 [workspace.package]
