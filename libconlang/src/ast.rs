@@ -4,12 +4,11 @@
 //! Also contains a [Visitor](visitor::Visitor) trait for visiting nodes
 //!
 //! ## Syntax
-//! ```ignore
-//! Start      := expression::Expr
-//! Identifier := IDENTIFIER
-//! Literal    := STRING | CHAR | FLOAT | INT | TRUE | FALSE
-//! ```
-//! See [literal] and [expression] for more details.
+//! [`Start`]`      := `[`Program`]  \
+//! [`Program`]    := [`statement::Stmt`]* EOI  \
+//! [`Identifier`] := [`IDENTIFIER`](crate::token::token_type::Type::Identifier)
+//! 
+//! See [statement], [literal], and [expression] for more information.
 
 pub mod preamble {
     //! Common imports for working with the [ast](super)
@@ -18,272 +17,24 @@ pub mod preamble {
             self, control,
             math::{self, operator},
         },
-        literal,
+        literal, statement::Stmt,
         visitor::{Visitor, Walk},
-        Identifier, Start,
+        Identifier, Program, Start,
     };
 }
 
-pub mod visitor {
-    //! A [`Visitor`] visits every kind of node in the [Abstract Syntax Tree](super). Nodes, conversely are [`Walkers`](Walk) for Visitors which return a [`Result<(), E>`](Result)
-    use super::{
-        expression::{
-            control::*,
-            math::{operator::*, *},
-            Block, *,
-        },
-        literal::*,
-        *,
-    };
-    /// A [Walker](Walk) is a node in the AST, and calls [`Visitor::visit_*()`](Visitor) on all its children
-    pub trait Walk<T: Visitor<R> + ?Sized, R> {
-        /// Traverses the children of this node in order, calling the appropriate [Visitor] function
-        fn walk(&self, visitor: &mut T) -> R;
-    }
-    mod walker {
-        use super::*;
-        macro leaf($($T:ty),*$(,)?) {$(
-            impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for $T {
-                #[doc = concat!("A(n) [`", stringify!($T), "`] is a leaf node.")]
-                /// Calling this will do nothing.
-                fn walk(&self, _visitor: &mut T) -> Result<(), E> { Ok(()) }
-            }
-        )*}
-        leaf!(Binary, bool, char, Continue, Float, Identifier, str, u128, Unary);
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for While {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_expr(&self.cond)?;
-                visitor.visit_block(&self.body)?;
-                match &self.else_ {
-                    Some(expr) => visitor.visit_else(expr),
-                    None => Ok(()),
-                }
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for If {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_expr(&self.cond)?;
-                visitor.visit_block(&self.body)?;
-                match &self.else_ {
-                    Some(expr) => visitor.visit_else(expr),
-                    None => Ok(()),
-                }
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for For {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_identifier(&self.var)?;
-                visitor.visit_expr(&self.iter)?;
-                visitor.visit_block(&self.body)?;
-                match &self.else_ {
-                    Some(expr) => visitor.visit_else(expr),
-                    None => Ok(()),
-                }
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Else {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_block(&self.block)
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Return {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_expr(&self.expr)
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Break {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_expr(&self.expr)
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Start {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_expr(&self.0)
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Expr {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_operation(&self.ignore)
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Group {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                match self {
-                    Group::Expr(expr) => visitor.visit_expr(expr),
-                    Group::Empty => visitor.visit_empty(),
-                }
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Block {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_expr(&self.expr)
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Operation {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                match self {
-                    Operation::Binary { first, other } => {
-                        visitor.visit_operation(first)?;
-                        for (op, other) in other {
-                            visitor.visit_binary_op(op)?;
-                            visitor.visit_operation(other)?;
-                        }
-                        Ok(())
-                    }
-                    Operation::Unary { operators, operand } => {
-                        for op in operators {
-                            visitor.visit_unary_op(op)?;
-                        }
-                        visitor.visit_primary(operand)
-                    }
-                }
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Primary {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                match self {
-                    Primary::Identifier(i) => visitor.visit_identifier(i),
-                    Primary::Literal(l) => visitor.visit_literal(l),
-                    Primary::Block(b) => visitor.visit_block(b),
-                    Primary::Group(g) => visitor.visit_group(g),
-                    Primary::Branch(b) => visitor.visit_branch_expr(b),
-                }
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Literal {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                match self {
-                    Literal::String(s) => visitor.visit_string_literal(s),
-                    Literal::Char(c) => visitor.visit_char_literal(c),
-                    Literal::Bool(b) => visitor.visit_bool_literal(b),
-                    Literal::Float(f) => visitor.visit_float_literal(f),
-                    Literal::Int(i) => visitor.visit_int_literal(i),
-                }
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Flow {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                match self {
-                    Flow::While(w) => visitor.visit_while(w),
-                    Flow::If(i) => visitor.visit_if(i),
-                    Flow::For(f) => visitor.visit_for(f),
-                    Flow::Continue(c) => visitor.visit_continue(c),
-                    Flow::Return(r) => visitor.visit_return(r),
-                    Flow::Break(b) => visitor.visit_break(b),
-                }
-            }
-        }
-    }
 
-    /// A Visitor traverses every kind of node in the [Abstract Syntax Tree](super)
-    pub trait Visitor<R> {
-        /// Visit the start of an AST
-        fn visit(&mut self, start: &Start) -> R {
-            self.visit_expr(&start.0)
-        }
-
-        /// Visit an [Expression](Expr)
-        fn visit_expr(&mut self, expr: &Expr) -> R {
-            self.visit_operation(&expr.ignore)
-        }
-        // Block expression
-        /// Visit a [Block] expression
-        fn visit_block(&mut self, expr: &Block) -> R {
-            self.visit_expr(&expr.expr)
-        }
-        /// Visit a [Group] expression
-        fn visit_group(&mut self, group: &Group) -> R {
-            match group {
-                Group::Expr(expr) => self.visit_expr(expr),
-                Group::Empty => self.visit_empty(),
-            }
-        }
-
-        // Math expression
-        /// Visit an [Operation]
-        fn visit_operation(&mut self, expr: &Operation) -> R;
-        /// Visit a [Binary](Operation::Binary) [operator](operator::Binary)
-        // Math operators
-        fn visit_binary_op(&mut self, op: &operator::Binary) -> R;
-        /// Visit a [Unary](Operation::Unary) [operator](operator::Unary)
-        fn visit_unary_op(&mut self, op: &operator::Unary) -> R;
-
-        /// Visit a [Primary] expression
-        ///
-        /// [Primary] := [Identifier] | [Literal] | [Block] | [Flow]
-        fn visit_primary(&mut self, expr: &Primary) -> R {
-            match expr {
-                Primary::Identifier(v) => self.visit_identifier(v),
-                Primary::Literal(v) => self.visit_literal(v),
-                Primary::Block(v) => self.visit_block(v),
-                Primary::Group(v) => self.visit_group(v),
-                Primary::Branch(v) => self.visit_branch_expr(v),
-            }
-        }
-
-        /// Visit a [Flow] expression.
-        ///
-        /// [Flow] := [While] | [If] | [For]
-        fn visit_branch_expr(&mut self, expr: &Flow) -> R {
-            match expr {
-                Flow::While(e) => self.visit_while(e),
-                Flow::If(e) => self.visit_if(e),
-                Flow::For(e) => self.visit_for(e),
-                Flow::Continue(e) => self.visit_continue(e),
-                Flow::Return(e) => self.visit_return(e),
-                Flow::Break(e) => self.visit_break(e),
-            }
-        }
-        /// Visit an [If] expression
-        fn visit_if(&mut self, expr: &If) -> R;
-        /// Visit a [While] loop expression
-        fn visit_while(&mut self, expr: &While) -> R;
-        /// Visit a [For] loop expression
-        fn visit_for(&mut self, expr: &For) -> R;
-        /// Visit an [Else] expression
-        fn visit_else(&mut self, expr: &Else) -> R;
-        /// Visit a [Continue] expression
-        fn visit_continue(&mut self, expr: &Continue) -> R;
-        /// Visit a [Break] expression
-        fn visit_break(&mut self, expr: &Break) -> R;
-        /// Visit a [Return] expression
-        fn visit_return(&mut self, expr: &Return) -> R;
-
-        // primary symbols
-        /// Visit an [Identifier]
-        fn visit_identifier(&mut self, ident: &Identifier) -> R;
-        /// Visit a [Literal]
-        ///
-        /// [Literal] := [String] | [char] | [bool] | [Float] | [u128]
-        fn visit_literal(&mut self, literal: &Literal) -> R {
-            match literal {
-                Literal::String(l) => self.visit_string_literal(l),
-                Literal::Char(l) => self.visit_char_literal(l),
-                Literal::Bool(l) => self.visit_bool_literal(l),
-                Literal::Float(l) => self.visit_float_literal(l),
-                Literal::Int(l) => self.visit_int_literal(l),
-            }
-        }
-        /// Visit a [string](str) literal
-        fn visit_string_literal(&mut self, string: &str) -> R;
-        /// Visit a [character](char) literal
-        fn visit_char_literal(&mut self, char: &char) -> R;
-        /// Visit a [boolean](bool) literal
-        fn visit_bool_literal(&mut self, bool: &bool) -> R;
-        /// Visit a [floating point](Float) literal
-        fn visit_float_literal(&mut self, float: &Float) -> R;
-        /// Visit an [integer](u128) literal
-        fn visit_int_literal(&mut self, int: &u128) -> R;
-
-        /// Visit an Empty
-        fn visit_empty(&mut self) -> R;
-    }
-}
 /// Marks the root of a tree
 /// # Syntax
-/// [`Start`] := [`expression::Expr`]
+/// [`Start`] := [`Program`]
 #[derive(Clone, Debug)]
-pub struct Start(pub expression::Expr);
+pub struct Start(pub Program);
+
+/// Contains an entire Conlang program
+/// # Syntax
+/// [`Program`] := [`statement::Stmt`]*
+#[derive(Clone, Debug)]
+pub struct Program(pub Vec<statement::Stmt>);
 
 /// An Identifier stores the name of an item
 /// # Syntax
@@ -386,6 +137,37 @@ pub mod literal {
         pub sign: bool,
         pub exponent: i32,
         pub mantissa: u64,
+    }
+}
+
+pub mod statement {
+    //! # Statements
+    //! A statement is an expression which evaluates to Empty
+    //! 
+    //! # Syntax
+    //! [`Stmt`] := [`Let`](Stmt::Let) | [`Expr`](Stmt::Expr)
+    //! [`Let`](Stmt::Let) := `"let"` [`Identifier`] (`:` `Type`)? (`=` [`Expr`])? `;`
+    //! [`Expr`](Stmt::Expr) := [`Expr`] `;`
+    use super::{expression::Expr, Identifier};
+
+    /// Contains a statement
+    /// # Syntax
+    /// [`Stmt`] := [`Let`](Stmt::Let) | [`Expr`](Stmt::Expr)
+    #[derive(Clone, Debug)]
+    pub enum Stmt {
+        /// Contains a variable declaration
+        /// # Syntax
+        /// [`Let`](Stmt::Let) := `"let"` [`Identifier`] (`:` `Type`)? (`=` [`Expr`])? `;`
+        Let {
+            name: Identifier,
+            mutable: bool,
+            ty: Option<Identifier>,
+            init: Option<Expr>,
+        },
+        /// Contains an expression statement
+        /// # Syntax
+        /// [`Expr`](Stmt::Expr) := [`Expr`] `;`
+        Expr(Expr),
     }
 }
 
@@ -829,5 +611,296 @@ pub mod expression {
         pub struct Return {
             pub expr: Box<Expr>,
         }
+    }
+}
+
+pub mod visitor {
+    //! A [`Visitor`] visits every kind of node in the [Abstract Syntax Tree](super). Nodes,
+    //! conversely are [`Walkers`](Walk) for Visitors which return a [`Result<(), E>`](Result)
+    use super::{
+        expression::{
+            control::*,
+            math::{operator::*, *},
+            Block, *,
+        },
+        literal::*,
+        statement::Stmt,
+        *,
+    };
+    /// A [Walker](Walk) is a node in the AST, and calls [`Visitor::visit_*()`](Visitor) on all its
+    /// children
+    pub trait Walk<T: Visitor<R> + ?Sized, R> {
+        /// Traverses the children of this node in order, calling the appropriate [Visitor] function
+        fn walk(&self, visitor: &mut T) -> R;
+    }
+    mod walker {
+        use crate::ast::statement::Stmt;
+
+        use super::*;
+        macro leaf($($T:ty),*$(,)?) {$(
+            impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for $T {
+                #[doc = concat!("A(n) [`", stringify!($T), "`] is a leaf node.")]
+                /// Calling this will do nothing.
+                fn walk(&self, _visitor: &mut T) -> Result<(), E> { Ok(()) }
+            }
+        )*}
+        leaf!(Binary, bool, char, Continue, Float, Identifier, str, u128, Unary);
+        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for While {
+            fn walk(&self, visitor: &mut T) -> Result<(), E> {
+                visitor.visit_expr(&self.cond)?;
+                visitor.visit_block(&self.body)?;
+                match &self.else_ {
+                    Some(expr) => visitor.visit_else(expr),
+                    None => Ok(()),
+                }
+            }
+        }
+        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for If {
+            fn walk(&self, visitor: &mut T) -> Result<(), E> {
+                visitor.visit_expr(&self.cond)?;
+                visitor.visit_block(&self.body)?;
+                match &self.else_ {
+                    Some(expr) => visitor.visit_else(expr),
+                    None => Ok(()),
+                }
+            }
+        }
+        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for For {
+            fn walk(&self, visitor: &mut T) -> Result<(), E> {
+                visitor.visit_identifier(&self.var)?;
+                visitor.visit_expr(&self.iter)?;
+                visitor.visit_block(&self.body)?;
+                match &self.else_ {
+                    Some(expr) => visitor.visit_else(expr),
+                    None => Ok(()),
+                }
+            }
+        }
+        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Else {
+            fn walk(&self, visitor: &mut T) -> Result<(), E> {
+                visitor.visit_block(&self.block)
+            }
+        }
+        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Return {
+            fn walk(&self, visitor: &mut T) -> Result<(), E> {
+                visitor.visit_expr(&self.expr)
+            }
+        }
+        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Break {
+            fn walk(&self, visitor: &mut T) -> Result<(), E> {
+                visitor.visit_expr(&self.expr)
+            }
+        }
+        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Start {
+            fn walk(&self, visitor: &mut T) -> Result<(), E> {
+                visitor.visit_program(&self.0)
+            }
+        }
+        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Expr {
+            fn walk(&self, visitor: &mut T) -> Result<(), E> {
+                visitor.visit_operation(&self.ignore)
+            }
+        }
+        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Group {
+            fn walk(&self, visitor: &mut T) -> Result<(), E> {
+                match self {
+                    Group::Expr(expr) => visitor.visit_expr(expr),
+                    Group::Empty => visitor.visit_empty(),
+                }
+            }
+        }
+        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Block {
+            fn walk(&self, visitor: &mut T) -> Result<(), E> {
+                visitor.visit_expr(&self.expr)
+            }
+        }
+        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Operation {
+            fn walk(&self, visitor: &mut T) -> Result<(), E> {
+                match self {
+                    Operation::Binary { first, other } => {
+                        visitor.visit_operation(first)?;
+                        for (op, other) in other {
+                            visitor.visit_binary_op(op)?;
+                            visitor.visit_operation(other)?;
+                        }
+                        Ok(())
+                    }
+                    Operation::Unary { operators, operand } => {
+                        for op in operators {
+                            visitor.visit_unary_op(op)?;
+                        }
+                        visitor.visit_primary(operand)
+                    }
+                }
+            }
+        }
+        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Primary {
+            fn walk(&self, visitor: &mut T) -> Result<(), E> {
+                match self {
+                    Primary::Identifier(i) => visitor.visit_identifier(i),
+                    Primary::Literal(l) => visitor.visit_literal(l),
+                    Primary::Block(b) => visitor.visit_block(b),
+                    Primary::Group(g) => visitor.visit_group(g),
+                    Primary::Branch(b) => visitor.visit_branch_expr(b),
+                }
+            }
+        }
+        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Literal {
+            fn walk(&self, visitor: &mut T) -> Result<(), E> {
+                match self {
+                    Literal::String(s) => visitor.visit_string_literal(s),
+                    Literal::Char(c) => visitor.visit_char_literal(c),
+                    Literal::Bool(b) => visitor.visit_bool_literal(b),
+                    Literal::Float(f) => visitor.visit_float_literal(f),
+                    Literal::Int(i) => visitor.visit_int_literal(i),
+                }
+            }
+        }
+        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Flow {
+            fn walk(&self, visitor: &mut T) -> Result<(), E> {
+                match self {
+                    Flow::While(w) => visitor.visit_while(w),
+                    Flow::If(i) => visitor.visit_if(i),
+                    Flow::For(f) => visitor.visit_for(f),
+                    Flow::Continue(c) => visitor.visit_continue(c),
+                    Flow::Return(r) => visitor.visit_return(r),
+                    Flow::Break(b) => visitor.visit_break(b),
+                }
+            }
+        }
+        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Stmt {
+            fn walk(&self, visitor: &mut T) -> Result<(), E> {
+                match self {
+                    Stmt::Let { name, mutable: _, ty, init } => {
+                        visitor.visit_identifier(name)?;
+                        if let Some(ty) = ty {
+                            visitor.visit_identifier(ty)?;
+                        }
+                        if let Some(init) = init {
+                            visitor.visit_expr(init)?;
+                        }
+                        Ok(())
+                    }
+                    Stmt::Expr(e) => visitor.visit_expr(e),
+                }
+            }
+        }
+        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Program {
+            fn walk(&self, visitor: &mut T) -> Result<(), E> {
+                for stmt in &self.0 {
+                    visitor.visit_statement(stmt)?;
+                }
+                Ok(())
+            }
+        }
+    }
+
+    /// A Visitor traverses every kind of node in the [Abstract Syntax Tree](super)
+    pub trait Visitor<R> {
+        /// Visit the start of an AST
+        fn visit(&mut self, start: &Start) -> R {
+            self.visit_program(&start.0)
+        }
+        /// Visit a [Program]
+        fn visit_program(&mut self, prog: &Program) -> R;
+
+        /// Visit a [Statement](Stmt)
+        fn visit_statement(&mut self, stmt: &Stmt) -> R;
+
+        /// Visit an [Expression](Expr)
+        fn visit_expr(&mut self, expr: &Expr) -> R {
+            self.visit_operation(&expr.ignore)
+        }
+        // Block expression
+        /// Visit a [Block] expression
+        fn visit_block(&mut self, expr: &Block) -> R {
+            self.visit_expr(&expr.expr)
+        }
+        /// Visit a [Group] expression
+        fn visit_group(&mut self, group: &Group) -> R {
+            match group {
+                Group::Expr(expr) => self.visit_expr(expr),
+                Group::Empty => self.visit_empty(),
+            }
+        }
+
+        // Math expression
+        /// Visit an [Operation]
+        fn visit_operation(&mut self, expr: &Operation) -> R;
+        /// Visit a [Binary](Operation::Binary) [operator](operator::Binary)
+        // Math operators
+        fn visit_binary_op(&mut self, op: &operator::Binary) -> R;
+        /// Visit a [Unary](Operation::Unary) [operator](operator::Unary)
+        fn visit_unary_op(&mut self, op: &operator::Unary) -> R;
+
+        /// Visit a [Primary] expression
+        ///
+        /// [Primary] := [Identifier] | [Literal] | [Block] | [Flow]
+        fn visit_primary(&mut self, expr: &Primary) -> R {
+            match expr {
+                Primary::Identifier(v) => self.visit_identifier(v),
+                Primary::Literal(v) => self.visit_literal(v),
+                Primary::Block(v) => self.visit_block(v),
+                Primary::Group(v) => self.visit_group(v),
+                Primary::Branch(v) => self.visit_branch_expr(v),
+            }
+        }
+
+        /// Visit a [Flow] expression.
+        ///
+        /// [Flow] := [While] | [If] | [For]
+        fn visit_branch_expr(&mut self, expr: &Flow) -> R {
+            match expr {
+                Flow::While(e) => self.visit_while(e),
+                Flow::If(e) => self.visit_if(e),
+                Flow::For(e) => self.visit_for(e),
+                Flow::Continue(e) => self.visit_continue(e),
+                Flow::Return(e) => self.visit_return(e),
+                Flow::Break(e) => self.visit_break(e),
+            }
+        }
+        /// Visit an [If] expression
+        fn visit_if(&mut self, expr: &If) -> R;
+        /// Visit a [While] loop expression
+        fn visit_while(&mut self, expr: &While) -> R;
+        /// Visit a [For] loop expression
+        fn visit_for(&mut self, expr: &For) -> R;
+        /// Visit an [Else] expression
+        fn visit_else(&mut self, expr: &Else) -> R;
+        /// Visit a [Continue] expression
+        fn visit_continue(&mut self, expr: &Continue) -> R;
+        /// Visit a [Break] expression
+        fn visit_break(&mut self, expr: &Break) -> R;
+        /// Visit a [Return] expression
+        fn visit_return(&mut self, expr: &Return) -> R;
+
+        // primary symbols
+        /// Visit an [Identifier]
+        fn visit_identifier(&mut self, ident: &Identifier) -> R;
+        /// Visit a [Literal]
+        ///
+        /// [Literal] := [String] | [char] | [bool] | [Float] | [u128]
+        fn visit_literal(&mut self, literal: &Literal) -> R {
+            match literal {
+                Literal::String(l) => self.visit_string_literal(l),
+                Literal::Char(l) => self.visit_char_literal(l),
+                Literal::Bool(l) => self.visit_bool_literal(l),
+                Literal::Float(l) => self.visit_float_literal(l),
+                Literal::Int(l) => self.visit_int_literal(l),
+            }
+        }
+        /// Visit a [string](str) literal
+        fn visit_string_literal(&mut self, string: &str) -> R;
+        /// Visit a [character](char) literal
+        fn visit_char_literal(&mut self, char: &char) -> R;
+        /// Visit a [boolean](bool) literal
+        fn visit_bool_literal(&mut self, bool: &bool) -> R;
+        /// Visit a [floating point](Float) literal
+        fn visit_float_literal(&mut self, float: &Float) -> R;
+        /// Visit an [integer](u128) literal
+        fn visit_int_literal(&mut self, int: &u128) -> R;
+
+        /// Visit an Empty
+        fn visit_empty(&mut self) -> R;
     }
 }

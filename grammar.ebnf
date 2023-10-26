@@ -1,15 +1,22 @@
 (* Conlang Expression Grammar *)
-Start       = Expr ;
+Start       = Program ;
+Program     = Stmt* EOI ;
 
 (* literal *)
 Literal     = STRING | CHARACTER | FLOAT | INTEGER | Bool ;
 Bool        = "true" | "false" ;
 Identifier  = IDENTIFIER ;
 
+(* # Statements *)
+(* statement *)
+Stmt        = Fn | Let | Expr ';' ;
+Let         = "let" "mut"? Identifier (':' Type)? ('=' Expr)? ';' ;
+Fn          = "fn" Identifier Block ; (* TODO: params, return value*)
+
 (* # Expressions *)
 (* expression *)
 Expr        = Ignore ;
-Block       = '{' Stmt* Expr? '}' ;
+Block       = '{' Expr '}' ;
 Group       = '(' Expr? ')' ;
 Primary     = Item | Identifier | Literal
               | Block | Group | Branch ;

@@ -147,12 +147,15 @@ impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
         Self { tokens, panic_stack: vec![], curr: 0 }
     }
-    /// Parse the [start of an AST](Start)
+    /// Parses the [start of an AST](Start)
     pub fn parse(&mut self) -> PResult<Start> {
         self.consume_comments();
-        Ok(Start(self.expr()?))
+        Ok(Start(self.program()?))
     }
-    /// Consumes any consecutive comments
+    /// Parses only one expression
+    pub fn parse_expr(&mut self) -> PResult<expression::Expr> {
+        self.expr()
+    }
     fn consume_comments(&mut self) -> &mut Self {
         while let Ok(Type::Comment) = self.peek().map(|t| t.ty()) {
             self.curr += 1;
@@ -311,6 +314,29 @@ impl Parser {
         Ok(out)
     }
 }
+/// Statements
+impl Parser {
+    /// Parses a series of [statements](Stmt)
+    fn program(&mut self) -> PResult<Program> {
+        let mut out = vec![];
+        while self.check_eof().is_ok() {
+            out.push(self.stmt()?);
+        }
+        Ok(Program(out))
+    }
+    /// Parses a single [statement](Stmt)
+    fn stmt(&mut self) -> PResult<Stmt> {
+        let token = self.peek()?;
+        match token.ty() {
+            Type::Keyword(Keyword::Let) => todo!("Let statements"),
+            _ => {
+                let out = Stmt::Expr(self.expr()?);
+                self.consume_type(Type::Semi)?;
+                Ok(out)
+            }
+        }
+    }
+}
 /// Expressions
 impl Parser {
     fn expr(&mut self) -> PResult<expression::Expr> {
@@ -404,7 +430,6 @@ impl Parser {
 }
 macro operator_impl ($($(#[$m:meta])* $f:ident : {$($type:pat => $op:ident),*$(,)?})*) {
     $($(#[$m])* fn $f(&mut self) -> PResult<operator::Binary> {
-
         use operator::Binary;
         let token = self.peek()?;
         let out = Ok(match token.ty() {

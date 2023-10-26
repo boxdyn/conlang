@@ -68,6 +68,31 @@ macro visit_operator($self:ident.$op:expr) {
     $self.space()?.put($op)?.space().map(drop)
 }
 impl<W: Write> Visitor<IOResult<()>> for Printer<W> {
+    fn visit_program(&mut self, prog: &Program) -> IOResult<()> {
+        // delegate to the walker
+        prog.walk(self)
+    }
+    fn visit_statement(&mut self, stmt: &Stmt) -> IOResult<()> {
+        match stmt {
+            Stmt::Let { name, mutable, ty, init } => {
+                self.put("let")?.space()?;
+                if *mutable {
+                    self.put("mut")?.space()?;
+                }
+                self.visit_identifier(name)?;
+                if let Some(ty) = ty {
+                    self.put(':')?.space()?.visit_identifier(ty)?;
+                }
+                if let Some(init) = init {
+                    self.space()?.put('=')?.space()?.visit_expr(init)?;
+                }
+            },
+            Stmt::Expr(e) => {
+                self.visit_expr(e)?;
+            },
+        }
+        self.put(';')?.newline().map(drop)
+    }
     fn visit_operation(&mut self, expr: &math::Operation) -> IOResult<()> {
         use math::Operation;
         match expr {
