@@ -5,7 +5,7 @@ use error::{Error, IResult, Reason};
 use temp_type_impl::ConValue;
 
 pub mod temp_type_impl {
-    //! Temporary implementations of Conlang values until I'm able to
+    //! Temporary implementations of Conlang values
     use super::error::{Error, IResult, Reason};
     use std::ops::*;
     /// A Conlang value
