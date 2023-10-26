@@ -42,10 +42,10 @@ pub mod lexer_iter {
 }
 
 /// The Lexer iterates over the characters in a body of text, searching for [Tokens](Token).
-/// 
+///
 /// # Examples
 /// ```rust
-///# use conlang::lexer::Lexer;
+/// # use conlang::lexer::Lexer;
 /// // Read in your code from somewhere
 /// let some_code = "
 /// fn main () {
@@ -59,7 +59,7 @@ pub mod lexer_iter {
 /// println!("{first_token:?}");
 /// // Loop over all the rest of the tokens
 /// for token in lexer {
-///#    let token: Result<_,()> = Ok(token.unwrap());
+/// #   let token: Result<_,()> = Ok(token.unwrap());
 ///     match token {
 ///         Ok(token) => println!("{token:?}"),
 ///         Err(e) => eprintln!("{e:?}"),
@@ -123,7 +123,11 @@ impl<'t> Lexer<'t> {
             '\'' => self.consume()?.character(),
             '_' => self.identifier(),
             i if i.is_xid_start() => self.identifier(),
-            e => Err(Error::unexpected_char(e, self.line(), self.col())),
+            e => {
+                let err = Err(Error::unexpected_char(e, self.line(), self.col()));
+                let _ = self.consume();
+                err
+            }
         }
     }
     /// Returns the current line

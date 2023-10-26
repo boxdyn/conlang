@@ -46,7 +46,7 @@ fn lex_tokens(file: &str, path: Option<&Path>) -> Result<(), Box<dyn Error>> {
             Ok(t) => t,
             Err(e) => {
                 println!("{e:?}");
-                break;
+                continue;
             },
         };
         if let Some(path) = path {
