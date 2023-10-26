@@ -341,7 +341,7 @@ impl Parser {
 impl Parser {
     fn expr(&mut self) -> PResult<expression::Expr> {
         use expression::Expr;
-        Ok(Expr { ignore: self.ignore()? })
+        Ok(Expr { ignore: self.assign()? })
     }
     fn block(&mut self) -> PResult<expression::Block> {
         self.delimited(Type::LCurly, |p| p.expr(), Type::RCurly)
@@ -408,8 +408,7 @@ macro binary ($($f:ident = $a:ident, $b:ident);*$(;)?) {$(
 /// # [Arithmetic and Logical Subexpressions](math)
 impl Parser {
     binary! {
-        //name    operands operators
-        ignore  = assign,  ignore_op;
+        // name   operands operators
         assign  = compare, assign_op;
         compare = range,   compare_op;
         range   = logic,   range_op;
@@ -491,10 +490,6 @@ impl Parser {
             Type::LtLtEq => ShlAssign,
             Type::GtGtEq => ShrAssign,
         }
-        ignore_op: {
-            Type::Semi => Ignore,
-        }
-
     }
     /// Parse a [unary operator](operator::Unary)
     fn unary_op(&mut self) -> PResult<operator::Unary> {

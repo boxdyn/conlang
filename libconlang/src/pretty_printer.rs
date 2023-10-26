@@ -147,7 +147,6 @@ impl<W: Write> Visitor<IOResult<()>> for Printer<W> {
             Binary::BitXorAssign => "^=",
             Binary::ShlAssign => "<<=",
             Binary::ShrAssign => ">>=",
-            Binary::Ignore => ";",
         })
     }
     fn visit_unary_op(&mut self, op: &operator::Unary) -> IOResult<()> {

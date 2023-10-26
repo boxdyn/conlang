@@ -15,14 +15,13 @@ Fn          = "fn" Identifier Block ; (* TODO: params, return value*)
 
 (* # Expressions *)
 (* expression *)
-Expr        = Ignore ;
+Expr        = Assign ;
 Block       = '{' Expr '}' ;
 Group       = '(' Expr? ')' ;
 Primary     = Item | Identifier | Literal
               | Block | Group | Branch ;
 
 (* expression::math *)
-Ignore      = Assign  (IgnoreOp  Assign )* ;
 Assign      = Compare (AssignOp  Compare)* ;
 Compare     = Range   (CompareOp Range  )* ;
 Range       = Logic   (RangeOp   Logic  )* ;
@@ -34,7 +33,6 @@ Factor      = Unary   (FactorOp  Unary  )* ;
 Unary       = (UnaryOp)* Primary ;
 
 (* expression::math::operator *)
-IgnoreOp    =  ';' ;
 AssignOp    =  '=' | "+=" | "-=" | "*=" | "/=" |
               "&=" | "|=" | "^=" |"<<=" |">>=" ;
 CompareOp   =  '<' | "<=" | "==" | "!=" | ">=" | '>' ;

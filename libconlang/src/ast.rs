@@ -270,18 +270,16 @@ pub mod expression {
         r"  | 8 |    Assign |", r"`*=`, `/=`, `%=`, `+=`, `-=`, ",//|
         /*  |   |           |*/ r"`&=`, <code>&#124;=</code>, ",  //|
         /*  |   |           |*/ r"`^=`, `<<=`, `>>=`",            r"| Right to Left")]
-        //! | 9 |    Ignore | `;` |
         //!
         //! <!-- Note: '&#124;' == '|' /-->
         //!
         //! ## Syntax
         //! ```ignore
         //! /* All precedence levels other than Unary fold into Binary */
-        //! Ignore  := Assign  (CompareOp Assign )*
-        //! Assign  := Compare (IgnoreOp  Compare)*
-        //! Compare := Logic   (AssignOp  Logic  )*
+        //! Assign  := Compare (AssignOp  Compare)*
+        //! Compare := Logic   (CompareOp Logic  )*
         //! Logic   := Bitwise (LogicOp   Bitwise)*
-        //! Bitwise := Shift   (BitOp     Shift  )*
+        //! Bitwise := Shift   (BitwiseOp Shift  )*
         //! Shift   := Term    (ShiftOp   Term   )*
         //! Term    := Factor  (TermOp    Factor )*
         //! Factor  := Unary   (FactorOp  Unary  )*
@@ -324,7 +322,7 @@ pub mod expression {
               r"| 7 |", r"`*=`, `/=`, `%=`, `+=`, `-=`, ",//|
             /*  |   |*/ r"`&=`, <code>&#124;=</code>, ",  //|
             /*  |   |*/ r"`^=`, `<<=`, `>>=`, `=`",       r"| Left to Right")]
-            //! | 8 | `;`                                   |
+            //! | 8 | `,`                                   |
 
             /// Operators which take a single argument
             ///
@@ -430,9 +428,6 @@ pub mod expression {
                 ShlAssign,
                 /// `>>=`: Right Shift In-place Assignment
                 ShrAssign,
-                // Ignorance operators
-                /// `;`: Ignore
-                Ignore,
             }
         }
     }
