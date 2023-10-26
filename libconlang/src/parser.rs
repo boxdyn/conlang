@@ -69,7 +69,7 @@ pub mod error {
         reason: Reason,
         start: Option<Token>,
     }
-
+    impl std::error::Error for Error {}
     impl Display for Error {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             if let Some(token) = &self.start {

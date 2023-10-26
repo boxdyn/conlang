@@ -1,4 +1,4 @@
-//! Conlang is an expression-based programming language with similarities to Rust
+//! Conlang is an expression-based programming language with similarities to Rust and Python
 #![warn(clippy::all)]
 #![feature(decl_macro)]
 
@@ -12,9 +12,7 @@ pub mod parser;
 
 pub mod pretty_printer;
 
-pub mod interpreter {
-    //! Interprets an AST as a program
-}
+pub mod interpreter;
 
 #[cfg(test)]
 mod tests;
