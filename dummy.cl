@@ -1,4 +1,3 @@
-#!/usr/local/bin/conlang
 // This is a Conlang file. Conlang is an expression-based language designed for maximum flexibility etc. etc. whatever
 
 // This is a function. It can be called with the call operator.
