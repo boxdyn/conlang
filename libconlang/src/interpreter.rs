@@ -24,6 +24,10 @@ pub mod temp_type_impl {
         Char(char),
         /// A string
         String(String),
+        /// An exclusive range
+        RangeExc(i128, i128),
+        /// An inclusive range
+        RangeInc(i128, i128),
     }
     impl ConValue {
         /// Gets whether the current value is true or false
@@ -32,6 +36,18 @@ pub mod temp_type_impl {
                 ConValue::Bool(v) => Ok(*v),
                 _ => Err(Error::with_reason(Reason::TypeError))?,
             }
+        }
+        pub fn range_exc(self, other: Self) -> IResult<Self> {
+            let (Self::Int(a), Self::Int(b)) = (self, other) else {
+                Err(Error::with_reason(Reason::TypeError))?
+            };
+            Ok(Self::RangeExc(a, b.saturating_sub(1)))
+        }
+        pub fn range_inc(self, other: Self) -> IResult<Self> {
+            let (Self::Int(a), Self::Int(b)) = (self, other) else {
+                Err(Error::with_reason(Reason::TypeError))?
+            };
+            Ok(Self::RangeInc(a, b))
         }
         cmp! {
             lt: false, <;
@@ -171,6 +187,8 @@ pub mod temp_type_impl {
                 ConValue::Bool(v) => v.fmt(f),
                 ConValue::Char(v) => write!(f, "'{v}'"),
                 ConValue::String(v) => write!(f, "\"{v}\""),
+                ConValue::RangeExc(a, b) => write!(f, "{a}..{}", b + 1),
+                ConValue::RangeInc(a, b) => write!(f, "{a}..={b}"),
             }
         }
     }
@@ -191,10 +209,10 @@ impl Interpreter {
     pub fn interpret(&mut self, start: &Start) -> IResult<()> {
         self.visit(start)
     }
-    /// Evaluates a single [Expression](expression::Expr)
-    pub fn eval(mut self, expr: &expression::Expr) -> IResult<Vec<ConValue>> {
+    /// Evaluates a single [Expression](expression::Expr) and returns the value stack.
+    pub fn eval(&mut self, expr: &expression::Expr) -> IResult<Vec<ConValue>> {
         self.visit_expr(expr)?;
-        Ok(self.stack)
+        Ok(std::mem::take(&mut self.stack))
     }
     fn push(&mut self, value: impl Into<ConValue>) {
         self.stack.push(value.into())
@@ -299,8 +317,8 @@ impl Visitor<IResult<()>> for Interpreter {
             Binary::LogAnd | Binary::LogOr | Binary::LogXor => {
                 unimplemented!("Implemented in visit_operation")
             }
-            Binary::RangeExc => todo!("Range expressions"),
-            Binary::RangeInc => todo!("Range expressions"),
+            Binary::RangeExc => first.range_exc(second),
+            Binary::RangeInc => first.range_inc(second),
             Binary::Less => first.lt(&second),
             Binary::LessEq => first.lt_eq(&second),
             Binary::Equal => first.eq(&second),
@@ -357,6 +375,9 @@ impl Visitor<IResult<()>> for Interpreter {
             self.pop()?.truthy()?
         } {
             let Err(out) = self.visit_block(&expr.body) else {
+                // Every expression returns a value. If allowed to pile up, they'll overflow the
+                // stack.
+                self.pop()?;
                 continue;
             };
             match out.reason() {
@@ -376,7 +397,31 @@ impl Visitor<IResult<()>> for Interpreter {
     }
 
     fn visit_for(&mut self, expr: &control::For) -> IResult<()> {
-        todo!("Visit for: {expr:?}")
+        self.visit_expr(&expr.iter)?;
+        let mut broke = false;
+        let bounds = match self.pop()? {
+            ConValue::RangeExc(a, b) | ConValue::RangeInc(a, b) => (a, b),
+            _ => Err(Error::with_reason(Reason::NotIterable))?,
+        };
+        for _ in bounds.0..=bounds.1 {
+            let Err(out) = self.visit_block(&expr.body) else {
+                self.pop()?;
+                continue;
+            };
+            match out.reason() {
+                Reason::Continue => continue,
+                Reason::Break(value) => {
+                    self.push(value);
+                    broke = true;
+                    break;
+                }
+                r => Err(Error::with_reason(r))?,
+            }
+        }
+        if let (Some(r#else), false) = (&expr.else_, broke) {
+            self.visit_else(r#else)?;
+        }
+        Ok(())
     }
 
     fn visit_else(&mut self, else_: &control::Else) -> IResult<()> {
@@ -482,6 +527,8 @@ pub mod error {
         /// Type incompatibility
         // TODO: store the type information in this error
         TypeError,
+        /// In clause of For loop didn't yield a Range
+        NotIterable,
     }
 
     impl std::error::Error for Error {}
@@ -498,6 +545,7 @@ pub mod error {
                 Reason::Continue => "continue".fmt(f),
                 Reason::StackUnderflow => "Stack underflow".fmt(f),
                 Reason::TypeError => "Type error".fmt(f),
+                Reason::NotIterable => "`in` clause of `for` loop did not yield an iterable".fmt(f),
             }
         }
     }

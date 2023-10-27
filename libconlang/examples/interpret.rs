@@ -31,12 +31,13 @@ impl Config {
 fn take_stdin() -> Result<(), Box<dyn Error>> {
     const PROMPT: &str = "> ";
     if stdin().is_terminal() {
+        let mut interpreter = Interpreter::new();
         print!("{PROMPT}");
         stdout().flush()?;
         for line in stdin().lines() {
             let line = line?;
             if !line.is_empty() {
-                let _ = run(&line).map_err(|e| eprintln!("{e}"));
+                let _ = run(&line, &mut interpreter).map_err(|e| eprintln!("{e}"));
                 println!();
             }
             print!("{PROMPT}");
@@ -58,8 +59,7 @@ fn parse(file: &str, path: Option<&Path>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn run(file: &str) -> Result<(), Box<dyn Error>> {
-    let mut interpreter = Interpreter::new();
+fn run(file: &str, interpreter: &mut Interpreter) -> Result<(), Box<dyn Error>> {
     // If it parses successfully as a program, run the program
     match Parser::from(Lexer::new(file)).parse() {
         Ok(ast) => interpreter.interpret(&ast)?,
