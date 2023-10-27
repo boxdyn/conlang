@@ -210,9 +210,7 @@ pub mod expression {
     /// # Syntax
     /// [`Expr`]` := `[`math::Operation`]
     #[derive(Clone, Debug)]
-    pub struct Expr {
-        pub ignore: math::Operation,
-    }
+    pub struct Expr (pub math::Operation);
 
     /// A [Primary] Expression is the expression with the highest precedence (i.e. the deepest
     /// derivation)
@@ -693,7 +691,7 @@ pub mod visitor {
         }
         impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Expr {
             fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_operation(&self.ignore)
+                visitor.visit_operation(&self.0)
             }
         }
         impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Group {
@@ -804,7 +802,7 @@ pub mod visitor {
 
         /// Visit an [Expression](Expr)
         fn visit_expr(&mut self, expr: &Expr) -> R {
-            self.visit_operation(&expr.ignore)
+            self.visit_operation(&expr.0)
         }
         // Block expression
         /// Visit a [Block] expression

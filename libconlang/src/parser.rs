@@ -229,13 +229,13 @@ impl Parser {
         Ok(token)
     }
     /// Consumes, without returning, a token with the given [Keyword], or returns an error.
-    /// 
+    ///
     /// Useful if you only want to check the existence of a [Keyword]
     fn keyword(&mut self, keyword: Keyword) -> PResult<&mut Self> {
         self.consume_type(Type::Keyword(keyword))
     }
     /// Consumes, without returning, a token with the given [Type], or returns an error.
-    /// 
+    ///
     /// Useful if you only want to check the existence of a token.
     fn consume_type(&mut self, t: Type) -> PResult<&mut Self> {
         self.matches(t)?;
@@ -381,7 +381,7 @@ impl Parser {
     /// Parses an [expression](expression::Expr)
     fn expr(&mut self) -> PResult<expression::Expr> {
         use expression::Expr;
-        Ok(Expr { ignore: self.assign()? })
+        Ok(Expr(self.assign()?))
     }
     /// Parses a [block expression](expression::Block)
     fn block(&mut self) -> PResult<expression::Block> {
