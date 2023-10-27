@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         take_stdin()?;
     } else {
         for path in conf.paths.iter().map(PathBuf::as_path) {
-            parse(&std::fs::read_to_string(path)?, Some(path))?;
+            run_file(&std::fs::read_to_string(path)?, Some(path))?;
         }
     }
     Ok(())
@@ -32,24 +32,31 @@ fn take_stdin() -> Result<(), Box<dyn Error>> {
     const PROMPT: &str = "> ";
     if stdin().is_terminal() {
         let mut interpreter = Interpreter::new();
+        let mut buf = String::new();
         print!("{PROMPT}");
         stdout().flush()?;
-        for line in stdin().lines() {
-            let line = line?;
-            if !line.is_empty() {
-                let _ = run(&line, &mut interpreter).map_err(|e| eprintln!("{e}"));
-                println!();
+        while let Ok(len) = stdin().read_line(&mut buf) {
+            match len {
+                0 => {
+                    println!();
+                    break;
+                }
+                1 => {
+                    let _ = run(&buf, &mut interpreter).map_err(|e| eprintln!("{e}"));
+                    buf.clear();
+                }
+                _ => (),
             }
             print!("{PROMPT}");
             stdout().flush()?;
         }
     } else {
-        parse(&std::io::read_to_string(stdin())?, None)?
+        run_file(&std::io::read_to_string(stdin())?, None)?
     }
     Ok(())
 }
 
-fn parse(file: &str, path: Option<&Path>) -> Result<(), Box<dyn Error>> {
+fn run_file(file: &str, path: Option<&Path>) -> Result<(), Box<dyn Error>> {
     match Parser::from(Lexer::new(file)).parse() {
         Ok(ast) => Interpreter::new().interpret(&ast)?,
         Err(e) if e.start().is_some() => print!("{:?}:{}", path.unwrap_or(Path::new("-")), e),
@@ -59,19 +66,16 @@ fn parse(file: &str, path: Option<&Path>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn run(file: &str, interpreter: &mut Interpreter) -> Result<(), Box<dyn Error>> {
+fn run(input: &str, interpreter: &mut Interpreter) -> Result<(), Box<dyn Error>> {
     // If it parses successfully as a program, run the program
-    match Parser::from(Lexer::new(file)).parse() {
-        Ok(ast) => interpreter.interpret(&ast)?,
-        Err(e) => {
-            // If not, re-parse as an expression, and print the stack
-            let Ok(expr) = Parser::from(Lexer::new(file)).parse_expr() else {
-                Err(e)?
-            };
-            for value in interpreter.eval(&expr)? {
-                println!("{value}");
-            }
-        }
+    let ast = Parser::from(Lexer::new(input)).parse();
+    if let Ok(ast) = ast {
+        interpreter.interpret(&ast)?;
+        return Ok(());
+    }
+    let ast = Parser::from(Lexer::new(input)).parse_expr()?;
+    for value in interpreter.eval(&ast)? {
+        println!("{value}");
     }
     Ok(())
 }
