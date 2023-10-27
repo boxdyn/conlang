@@ -359,7 +359,15 @@ impl Parser {
     fn stmt(&mut self) -> PResult<Stmt> {
         let token = self.peek()?;
         match token.ty() {
-            Type::Keyword(Keyword::Let) => todo!("Let statements"),
+            Type::Keyword(Keyword::Let) => Ok(Stmt::Let {
+                mutable: self.consume().keyword(Keyword::Mut).is_ok(),
+                name: self.identifier()?,
+                ty: self
+                    .consume_type(Type::Colon)
+                    .and_then(Self::identifier)
+                    .ok(),
+                init: self.consume_type(Type::Eq).and_then(Self::expr).ok(),
+            }),
             _ => {
                 let out = Stmt::Expr(self.expr()?);
                 self.consume_type(Type::Semi)?;
