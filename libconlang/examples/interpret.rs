@@ -43,11 +43,11 @@ fn take_stdin() -> Result<(), Box<dyn Error>> {
                 }
                 1 => {
                     let _ = run(&buf, &mut interpreter).map_err(|e| eprintln!("{e}"));
+                    print!("\n{PROMPT}");
                     buf.clear();
                 }
-                _ => (),
+                _ => print!(". "),
             }
-            print!("{PROMPT}");
             stdout().flush()?;
         }
     } else {
