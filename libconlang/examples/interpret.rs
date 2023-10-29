@@ -1,5 +1,10 @@
 //! This example grabs input from stdin or a file, lexes it, parses it, and interprets it
-use conlang::{interpreter::Interpreter, lexer::Lexer, parser::Parser};
+use conlang::{
+    ast::{expression::Expr, Start},
+    interpreter::Interpreter,
+    lexer::Lexer,
+    parser::Parser,
+};
 use std::{
     error::Error,
     io::{stdin, stdout, IsTerminal, Write},
@@ -28,27 +33,48 @@ impl Config {
     }
 }
 
+macro_rules! prompt {
+    ($($t:tt)*) => {{
+        let mut out = stdout().lock();
+        out.write_all(b"\x1b[36m")?;
+        write!(out, $($t)*)?;
+        out.write_all(b"\x1b[0m")?;
+        out.flush()
+    }};
+}
+
 fn take_stdin() -> Result<(), Box<dyn Error>> {
-    const PROMPT: &str = "> ";
+    const CONLANG: &str = "cl>";
+    const MOREPLS: &str = " ?>";
     if stdin().is_terminal() {
         let mut interpreter = Interpreter::new();
         let mut buf = String::new();
-        print!("{PROMPT}");
-        stdout().flush()?;
+        prompt!("{CONLANG} ")?;
         while let Ok(len) = stdin().read_line(&mut buf) {
-            match len {
-                0 => {
+            let code = Program::parse(&buf);
+            match (len, code) {
+                // Exit the loop
+                (0, _) => {
                     println!();
                     break;
                 }
-                1 => {
-                    let _ = run(&buf, &mut interpreter).map_err(|e| eprintln!("{e}"));
-                    print!("\n{PROMPT}");
+                // If the code is OK, run it and print any errors
+                (_, Ok(code)) => {
+                    let _ = code.run(&mut interpreter).map_err(|e| eprintln!("{e}"));
                     buf.clear();
                 }
-                _ => print!(". "),
+                // If the user types two newlines, print syntax errors
+                (1, Err(e)) => {
+                    eprintln!("{e}");
+                    buf.clear();
+                }
+                // Otherwise, ask for more input
+                _ => {
+                    prompt!("{MOREPLS} ")?;
+                    continue;
+                }
             }
-            stdout().flush()?;
+            prompt!("{CONLANG} ")?;
         }
     } else {
         run_file(&std::io::read_to_string(stdin())?, None)?
@@ -66,16 +92,28 @@ fn run_file(file: &str, path: Option<&Path>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn run(input: &str, interpreter: &mut Interpreter) -> Result<(), Box<dyn Error>> {
-    // If it parses successfully as a program, run the program
-    let ast = Parser::from(Lexer::new(input)).parse();
-    if let Ok(ast) = ast {
-        interpreter.interpret(&ast)?;
-        return Ok(());
+enum Program {
+    Program(Start),
+    Expr(Expr),
+}
+
+impl Program {
+    fn parse(input: &str) -> conlang::parser::error::PResult<Self> {
+        let ast = Parser::from(Lexer::new(input)).parse();
+        if let Ok(ast) = ast {
+            return Ok(Self::Program(ast));
+        }
+        Ok(Self::Expr(Parser::from(Lexer::new(input)).parse_expr()?))
     }
-    let ast = Parser::from(Lexer::new(input)).parse_expr()?;
-    for value in interpreter.eval(&ast)? {
-        println!("{value}");
+    fn run(&self, interpreter: &mut Interpreter) -> conlang::interpreter::error::IResult<()> {
+        match self {
+            Program::Program(start) => interpreter.interpret(start),
+            Program::Expr(expr) => {
+                for value in interpreter.eval(expr)? {
+                    println!("{value}")
+                }
+                Ok(())
+            }
+        }
     }
-    Ok(())
 }
