@@ -8,7 +8,7 @@ pub mod error {
     use std::fmt::Display;
 
     /// The reason for the [Error]
-    #[derive(Clone, Debug, Default, PartialEq, Eq)]
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
     pub enum Reason {
         Expected(Type),
         Unexpected(Type),
@@ -101,7 +101,11 @@ pub mod error {
             self.start.as_ref()
         }
         /// Gets the [Reason] for this error
-        pub fn reason(self, reason: Reason) -> Self {
+        pub fn reason(&self) -> Reason {
+            self.reason
+        }
+        /// Modifies the [Reason] of this error
+        pub fn with_reason(self, reason: Reason) -> Self {
             Self { reason, ..self }
         }
         error_impl! {
@@ -131,6 +135,7 @@ pub mod error {
 pub struct Parser {
     tokens: Vec<Token>,
     panic_stack: Vec<usize>,
+    pub errors: Vec<Error>,
     cursor: usize,
 }
 impl<'t> From<Lexer<'t>> for Parser {
@@ -153,7 +158,7 @@ impl Parser {
     ///
     /// [1]: Token
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens, panic_stack: vec![], cursor: 0 }
+        Self { tokens, panic_stack: vec![], errors: vec![], cursor: 0 }
     }
     /// Parses the [start of an AST](Start)
     pub fn parse(&mut self) -> PResult<Start> {
@@ -184,6 +189,10 @@ impl Parser {
         self.consume_comments();
         self
     }
+}
+/// Panicking
+#[allow(dead_code)]
+impl Parser {
     /// Records the current position on the panic stack
     fn mark(&mut self) -> &mut Self {
         self.panic_stack.push(self.cursor);
@@ -204,10 +213,21 @@ impl Parser {
     fn advance_until(&mut self, t: Type) -> PResult<&mut Self> {
         while self.matches(t).is_err() {
             self.check_eof()
-                .map_err(|e| e.reason(Expected(t)))?
+                .map_err(|e| e.with_reason(Expected(t)))?
                 .consume();
         }
         Ok(self)
+    }
+    /// Marks the current position, and unwinds the panic stack if `f` fails.
+    fn attempt<F, R>(&mut self, f: F) -> PResult<R>
+    where F: FnOnce(&mut Self) -> PResult<R> {
+        self.mark();
+        let out = f(self);
+        match out {
+            Ok(_) => self.unmark(),
+            Err(_) => self.unwind()?,
+        };
+        out
     }
 }
 /// Helpers
@@ -240,22 +260,6 @@ impl Parser {
     fn consume_type(&mut self, t: Type) -> PResult<&mut Self> {
         self.matches(t)?;
         Ok(self.consume())
-    }
-    /// Parses anything wrapped in `lhs` and `rhs` delimiters.
-    fn delimited<F, R>(&mut self, lhs: Type, mid: F, rhs: Type) -> PResult<R>
-    where F: Fn(&mut Self) -> PResult<R> {
-        self.consume_type(lhs)?.mark();
-        let out = match mid(self) {
-            Ok(out) => out,
-            Err(e) => {
-                eprintln!("{e}");
-                // Jump back in time and try to re-parse from the next brace
-                self.unwind()?.advance_until(lhs)?.mark();
-                return self.delimited(lhs, mid, rhs);
-            }
-        };
-        self.consume_type(rhs)?.unmark();
-        Ok(out)
     }
     #[doc(hidden)]
     fn todo_error(&mut self, l: u32, c: u32, s: &str) -> Error {
@@ -359,15 +363,7 @@ impl Parser {
     fn stmt(&mut self) -> PResult<Stmt> {
         let token = self.peek()?;
         match token.ty() {
-            Type::Keyword(Keyword::Let) => Ok(Stmt::Let {
-                mutable: self.consume().keyword(Keyword::Mut).is_ok(),
-                name: self.identifier()?,
-                ty: self
-                    .consume_type(Type::Colon)
-                    .and_then(Self::identifier)
-                    .ok(),
-                init: self.consume_type(Type::Eq).and_then(Self::expr).ok(),
-            }),
+            Type::Keyword(Keyword::Let) => self.let_stmt().map(Stmt::Let),
             _ => {
                 let out = Stmt::Expr(self.expr()?);
                 self.consume_type(Type::Semi)?;
@@ -375,6 +371,23 @@ impl Parser {
             }
         }
     }
+    /// Parses a [Let] statement
+    fn let_stmt(&mut self) -> PResult<Let> {
+        let out = Let {
+            mutable: self.consume().keyword(Keyword::Mut).is_ok(),
+            name: self.identifier()?,
+            ty: self
+                .consume_type(Type::Colon)
+                .and_then(Self::identifier)
+                .ok(),
+            init: self.consume_type(Type::Eq).and_then(Self::expr).ok(),
+        };
+        self.consume_type(Type::Semi)?;
+        Ok(out)
+    }
+    // /// Parses a [Function] statement
+    // fn function_stmt(&mut self) -> PResult<Function> {
+    // }
 }
 /// Expressions
 impl Parser {
@@ -385,8 +398,23 @@ impl Parser {
     }
     /// Parses a [block expression](expression::Block)
     fn block(&mut self) -> PResult<expression::Block> {
-        self.delimited(Type::LCurly, |p| p.expr(), Type::RCurly)
-            .map(|e| expression::Block { expr: Box::new(e) })
+        use expression::{Block, Expr};
+        let mut statements = vec![];
+        let mut expr: Option<Box<Expr>> = None;
+        self.consume_type(Type::LCurly)?;
+        // tHeRe Is No PlAcE iN yOuR gRaMmAr WhErE bOtH aN eXpReSsIoN aNd A sTaTeMeNt ArE eXpEcTeD
+        while self.consume_type(Type::RCurly).is_err() {
+            match self.expr() {
+                Ok(e) if self.consume_type(Type::Semi).is_ok() => statements.push(Stmt::Expr(e)),
+                Ok(e) => {
+                    expr = Some(Box::new(e));
+                    self.consume_type(Type::RCurly)?;
+                    break;
+                }
+                Err(_) => statements.push(self.stmt()?),
+            }
+        }
+        Ok(Block { statements, expr })
     }
     /// Parses a [group expression](expression::Group)
     fn group(&mut self) -> PResult<expression::Group> {
@@ -440,20 +468,35 @@ impl Parser {
 macro binary ($($f:ident = $a:ident, $b:ident);*$(;)?) {$(
     #[doc = concat!("Parses a(n) [", stringify!($f), " operation](math::Operation::Binary) expression")]
     fn $f (&mut self) -> PResult<math::Operation> {
-        let (first, mut others) = (self.$a()?, vec![]);
+        use math::{Operation, Binary};
+        let (first, mut other) = (self.$a()?, vec![]);
         while let Ok(op) = self.$b() {
-            others.push((op, self.$a()?));
+            other.push((op, self.$a()?));
         }
-        Ok(if others.is_empty() { first } else {
-            math::Operation::binary(first, others)
+        Ok(if other.is_empty() { first } else {
+            Operation::Binary(Binary { first: first.into(), other })
         })
     }
 )*}
 /// # [Arithmetic and Logical Subexpressions](math)
 impl Parser {
+    fn assign(&mut self) -> PResult<math::Operation> {
+        use math::{Assign, Operation};
+        let next = self.compare()?;
+        let Ok(operator) = self.assign_op() else {
+            return Ok(next);
+        };
+        let Operation::Primary(expression::Primary::Identifier(target)) = next else {
+            return Ok(next);
+        };
+        Ok(Operation::Assign(Assign {
+            target,
+            operator,
+            init: self.assign()?.into(),
+        }))
+    }
     binary! {
         // name   operands operators
-        assign  = compare, assign_op;
         compare = range,   compare_op;
         range   = logic,   range_op;
         logic   = bitwise, logic_op;
@@ -464,11 +507,22 @@ impl Parser {
     }
     /// Parses a [unary operation](math::Operation::Unary) expression
     fn unary(&mut self) -> PResult<math::Operation> {
+        use math::{Operation, Unary};
         let mut operators = vec![];
         while let Ok(op) = self.unary_op() {
             operators.push(op)
         }
-        Ok(math::Operation::Unary { operators, operand: self.primary()? })
+        if operators.is_empty() {
+            return self.primary_operation();
+        }
+        Ok(Operation::Unary(Unary {
+            operators,
+            operand: self.primary_operation()?.into(),
+        }))
+    }
+    /// Parses a [primary operation](math::Operation::Primary) expression
+    fn primary_operation(&mut self) -> PResult<math::Operation> {
+        Ok(math::Operation::Primary(self.primary()?))
     }
 }
 macro operator_impl ($($(#[$m:meta])* $f:ident : {$($type:pat => $op:ident),*$(,)?})*) {
@@ -528,20 +582,27 @@ impl Parser {
             Type::GtEq => GreaterEq,
             Type::Gt => Greater,
         }
-        /// Parses an [assign operator](operator)
-        assign_op: {
-            Type::Eq => Assign,
-            Type::PlusEq => AddAssign,
-            Type::MinusEq => SubAssign,
-            Type::StarEq => MulAssign,
-            Type::SlashEq => DivAssign,
-            Type::RemEq => RemAssign,
-            Type::AmpEq => BitAndAssign,
-            Type::BarEq => BitOrAssign,
-            Type::XorEq => BitXorAssign,
-            Type::LtLtEq => ShlAssign,
-            Type::GtGtEq => ShrAssign,
-        }
+    }
+    /// Parses an [assign operator](operator::Assign)
+    fn assign_op(&mut self) -> PResult<operator::Assign> {
+        use operator::Assign;
+        let token = self.peek()?;
+        let out = Ok(match token.ty() {
+            Type::Eq => Assign::Assign,
+            Type::PlusEq => Assign::AddAssign,
+            Type::MinusEq => Assign::SubAssign,
+            Type::StarEq => Assign::MulAssign,
+            Type::SlashEq => Assign::DivAssign,
+            Type::RemEq => Assign::RemAssign,
+            Type::AmpEq => Assign::BitAndAssign,
+            Type::BarEq => Assign::BitOrAssign,
+            Type::XorEq => Assign::BitXorAssign,
+            Type::LtLtEq => Assign::ShlAssign,
+            Type::GtGtEq => Assign::ShrAssign,
+            _ => Err(Error::not_operator().token(token.clone()))?,
+        });
+        self.consume();
+        out
     }
     /// Parses a [unary operator](operator::Unary)
     fn unary_op(&mut self) -> PResult<operator::Unary> {
@@ -578,7 +639,7 @@ impl Parser {
             Type::Keyword(Continue) => self.parse_continue().map(Flow::Continue),
             e => Err(Error::unexpected(e).token(token.clone()))?,
         }
-        .map_err(|e| e.reason(IncompleteBranch))
+        .map_err(|e| e.with_reason(IncompleteBranch))
     }
     /// Parses an [if](control::If) expression
     fn parse_if(&mut self) -> PResult<control::If> {

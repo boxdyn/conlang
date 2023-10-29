@@ -18,8 +18,8 @@ pub mod preamble {
             math::{self, operator},
         },
         literal,
-        statement::Stmt,
-        visitor::{Visitor, Walk},
+        statement::*,
+        visitor::Visitor,
         Identifier, Program, Start,
     };
 }
@@ -39,7 +39,7 @@ pub struct Program(pub Vec<statement::Stmt>);
 /// An Identifier stores the name of an item
 /// # Syntax
 /// [`Identifier`]` := `[`IDENTIFIER`](crate::token::token_type::Type::Identifier)
-#[derive(Clone, Debug, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Identifier(pub String);
 
 pub mod todo {
@@ -148,7 +148,12 @@ pub mod statement {
     //! [`Stmt`]` := `[`Let`](Stmt::Let)` | `[`Expr`](Stmt::Expr)
     //! [`Let`](Stmt::Let)` := "let"` [`Identifier`] (`:` `Type`)? (`=` [`Expr`])? `;`
     //! [`Expr`](Stmt::Expr)` := `[`Expr`] `;`
-    use super::{expression::Expr, Identifier};
+    use crate::token::Token;
+
+    use super::{
+        expression::{Block, Expr},
+        Identifier,
+    };
 
     /// Contains a statement
     /// # Syntax
@@ -158,16 +163,30 @@ pub mod statement {
         /// Contains a variable declaration
         /// # Syntax
         /// [`Let`](Stmt::Let) := `"let"` [`Identifier`] (`:` `Type`)? (`=` [`Expr`])? `;`
-        Let {
-            name: Identifier,
-            mutable: bool,
-            ty: Option<Identifier>,
-            init: Option<Expr>,
-        },
+        Let(Let),
         /// Contains an expression statement
         /// # Syntax
         /// [`Expr`](Stmt::Expr) := [`Expr`] `;`
         Expr(Expr),
+    }
+
+    /// Contains a variable declaration
+    /// # Syntax
+    /// [`Let`] := `let` [`Identifier`] (`:`) `Type`)? (`=` [`Expr`])? `;`
+    #[derive(Clone, Debug)]
+    pub struct Let {
+        pub name: Identifier,
+        pub mutable: bool,
+        pub ty: Option<Identifier>,
+        pub init: Option<Expr>,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Fn {
+        pub name: Identifier,
+        pub args: (), // TODO: capture arguments
+        pub rety: Token,
+        pub body: Block,
     }
 }
 
@@ -203,14 +222,14 @@ pub mod expression {
     //! `[`Group`]` | `[`control::Flow`]
     //!
     //! See [control] and [math] for their respective production rules.
-    use super::*;
+    use super::{statement::Stmt, *};
 
     /// Contains an expression
     ///
     /// # Syntax
     /// [`Expr`]` := `[`math::Operation`]
     #[derive(Clone, Debug)]
-    pub struct Expr (pub math::Operation);
+    pub struct Expr(pub math::Operation);
 
     /// A [Primary] Expression is the expression with the highest precedence (i.e. the deepest
     /// derivation)
@@ -234,7 +253,8 @@ pub mod expression {
     /// [`Block`] := `'{'` [`Expr`] `'}'`
     #[derive(Clone, Debug)]
     pub struct Block {
-        pub expr: Box<Expr>,
+        pub statements: Vec<Stmt>,
+        pub expr: Option<Box<Expr>>,
     }
 
     /// Contains a Parenthesized Expression
@@ -252,64 +272,83 @@ pub mod expression {
         //! ## Precedence Order
         //! Operator associativity is always left-to-right among members of the same group
         //!
-        //! | # |      Name | Operators                               | Associativity
-        //! |---|----------:|:----------------------------------------|---------------
-        //  |   | TODO: Try | `?`                                     |
-        //! | 1 |     Unary | [`*` `&` `-` `!`][3]                    | Right
-        //! | 2 |    Factor | [`*` `/` `%`][4]                        | Left to Right
-        //! | 3 |      Term | [`+` `-`][4]                            | Left to Right
-        //! | 4 |     Shift | [`<<` `>>`][4]                          | Left to Right
-        //! | 5 |   Bitwise | [`&` <code>&#124;</code>][4]            | Left to Right
-        //! | 6 |     Logic | [`&&` <code>&#124;&#124;</code> `^^`][4]| Left to Right
-        //! | 7 |   Compare | [`<` `<=` `==` `!=` `>=` `>`][4]        | Left to Right
-        #![doc = concat!( //|                                         |
-        r"  | 8 |    Assign | [`*=`, `/=`, `%=`, `+=`, `-=`, ",     //|
-        /*  |   |           |*/ r"`&=`, <code>&#124;=</code>, ",    //|
-        /*  |   |           |*/ r"`^=`, `<<=`, `>>=`][4]",          r"| Left to Right")]
+        //! | # |       Name | Operators                               | Associativity
+        //! |---|-----------:|:----------------------------------------|---------------
+        //  |   |  TODO: Try | `?`                                     |
+        //! | 1 |  [Unary][1]| [`*` `&` `-` `!`][4]                    | Right
+        //! | 2 | [Factor][2]| [`*` `/` `%`][5]                        | Left to Right
+        //! | 3 |   [Term][2]| [`+` `-`][5]                            | Left to Right
+        //! | 4 |  [Shift][2]| [`<<` `>>`][5]                          | Left to Right
+        //! | 5 |[Bitwise][2]| [`&` <code>&#124;</code>][4]            | Left to Right
+        //! | 6 |  [Logic][2]| [`&&` <code>&#124;&#124;</code> `^^`][5]| Left to Right
+        //! | 7 |[Compare][2]| [`<` `<=` `==` `!=` `>=` `>`][5]        | Left to Right
+        #![doc = concat!(  //|                                         |
+        r"  | 8 | [Assign][3]| [`*=`, `/=`, `%=`, `+=`, `-=`, ",     //|
+        /*  |   |            |*/ r"`&=`, <code>&#124;=</code>, ",    //|
+        /*  |   |            |*/ r"`^=`, `<<=`, `>>=`][6]",          r"| Left to Right")]
         //!
         //! <!-- Note: '&#124;' == '|' /-->
         //!
         //! ## Syntax
         //! All precedence levels other than [Unary][1] fold into [Binary][2]
         //!
-        //! [`Assign`][2]`  := `[`Compare`][2]` (`[`AssignOp`][4]`  `[`Compare`][2]`)*`  \
-        //! [`Compare`][2]` := `[`Logic`][2]`   (`[`CompareOp`][4]` `[`Logic`][2]`  )*`  \
-        //! [`Logic`][2]`   := `[`Bitwise`][2]` (`[`LogicOp`][4]`   `[`Bitwise`][2]`)*`  \
-        //! [`Bitwise`][2]` := `[`Shift`][2]`   (`[`BitwiseOp`][4]` `[`Shift`][2]`  )*`  \
-        //! [`Shift`][2]`   := `[`Term`][2]`    (`[`ShiftOp`][4]`   `[`Term`][2]`   )*`  \
-        //! [`Term`][2]`    := `[`Factor`][2]`  (`[`TermOp`][4]`    `[`Factor`][2]` )*`  \
-        //! [`Factor`][2]`  := `[`Unary`][1]`   (`[`FactorOp`][4]`  `[`Unary`][1]`  )*`  \
-        //! [`Unary`][1]`   := (`[`UnaryOp`][3]`)* `[`Primary`]
+        //! [`Assign`][3]`  := `[`Compare`][2]` (`[`AssignOp`][6]`  `[`Compare`][2]`)*`  \
+        //! [`Compare`][2]` := `[`Logic`][2]`   (`[`CompareOp`][5]` `[`Logic`][2]`  )*`  \
+        //! [`Logic`][2]`   := `[`Bitwise`][2]` (`[`LogicOp`][5]`   `[`Bitwise`][2]`)*`  \
+        //! [`Bitwise`][2]` := `[`Shift`][2]`   (`[`BitwiseOp`][5]` `[`Shift`][2]`  )*`  \
+        //! [`Shift`][2]`   := `[`Term`][2]`    (`[`ShiftOp`][5]`   `[`Term`][2]`   )*`  \
+        //! [`Term`][2]`    := `[`Factor`][2]`  (`[`TermOp`][5]`    `[`Factor`][2]` )*`  \
+        //! [`Factor`][2]`  := `[`Unary`][1]`   (`[`FactorOp`][5]`  `[`Unary`][1]`  )*`  \
+        //! [`Unary`][1]`   := (`[`UnaryOp`][4]`)* `[`Primary`]
         //!
         //! [1]: Operation::Unary
         //! [2]: Operation::Binary
-        //! [3]: operator::Unary
-        //! [4]: operator::Binary
+        //! [3]: Operation::Assign
+        //! [4]: operator::Unary
+        //! [5]: operator::Binary
+        //! [6]: operator::Assign
         use super::*;
 
         /// An Operation is a tree of [operands](Primary) and [operators](operator).
         #[derive(Clone, Debug)]
         pub enum Operation {
+            /// [`Assign`](Operation::Assign) :=
+            /// [`Identifier`] [`operator::Assign`] [`Operation`] | [`Operation`]
+            Assign(Assign),
             /// [`Binary`](Operation::Binary) :=
             /// [`Operation`] ([`operator::Binary`] [`Operation`])*
-            Binary {
-                first: Box<Self>,
-                other: Vec<(operator::Binary, Self)>,
-            },
-            /// [`Unary`](Operation::Unary) := ([`operator::Unary`])* [`Primary`]
-            Unary {
-                operators: Vec<operator::Unary>,
-                operand: Primary,
-            },
+            Binary(Binary),
+            /// [`Unary`](Operation::Unary) := ([`operator::Unary`])*
+            /// [`Primary`](Operation::Primary)
+            Unary(Unary),
+            /// [`Primary`](Operation::Primary) := [`expression::Primary`]
+            Primary(Primary),
         }
-        impl Operation {
-            pub fn binary(first: Self, other: Vec<(operator::Binary, Self)>) -> Self {
-                Self::Binary { first: Box::new(first), other }
-            }
+
+        /// [`Assign`] := [`Identifier`] [`operator::Assign`] [`Operation`] | [`Operation`]
+        #[derive(Clone, Debug)]
+        pub struct Assign {
+            pub target: Identifier,
+            pub operator: operator::Assign,
+            pub init: Box<Operation>,
+        }
+
+        /// [`Binary`] := [`Operation`] ([`operator::Binary`] [`Operation`])*
+        #[derive(Clone, Debug)]
+        pub struct Binary {
+            pub first: Box<Operation>,
+            pub other: Vec<(operator::Binary, Operation)>,
+        }
+
+        /// [`Unary`] := ([`operator::Unary`])* [`Primary`](Operation::Primary)
+        #[derive(Clone, Debug)]
+        pub struct Unary {
+            pub operators: Vec<operator::Unary>,
+            pub operand: Box<Operation>,
         }
 
         pub mod operator {
-            //! # [Unary] and [Binary] operators
+            //! # [Unary], [Binary], and [Assign] operators
             //!
             //! An Operator represents the action taken during an [operation](super::Operation)
 
@@ -351,13 +390,6 @@ pub mod expression {
             /// ## Comparison operators
             /// [`<`](Binary::Less), [`<=`](Binary::LessEq), [`==`](Binary::Equal),
             /// [`!=`](Binary::NotEq), [`>=`](Binary::GreaterEq), [`>`](Binary::Greater),
-            /// ## Assignment operators
-            /// [`=`](Binary::Assign), [`+=`](Binary::AddAssign), [`-=`](Binary::SubAssign),
-            /// [`*=`](Binary::MulAssign), [`/=`](Binary::DivAssign), [`%=`](Binary::RemAssign),
-            /// [`&=`](Binary::BitAndAssign), [`|=`](Binary::BitOrAssign),
-            /// [`^=`](Binary::BitXorAssign) [`<<=`](Binary::ShlAssign),
-            /// [`>>=`](Binary::ShrAssign)
-
             #[derive(Clone, Copy, Debug, PartialEq, Eq)]
             pub enum Binary {
                 /// `*`: Multiplication
@@ -402,6 +434,16 @@ pub mod expression {
                 GreaterEq,
                 /// `>`: Greater-than Comparison
                 Greater,
+            }
+
+            /// # Assignment operators
+            /// [`=`](Assign::Assign), [`+=`](Assign::AddAssign), [`-=`](Assign::SubAssign),
+            /// [`*=`](Assign::MulAssign), [`/=`](Assign::DivAssign), [`%=`](Assign::RemAssign),
+            /// [`&=`](Assign::BitAndAssign), [`|=`](Assign::BitOrAssign),
+            /// [`^=`](Assign::BitXorAssign) [`<<=`](Assign::ShlAssign),
+            /// [`>>=`](Assign::ShrAssign)
+            #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+            pub enum Assign {
                 /// `=`: Assignment
                 Assign,
                 /// `+=`: Additive In-place Assignment
@@ -611,182 +653,11 @@ pub mod visitor {
     //! A [`Visitor`] visits every kind of node in the [Abstract Syntax Tree](super). Nodes,
     //! conversely are [`Walkers`](Walk) for Visitors which return a [`Result<(), E>`](Result)
     use super::{
-        expression::{
-            control::*,
-            math::{operator::*, *},
-            Block, *,
-        },
+        expression::{control::*, math::*, Block, *},
         literal::*,
-        statement::Stmt,
+        statement::*,
         *,
     };
-    /// A [Walker](Walk) is a node in the AST, and calls [`Visitor::visit_*()`](Visitor) on all its
-    /// children
-    pub trait Walk<T: Visitor<R> + ?Sized, R> {
-        /// Traverses the children of this node in order, calling the appropriate [Visitor] function
-        fn walk(&self, visitor: &mut T) -> R;
-    }
-    mod walker {
-        use crate::ast::statement::Stmt;
-
-        use super::*;
-        macro leaf($($T:ty),*$(,)?) {$(
-            impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for $T {
-                #[doc = concat!("A(n) [`", stringify!($T), "`] is a leaf node.")]
-                /// Calling this will do nothing.
-                fn walk(&self, _visitor: &mut T) -> Result<(), E> { Ok(()) }
-            }
-        )*}
-        leaf!(Binary, bool, char, Continue, Float, Identifier, str, u128, Unary);
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for While {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_expr(&self.cond)?;
-                visitor.visit_block(&self.body)?;
-                match &self.else_ {
-                    Some(expr) => visitor.visit_else(expr),
-                    None => Ok(()),
-                }
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for If {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_expr(&self.cond)?;
-                visitor.visit_block(&self.body)?;
-                match &self.else_ {
-                    Some(expr) => visitor.visit_else(expr),
-                    None => Ok(()),
-                }
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for For {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_identifier(&self.var)?;
-                visitor.visit_expr(&self.iter)?;
-                visitor.visit_block(&self.body)?;
-                match &self.else_ {
-                    Some(expr) => visitor.visit_else(expr),
-                    None => Ok(()),
-                }
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Else {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_block(&self.block)
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Return {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_expr(&self.expr)
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Break {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_expr(&self.expr)
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Start {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_program(&self.0)
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Expr {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_operation(&self.0)
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Group {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                match self {
-                    Group::Expr(expr) => visitor.visit_expr(expr),
-                    Group::Empty => visitor.visit_empty(),
-                }
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Block {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                visitor.visit_expr(&self.expr)
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Operation {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                match self {
-                    Operation::Binary { first, other } => {
-                        visitor.visit_operation(first)?;
-                        for (op, other) in other {
-                            visitor.visit_binary_op(op)?;
-                            visitor.visit_operation(other)?;
-                        }
-                        Ok(())
-                    }
-                    Operation::Unary { operators, operand } => {
-                        for op in operators {
-                            visitor.visit_unary_op(op)?;
-                        }
-                        visitor.visit_primary(operand)
-                    }
-                }
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Primary {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                match self {
-                    Primary::Identifier(i) => visitor.visit_identifier(i),
-                    Primary::Literal(l) => visitor.visit_literal(l),
-                    Primary::Block(b) => visitor.visit_block(b),
-                    Primary::Group(g) => visitor.visit_group(g),
-                    Primary::Branch(b) => visitor.visit_branch_expr(b),
-                }
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Literal {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                match self {
-                    Literal::String(s) => visitor.visit_string_literal(s),
-                    Literal::Char(c) => visitor.visit_char_literal(c),
-                    Literal::Bool(b) => visitor.visit_bool_literal(b),
-                    Literal::Float(f) => visitor.visit_float_literal(f),
-                    Literal::Int(i) => visitor.visit_int_literal(i),
-                }
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Flow {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                match self {
-                    Flow::While(w) => visitor.visit_while(w),
-                    Flow::If(i) => visitor.visit_if(i),
-                    Flow::For(f) => visitor.visit_for(f),
-                    Flow::Continue(c) => visitor.visit_continue(c),
-                    Flow::Return(r) => visitor.visit_return(r),
-                    Flow::Break(b) => visitor.visit_break(b),
-                }
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Stmt {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                match self {
-                    Stmt::Let { name, mutable: _, ty, init } => {
-                        visitor.visit_identifier(name)?;
-                        if let Some(ty) = ty {
-                            visitor.visit_identifier(ty)?;
-                        }
-                        if let Some(init) = init {
-                            visitor.visit_expr(init)?;
-                        }
-                        Ok(())
-                    }
-                    Stmt::Expr(e) => visitor.visit_expr(e),
-                }
-            }
-        }
-        impl<T: Visitor<Result<(), E>> + ?Sized, E> Walk<T, Result<(), E>> for Program {
-            fn walk(&self, visitor: &mut T) -> Result<(), E> {
-                for stmt in &self.0 {
-                    visitor.visit_statement(stmt)?;
-                }
-                Ok(())
-            }
-        }
-    }
 
     /// A Visitor traverses every kind of node in the [Abstract Syntax Tree](super)
     pub trait Visitor<R> {
@@ -798,7 +669,14 @@ pub mod visitor {
         fn visit_program(&mut self, prog: &Program) -> R;
 
         /// Visit a [Statement](Stmt)
-        fn visit_statement(&mut self, stmt: &Stmt) -> R;
+        fn visit_statement(&mut self, stmt: &Stmt) -> R {
+            match stmt {
+                Stmt::Let(stmt) => self.visit_let(stmt),
+                Stmt::Expr(expr) => self.visit_expr(expr),
+            }
+        }
+        /// Visit a [Let statement](Let)
+        fn visit_let(&mut self, stmt: &Let) -> R;
 
         /// Visit an [Expression](Expr)
         fn visit_expr(&mut self, expr: &Expr) -> R {
@@ -806,9 +684,7 @@ pub mod visitor {
         }
         // Block expression
         /// Visit a [Block] expression
-        fn visit_block(&mut self, expr: &Block) -> R {
-            self.visit_expr(&expr.expr)
-        }
+        fn visit_block(&mut self, block: &Block) -> R;
         /// Visit a [Group] expression
         fn visit_group(&mut self, group: &Group) -> R {
             match group {
@@ -819,9 +695,23 @@ pub mod visitor {
 
         // Math expression
         /// Visit an [Operation]
-        fn visit_operation(&mut self, expr: &Operation) -> R;
-        /// Visit a [Binary](Operation::Binary) [operator](operator::Binary)
+        fn visit_operation(&mut self, operation: &Operation) -> R {
+            match operation {
+                Operation::Assign(assign) => self.visit_assign(assign),
+                Operation::Binary(binary) => self.visit_binary(binary),
+                Operation::Unary(unary) => self.visit_unary(unary),
+                Operation::Primary(primary) => self.visit_primary(primary),
+            }
+        }
+        /// Visit an [Assignment](Assign) operation
+        fn visit_assign(&mut self, assign: &Assign) -> R;
+        /// Visit a [Binary] Operation
+        fn visit_binary(&mut self, binary: &Binary) -> R;
+        /// Visit a [Unary] Operation
+        fn visit_unary(&mut self, unary: &Unary) -> R;
         // Math operators
+        fn visit_assign_op(&mut self, op: &operator::Assign) -> R;
+        /// Visit a [Binary](Operation::Binary) [operator](operator::Binary)
         fn visit_binary_op(&mut self, op: &operator::Binary) -> R;
         /// Visit a [Unary](Operation::Unary) [operator](operator::Unary)
         fn visit_unary_op(&mut self, op: &operator::Unary) -> R;
@@ -829,8 +719,8 @@ pub mod visitor {
         /// Visit a [Primary] expression
         ///
         /// [`Primary`]` := `[`Identifier`]` | `[`Literal`]` | `[`Block`]` | `[`Flow`]
-        fn visit_primary(&mut self, expr: &Primary) -> R {
-            match expr {
+        fn visit_primary(&mut self, primary: &Primary) -> R {
+            match primary {
                 Primary::Identifier(v) => self.visit_identifier(v),
                 Primary::Literal(v) => self.visit_literal(v),
                 Primary::Block(v) => self.visit_block(v),

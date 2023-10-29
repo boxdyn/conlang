@@ -13,10 +13,10 @@ pub trait PrettyPrintable {
 }
 impl PrettyPrintable for Start {
     fn print(&self) {
-        let _ = self.walk(&mut Printer::default());
+        let _ = Printer::default().visit(self);
     }
     fn write(&self, into: impl Write) -> IOResult<()> {
-        self.walk(&mut Printer::from(into))
+        Printer::from(into).visit(self)
     }
 }
 
@@ -70,47 +70,75 @@ macro visit_operator($self:ident.$op:expr) {
 impl<W: Write> Visitor<IOResult<()>> for Printer<W> {
     fn visit_program(&mut self, prog: &Program) -> IOResult<()> {
         // delegate to the walker
-        prog.walk(self)
+        for stmt in &prog.0 {
+            self.visit_statement(stmt)?;
+        }
+        Ok(())
     }
     fn visit_statement(&mut self, stmt: &Stmt) -> IOResult<()> {
         match stmt {
-            Stmt::Let { name, mutable, ty, init } => {
-                self.put("let")?.space()?;
-                if *mutable {
-                    self.put("mut")?.space()?;
-                }
-                self.visit_identifier(name)?;
-                if let Some(ty) = ty {
-                    self.put(':')?.space()?.visit_identifier(ty)?;
-                }
-                if let Some(init) = init {
-                    self.space()?.put('=')?.space()?.visit_expr(init)?;
-                }
-            },
+            Stmt::Let(stmt) => self.visit_let(stmt)?,
             Stmt::Expr(e) => {
                 self.visit_expr(e)?;
-            },
+                self.put(';').map(drop)?
+            }
         }
-        self.put(';')?.newline().map(drop)
+        self.newline().map(drop)
     }
-    fn visit_operation(&mut self, expr: &math::Operation) -> IOResult<()> {
-        use math::Operation;
-        match expr {
-            Operation::Binary { first, other } => {
-                self.put('(')?.visit_operation(first)?;
-                for (op, other) in other {
-                    self.visit_binary_op(op)?;
-                    self.visit_operation(other)?;
-                }
-                self.put(')').map(drop)
-            }
-            Operation::Unary { operators, operand } => {
-                for op in operators {
-                    self.visit_unary_op(op)?;
-                }
-                self.visit_primary(operand)
-            }
+    fn visit_let(&mut self, stmt: &Let) -> IOResult<()> {
+        let Let { name, mutable, ty, init } = stmt;
+        self.put("let")?.space()?;
+        if *mutable {
+            self.put("mut")?.space()?;
         }
+        self.visit_identifier(name)?;
+        if let Some(ty) = ty {
+            self.put(':')?.space()?.visit_identifier(ty)?;
+        }
+        if let Some(init) = init {
+            self.space()?.put('=')?.space()?.visit_expr(init)?;
+        }
+        self.put(';').map(drop)
+    }
+
+    fn visit_assign(&mut self, assign: &math::Assign) -> IOResult<()> {
+        let math::Assign { target, operator, init } = assign;
+        self.visit_identifier(target)?;
+        self.visit_assign_op(operator)?;
+        self.visit_operation(init)
+    }
+    fn visit_binary(&mut self, binary: &math::Binary) -> IOResult<()> {
+        let math::Binary { first, other } = binary;
+        self.put('(')?.visit_operation(first)?;
+        for (op, other) in other {
+            self.visit_binary_op(op)?;
+            self.visit_operation(other)?;
+        }
+        self.put(')').map(drop)
+    }
+    fn visit_unary(&mut self, unary: &math::Unary) -> IOResult<()> {
+        let math::Unary { operators, operand } = unary;
+        for op in operators {
+            self.visit_unary_op(op)?;
+        }
+        self.visit_operation(operand)
+    }
+
+    fn visit_assign_op(&mut self, op: &operator::Assign) -> IOResult<()> {
+        use operator::Assign;
+        visit_operator!(self.match op {
+            Assign::Assign => "=",
+            Assign::AddAssign => "+=",
+            Assign::SubAssign => "-=",
+            Assign::MulAssign => "*=",
+            Assign::DivAssign => "/=",
+            Assign::RemAssign => "%=",
+            Assign::BitAndAssign => "&=",
+            Assign::BitOrAssign => "|=",
+            Assign::BitXorAssign => "^=",
+            Assign::ShlAssign => "<<=",
+            Assign::ShrAssign => ">>=",
+        })
     }
     fn visit_binary_op(&mut self, op: &operator::Binary) -> IOResult<()> {
         use operator::Binary;
@@ -136,17 +164,6 @@ impl<W: Write> Visitor<IOResult<()>> for Printer<W> {
             Binary::NotEq => "!=",
             Binary::GreaterEq => ">=",
             Binary::Greater => ">",
-            Binary::Assign => "=",
-            Binary::AddAssign => "+=",
-            Binary::SubAssign => "-=",
-            Binary::MulAssign => "*=",
-            Binary::DivAssign => "/=",
-            Binary::RemAssign => "%=",
-            Binary::BitAndAssign => "&=",
-            Binary::BitOrAssign => "|=",
-            Binary::BitXorAssign => "^=",
-            Binary::ShlAssign => "<<=",
-            Binary::ShrAssign => ">>=",
         })
     }
     fn visit_unary_op(&mut self, op: &operator::Unary) -> IOResult<()> {
@@ -223,18 +240,28 @@ impl<W: Write> Visitor<IOResult<()>> for Printer<W> {
         self.put(int).map(drop)
     }
     fn visit_empty(&mut self) -> IOResult<()> {
-        self.put("").map(drop)
+        self.put("()").map(drop)
     }
 
-    fn visit_block(&mut self, expr: &expression::Block) -> IOResult<()> {
+    fn visit_block(&mut self, block: &expression::Block) -> IOResult<()> {
         self.put('{')?.indent().newline()?;
-        expr.walk(self)?;
+        for stmt in &block.statements {
+            self.visit_statement(stmt)?;
+        }
+        for expr in &block.expr {
+            self.visit_expr(expr)?;
+        }
         self.dedent().newline()?.put('}').map(drop)
     }
 
     fn visit_group(&mut self, expr: &expression::Group) -> IOResult<()> {
-        self.put('(')?.space()?;
-        expr.walk(self)?;
-        self.space()?.put(')').map(drop)
+        match expr {
+            expression::Group::Expr(expr) => {
+                self.put('(')?.space()?;
+                self.visit_expr(expr)?;
+                self.space()?.put(')').map(drop)
+            }
+            expression::Group::Empty => self.visit_empty(),
+        }
     }
 }

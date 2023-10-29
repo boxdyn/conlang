@@ -16,13 +16,13 @@ Fn          = "fn" Identifier Block ; (* TODO: params, return value*)
 (* # Expressions *)
 (* expression *)
 Expr        = Assign ;
-Block       = '{' Expr '}' ;
+Block       = '{' Stmt* Expr? '}' ;
 Group       = '(' Expr? ')' ;
-Primary     = Item | Identifier | Literal
+Primary     = Identifier | Literal
               | Block | Group | Branch ;
 
 (* expression::math *)
-Assign      = Compare (AssignOp  Compare)* ;
+Assign      = Identifier (AssignOp  Assign) | Compare ;
 Compare     = Range   (CompareOp Range  )* ;
 Range       = Logic   (RangeOp   Logic  )* ;
 Logic       = Bitwise (LogicOp   Bitwise)* ;
