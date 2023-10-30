@@ -393,7 +393,7 @@ impl Parser {
         self.consume_type(Type::LParen)?;
         let args = self.params()?;
         self.consume_type(Type::RParen)?;
-        // Discard return type, for now
+        // TODO: Parse type-expressions and store return types in the AST
         if self.consume_type(Type::Arrow).is_ok() {
             self.expr()?;
         }
@@ -404,6 +404,10 @@ impl Parser {
         let mut args = vec![];
         while let Ok(ident) = self.identifier() {
             args.push(ident);
+            if self.consume_type(Type::Colon).is_ok() {
+                // TODO: Parse type-expressions and make this mandatory
+                self.expr()?;
+            }
             if self.consume_type(Type::Comma).is_err() {
                 break;
             }

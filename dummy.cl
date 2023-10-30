@@ -2,7 +2,7 @@
 
 // This is a function. It can be called with the call operator.
 // The function called `main` is the program's entrypoint
-fn main() {
+fn main() -> (&str, bool, i128) {
     // An if expression is like the ternary conditional operator in C
     let y = if 10 < 50 {
         "\u{1f988}"
