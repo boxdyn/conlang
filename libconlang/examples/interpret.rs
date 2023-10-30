@@ -83,8 +83,12 @@ fn take_stdin() -> Result<(), Box<dyn Error>> {
 }
 
 fn run_file(file: &str, path: Option<&Path>) -> Result<(), Box<dyn Error>> {
+    let mut interpreter = Interpreter::new();
     match Parser::from(Lexer::new(file)).parse() {
-        Ok(ast) => Interpreter::new().interpret(&ast)?,
+        Ok(ast) => {
+            interpreter.interpret(&ast)?;
+            println!("{}", interpreter.call("main", &[])?)
+        },
         Err(e) if e.start().is_some() => print!("{:?}:{}", path.unwrap_or(Path::new("-")), e),
         Err(e) => print!("{e}"),
     }
