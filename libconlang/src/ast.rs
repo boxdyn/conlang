@@ -14,8 +14,11 @@ pub mod preamble {
     //! Common imports for working with the [ast](super)
     pub use super::{
         expression::{
-            self, control,
+            self,
+            call::*,
+            control,
             math::{self, operator},
+            tuple::*,
         },
         literal,
         statement::*,
@@ -47,9 +50,10 @@ pub mod todo {
     //! when an item is in progress, remove it from todo.
     //!
     //! # General TODOs:
-    //! - [ ] Implement support for storing items in the AST
+    //! - [x] Implement support for storing items in the AST
+    //! - [ ] Keep track of the source location of each node
     //! - [ ] Implement paths
-    //! - [ ] Implement functions
+    //! - [x] Implement functions
     //! - [ ] Implement structs
     //! - [ ] Implement enums
     //! - [ ] Implement implementation
@@ -60,11 +64,6 @@ pub mod todo {
         //!
         //! Path resolution will be vital to the implementation of structs, enums, impl blocks,
         //! traits, modules, etc.
-    }
-    pub mod function {
-        //! Function support
-        //! - [ ] Add function declaration expression (returns a function)
-        //! - [ ] Add function call expression
     }
 
     pub mod structure {
@@ -148,7 +147,6 @@ pub mod statement {
     //! [`Stmt`]` := `[`Let`](Stmt::Let)` | `[`Expr`](Stmt::Expr)
     //! [`Let`](Stmt::Let)` := "let"` [`Identifier`] (`:` `Type`)? (`=` [`Expr`])? `;`
     //! [`Expr`](Stmt::Expr)` := `[`Expr`] `;`
-    use crate::token::Token;
 
     use super::{
         expression::{Block, Expr},
@@ -164,6 +162,10 @@ pub mod statement {
         /// # Syntax
         /// [`Let`](Stmt::Let) := `"let"` [`Identifier`] (`:` `Type`)? (`=` [`Expr`])? `;`
         Let(Let),
+        /// Contains a function declaration
+        /// # Syntax
+        /// [`Fn`](Stmt::Fn) := `"fn"` [`Identifier`] `'('` [`Tuple`] `')'` [`Block`]
+        Fn(FnDecl),
         /// Contains an expression statement
         /// # Syntax
         /// [`Expr`](Stmt::Expr) := [`Expr`] `;`
@@ -181,13 +183,18 @@ pub mod statement {
         pub init: Option<Expr>,
     }
 
+    /// Contains a function declaration
+    /// # Syntax
+    /// [`FnDecl`] := `"fn"` [`Identifier`] `'('` [`Tuple`] `')'`
     #[derive(Clone, Debug)]
-    pub struct Fn {
+    pub struct FnDecl {
         pub name: Identifier,
-        pub args: (), // TODO: capture arguments
-        pub rety: Token,
+        pub args: Vec<Identifier>,
         pub body: Block,
+        // TODO: Store type information
     }
+
+    // TODO: Create closure, transmute fndecl into a name and closure
 }
 
 pub mod expression {
@@ -237,14 +244,14 @@ pub mod expression {
     /// [`Primary`]` := `[`IDENTIFIER`](Identifier)`
     /// | `[`Literal`](literal::Literal)`
     /// | `[`Block`]`
-    /// | `[`Group`]`
+    /// | `[`Group`](tuple::Group)`
     /// | `[`Branch`](control::Flow)
     #[derive(Clone, Debug)]
     pub enum Primary {
         Identifier(Identifier),
         Literal(literal::Literal),
         Block(Block),
-        Group(Group),
+        Group(tuple::Group),
         Branch(control::Flow),
     }
 
@@ -257,13 +264,59 @@ pub mod expression {
         pub expr: Option<Box<Expr>>,
     }
 
-    /// Contains a Parenthesized Expression
-    /// # Syntax
-    /// [`Group`] := `'('` [`Expr`]? `')'`
-    #[derive(Clone, Debug)]
-    pub enum Group {
-        Expr(Box<Expr>),
-        Empty,
+    pub mod call {
+        //! [Function](FnCall) and [Method](todo) Call Expressions
+        //!
+        //! # Syntax
+        //! [`Call`]` := `[`FnCall`]` | `[`Primary`]
+        //!
+        //! [`FnCall`]` := `[`Primary`]` (`[`Tuple`]`)*`
+        use super::{tuple::Tuple, Primary};
+        #[derive(Clone, Debug)]
+        pub enum Call {
+            /// Contains a [Function Call Expression](FnCall)
+            FnCall(FnCall),
+            /// Contains only a [Primary] expression
+            Primary(Primary),
+        }
+
+        /// Contains a Function Call Expression
+        #[derive(Clone, Debug)]
+        pub struct FnCall {
+            pub callee: Box<Primary>,
+            pub args: Vec<Tuple>,
+        }
+    }
+
+    pub mod tuple {
+        //! A [Tuple] expression contains an arbitrary number of sub-expressions
+        use super::Expr;
+        /// Contains a [Tuple], [`(Expr)`](Group::Single),
+        /// or [Empty](Group::Empty)
+        /// # Syntax
+        /// [`Group`]`:= '('(`[`Expr`]` | `[`Tuple`]`)?')'`
+        #[derive(Clone, Debug)]
+        pub enum Group {
+            /// Contains a variety of elements
+            /// # Syntax
+            /// [`Group::Tuple`]`:= '('`[`Tuple`]`')'`
+            Tuple(Tuple),
+            /// Contains a single element
+            /// # Syntax
+            /// [`Group::Single`]`:= '('`[`Expr`]`')'`
+            Single(Box<Expr>),
+            /// Contains no elements
+            /// # Syntax
+            /// [`Group::Empty`]`:= '(' ')'`
+            Empty,
+        }
+
+        /// Contains a heterogeneous collection of sub-expressions
+        /// # Syntax
+        #[derive(Clone, Debug)]
+        pub struct Tuple {
+            pub elements: Vec<Expr>,
+        }
     }
 
     pub mod math {
@@ -299,7 +352,7 @@ pub mod expression {
         //! [`Shift`][2]`   := `[`Term`][2]`    (`[`ShiftOp`][5]`   `[`Term`][2]`   )*`  \
         //! [`Term`][2]`    := `[`Factor`][2]`  (`[`TermOp`][5]`    `[`Factor`][2]` )*`  \
         //! [`Factor`][2]`  := `[`Unary`][1]`   (`[`FactorOp`][5]`  `[`Unary`][1]`  )*`  \
-        //! [`Unary`][1]`   := (`[`UnaryOp`][4]`)* `[`Primary`]
+        //! [`Unary`][1]`   := (`[`UnaryOp`][4]`)* `[`FnCall`][7]
         //!
         //! [1]: Operation::Unary
         //! [2]: Operation::Binary
@@ -307,7 +360,7 @@ pub mod expression {
         //! [4]: operator::Unary
         //! [5]: operator::Binary
         //! [6]: operator::Assign
-        use super::*;
+        use super::{call::Call, *};
 
         /// An Operation is a tree of [operands](Primary) and [operators](operator).
         #[derive(Clone, Debug)]
@@ -319,10 +372,10 @@ pub mod expression {
             /// [`Operation`] ([`operator::Binary`] [`Operation`])*
             Binary(Binary),
             /// [`Unary`](Operation::Unary) := ([`operator::Unary`])*
-            /// [`Primary`](Operation::Primary)
+            /// [`Call`](Operation::Call)
             Unary(Unary),
-            /// [`Primary`](Operation::Primary) := [`expression::Primary`]
-            Primary(Primary),
+            /// [`Call`](Operation::Call) := [`expression::call::Call`]
+            Call(Call),
         }
 
         /// [`Assign`] := [`Identifier`] [`operator::Assign`] [`Operation`] | [`Operation`]
@@ -340,7 +393,7 @@ pub mod expression {
             pub other: Vec<(operator::Binary, Operation)>,
         }
 
-        /// [`Unary`] := ([`operator::Unary`])* [`Primary`](Operation::Primary)
+        /// [`Unary`] := ([`operator::Unary`])* [`Call`](Operation::Call)
         #[derive(Clone, Debug)]
         pub struct Unary {
             pub operators: Vec<operator::Unary>,
@@ -502,7 +555,7 @@ pub mod expression {
         //! [`While`]` := "while" `[`Expr`]` `[`Block`]` `[`Else`]`?`  \
         //! [`If`]`    := "if"    `[`Expr`]` `[`Block`]` `[`Else`]`?`  \
         //! [`For`]`   := "for"   `[`Identifier`]` "in" `[`Expr`]` `[`Block`]` `[`Else`]`?`  \
-        //! [`Else`]`  := "else"  `[`Block`]  \
+        //! [`Else`]`  := "else"  `[`Expr`]  \
         //!
         //! [`Break`]`    := "break" `[`Expr`]  \
         //! [`Return`]`   := "return" `[`Expr`]  \
@@ -607,7 +660,7 @@ pub mod expression {
 
         /// Represents an [`else` block](control).
         ///
-        /// An [`else` block](Else) contains instructions to be executed if
+        /// An [`else` expression](Else) contains instructions to be executed if
         /// the corresponding body refused to produce a value. In the case of
         /// [`if` expressions](If), this happens if the condition fails.
         /// In the case of loop ([`while`](While), [`for`](For))expressions,
@@ -617,10 +670,10 @@ pub mod expression {
         /// to something other than the Empty type, this block is mandatory.
         ///
         /// # Syntax
-        /// [`Else`] := `"else"` [`Block`]
+        /// [`Else`] := `"else"` [`Expr`]
         #[derive(Clone, Debug)]
         pub struct Else {
-            pub block: Block,
+            pub expr: Box<Expr>,
         }
 
         /// Represents a [`continue` expression][control]
@@ -650,10 +703,13 @@ pub mod expression {
 }
 
 pub mod visitor {
-    //! A [`Visitor`] visits every kind of node in the [Abstract Syntax Tree](super). Nodes,
-    //! conversely are [`Walkers`](Walk) for Visitors which return a [`Result<(), E>`](Result)
+    //! A [`Visitor`] visits every kind of node in the [Abstract Syntax Tree](super)
+    //! 
+    //! This trait is mostly here to ensure that every branch of the tree is accounted for.
+    //! 
+    //! Default implementations are provided for 
     use super::{
-        expression::{control::*, math::*, Block, *},
+        expression::{call::*, control::*, math::*, tuple::*, Block, *},
         literal::*,
         statement::*,
         *,
@@ -672,11 +728,14 @@ pub mod visitor {
         fn visit_statement(&mut self, stmt: &Stmt) -> R {
             match stmt {
                 Stmt::Let(stmt) => self.visit_let(stmt),
+                Stmt::Fn(function) => self.visit_fn_decl(function),
                 Stmt::Expr(expr) => self.visit_expr(expr),
             }
         }
         /// Visit a [Let statement](Let)
         fn visit_let(&mut self, stmt: &Let) -> R;
+        /// Visit a [Fn declaration](FnDecl)
+        fn visit_fn_decl(&mut self, function: &FnDecl) -> R;
 
         /// Visit an [Expression](Expr)
         fn visit_expr(&mut self, expr: &Expr) -> R {
@@ -688,10 +747,22 @@ pub mod visitor {
         /// Visit a [Group] expression
         fn visit_group(&mut self, group: &Group) -> R {
             match group {
-                Group::Expr(expr) => self.visit_expr(expr),
+                Group::Tuple(tuple) => self.visit_tuple(tuple),
+                Group::Single(expr) => self.visit_expr(expr),
                 Group::Empty => self.visit_empty(),
             }
         }
+        /// Visit a [Tuple] expression
+        fn visit_tuple(&mut self, tuple: &Tuple) -> R;
+        /// Visit a [Call] expression
+        fn visit_call(&mut self, call: &Call) -> R {
+            match call {
+                Call::FnCall(call) => self.visit_fn_call(call),
+                Call::Primary(primary) => self.visit_primary(primary),
+            }
+        }
+        /// Visit a [Function Call](FnCall) expression
+        fn visit_fn_call(&mut self, call: &FnCall) -> R;
 
         // Math expression
         /// Visit an [Operation]
@@ -700,7 +771,7 @@ pub mod visitor {
                 Operation::Assign(assign) => self.visit_assign(assign),
                 Operation::Binary(binary) => self.visit_binary(binary),
                 Operation::Unary(unary) => self.visit_unary(unary),
-                Operation::Primary(primary) => self.visit_primary(primary),
+                Operation::Call(call) => self.visit_call(call),
             }
         }
         /// Visit an [Assignment](Assign) operation

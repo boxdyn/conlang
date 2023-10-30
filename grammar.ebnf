@@ -11,15 +11,25 @@ Identifier  = IDENTIFIER ;
 (* statement *)
 Stmt        = Fn | Let | Expr ';' ;
 Let         = "let" "mut"? Identifier (':' Type)? ('=' Expr)? ';' ;
-Fn          = "fn" Identifier Block ; (* TODO: params, return value*)
+Fn          = "fn" Identifier '(' Params? ')' Block ;
+(* TODO: Type system *)
+Params      = (Param ',')* Param? ;
+Param       = Identifier (*':' Type *) ;
 
 (* # Expressions *)
 (* expression *)
 Expr        = Assign ;
 Block       = '{' Stmt* Expr? '}' ;
-Group       = '(' Expr? ')' ;
 Primary     = Identifier | Literal
               | Block | Group | Branch ;
+
+(* expression::call *)
+Call        = FnCall | Primary ;
+FnCall      = Primary ('(' Tuple? ')')? ;
+
+(* expression::tuple *)
+Group       = '(' Tuple? ')' ;
+Tuple       = Expr (',' Expr)* ;
 
 (* expression::math *)
 Assign      = Identifier (AssignOp  Assign) | Compare ;
@@ -30,7 +40,7 @@ Bitwise     = Shift   (BitwiseOp Shift  )* ;
 Shift       = Term    (ShiftOp   Term   )* ;
 Term        = Factor  (TermOp    Factor )* ;
 Factor      = Unary   (FactorOp  Unary  )* ;
-Unary       = (UnaryOp)* Primary ;
+Unary       = (UnaryOp)* Call ;
 
 (* expression::math::operator *)
 AssignOp    =  '=' | "+=" | "-=" | "*=" | "/=" |
@@ -50,7 +60,7 @@ Branch      = While | If | For | Break | Return | Continue ;
 If          = "if"    Expr Block (Else)? ;
 While       = "while" Expr Block (Else)? ;
 For         = "for"   Identifier "in" Expr Block (Else)? ;
-Else        = "else"  Block ;
+Else        = "else"   Expr ;
 Break       = "break"  Expr ;
 Return      = "return" Expr ;
 Continue    = "continue" ;

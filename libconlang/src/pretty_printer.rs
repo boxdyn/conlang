@@ -78,6 +78,7 @@ impl<W: Write> Visitor<IOResult<()>> for Printer<W> {
     fn visit_statement(&mut self, stmt: &Stmt) -> IOResult<()> {
         match stmt {
             Stmt::Let(stmt) => self.visit_let(stmt)?,
+            Stmt::Fn(function) => self.visit_fn_decl(function)?,
             Stmt::Expr(e) => {
                 self.visit_expr(e)?;
                 self.put(';').map(drop)?
@@ -99,6 +100,21 @@ impl<W: Write> Visitor<IOResult<()>> for Printer<W> {
             self.space()?.put('=')?.space()?.visit_expr(init)?;
         }
         self.put(';').map(drop)
+    }
+
+    fn visit_fn_decl(&mut self, function: &FnDecl) -> IOResult<()> {
+        let FnDecl { name, args, body } = function;
+        self.put("fn")?.space()?;
+        self.visit_identifier(name)?;
+        self.space()?.put('(')?;
+        for (idx, arg) in args.iter().enumerate() {
+            if idx > 0 {
+                self.put(',')?.space()?;
+            }
+            self.visit_identifier(arg)?;
+        }
+        self.put(')')?.space()?;
+        self.visit_block(body)
     }
 
     fn visit_assign(&mut self, assign: &math::Assign) -> IOResult<()> {
@@ -205,8 +221,8 @@ impl<W: Write> Visitor<IOResult<()>> for Printer<W> {
             None => Ok(()),
         }
     }
-    fn visit_else(&mut self, expr: &control::Else) -> IOResult<()> {
-        self.space()?.put("else")?.space()?.visit_block(&expr.block)
+    fn visit_else(&mut self, else_: &control::Else) -> IOResult<()> {
+        self.space()?.put("else")?.space()?.visit_expr(&else_.expr)
     }
     fn visit_continue(&mut self, _: &control::Continue) -> IOResult<()> {
         self.put("continue").map(drop)
@@ -254,14 +270,34 @@ impl<W: Write> Visitor<IOResult<()>> for Printer<W> {
         self.dedent().newline()?.put('}').map(drop)
     }
 
-    fn visit_group(&mut self, expr: &expression::Group) -> IOResult<()> {
-        match expr {
-            expression::Group::Expr(expr) => {
-                self.put('(')?.space()?;
-                self.visit_expr(expr)?;
-                self.space()?.put(')').map(drop)
+    fn visit_tuple(&mut self, tuple: &Tuple) -> IOResult<()> {
+        for (idx, expr) in tuple.elements.iter().enumerate() {
+            if idx > 0 {
+                self.put(',')?.space()?;
             }
-            expression::Group::Empty => self.visit_empty(),
+            self.visit_expr(expr)?;
         }
+        Ok(())
+    }
+
+    fn visit_group(&mut self, expr: &Group) -> IOResult<()> {
+        self.put('(')?;
+        match expr {
+            Group::Tuple(tuple) => self.space()?.visit_tuple(tuple),
+            Group::Single(expr) => self.space()?.visit_expr(expr),
+            Group::Empty => self.visit_empty(),
+        }?;
+        self.space()?.put(')').map(drop)
+    }
+
+    fn visit_fn_call(&mut self, call: &FnCall) -> IOResult<()> {
+        let FnCall { callee, args } = call;
+        self.visit_primary(callee)?;
+        for arg_list in args {
+            self.put('(')?;
+            self.visit_tuple(arg_list)?;
+            self.put(')')?;
+        }
+        Ok(())
     }
 }

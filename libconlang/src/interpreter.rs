@@ -1,18 +1,36 @@
 //! Interprets an AST as a program
 
-use self::scope::Environment;
 use crate::ast::preamble::*;
-use error::{Error, IResult, Reason};
+use error::{Error, IResult};
+use scope::Environment;
 use temp_type_impl::ConValue;
+
+/// Callable types can be called from within a Conlang program
+pub trait Callable: std::fmt::Debug {
+    /// Calls this [Callable] in the provided [Interpreter], with [ConValue] args  \
+    /// The Callable is responsible for checking the argument count and validating types
+    fn call(&self, interpreter: &mut Interpreter, args: &[ConValue]) -> IResult<()>;
+    /// Returns the common name of this identifier.
+    fn name(&self) -> &str;
+}
+
+/// [BuiltIn]s are [Callable]s with bespoke definitions
+pub trait BuiltIn: std::fmt::Debug + Callable {}
 
 pub mod temp_type_impl {
     //! Temporary implementations of Conlang values
-    use super::error::{Error, IResult, Reason};
+    //!
+    //! The most permanent fix is a temporary one.
+    use super::{
+        error::{Error, IResult},
+        function::Function,
+        BuiltIn, Callable, Interpreter,
+    };
     use std::ops::*;
     /// A Conlang value
     ///
-    /// This is a hack to work around the fact that Conlang doesn't have a functioning type system
-    /// yet :(
+    /// This is a hack to work around the fact that Conlang doesn't
+    /// have a functioning type system yet :(
     #[derive(Clone, Debug, Default)]
     pub enum ConValue {
         /// The empty/unit `()` type
@@ -26,28 +44,34 @@ pub mod temp_type_impl {
         Char(char),
         /// A string
         String(String),
+        /// A tuple
+        Tuple(Vec<ConValue>),
         /// An exclusive range
         RangeExc(i128, i128),
         /// An inclusive range
         RangeInc(i128, i128),
+        /// A callable thing
+        Function(Function),
+        /// A built-in function
+        BuiltIn(&'static dyn BuiltIn),
     }
     impl ConValue {
         /// Gets whether the current value is true or false
         pub fn truthy(&self) -> IResult<bool> {
             match self {
                 ConValue::Bool(v) => Ok(*v),
-                _ => Err(Error::with_reason(Reason::TypeError))?,
+                _ => Err(Error::TypeError)?,
             }
         }
         pub fn range_exc(self, other: Self) -> IResult<Self> {
             let (Self::Int(a), Self::Int(b)) = (self, other) else {
-                Err(Error::with_reason(Reason::TypeError))?
+                Err(Error::TypeError)?
             };
             Ok(Self::RangeExc(a, b.saturating_sub(1)))
         }
         pub fn range_inc(self, other: Self) -> IResult<Self> {
             let (Self::Int(a), Self::Int(b)) = (self, other) else {
-                Err(Error::with_reason(Reason::TypeError))?
+                Err(Error::TypeError)?
             };
             Ok(Self::RangeInc(a, b))
         }
@@ -72,6 +96,23 @@ pub mod temp_type_impl {
             sub_assign: -;
         }
     }
+
+    impl Callable for ConValue {
+        fn name(&self) -> &str {
+            match self {
+                ConValue::Function(func) => func.name(),
+                ConValue::BuiltIn(func) => func.name(),
+                _ => "",
+            }
+        }
+        fn call(&self, interpreter: &mut Interpreter, args: &[ConValue]) -> IResult<()> {
+            match self {
+                Self::Function(func) => func.call(interpreter, args),
+                Self::BuiltIn(func) => func.call(interpreter, args),
+                _ => Err(Error::NotCallable(self.clone())),
+            }
+        }
+    }
     /// Templates comparison functions for [ConValue]
     macro cmp ($($fn:ident: $empty:literal, $op:tt);*$(;)?) {$(
         /// TODO: Remove when functions are implemented:
@@ -83,7 +124,7 @@ pub mod temp_type_impl {
                 (Self::Bool(a), Self::Bool(b)) => Ok(Self::Bool(a $op b)),
                 (Self::Char(a), Self::Char(b)) => Ok(Self::Bool(a $op b)),
                 (Self::String(a), Self::String(b)) => Ok(Self::Bool(a $op b)),
-                _ => Err(Error::with_reason(Reason::TypeError))
+                _ => Err(Error::TypeError)
             }
         }
     )*}
@@ -105,10 +146,21 @@ pub mod temp_type_impl {
         char => ConValue::Char,
         &str => ConValue::String,
         String => ConValue::String,
+        Function => ConValue::Function,
+        Vec<ConValue> => ConValue::Tuple,
     }
     impl From<()> for ConValue {
         fn from(_: ()) -> Self {
             Self::Empty
+        }
+    }
+    impl From<&[ConValue]> for ConValue {
+        fn from(value: &[ConValue]) -> Self {
+            match value.len() {
+                0 => Self::Empty,
+                1 => value[0].clone(),
+                _ => Self::Tuple(value.into()),
+            }
         }
     }
 
@@ -127,55 +179,55 @@ pub mod temp_type_impl {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a + b),
             (ConValue::String(a), ConValue::String(b)) => ConValue::String(a + &b),
-            _ => Err(Error::with_reason(Reason::TypeError))?
+            _ => Err(Error::TypeError)?
             ]
         BitAnd: bitand = [
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a & b),
             (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a & b),
-            _ => Err(Error::with_reason(Reason::TypeError))?
+            _ => Err(Error::TypeError)?
         ]
         BitOr: bitor = [
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a | b),
             (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a | b),
-            _ => Err(Error::with_reason(Reason::TypeError))?
+            _ => Err(Error::TypeError)?
         ]
         BitXor: bitxor = [
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a ^ b),
             (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a ^ b),
-            _ => Err(Error::with_reason(Reason::TypeError))?
+            _ => Err(Error::TypeError)?
         ]
         Div: div = [
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a / b),
-            _ => Err(Error::with_reason(Reason::TypeError))?
+            _ => Err(Error::TypeError)?
         ]
         Mul: mul = [
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a * b),
-            _ => Err(Error::with_reason(Reason::TypeError))?
+            _ => Err(Error::TypeError)?
         ]
         Rem: rem = [
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a % b),
-            _ => Err(Error::with_reason(Reason::TypeError))?
+            _ => Err(Error::TypeError)?
         ]
         Shl: shl = [
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a << b),
-            _ => Err(Error::with_reason(Reason::TypeError))?
+            _ => Err(Error::TypeError)?
         ]
         Shr: shr = [
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a >> b),
-            _ => Err(Error::with_reason(Reason::TypeError))?
+            _ => Err(Error::TypeError)?
         ]
         Sub: sub = [
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a - b),
-            _ => Err(Error::with_reason(Reason::TypeError))?
+            _ => Err(Error::TypeError)?
         ]
     }
     impl Neg for ConValue {
@@ -184,7 +236,7 @@ pub mod temp_type_impl {
             Ok(match self {
                 ConValue::Empty => ConValue::Empty,
                 ConValue::Int(v) => ConValue::Int(-v),
-                _ => Err(Error::with_reason(Reason::TypeError))?,
+                _ => Err(Error::TypeError)?,
             })
         }
     }
@@ -195,7 +247,7 @@ pub mod temp_type_impl {
                 ConValue::Empty => ConValue::Empty,
                 ConValue::Int(v) => ConValue::Int(!v),
                 ConValue::Bool(v) => ConValue::Bool(!v),
-                _ => Err(Error::with_reason(Reason::TypeError))?,
+                _ => Err(Error::TypeError)?,
             })
         }
     }
@@ -205,17 +257,33 @@ pub mod temp_type_impl {
                 ConValue::Empty => "Empty".fmt(f),
                 ConValue::Int(v) => v.fmt(f),
                 ConValue::Bool(v) => v.fmt(f),
-                ConValue::Char(v) => write!(f, "'{v}'"),
-                ConValue::String(v) => write!(f, "\"{v}\""),
+                ConValue::Char(v) => v.fmt(f),
+                ConValue::String(v) => v.fmt(f),
                 ConValue::RangeExc(a, b) => write!(f, "{a}..{}", b + 1),
                 ConValue::RangeInc(a, b) => write!(f, "{a}..={b}"),
+                ConValue::Tuple(tuple) => {
+                    '('.fmt(f)?;
+                    for (idx, element) in tuple.iter().enumerate() {
+                        if idx > 0 {
+                            ", ".fmt(f)?
+                        }
+                        element.fmt(f)?
+                    }
+                    ')'.fmt(f)
+                }
+                ConValue::Function(func) => {
+                    write!(f, "fn {}", func.name())
+                }
+                ConValue::BuiltIn(func) => {
+                    write!(f, "internal fn {}", func.name())
+                }
             }
         }
     }
 }
 
 /// A work-in-progress tree walk interpreter for Conlang
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Interpreter {
     scope: Box<Environment>,
     stack: Vec<ConValue>,
@@ -230,6 +298,13 @@ impl Interpreter {
     pub fn interpret(&mut self, start: &Start) -> IResult<()> {
         self.visit(start)
     }
+    /// Calls a function inside the interpreter's scope,
+    /// and returns the result
+    pub fn call(&mut self, name: &str, args: &[ConValue]) -> IResult<ConValue> {
+        let function = self.resolve(name)?;
+        function.call(self, args)?;
+        self.pop()
+    }
     /// Evaluates a single [Expression](expression::Expr) and returns the value stack.
     pub fn eval(&mut self, expr: &expression::Expr) -> IResult<Vec<ConValue>> {
         self.visit_expr(expr)?;
@@ -239,24 +314,16 @@ impl Interpreter {
         self.stack.push(value.into())
     }
     fn peek(&mut self) -> IResult<&ConValue> {
-        self.stack
-            .last()
-            .ok_or(Error::with_reason(Reason::StackUnderflow))
+        self.stack.last().ok_or(Error::StackUnderflow)
     }
     fn pop(&mut self) -> IResult<ConValue> {
-        self.stack
-            .pop()
-            .ok_or(Error::with_reason(Reason::StackUnderflow))
+        self.stack.pop().ok_or(Error::StackUnderflow)
     }
     fn pop_two(&mut self) -> IResult<(ConValue, ConValue)> {
         Ok((self.pop()?, self.pop()?))
     }
-    fn resolve(&mut self, value: &Identifier) -> IResult<ConValue> {
-        self.scope
-            .get(value)
-            .cloned()
-            .ok_or_else(|| Error::with_reason(Reason::NotDefined(value.to_owned())))?
-            .ok_or_else(|| Error::with_reason(Reason::NotInitialized(value.to_owned())))
+    fn resolve(&mut self, value: &str) -> IResult<ConValue> {
+        self.scope.get(value).cloned()
     }
 }
 
@@ -271,6 +338,7 @@ impl Visitor<IResult<()>> for Interpreter {
     fn visit_statement(&mut self, stmt: &Stmt) -> IResult<()> {
         match stmt {
             Stmt::Let(l) => self.visit_let(l),
+            Stmt::Fn(f) => self.visit_fn_decl(f),
             Stmt::Expr(e) => {
                 self.visit_expr(e)?;
                 self.pop().map(drop)
@@ -279,7 +347,7 @@ impl Visitor<IResult<()>> for Interpreter {
     }
 
     fn visit_let(&mut self, stmt: &Let) -> IResult<()> {
-        let Let { name, init, .. } = stmt;
+        let Let { name: Identifier(name), init, .. } = stmt;
         if let Some(init) = init {
             self.visit_expr(init)?;
             let init = self.pop()?;
@@ -287,6 +355,12 @@ impl Visitor<IResult<()>> for Interpreter {
         } else {
             self.scope.insert(name, None);
         }
+        Ok(())
+    }
+
+    fn visit_fn_decl(&mut self, function: &FnDecl) -> IResult<()> {
+        // register the function in the current environment
+        self.scope.insert_fn(function);
         Ok(())
     }
 
@@ -302,14 +376,35 @@ impl Visitor<IResult<()>> for Interpreter {
         }
     }
 
+    fn visit_tuple(&mut self, tuple: &Tuple) -> IResult<()> {
+        let mut out = vec![];
+        for expr in &tuple.elements {
+            self.visit_expr(expr)?;
+            out.push(self.pop()?);
+        }
+        self.push(out);
+        Ok(())
+    }
+
+    fn visit_fn_call(&mut self, call: &FnCall) -> IResult<()> {
+        // evaluate the callee
+        self.visit_primary(&call.callee)?;
+        for args in &call.args {
+            self.visit_tuple(args)?;
+            let (ConValue::Tuple(args), callee) = self.pop_two()? else {
+                Err(Error::TypeError)?
+            };
+            callee.call(self, &args)?;
+        }
+        Ok(())
+    }
+
     fn visit_assign(&mut self, assign: &math::Assign) -> IResult<()> {
         use operator::Assign;
         let math::Assign { target, operator, init } = assign;
         self.visit_operation(init)?;
         let init = self.pop()?;
-        let Some(resolved) = self.scope.get_mut(target) else {
-            Err(Error::with_reason(Reason::NotDefined(target.to_owned())))?
-        };
+        let resolved = self.scope.get_mut(&target.0)?;
         if let Assign::Assign = operator {
             use std::mem::discriminant as variant;
             // runtime typecheck
@@ -318,15 +413,13 @@ impl Visitor<IResult<()>> for Interpreter {
                     *value = init;
                 }
                 None => *resolved = Some(init),
-                _ => Err(Error::with_reason(Reason::TypeError))?,
+                _ => Err(Error::TypeError)?,
             }
             self.push(ConValue::Empty);
             return Ok(());
         }
         let Some(target) = resolved.as_mut() else {
-            Err(Error::with_reason(Reason::NotInitialized(
-                target.to_owned(),
-            )))?
+            Err(Error::NotInitialized(target.0.to_owned()))?
         };
         match operator {
             Assign::AddAssign => target.add_assign(init)?,
@@ -463,13 +556,13 @@ impl Visitor<IResult<()>> for Interpreter {
                 self.pop()?;
                 continue;
             };
-            match out.reason() {
-                Reason::Continue => continue,
-                Reason::Break(value) => {
+            match out {
+                Error::Continue => continue,
+                Error::Break(value) => {
                     self.push(value);
                     return Ok(());
                 }
-                r => Err(Error::with_reason(r))?,
+                r => Err(r)?,
             }
         }
         if let Some(r#else) = &expr.else_ {
@@ -485,21 +578,21 @@ impl Visitor<IResult<()>> for Interpreter {
         self.visit_expr(&expr.iter)?;
         let bounds = match self.pop()? {
             ConValue::RangeExc(a, b) | ConValue::RangeInc(a, b) => (a, b),
-            _ => Err(Error::with_reason(Reason::NotIterable))?,
+            _ => Err(Error::NotIterable)?,
         };
         for loop_var in bounds.0..=bounds.1 {
-            self.scope.insert(&expr.var, Some(loop_var.into()));
+            self.scope.insert(&expr.var.0, Some(loop_var.into()));
             let Err(out) = self.visit_block(&expr.body) else {
                 self.pop()?;
                 continue;
             };
-            match out.reason() {
-                Reason::Continue => continue,
-                Reason::Break(value) => {
+            match out {
+                Error::Continue => continue,
+                Error::Break(value) => {
                     self.push(value);
                     return Ok(());
                 }
-                r => Err(Error::with_reason(r))?,
+                r => Err(r)?,
             }
         }
         if let Some(r#else) = &expr.else_ {
@@ -512,7 +605,7 @@ impl Visitor<IResult<()>> for Interpreter {
     }
 
     fn visit_else(&mut self, else_: &control::Else) -> IResult<()> {
-        self.visit_block(&else_.block)
+        self.visit_expr(&else_.expr)
     }
 
     fn visit_continue(&mut self, _: &control::Continue) -> IResult<()> {
@@ -534,7 +627,7 @@ impl Visitor<IResult<()>> for Interpreter {
     }
 
     fn visit_identifier(&mut self, ident: &Identifier) -> IResult<()> {
-        let value = self.resolve(ident)?;
+        let value = self.resolve(&ident.0)?;
         self.push(value);
         Ok(())
     }
@@ -569,34 +662,139 @@ impl Visitor<IResult<()>> for Interpreter {
     }
 }
 
+impl Default for Interpreter {
+    fn default() -> Self {
+        Self { scope: Environment::new().into(), stack: Default::default() }
+    }
+}
+
+pub mod function {
+    //! Represents a block of code which lives inside the Interpreter
+    use super::{Callable, ConValue, Error, FnDecl, IResult, Identifier, Interpreter};
+    use crate::ast::visitor::Visitor;
+    /// Represents a block of code which persists inside the Interpreter
+    #[derive(Clone, Debug)]
+    pub struct Function {
+        /// Stores the contents of the function declaration
+        declaration: Box<FnDecl>,
+        // /// Stores the enclosing scope of the function
+        // TODO: Capture variables
+    }
+
+    impl Function {
+        pub fn new(declaration: &FnDecl) -> Self {
+            Self { declaration: declaration.clone().into() }
+        }
+    }
+
+    impl Callable for Function {
+        fn name(&self) -> &str {
+            &self.declaration.name.0
+        }
+        fn call(&self, interpreter: &mut Interpreter, args: &[ConValue]) -> IResult<()> {
+            // Check arg mapping
+            if args.len() != self.declaration.args.len() {
+                return Err(Error::ArgNumber {
+                    want: self.declaration.args.len(),
+                    got: args.len(),
+                });
+            }
+            // TODO: Isolate cross-function scopes!
+            interpreter.scope.enter();
+            for (Identifier(arg), value) in self.declaration.args.iter().zip(args) {
+                interpreter.scope.insert(arg, Some(value.clone()));
+            }
+            match interpreter.visit_block(&self.declaration.body) {
+                Err(Error::Return(value)) => interpreter.push(value),
+                Err(Error::Break(value)) => Err(Error::BadBreak(value))?,
+                Err(e) => Err(e)?,
+                Ok(_) => (),
+            }
+            interpreter.scope.exit()?;
+            Ok(())
+        }
+    }
+}
+
+pub mod builtin {
+    mod builtin_imports {
+        pub use crate::interpreter::{
+            error::{Error, IResult},
+            temp_type_impl::ConValue,
+            BuiltIn, Callable, Interpreter,
+        };
+    }
+    use super::BuiltIn;
+    /// Builtins to load when a new interpreter is created
+    pub const DEFAULT_BUILTINS: &[&dyn BuiltIn] = &[&print::Print, &dbg::Dbg];
+
+    mod print {
+        //! Implements the unstable `print(...)` builtin
+        use super::builtin_imports::*;
+        /// Implements the `print(...)` builtin
+        #[derive(Clone, Debug)]
+        pub struct Print;
+        impl BuiltIn for Print {}
+        #[rustfmt::skip]
+        impl Callable for Print {
+            fn name(&self) -> &'static str { "print" }
+            fn call(&self, inter: &mut Interpreter, args: &[ConValue]) -> IResult<()> {
+                for arg in args { print!("{arg}") }
+                println!();
+                inter.push(ConValue::Empty);
+                Ok(())
+            }
+        }
+    }
+    mod dbg {
+        //! Implements the unstable `dbg(...)` builtin
+        use super::builtin_imports::*;
+        #[derive(Clone, Debug)]
+        pub struct Dbg;
+        impl BuiltIn for Dbg {}
+        #[rustfmt::skip]
+        impl Callable for Dbg {
+            fn name(&self) -> &str { "dbg" }
+            fn call(&self, inter: &mut Interpreter, args: &[ConValue]) -> IResult<()> {
+                println!("{args:?}");
+                inter.push(args);
+                Ok(())
+            }
+        }
+    }
+}
+
 pub mod scope {
     //! Lexical and non-lexical scoping for variables
+
     use super::{
-        error::{Error, IResult, Reason},
+        builtin::DEFAULT_BUILTINS,
+        error::{Error, IResult},
+        function::Function,
         temp_type_impl::ConValue,
-        Identifier,
+        FnDecl,
     };
     use std::collections::HashMap;
-
-    #[derive(Clone, Debug, Default)]
-    pub enum Variable {
-        #[default]
-        Uninit,
-        Init(ConValue),
-    }
 
     /// Implements a nested lexical scope
     #[derive(Clone, Debug, Default)]
     pub struct Environment {
         outer: Option<Box<Self>>,
-        vars: HashMap<Identifier, Option<ConValue>>,
+        vars: HashMap<String, Option<ConValue>>,
     }
 
     impl Environment {
+        pub fn new() -> Self {
+            let mut out = Self::default();
+            for &builtin in DEFAULT_BUILTINS {
+                out.insert(builtin.name(), Some(ConValue::BuiltIn(builtin)))
+            }
+            out
+        }
         /// Enter a nested scope
-        pub fn enter(self: &mut Box<Self>) {
+        pub fn enter(&mut self) {
             let outer = std::mem::take(self);
-            self.outer = Some(outer);
+            self.outer = Some(outer.into());
         }
         /// Exits the scope, destroying all local variables and
         /// returning the outer scope, if there is one
@@ -605,71 +803,75 @@ pub mod scope {
                 *self = *outer;
                 Ok(())
             } else {
-                Err(Error::with_reason(Reason::ScopeExit))
+                Err(Error::ScopeExit)
             }
         }
         /// Resolves a variable mutably
-        pub fn get_mut(&mut self, id: &Identifier) -> Option<&mut Option<ConValue>> {
+        ///
+        /// Returns a mutable reference to the variable's record, if it exists
+        pub fn get_mut(&mut self, id: &str) -> IResult<&mut Option<ConValue>> {
             match self.vars.get_mut(id) {
-                Some(var) => Some(var),
-                None => self.outer.as_mut().and_then(|o| o.get_mut(id)),
+                Some(var) => Ok(var),
+                None => self
+                    .outer
+                    .as_mut()
+                    .ok_or_else(|| Error::NotDefined(id.into()))?
+                    .get_mut(id),
             }
         }
         /// Resolves a variable immutably
-        pub fn get(&self, id: &Identifier) -> Option<&Option<ConValue>> {
+        pub fn get(&self, id: &str) -> IResult<&ConValue> {
             match self.vars.get(id) {
-                Some(var) => Some(var),
-                None => self.outer.as_ref().and_then(|o| o.get(id)),
+                Some(var) => var.as_ref().ok_or_else(|| Error::NotInitialized(id.into())),
+                None => self
+                    .outer
+                    .as_ref()
+                    .ok_or_else(|| Error::NotDefined(id.into()))?
+                    .get(id),
             }
         }
-        pub fn insert(&mut self, id: &Identifier, value: Option<ConValue>) {
-            self.vars.insert(id.clone(), value);
+        pub fn insert(&mut self, id: &str, value: Option<ConValue>) {
+            self.vars.insert(id.to_string(), value);
+        }
+        /// A convenience function for registering a [FnDecl] as a [Function]
+        pub fn insert_fn(&mut self, decl: &FnDecl) {
+            self.vars
+                .insert(decl.name.0.clone(), Some(Function::new(decl).into()));
         }
     }
 }
 
 pub mod error {
     //! The [Error] type represents any error thrown by the [Interpreter](super::Interpreter)
-    use crate::ast::Identifier;
 
     use super::temp_type_impl::ConValue;
 
     pub type IResult<T> = Result<T, Error>;
     /// Represents any error thrown by the [Interpreter](super::Interpreter)
-    #[derive(Clone, Debug)]
-    pub struct Error {
-        reason: Reason,
-    }
     impl Error {
-        /// Returns the [Reason] for this error
-        pub fn reason(self) -> Reason {
-            self.reason
-        }
-        /// Creates an error with a given [Reason]
-        pub(crate) fn with_reason(reason: Reason) -> Self {
-            Self { reason }
-        }
-        /// Creates a [Return](Reason::Return) error, with the given [value](ConValue)
+        /// Creates a [Return](Error::Return) error, with the given [value](ConValue)
         pub fn ret(value: ConValue) -> Self {
-            Self { reason: Reason::Return(value) }
+            Error::Return(value)
         }
-        /// Creates a [Break](Reason::Break) error, with the given [value](ConValue)
+        /// Creates a [Break](Error::Break) error, with the given [value](ConValue)
         pub fn brk(value: ConValue) -> Self {
-            Self { reason: Reason::Break(value) }
+            Error::Break(value)
         }
-        /// Creates a [Continue](Reason::Continue) error
+        /// Creates a [Continue](Error::Continue) error
         pub fn cnt() -> Self {
-            Self { reason: Reason::Continue }
+            Error::Continue
         }
     }
 
     /// The reason for the [Error]
     #[derive(Clone, Debug)]
-    pub enum Reason {
+    pub enum Error {
         /// Propagate a Return value
         Return(ConValue),
         /// Propagate a Break value
         Break(ConValue),
+        /// Break propagated across function bounds
+        BadBreak(ConValue),
         /// Continue to the next iteration of a loop
         Continue,
         /// Underflowed the stack
@@ -682,32 +884,38 @@ pub mod error {
         /// In clause of For loop didn't yield a Range
         NotIterable,
         /// A name was not defined in scope before being used
-        NotDefined(Identifier),
+        NotDefined(String),
         /// A name was defined but not initialized
-        NotInitialized(Identifier),
+        NotInitialized(String),
+        /// A value was called, but is not callable
+        NotCallable(ConValue),
+        /// A function was called with the wrong number of arguments
+        ArgNumber { want: usize, got: usize },
     }
 
     impl std::error::Error for Error {}
     impl std::fmt::Display for Error {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            self.reason.fmt(f)
-        }
-    }
-    impl std::fmt::Display for Reason {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
-                Reason::Return(value) => write!(f, "return {value}"),
-                Reason::Break(value) => write!(f, "break {value}"),
-                Reason::Continue => "continue".fmt(f),
-                Reason::StackUnderflow => "Stack underflow".fmt(f),
-                Reason::ScopeExit => "Exited the last scope. This is a logic bug.".fmt(f),
-                Reason::TypeError => "Incompatible types".fmt(f),
-                Reason::NotIterable => "`in` clause of `for` loop did not yield an iterable".fmt(f),
-                Reason::NotDefined(value) => {
-                    write!(f, "{} not bound. Did you mean `let {};`?", value.0, value.0)
+                Error::Return(value) => write!(f, "return {value}"),
+                Error::Break(value) => write!(f, "break {value}"),
+                Error::BadBreak(value) => write!(f, "rogue break: {value}"),
+                Error::Continue => "continue".fmt(f),
+                Error::StackUnderflow => "Stack underflow".fmt(f),
+                Error::ScopeExit => "Exited the last scope. This is a logic bug.".fmt(f),
+                Error::TypeError => "Incompatible types".fmt(f),
+                Error::NotIterable => "`in` clause of `for` loop did not yield an iterable".fmt(f),
+                Error::NotDefined(value) => {
+                    write!(f, "{value} not bound. Did you mean `let {value};`?")
                 }
-                Reason::NotInitialized(value) => {
-                    write!(f, "{} bound, but not initialized", value.0)
+                Error::NotInitialized(value) => {
+                    write!(f, "{value} bound, but not initialized")
+                }
+                Error::NotCallable(value) => {
+                    write!(f, "{value} is not a function, and cannot be called")
+                }
+                Error::ArgNumber { want, got } => {
+                    write!(f, "Expected {want} arguments, got {got}")
                 }
             }
         }

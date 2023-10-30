@@ -1,12 +1,10 @@
-// This is a Conlang file. Conlang is an expression-based language designed for maximum flexibility etc. etc. whatever
+// This is a Conlang file. 
 
 // This is a function. It can be called with the call operator.
 // The function called `main` is the program's entrypoint
 fn main() {
-    let x = 100;
-
     // An if expression is like the ternary conditional operator in C
-    let y = if x < 50 {
+    let y = if 10 < 50 {
         "\u{1f988}"
     } else {
         "x"
@@ -20,12 +18,16 @@ fn main() {
     // If `while` does not `break`, fall through to the `else` expression
     } else {
         false
-    }
+    };
     // The same is true of `for` expressions!
     let w = for idx in 0..100 {
-        break idx
+        if idx > 2 * 2 {
+            break idx
+        }
     } else {
         12345
-    }
-    // TODO: decide how to do IO
+    };
+    // A block evaluates to its last expression,
+    // or Empty if there is none
+    (y, z, w) // (🦈, false, 5)
 }

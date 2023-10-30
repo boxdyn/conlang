@@ -364,6 +364,7 @@ impl Parser {
         let token = self.peek()?;
         match token.ty() {
             Type::Keyword(Keyword::Let) => self.let_stmt().map(Stmt::Let),
+            Type::Keyword(Keyword::Fn) => self.fn_decl().map(Stmt::Fn),
             _ => {
                 let out = Stmt::Expr(self.expr()?);
                 self.consume_type(Type::Semi)?;
@@ -385,9 +386,30 @@ impl Parser {
         self.consume_type(Type::Semi)?;
         Ok(out)
     }
-    // /// Parses a [Function] statement
-    // fn function_stmt(&mut self) -> PResult<Function> {
-    // }
+    /// Parses a [Function] statement
+    fn fn_decl(&mut self) -> PResult<FnDecl> {
+        self.keyword(Keyword::Fn)?;
+        let name = self.identifier()?;
+        self.consume_type(Type::LParen)?;
+        let args = self.params()?;
+        self.consume_type(Type::RParen)?;
+        // Discard return type, for now
+        if self.consume_type(Type::Arrow).is_ok() {
+            self.expr()?;
+        }
+        Ok(FnDecl { name, args, body: self.block()? })
+    }
+
+    fn params(&mut self) -> PResult<Vec<Identifier>> {
+        let mut args = vec![];
+        while let Ok(ident) = self.identifier() {
+            args.push(ident);
+            if self.consume_type(Type::Comma).is_err() {
+                break;
+            }
+        }
+        Ok(args)
+    }
 }
 /// Expressions
 impl Parser {
@@ -416,22 +438,6 @@ impl Parser {
         }
         Ok(Block { statements, expr })
     }
-    /// Parses a [group expression](expression::Group)
-    fn group(&mut self) -> PResult<expression::Group> {
-        use expression::Group;
-        let t = self.consume_type(Type::LParen)?.peek()?;
-        match t.ty() {
-            Type::RParen => {
-                self.consume();
-                Ok(Group::Empty)
-            }
-            _ => {
-                let out = self.expr().map(|expr| Group::Expr(expr.into()));
-                self.consume_type(Type::RParen)?;
-                out
-            }
-        }
-    }
     /// Parses a [primary expression](expression::Primary)
     fn primary(&mut self) -> PResult<expression::Primary> {
         use expression::Primary;
@@ -448,6 +454,59 @@ impl Parser {
             Type::Keyword(_) => self.flow().map(Primary::Branch),
             e => Err(Error::unexpected(e).token(token.clone()))?,
         }
+    }
+}
+/// [Call] expressions
+impl Parser {
+    /// Parses a [call expression](Call)
+    fn call(&mut self) -> PResult<Call> {
+        let callee = self.primary()?;
+        let Ok(Type::LParen) = self.peek().map(Token::ty) else {
+            return Ok(Call::Primary(callee));
+        };
+        let mut args = vec![];
+        while self.consume_type(Type::LParen).is_ok() {
+            match self.consume_type(Type::RParen) {
+                Ok(_) => args.push(Tuple { elements: vec![] }),
+                Err(_) => {
+                    args.push(self.tuple()?);
+                    self.consume_type(Type::RParen)?;
+                }
+            }
+        }
+        Ok(Call::FnCall(FnCall { callee: callee.into(), args }))
+    }
+}
+
+/// Groups and Tuples
+impl Parser {
+    /// Parses a [group expression](Group)
+    fn group(&mut self) -> PResult<Group> {
+        let t = self.consume_type(Type::LParen)?.peek()?;
+        match t.ty() {
+            Type::RParen => {
+                self.consume();
+                Ok(Group::Empty)
+            }
+            _ => {
+                let mut out = self.tuple()?;
+                let out = if out.elements.len() == 1 {
+                    Group::Single(out.elements.remove(0).into())
+                } else {
+                    Group::Tuple(out)
+                };
+                self.consume_type(Type::RParen)?;
+                Ok(out)
+            }
+        }
+    }
+    /// Parses a [tuple expression](Tuple)
+    fn tuple(&mut self) -> PResult<Tuple> {
+        let mut elements = vec![self.expr()?];
+        while self.consume_type(Type::Comma).is_ok() {
+            elements.push(self.expr()?);
+        }
+        Ok(Tuple { elements })
     }
 }
 
@@ -481,12 +540,13 @@ macro binary ($($f:ident = $a:ident, $b:ident);*$(;)?) {$(
 /// # [Arithmetic and Logical Subexpressions](math)
 impl Parser {
     fn assign(&mut self) -> PResult<math::Operation> {
+        use expression::Primary;
         use math::{Assign, Operation};
         let next = self.compare()?;
         let Ok(operator) = self.assign_op() else {
             return Ok(next);
         };
-        let Operation::Primary(expression::Primary::Identifier(target)) = next else {
+        let Operation::Call(Call::Primary(Primary::Identifier(target))) = next else {
             return Ok(next);
         };
         Ok(Operation::Assign(Assign {
@@ -522,7 +582,7 @@ impl Parser {
     }
     /// Parses a [primary operation](math::Operation::Primary) expression
     fn primary_operation(&mut self) -> PResult<math::Operation> {
-        Ok(math::Operation::Primary(self.primary()?))
+        Ok(math::Operation::Call(self.call()?))
     }
 }
 macro operator_impl ($($(#[$m:meta])* $f:ident : {$($type:pat => $op:ident),*$(,)?})*) {
@@ -674,7 +734,7 @@ impl Parser {
         // it's fine for `else` to be missing entirely
         self.keyword(Keyword::Else)
             .ok()
-            .map(|p| Ok(control::Else { block: p.block()? }))
+            .map(|p| Ok(control::Else { expr: p.expr()?.into() }))
             .transpose()
     }
     /// Parses a [break](control::Break) expression

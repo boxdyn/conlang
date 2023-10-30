@@ -11,15 +11,15 @@ Friday each month.
 - [x] Write AST for expression grammar
 - [x] Write parser for AST
 - [ ] Create tests for parser (and AST)
-- [ ] Parse `dummy.cl` into a valid AST
+- [x] Parse `dummy.cl` into a valid AST
 - [x] Pretty printer, for debugging
-- [ ] Create minimal statement grammar
-  - [ ] Variable definition statements
-  - [ ] Function definition statements
+- [x] Create minimal statement grammar
+  - [x] Variable definition statements
+  - [x] Function definition statements
 
 ## Short Goals:
-- [ ] `for` loops and `while` loops can be used on the trailing side of an assignment
-- [ ] Tree-walk interpreter for prototyping and debugging
+- [x] `for` loops and `while` loops can be used on the trailing side of an assignment
+- [x] Tree-walk interpreter for prototyping and debugging
 - [ ] Data structures and sum-type enums
 - [ ] Expression type-checker
 - [ ] Trait/Interface system
