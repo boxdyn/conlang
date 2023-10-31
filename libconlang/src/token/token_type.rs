@@ -17,58 +17,60 @@ pub enum Type {
     String,
     Character,
     // Delimiters and punctuation
-    LCurly,    // {
-    RCurly,    // }
-    LBrack,    // [
-    RBrack,    // ]
-    LParen,    // (
-    RParen,    // )
-    Amp,       // &
-    AmpAmp,    // &&
-    AmpEq,     // &=
-    Arrow,     // ->
-    At,        // @
-    Backslash, // \
-    Bang,      // !
-    BangBang,  // !!
-    BangEq,    // !=
-    Bar,       // |
-    BarBar,    // ||
-    BarEq,     // |=
-    Colon,     // :
-    Comma,     // ,
-    Dot,       // .
-    DotDot,    // ..
-    DotDotEq,  // ..=
-    Eq,        // =
-    EqEq,      // ==
-    FatArrow,  // =>
-    Grave,     // `
-    Gt,        // >
-    GtEq,      // >=
-    GtGt,      // >>
-    GtGtEq,    // >>=
-    Hash,      // #
-    Lt,        // <
-    LtEq,      // <=
-    LtLt,      // <<
-    LtLtEq,    // <<=
-    Minus,     // -
-    MinusEq,   // -=
-    Plus,      // +
-    PlusEq,    // +=
-    Question,  // ?
-    Rem,       // %
-    RemEq,     // %=
-    Semi,      // ;
-    Slash,     // /
-    SlashEq,   // /=
-    Star,      // *
-    StarEq,    // *=
-    Tilde,     // ~
-    Xor,       // ^
-    XorEq,     // ^=
-    XorXor,    // ^^
+    LCurly,     // {
+    RCurly,     // }
+    LBrack,     // [
+    RBrack,     // ]
+    LParen,     // (
+    RParen,     // )
+    Amp,        // &
+    AmpAmp,     // &&
+    AmpEq,      // &=
+    Arrow,      // ->
+    At,         // @
+    Backslash,  // \
+    Bang,       // !
+    BangBang,   // !!
+    BangEq,     // !=
+    Bar,        // |
+    BarBar,     // ||
+    BarEq,      // |=
+    Colon,      // :
+    ColonColon, // ::
+    Comma,      // ,
+    Dot,        // .
+    DotDot,     // ..
+    DotDotEq,   // ..=
+    Eq,         // =
+    EqEq,       // ==
+    FatArrow,   // =>
+    Grave,      // `
+    Gt,         // >
+    GtEq,       // >=
+    GtGt,       // >>
+    GtGtEq,     // >>=
+    Hash,       // #
+    HashBang,   // #!
+    Lt,         // <
+    LtEq,       // <=
+    LtLt,       // <<
+    LtLtEq,     // <<=
+    Minus,      // -
+    MinusEq,    // -=
+    Plus,       // +
+    PlusEq,     // +=
+    Question,   // ?
+    Rem,        // %
+    RemEq,      // %=
+    Semi,       // ;
+    Slash,      // /
+    SlashEq,    // /=
+    Star,       // *
+    StarEq,     // *=
+    Tilde,      // ~
+    Xor,        // ^
+    XorEq,      // ^=
+    XorXor,     // ^^
 }
 
 /// Represents a reserved word.
@@ -119,6 +121,7 @@ impl Display for Type {
             Type::BarBar => "or-or".fmt(f),
             Type::BarEq => "or-assign".fmt(f),
             Type::Colon => "colon".fmt(f),
+            Type::ColonColon => "path separator".fmt(f),
             Type::Comma => "comma".fmt(f),
             Type::Dot => "dot".fmt(f),
             Type::DotDot => "exclusive range".fmt(f),
@@ -132,6 +135,7 @@ impl Display for Type {
             Type::GtGt => "shift right".fmt(f),
             Type::GtGtEq => "shift right-assign".fmt(f),
             Type::Hash => "hash".fmt(f),
+            Type::HashBang => "shebang".fmt(f),
             Type::Lt => "less than".fmt(f),
             Type::LtEq => "less than or equal to".fmt(f),
             Type::LtLt => "shift left".fmt(f),

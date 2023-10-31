@@ -100,13 +100,13 @@ impl<'t> Lexer<'t> {
             '\\' => self.consume()?.produce(Type::Backslash, ()),
             '!' => self.consume()?.bang(),
             '|' => self.consume()?.bar(),
-            ':' => self.consume()?.produce(Type::Colon, ()),
+            ':' => self.consume()?.colon(),
             ',' => self.consume()?.produce(Type::Comma, ()),
             '.' => self.consume()?.dot(),
             '=' => self.consume()?.equal(),
             '`' => self.consume()?.produce(Type::Grave, ()),
             '>' => self.consume()?.greater(),
-            '#' => self.consume()?.produce(Type::Hash, ()),
+            '#' => self.consume()?.hash(),
             '<' => self.consume()?.less(),
             '-' => self.consume()?.minus(),
             '+' => self.consume()?.plus(),
@@ -203,6 +203,12 @@ impl<'t> Lexer<'t> {
             _ => self.produce(Type::Bar, ()),
         }
     }
+    fn colon(&mut self) -> LResult<Token> {
+        match self.peek() {
+            Ok(':') => self.consume()?.produce(Type::ColonColon, ()),
+            _ => self.produce(Type::Colon, ()),
+        }
+    }
     fn dot(&mut self) -> LResult<Token> {
         match self.peek() {
             Ok('.') => {
@@ -233,6 +239,12 @@ impl<'t> Lexer<'t> {
                 }
             }
             _ => self.produce(Type::Gt, ()),
+        }
+    }
+    fn hash(&mut self) -> LResult<Token> {
+        match self.peek() {
+            Ok('!') => self.consume()?.produce(Type::HashBang, ()),
+            _ => self.produce(Type::Hash, ()),
         }
     }
     fn less(&mut self) -> LResult<Token> {
