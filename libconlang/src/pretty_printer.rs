@@ -1,4 +1,5 @@
 //! A [Printer] pretty-prints a Conlang [syntax tree](crate::ast)
+
 use super::ast::preamble::*;
 use std::{
     fmt::Display,
@@ -7,17 +8,14 @@ use std::{
 /// Prettily prints this node
 pub trait PrettyPrintable {
     /// Prettily prints this node
-    fn print(&self);
-    /// Prettily writes this node into the given [Writer](Write)
-    fn write(&self, into: impl Write) -> IOResult<()>;
-}
-impl PrettyPrintable for Start {
     fn print(&self) {
-        let _ = Printer::default().visit(self);
+        let _ = self.visit(&mut Printer::default());
     }
+    /// Prettily writes this node into the given [Writer](Write)
     fn write(&self, into: impl Write) -> IOResult<()> {
-        Printer::from(into).visit(self)
+        self.visit(&mut Printer::from(into))
     }
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()>;
 }
 
 /// Prints a Conlang [syntax tree](crate::ast) into a [Writer](Write)
@@ -26,6 +24,18 @@ pub struct Printer<W: Write> {
     level: u32,
     writer: W,
 }
+
+impl<W: Write> Write for Printer<W> {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> IOResult<usize> {
+        self.writer.write(buf)
+    }
+    #[inline]
+    fn flush(&mut self) -> IOResult<()> {
+        self.writer.flush()
+    }
+}
+
 impl<'t> Default for Printer<StdoutLock<'t>> {
     fn default() -> Self {
         Self { level: 0, writer: stdout().lock() }
@@ -67,82 +77,154 @@ impl<W: Write> Printer<W> {
 macro visit_operator($self:ident.$op:expr) {
     $self.space()?.put($op)?.space().map(drop)
 }
-impl<W: Write> Visitor<IOResult<()>> for Printer<W> {
-    fn visit_program(&mut self, prog: &Program) -> IOResult<()> {
-        // delegate to the walker
-        for stmt in &prog.0 {
-            self.visit_statement(stmt)?;
+
+impl PrettyPrintable for Start {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let Self(program) = self;
+        program.visit(p)
+    }
+}
+impl PrettyPrintable for Program {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let Self(module) = self;
+        for decl in module {
+            decl.visit(p)?;
+            p.newline()?;
         }
         Ok(())
     }
-    fn visit_statement(&mut self, stmt: &Stmt) -> IOResult<()> {
-        match stmt {
-            Stmt::Let(stmt) => self.visit_let(stmt)?,
-            Stmt::Fn(function) => self.visit_fn_decl(function)?,
-            Stmt::Expr(e) => {
-                self.visit_expr(e)?;
-                self.put(';').map(drop)?
+}
+impl PrettyPrintable for Stmt {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        match self {
+            Stmt::Let(value) => value.visit(p),
+            Stmt::Fn(value) => value.visit(p),
+            Stmt::Expr(value) => {
+                value.visit(p)?;
+                p.put(';')?.newline().map(drop)
             }
         }
-        self.newline().map(drop)
     }
-    fn visit_let(&mut self, stmt: &Let) -> IOResult<()> {
-        let Let { name, mutable, ty, init } = stmt;
-        self.put("let")?.space()?;
+}
+impl PrettyPrintable for Let {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let Let { name: Name { name, mutable, ty }, init } = self;
+        p.put("let")?.space()?;
         if *mutable {
-            self.put("mut")?.space()?;
+            p.put("mut")?.space()?;
         }
-        self.visit_identifier(name)?;
+        name.visit(p)?;
         if let Some(ty) = ty {
-            self.put(':')?.space()?.visit_identifier(ty)?;
+            ty.visit(p.put(':')?.space()?)?
         }
         if let Some(init) = init {
-            self.space()?.put('=')?.space()?.visit_expr(init)?;
+            init.visit(p.space()?.put('=')?.space()?)?;
         }
-        self.put(';').map(drop)
+        p.put(';').map(drop)
     }
-
-    fn visit_fn_decl(&mut self, function: &FnDecl) -> IOResult<()> {
-        let FnDecl { name, args, body } = function;
-        self.put("fn")?.space()?;
-        self.visit_identifier(name)?;
-        self.space()?.put('(')?;
+}
+impl PrettyPrintable for FnDecl {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let FnDecl { name, args, body } = self;
+        p.put("fn")?.space()?;
+        name.visit(p)?;
+        p.space()?.put('(')?;
         for (idx, arg) in args.iter().enumerate() {
             if idx > 0 {
-                self.put(',')?.space()?;
+                p.put(',')?.space()?;
             }
-            self.visit_identifier(arg)?;
+            arg.visit(p)?;
         }
-        self.put(')')?.space()?;
-        self.visit_block(body)
+        p.put(')')?.space()?;
+        body.visit(p)
     }
+}
+impl PrettyPrintable for Name {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        if self.mutable {
+            p.put("mut")?.space()?;
+        }
+        self.name.visit(p)?;
+        if let Some(ty) = &self.ty {
+            ty.visit(p.put(':')?.space()?)?;
+        }
+        Ok(())
+    }
+}
+impl PrettyPrintable for TypeExpr {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        match self {
+            TypeExpr::TupleType(_tt) => todo!(),
+            TypeExpr::TypePath(t) => t.visit(p),
+            TypeExpr::Empty(_) => p.put("()").map(drop),
+            TypeExpr::Never(_) => p.put('!').map(drop),
+        }
+    }
+}
+impl PrettyPrintable for Path {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let Path { absolute, parts } = self;
+        if *absolute {
+            p.put("::")?;
+        }
+        for (idx, part) in parts.iter().enumerate() {
+            if idx != 0 { p.put("::")?;}
+            part.visit(p)?;
+        }
+        Ok(())
+    }
+}
+impl PrettyPrintable for PathPart {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        match self {
+            PathPart::PathSuper => p.put("super").map(drop),
+            PathPart::PathSelf => p.put("self").map(drop),
+            PathPart::PathIdent(id) =>id.visit(p),
+        }
+    }
+}
+impl PrettyPrintable for Block {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let Block { let_count: _, statements, expr } = self;
+        p.put('{')?.indent().newline()?;
+        for stmt in statements {
+            stmt.visit(p)?;
+        }
+        for expr in expr {
+            expr.visit(p)?;
+        }
+        p.dedent().newline()?.put('}').map(drop)
+    }
+}
+impl PrettyPrintable for Expr {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let Expr(expr) = self;
+        expr.visit(p)
+    }
+}
 
-    fn visit_assign(&mut self, assign: &math::Assign) -> IOResult<()> {
-        let math::Assign { target, operator, init } = assign;
-        self.visit_identifier(target)?;
-        self.visit_assign_op(operator)?;
-        self.visit_operation(init)
-    }
-    fn visit_binary(&mut self, binary: &math::Binary) -> IOResult<()> {
-        let math::Binary { first, other } = binary;
-        self.put('(')?.visit_operation(first)?;
-        for (op, other) in other {
-            self.visit_binary_op(op)?;
-            self.visit_operation(other)?;
+impl PrettyPrintable for Operation {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        match self {
+            Operation::Assign(value) => value.visit(p),
+            Operation::Binary(value) => value.visit(p),
+            Operation::Unary(value) => value.visit(p),
+            Operation::Call(value) => value.visit(p),
         }
-        self.put(')').map(drop)
     }
-    fn visit_unary(&mut self, unary: &math::Unary) -> IOResult<()> {
-        let math::Unary { operators, operand } = unary;
-        for op in operators {
-            self.visit_unary_op(op)?;
-        }
-        self.visit_operation(operand)
+}
+impl PrettyPrintable for Assign {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let Assign { target, operator, init } = self;
+        target.visit(p)?;
+        operator.visit(p)?;
+        init.visit(p)
     }
-
-    fn visit_assign_op(&mut self, op: &operator::Assign) -> IOResult<()> {
+}
+impl PrettyPrintable for operator::Assign {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
         use operator::Assign;
-        visit_operator!(self.match op {
+        visit_operator!(p.match self {
             Assign::Assign => "=",
             Assign::AddAssign => "+=",
             Assign::SubAssign => "-=",
@@ -156,9 +238,23 @@ impl<W: Write> Visitor<IOResult<()>> for Printer<W> {
             Assign::ShrAssign => ">>=",
         })
     }
-    fn visit_binary_op(&mut self, op: &operator::Binary) -> IOResult<()> {
+}
+impl PrettyPrintable for Binary {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let Binary { first, other } = self;
+        p.put('(')?;
+        first.visit(p)?;
+        for (op, other) in other {
+            op.visit(p)?;
+            other.visit(p)?
+        }
+        p.put(')').map(drop)
+    }
+}
+impl PrettyPrintable for operator::Binary {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
         use operator::Binary;
-        visit_operator!(self.match op {
+        visit_operator!(p.match self {
             Binary::Mul => "*",
             Binary::Div => "/",
             Binary::Rem => "%",
@@ -182,9 +278,20 @@ impl<W: Write> Visitor<IOResult<()>> for Printer<W> {
             Binary::Greater => ">",
         })
     }
-    fn visit_unary_op(&mut self, op: &operator::Unary) -> IOResult<()> {
+}
+impl PrettyPrintable for Unary {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let Unary { operators, operand } = self;
+        for op in operators {
+            op.visit(p)?;
+        }
+        operand.visit(p)
+    }
+}
+impl PrettyPrintable for operator::Unary {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
         use operator::Unary;
-        self.put(match op {
+        p.put(match self {
             Unary::RefRef => "&&",
             Unary::Deref => "*",
             Unary::Ref => "&",
@@ -196,108 +303,155 @@ impl<W: Write> Visitor<IOResult<()>> for Printer<W> {
         })
         .map(drop)
     }
-    fn visit_if(&mut self, expr: &control::If) -> IOResult<()> {
-        self.put("while")?.space()?.visit_expr(&expr.cond)?;
-        self.space()?.visit_block(&expr.body)?;
-        match &expr.else_ {
-            Some(e) => self.visit_else(e),
-            None => Ok(()),
-        }
-    }
-    fn visit_while(&mut self, expr: &control::While) -> IOResult<()> {
-        self.put("while")?.space()?.visit_expr(&expr.cond)?;
-        self.space()?.visit_block(&expr.body)?;
-        match &expr.else_ {
-            Some(e) => self.visit_else(e),
-            None => Ok(()),
-        }
-    }
-    fn visit_for(&mut self, expr: &control::For) -> IOResult<()> {
-        self.put("for")?.space()?.visit_identifier(&expr.var)?;
-        self.space()?.put("in")?.space()?.visit_expr(&expr.iter)?;
-        self.space()?.visit_block(&expr.body)?;
-        match &expr.else_ {
-            Some(e) => self.visit_else(e),
-            None => Ok(()),
-        }
-    }
-    fn visit_else(&mut self, else_: &control::Else) -> IOResult<()> {
-        self.space()?.put("else")?.space()?.visit_expr(&else_.expr)
-    }
-    fn visit_continue(&mut self, _: &control::Continue) -> IOResult<()> {
-        self.put("continue").map(drop)
-    }
-    fn visit_break(&mut self, brk: &control::Break) -> IOResult<()> {
-        self.put("break")?.space()?.visit_expr(&brk.expr)
-    }
-    fn visit_return(&mut self, ret: &control::Return) -> IOResult<()> {
-        self.put("return")?.space()?.visit_expr(&ret.expr)
-    }
+}
 
-    fn visit_identifier(&mut self, ident: &Identifier) -> IOResult<()> {
-        self.put(&ident.0).map(drop)
-    }
-    fn visit_string_literal(&mut self, string: &str) -> IOResult<()> {
-        self.put("\"")?.put(string)?.put("\"").map(drop)
-    }
-    fn visit_char_literal(&mut self, char: &char) -> IOResult<()> {
-        self.put("'")?.put(char)?.put("'").map(drop)
-    }
-    fn visit_bool_literal(&mut self, bool: &bool) -> IOResult<()> {
-        self.put(bool).map(drop)
-    }
-    fn visit_float_literal(&mut self, float: &literal::Float) -> IOResult<()> {
-        self.put(float.sign)?
-            .put(float.exponent)?
-            .put(float.mantissa)
-            .map(drop)
-    }
-    fn visit_int_literal(&mut self, int: &u128) -> IOResult<()> {
-        self.put(int).map(drop)
-    }
-    fn visit_empty(&mut self) -> IOResult<()> {
-        self.put("()").map(drop)
-    }
-
-    fn visit_block(&mut self, block: &expression::Block) -> IOResult<()> {
-        self.put('{')?.indent().newline()?;
-        for stmt in &block.statements {
-            self.visit_statement(stmt)?;
+impl PrettyPrintable for Call {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        match self {
+            Call::FnCall(value) => value.visit(p),
+            Call::Primary(value) => value.visit(p),
         }
-        for expr in &block.expr {
-            self.visit_expr(expr)?;
-        }
-        self.dedent().newline()?.put('}').map(drop)
     }
-
-    fn visit_tuple(&mut self, tuple: &Tuple) -> IOResult<()> {
-        for (idx, expr) in tuple.elements.iter().enumerate() {
-            if idx > 0 {
-                self.put(',')?.space()?;
-            }
-            self.visit_expr(expr)?;
-        }
-        Ok(())
-    }
-
-    fn visit_group(&mut self, expr: &Group) -> IOResult<()> {
-        self.put('(')?;
-        match expr {
-            Group::Tuple(tuple) => self.space()?.visit_tuple(tuple),
-            Group::Single(expr) => self.space()?.visit_expr(expr),
-            Group::Empty => self.visit_empty(),
-        }?;
-        self.space()?.put(')').map(drop)
-    }
-
-    fn visit_fn_call(&mut self, call: &FnCall) -> IOResult<()> {
-        let FnCall { callee, args } = call;
-        self.visit_primary(callee)?;
+}
+impl PrettyPrintable for FnCall {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let FnCall { callee, args } = self;
+        callee.visit(p)?;
         for arg_list in args {
-            self.put('(')?;
-            self.visit_tuple(arg_list)?;
-            self.put(')')?;
+            p.put('(')?;
+            arg_list.visit(p)?;
+            p.put(')')?;
         }
         Ok(())
+    }
+}
+impl PrettyPrintable for Primary {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        match self {
+            Primary::Identifier(value) => value.visit(p),
+            Primary::Literal(value) => value.visit(p),
+            Primary::Block(value) => value.visit(p),
+            Primary::Group(value) => value.visit(p),
+            Primary::Branch(value) => value.visit(p),
+        }
+    }
+}
+impl PrettyPrintable for Group {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        p.put('(')?;
+        match self {
+            Group::Tuple(tuple) => tuple.visit(p.space()?)?,
+            Group::Single(expr) => expr.visit(p.space()?)?,
+            Group::Empty => (),
+        };
+        p.space()?.put(')').map(drop)
+    }
+}
+impl PrettyPrintable for Tuple {
+    /// Writes a *non-delimited* [Tuple] to the [Printer]
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let Tuple { elements } = self;
+        for (idx, expr) in elements.iter().enumerate() {
+            if idx > 0 {
+                p.put(',')?.space()?;
+            }
+            expr.visit(p)?;
+        }
+        Ok(())
+    }
+}
+
+impl PrettyPrintable for Identifier {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let Identifier { name, index: _ } = self; // TODO: Pretty-print variable number as well
+        p.put(name).map(drop)
+    }
+}
+impl PrettyPrintable for Literal {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        match self {
+            Literal::String(value) => write!(p, "\"{value}\""),
+            Literal::Char(value) => write!(p, "'{value}'"),
+            Literal::Bool(value) => write!(p, "{value}"),
+            Literal::Float(value) => value.visit(p),
+            Literal::Int(value) => write!(p, "{value}"),
+        }
+    }
+}
+impl PrettyPrintable for Float {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let Float { sign, exponent, mantissa } = self;
+        p.put(sign)?.put(exponent)?.put(mantissa).map(drop)
+    }
+}
+
+impl PrettyPrintable for Flow {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        match self {
+            Flow::While(value) => value.visit(p),
+            Flow::If(value) => value.visit(p),
+            Flow::For(value) => value.visit(p),
+            Flow::Continue(value) => value.visit(p),
+            Flow::Return(value) => value.visit(p),
+            Flow::Break(value) => value.visit(p),
+        }
+    }
+}
+impl PrettyPrintable for While {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let While { cond, body, else_ } = self;
+        cond.visit(p.put("while")?.space()?)?;
+        body.visit(p.space()?)?;
+        match else_ {
+            Some(e) => e.visit(p),
+            None => Ok(()),
+        }
+    }
+}
+impl PrettyPrintable for If {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let If { cond, body, else_ } = self;
+        cond.visit(p.put("if")?.space()?)?;
+        body.visit(p.space()?)?;
+        match else_ {
+            Some(e) => e.visit(p),
+            None => Ok(()),
+        }
+    }
+}
+impl PrettyPrintable for For {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let For { var, iter, body, else_ } = self;
+        var.visit(p.put("for")?.space()?)?;
+        iter.visit(p.space()?.put("in")?.space()?)?;
+        body.visit(p.space()?)?;
+        match else_ {
+            Some(e) => e.visit(p),
+            None => Ok(()),
+        }
+    }
+}
+impl PrettyPrintable for Else {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let Else { expr } = self;
+        expr.visit(p.space()?.put("else")?.space()?)
+    }
+}
+impl PrettyPrintable for Continue {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let control::Continue = self; // using pattern destructuring, rather than assigning to "Continue"
+        p.put("continue").map(drop)
+    }
+}
+impl PrettyPrintable for Break {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let Break { expr } = self;
+        expr.visit(p.put("break")?.space()?)
+    }
+}
+impl PrettyPrintable for Return {
+    fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+        let Return { expr } = self;
+        expr.visit(p.put("return")?.space()?)
     }
 }

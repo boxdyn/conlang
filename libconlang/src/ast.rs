@@ -11,19 +11,16 @@
 //! See [statement], [literal], and [expression] for more information.
 
 pub mod preamble {
+    #![allow(deprecated)]
     //! Common imports for working with the [ast](super)
     pub use super::{
-        expression::{
-            self,
-            call::*,
-            control,
-            math::{self, operator},
-            tuple::*,
-        },
-        literal,
+        expression::{call::*, control::*, math::*, tuple::*, *},
+        literal::*,
+        path::*,
         statement::*,
+        types::*,
         visitor::Visitor,
-        Identifier, Program, Start,
+        *,
     };
 }
 
@@ -43,47 +40,9 @@ pub struct Program(pub Vec<statement::Stmt>);
 /// # Syntax
 /// [`Identifier`]` := `[`IDENTIFIER`](crate::token::token_type::Type::Identifier)
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Identifier(pub String);
-
-pub mod todo {
-    //! temporary storage for pending expression work.  \
-    //! when an item is in progress, remove it from todo.
-    //!
-    //! # General TODOs:
-    //! - [x] Implement support for storing items in the AST
-    //! - [ ] Keep track of the source location of each node
-    //! - [ ] Implement paths
-    //! - [x] Implement functions
-    //! - [ ] Implement structs
-    //! - [ ] Implement enums
-    //! - [ ] Implement implementation
-    //! - [ ] Store token spans in AST
-    pub mod path {
-        //! Path support
-        //! - [ ] Add namespace syntax (i.e. `::crate::foo::bar` | `foo::bar::Baz` | `foo::bar::*`)
-        //!
-        //! Path resolution will be vital to the implementation of structs, enums, impl blocks,
-        //! traits, modules, etc.
-    }
-
-    pub mod structure {
-        //! Struct support
-        //! - [ ] Add struct declaration expression (returns a struct declaration)
-        //! - [ ] Add struct value expression (returns a struct value)
-        //! - [ ] Add struct update syntax (yippee!!)
-    }
-
-    pub mod enumeration {
-        //! Enum support
-        //! - [ ] Add enum declaration expression (returns an enum declaration)
-        //! - [ ] Add enum value expression (returns an enum value)
-    }
-
-    pub mod implementation {
-        //! Impl block support
-        //! - [ ] Add impl block expression? Statement?
-        //! - [ ] Add member function call expression
-    }
+pub struct Identifier {
+    pub name: String,
+    pub index: Option<usize>,
 }
 
 pub mod literal {
@@ -150,6 +109,7 @@ pub mod statement {
 
     use super::{
         expression::{Block, Expr},
+        types::TypeExpr,
         Identifier,
     };
 
@@ -164,7 +124,7 @@ pub mod statement {
         Let(Let),
         /// Contains a function declaration
         /// # Syntax
-        /// [`Fn`](Stmt::Fn) := `"fn"` [`Identifier`] `'('` [`Tuple`] `')'` [`Block`]
+        /// [`Fn`](Stmt::Fn) := `"fn"` [`Identifier`] `'('` `Args...` `')'` [`Block`]
         Fn(FnDecl),
         /// Contains an expression statement
         /// # Syntax
@@ -177,24 +137,102 @@ pub mod statement {
     /// [`Let`] := `let` [`Identifier`] (`:`) `Type`)? (`=` [`Expr`])? `;`
     #[derive(Clone, Debug)]
     pub struct Let {
-        pub name: Identifier,
-        pub mutable: bool,
-        pub ty: Option<Identifier>,
+        pub name: Name,
         pub init: Option<Expr>,
     }
 
     /// Contains a function declaration
     /// # Syntax
-    /// [`FnDecl`] := `"fn"` [`Identifier`] `'('` [`Tuple`] `')'`
+    /// [`FnDecl`] := `"fn"` [`Identifier`] `'('` `Args...` `')'`
     #[derive(Clone, Debug)]
     pub struct FnDecl {
-        pub name: Identifier,
-        pub args: Vec<Identifier>,
+        pub name: Name,
+        pub args: Vec<Name>,
         pub body: Block,
         // TODO: Store type information
     }
 
+    /// Contains the name, mutability, and type information for a [Let] or [FnDecl]
+    /// # Syntax
+    #[derive(Clone, Debug)]
+    pub struct Name {
+        pub name: Identifier,
+        /// The mutability of the [Name]. Functions are never mutable.
+        pub mutable: bool,
+        /// The [type](TypeExpr)
+        pub ty: Option<TypeExpr>,
+    }
+
     // TODO: Create closure, transmute fndecl into a name and closure
+}
+
+pub mod path {
+    //! Paths
+    //!
+    //! A Path Expression refers to an item, either local or module-scoped.
+
+    use super::Identifier;
+
+    /// A path to an item in a module
+    /// # Syntax
+    /// [`Path`]` := "::"? `[`PathPart`]` ("::" `[`PathPart`]`)*`
+    #[derive(Clone, Debug)]
+    pub struct Path {
+        pub absolute: bool,
+        pub parts: Vec<PathPart>,
+    }
+
+    /// A component of a [`TypePath`]
+    /// # Syntax
+    /// [`PathPart`]` := "super" | `[`Identifier`]
+    #[derive(Clone, Debug)]
+    pub enum PathPart {
+        PathSuper,
+        PathSelf,
+        PathIdent(Identifier),
+    }
+}
+
+pub mod types {
+    //! # Types
+    //!
+    //! The [Type Expresson](TypeExpr) powers Conlang's type checker.
+    //!
+    //! # Syntax
+    //! [`TypeExpr`]` := `[`TupleType`]` | `[`TypePath`]` | `[`Never`]
+
+    pub use super::path::Path as TypePath;
+
+    /// Contains a [Type Expression](self)
+    ///
+    /// # Syntax
+    /// [`TypeExpr`]` := `[`TupleType`]` | `[`TypePath`]` | `[`Empty`]` | `[`Never`]
+    #[derive(Clone, Debug)]
+    pub enum TypeExpr {
+        TupleType(TupleType),
+        TypePath(TypePath),
+        Empty(Empty),
+        Never(Never),
+    }
+
+    /// A [TupleType] represents the [TypeExpr] of a Tuple value
+    #[derive(Clone, Debug)]
+    pub struct TupleType {
+        pub types: Vec<TypeExpr>,
+    }
+
+    /// The empty type. You get nothing! You lose!
+    /// # Syntax
+    /// [`Empty`]` := '(' ')'`
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct Empty;
+
+    /// The never type. This type can never be constructed, and can only appear if a block of code
+    /// doesn't terminate
+    /// # Syntax
+    /// [`Never`]` := '!'`
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct Never;
 }
 
 pub mod expression {
@@ -219,17 +257,19 @@ pub mod expression {
     //! | 9 | [`control::Flow`] | Branch expressions (`if`, `while`, `for`, `return`, `break`, `continue`)
     //! | 9 |         [`Group`] | Group expressions `(` [Expr]? `)` /* Can evaluate to Empty! */
     //! | 9 |         [`Block`] | Block expressions `{` [Expr] `}`
-    //! | 9 |       [`Primary`] | Contains an [Identifier], [Literal](literal::Literal), [Block], [Group], or [Flow](control::Flow)
+    //! | 9 |       [`Primary`] | Contains an [Identifier], [Literal], [Block], [Group], or [Flow]
     //!
     //! ## Syntax
     //! [`Expr`]`  := `[`math::Operation`]  \
     //! [`Block`]` := '{' `[`Expr`]` '}'`   \
     //! [`Group`]` := '(' `[`Expr`]`? ')'`  \
-    //! [`Primary`]` := `[`Identifier`]` | `[`Literal`](literal::Literal)` | `[`Block`]` |
-    //! `[`Group`]` | `[`control::Flow`]
+    //! [`Primary`]` := `[`Identifier`]` | `[`Literal`]` | `[`Block`]` |
+    //! `[`Group`]` | `[`Flow`]
     //!
     //! See [control] and [math] for their respective production rules.
-    use super::{statement::Stmt, *};
+    use super::{literal::Literal, statement::Stmt, *};
+    use control::Flow;
+    use tuple::Group;
 
     /// Contains an expression
     ///
@@ -241,18 +281,18 @@ pub mod expression {
     /// A [Primary] Expression is the expression with the highest precedence (i.e. the deepest
     /// derivation)
     /// # Syntax
-    /// [`Primary`]` := `[`IDENTIFIER`](Identifier)`
-    /// | `[`Literal`](literal::Literal)`
-    /// | `[`Block`]`
-    /// | `[`Group`](tuple::Group)`
-    /// | `[`Branch`](control::Flow)
+    /// [`Primary`]` := `[`Identifier`]`
+    /// | `[`Literal`]`
+    /// | `[`Block`]`
+    /// | `[`Group`]`
+    /// | `[`Branch`](Flow)
     #[derive(Clone, Debug)]
     pub enum Primary {
         Identifier(Identifier),
-        Literal(literal::Literal),
+        Literal(Literal),
         Block(Block),
-        Group(tuple::Group),
-        Branch(control::Flow),
+        Group(Group),
+        Branch(Flow),
     }
 
     /// Contains a Block Expression
@@ -260,6 +300,7 @@ pub mod expression {
     /// [`Block`] := `'{'` [`Expr`] `'}'`
     #[derive(Clone, Debug)]
     pub struct Block {
+        pub let_count: Option<usize>,
         pub statements: Vec<Stmt>,
         pub expr: Option<Box<Expr>>,
     }
@@ -352,7 +393,7 @@ pub mod expression {
         //! [`Shift`][2]`   := `[`Term`][2]`    (`[`ShiftOp`][5]`   `[`Term`][2]`   )*`  \
         //! [`Term`][2]`    := `[`Factor`][2]`  (`[`TermOp`][5]`    `[`Factor`][2]` )*`  \
         //! [`Factor`][2]`  := `[`Unary`][1]`   (`[`FactorOp`][5]`  `[`Unary`][1]`  )*`  \
-        //! [`Unary`][1]`   := (`[`UnaryOp`][4]`)* `[`FnCall`][7]
+        //! [`Unary`][1]`   := (`[`UnaryOp`][4]`)* `[`Call`]
         //!
         //! [1]: Operation::Unary
         //! [2]: Operation::Binary
@@ -704,10 +745,10 @@ pub mod expression {
 
 pub mod visitor {
     //! A [`Visitor`] visits every kind of node in the [Abstract Syntax Tree](super)
-    //! 
+    //!
     //! This trait is mostly here to ensure that every branch of the tree is accounted for.
-    //! 
-    //! Default implementations are provided for 
+    //!
+    //! Default implementations are provided for
     use super::{
         expression::{call::*, control::*, math::*, tuple::*, Block, *},
         literal::*,
@@ -716,6 +757,7 @@ pub mod visitor {
     };
 
     /// A Visitor traverses every kind of node in the [Abstract Syntax Tree](super)
+    #[deprecated]
     pub trait Visitor<R> {
         /// Visit the start of an AST
         fn visit(&mut self, start: &Start) -> R {
@@ -733,9 +775,9 @@ pub mod visitor {
             }
         }
         /// Visit a [Let statement](Let)
-        fn visit_let(&mut self, stmt: &Let) -> R;
+        fn visit_let(&mut self, decl: &Let) -> R;
         /// Visit a [Fn declaration](FnDecl)
-        fn visit_fn_decl(&mut self, function: &FnDecl) -> R;
+        fn visit_fn_decl(&mut self, decl: &FnDecl) -> R;
 
         /// Visit an [Expression](Expr)
         fn visit_expr(&mut self, expr: &Expr) -> R {
@@ -781,10 +823,11 @@ pub mod visitor {
         /// Visit a [Unary] Operation
         fn visit_unary(&mut self, unary: &Unary) -> R;
         // Math operators
+        /// Visit an [Assignment](Assign) [operator](operator::Assign)
         fn visit_assign_op(&mut self, op: &operator::Assign) -> R;
-        /// Visit a [Binary](Operation::Binary) [operator](operator::Binary)
+        /// Visit a [Binary] [operator](operator::Binary)
         fn visit_binary_op(&mut self, op: &operator::Binary) -> R;
-        /// Visit a [Unary](Operation::Unary) [operator](operator::Unary)
+        /// Visit a [Unary] [operator](operator::Unary)
         fn visit_unary_op(&mut self, op: &operator::Unary) -> R;
 
         /// Visit a [Primary] expression
@@ -796,7 +839,7 @@ pub mod visitor {
                 Primary::Literal(v) => self.visit_literal(v),
                 Primary::Block(v) => self.visit_block(v),
                 Primary::Group(v) => self.visit_group(v),
-                Primary::Branch(v) => self.visit_branch_expr(v),
+                Primary::Branch(v) => self.visit_branch(v),
             }
         }
 
@@ -804,8 +847,8 @@ pub mod visitor {
         ///
         /// [`Flow`]` := `[`While`]` | `[`If`]` | `[`For`]`
         /// | `[`Continue`]` | `[`Return`]` | `[`Break`]
-        fn visit_branch_expr(&mut self, expr: &Flow) -> R {
-            match expr {
+        fn visit_branch(&mut self, flow: &Flow) -> R {
+            match flow {
                 Flow::While(e) => self.visit_while(e),
                 Flow::If(e) => self.visit_if(e),
                 Flow::For(e) => self.visit_for(e),
@@ -857,5 +900,48 @@ pub mod visitor {
 
         /// Visit an Empty
         fn visit_empty(&mut self) -> R;
+    }
+}
+
+pub mod todo {
+    //! temporary storage for pending expression work.  \
+    //! when an item is in progress, remove it from todo.
+    //!
+    //! # General TODOs:
+    //! - [ ] REMOVE VISITOR TRAIT
+    //! - [ ]
+    //! - [x] Implement support for storing items in the AST
+    //! - [ ] Keep track of the source location of each node
+    //! - [ ] Implement paths
+    //! - [x] Implement functions
+    //! - [ ] Implement structs
+    //! - [ ] Implement enums
+    //! - [ ] Implement implementation
+    //! - [ ] Store token spans in AST
+    pub mod path {
+        //! Path support
+        //! - [ ] Add namespace syntax (i.e. `::crate::foo::bar` | `foo::bar::Baz` | `foo::bar::*`)
+        //!
+        //! Path resolution will be vital to the implementation of structs, enums, impl blocks,
+        //! traits, modules, etc.
+    }
+
+    pub mod structure {
+        //! Struct support
+        //! - [ ] Add struct declaration expression (returns a struct declaration)
+        //! - [ ] Add struct value expression (returns a struct value)
+        //! - [ ] Add struct update syntax (yippee!!)
+    }
+
+    pub mod enumeration {
+        //! Enum support
+        //! - [ ] Add enum declaration expression (returns an enum declaration)
+        //! - [ ] Add enum value expression (returns an enum value)
+    }
+
+    pub mod implementation {
+        //! Impl block support
+        //! - [ ] Add impl block expression? Statement?
+        //! - [ ] Add member function call expression
     }
 }

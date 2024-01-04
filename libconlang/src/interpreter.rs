@@ -1,4 +1,5 @@
 //! Interprets an AST as a program
+#![allow(deprecated)] // TODO: REMOVE
 
 use crate::ast::preamble::*;
 use error::{Error, IResult};
@@ -9,7 +10,7 @@ use temp_type_impl::ConValue;
 pub trait Callable: std::fmt::Debug {
     /// Calls this [Callable] in the provided [Interpreter], with [ConValue] args  \
     /// The Callable is responsible for checking the argument count and validating types
-    fn call(&self, interpreter: &mut Interpreter, args: &[ConValue]) -> IResult<()>;
+    fn call(&self, interpreter: &mut Interpreter, args: &[ConValue]) -> IResult<ConValue>;
     /// Returns the common name of this identifier.
     fn name(&self) -> &str;
 }
@@ -105,7 +106,7 @@ pub mod temp_type_impl {
                 _ => "",
             }
         }
-        fn call(&self, interpreter: &mut Interpreter, args: &[ConValue]) -> IResult<()> {
+        fn call(&self, interpreter: &mut Interpreter, args: &[ConValue]) -> IResult<ConValue> {
             match self {
                 Self::Function(func) => func.call(interpreter, args),
                 Self::BuiltIn(func) => func.call(interpreter, args),
@@ -347,7 +348,7 @@ impl Visitor<IResult<()>> for Interpreter {
     }
 
     fn visit_let(&mut self, stmt: &Let) -> IResult<()> {
-        let Let { name: Identifier(name), init, .. } = stmt;
+        let Let { name: Name { name: Identifier { name, .. }, .. }, init, .. } = stmt;
         if let Some(init) = init {
             self.visit_expr(init)?;
             let init = self.pop()?;
@@ -394,7 +395,8 @@ impl Visitor<IResult<()>> for Interpreter {
             let (ConValue::Tuple(args), callee) = self.pop_two()? else {
                 Err(Error::TypeError)?
             };
-            callee.call(self, &args)?;
+            let return_value = callee.call(self, &args)?;
+            self.push(return_value);
         }
         Ok(())
     }
@@ -404,7 +406,8 @@ impl Visitor<IResult<()>> for Interpreter {
         let math::Assign { target, operator, init } = assign;
         self.visit_operation(init)?;
         let init = self.pop()?;
-        let resolved = self.scope.get_mut(&target.0)?;
+        let resolved = self.scope.get_mut(&target.name)?;
+
         if let Assign::Assign = operator {
             use std::mem::discriminant as variant;
             // runtime typecheck
@@ -418,9 +421,11 @@ impl Visitor<IResult<()>> for Interpreter {
             self.push(ConValue::Empty);
             return Ok(());
         }
+
         let Some(target) = resolved.as_mut() else {
-            Err(Error::NotInitialized(target.0.to_owned()))?
+            Err(Error::NotInitialized(target.name.to_owned()))?
         };
+
         match operator {
             Assign::AddAssign => target.add_assign(init)?,
             Assign::SubAssign => target.sub_assign(init)?,
@@ -434,12 +439,13 @@ impl Visitor<IResult<()>> for Interpreter {
             Assign::ShrAssign => target.shr_assign(init)?,
             _ => (),
         }
+
         self.push(ConValue::Empty);
+
         Ok(())
     }
 
     fn visit_binary(&mut self, bin: &math::Binary) -> IResult<()> {
-        use math::Binary;
         let Binary { first, other } = bin;
 
         self.visit_operation(first)?;
@@ -469,15 +475,19 @@ impl Visitor<IResult<()>> for Interpreter {
                 }
             }
         }
+
         Ok(())
     }
 
     fn visit_unary(&mut self, unary: &math::Unary) -> IResult<()> {
-        let math::Unary { operand, operators } = unary;
+        let Unary { operand, operators } = unary;
+
         self.visit_operation(operand)?;
+
         for op in operators.iter().rev() {
             self.visit_unary_op(op)?;
         }
+
         Ok(())
     }
 
@@ -488,6 +498,7 @@ impl Visitor<IResult<()>> for Interpreter {
     fn visit_binary_op(&mut self, op: &operator::Binary) -> IResult<()> {
         use operator::Binary;
         let (second, first) = self.pop_two()?;
+
         let out = match op {
             Binary::Mul => first * second,
             Binary::Div => first / second,
@@ -511,12 +522,14 @@ impl Visitor<IResult<()>> for Interpreter {
             Binary::GreaterEq => first.gt_eq(&second),
             Binary::Greater => first.gt(&second),
         }?;
+
         self.push(out);
         Ok(())
     }
 
     fn visit_unary_op(&mut self, op: &operator::Unary) -> IResult<()> {
         let operand = self.pop()?;
+
         self.push(match op {
             operator::Unary::RefRef => todo!(),
             operator::Unary::Ref => todo!(),
@@ -530,10 +543,11 @@ impl Visitor<IResult<()>> for Interpreter {
             }
             operator::Unary::Tilde => todo!(),
         });
+
         Ok(())
     }
 
-    fn visit_if(&mut self, expr: &control::If) -> IResult<()> {
+    fn visit_if(&mut self, expr: &If) -> IResult<()> {
         self.visit_expr(&expr.cond)?;
         if self.pop()?.truthy()? {
             self.visit_block(&expr.body)?;
@@ -545,7 +559,7 @@ impl Visitor<IResult<()>> for Interpreter {
         Ok(())
     }
 
-    fn visit_while(&mut self, expr: &control::While) -> IResult<()> {
+    fn visit_while(&mut self, expr: &While) -> IResult<()> {
         while {
             self.visit_expr(&expr.cond)?;
             self.pop()?.truthy()?
@@ -581,7 +595,7 @@ impl Visitor<IResult<()>> for Interpreter {
             _ => Err(Error::NotIterable)?,
         };
         for loop_var in bounds.0..=bounds.1 {
-            self.scope.insert(&expr.var.0, Some(loop_var.into()));
+            self.scope.insert(&expr.var.name, Some(loop_var.into()));
             let Err(out) = self.visit_block(&expr.body) else {
                 self.pop()?;
                 continue;
@@ -627,7 +641,7 @@ impl Visitor<IResult<()>> for Interpreter {
     }
 
     fn visit_identifier(&mut self, ident: &Identifier) -> IResult<()> {
-        let value = self.resolve(&ident.0)?;
+        let value = self.resolve(&ident.name)?;
         self.push(value);
         Ok(())
     }
@@ -670,8 +684,17 @@ impl Default for Interpreter {
 
 pub mod function {
     //! Represents a block of code which lives inside the Interpreter
-    use super::{Callable, ConValue, Error, FnDecl, IResult, Identifier, Interpreter};
-    use crate::ast::visitor::Visitor;
+    use super::{
+        // scope::Environment,
+        Callable,
+        ConValue,
+        Error,
+        FnDecl,
+        IResult,
+        Identifier,
+        Interpreter,
+    };
+    use crate::ast::{preamble::Name, visitor::Visitor};
     /// Represents a block of code which persists inside the Interpreter
     #[derive(Clone, Debug)]
     pub struct Function {
@@ -679,19 +702,23 @@ pub mod function {
         declaration: Box<FnDecl>,
         // /// Stores the enclosing scope of the function
         // TODO: Capture variables
+        //environment: Box<Environment>,
     }
 
     impl Function {
         pub fn new(declaration: &FnDecl) -> Self {
-            Self { declaration: declaration.clone().into() }
+            Self {
+                declaration: declaration.clone().into(),
+                //environment: Box::new(Environment::new()),
+            }
         }
     }
 
     impl Callable for Function {
         fn name(&self) -> &str {
-            &self.declaration.name.0
+            &self.declaration.name.name.name
         }
-        fn call(&self, interpreter: &mut Interpreter, args: &[ConValue]) -> IResult<()> {
+        fn call(&self, interpreter: &mut Interpreter, args: &[ConValue]) -> IResult<ConValue> {
             // Check arg mapping
             if args.len() != self.declaration.args.len() {
                 return Err(Error::ArgNumber {
@@ -701,17 +728,19 @@ pub mod function {
             }
             // TODO: Isolate cross-function scopes!
             interpreter.scope.enter();
-            for (Identifier(arg), value) in self.declaration.args.iter().zip(args) {
-                interpreter.scope.insert(arg, Some(value.clone()));
+            for (Name { name: Identifier { name, .. }, .. }, value) in
+                self.declaration.args.iter().zip(args)
+            {
+                interpreter.scope.insert(name, Some(value.clone()));
             }
             match interpreter.visit_block(&self.declaration.body) {
                 Err(Error::Return(value)) => interpreter.push(value),
                 Err(Error::Break(value)) => Err(Error::BadBreak(value))?,
                 Err(e) => Err(e)?,
-                Ok(_) => (),
+                Ok(()) => (),
             }
             interpreter.scope.exit()?;
-            Ok(())
+            interpreter.pop()
         }
     }
 }
@@ -719,14 +748,12 @@ pub mod function {
 pub mod builtin {
     mod builtin_imports {
         pub use crate::interpreter::{
-            error::{Error, IResult},
-            temp_type_impl::ConValue,
-            BuiltIn, Callable, Interpreter,
+            error::IResult, temp_type_impl::ConValue, BuiltIn, Callable, Interpreter,
         };
     }
     use super::BuiltIn;
     /// Builtins to load when a new interpreter is created
-    pub const DEFAULT_BUILTINS: &[&dyn BuiltIn] = &[&print::Print, &dbg::Dbg];
+    pub const DEFAULT_BUILTINS: &[&dyn BuiltIn] = &[&print::Print, &dbg::Dbg, &dump::Dump];
 
     mod print {
         //! Implements the unstable `print(...)` builtin
@@ -738,11 +765,12 @@ pub mod builtin {
         #[rustfmt::skip]
         impl Callable for Print {
             fn name(&self) -> &'static str { "print" }
-            fn call(&self, inter: &mut Interpreter, args: &[ConValue]) -> IResult<()> {
-                for arg in args { print!("{arg}") }
+            fn call(&self, _inter: &mut Interpreter, args: &[ConValue]) -> IResult<ConValue> {
+                for arg in args {
+                    print!("{arg}")
+                }
                 println!();
-                inter.push(ConValue::Empty);
-                Ok(())
+                Ok(ConValue::Empty)
             }
         }
     }
@@ -755,10 +783,27 @@ pub mod builtin {
         #[rustfmt::skip]
         impl Callable for Dbg {
             fn name(&self) -> &str { "dbg" }
-            fn call(&self, inter: &mut Interpreter, args: &[ConValue]) -> IResult<()> {
+            fn call(&self, _inter: &mut Interpreter, args: &[ConValue]) -> IResult<ConValue> {
                 println!("{args:?}");
-                inter.push(args);
-                Ok(())
+                Ok(args.into())
+            }
+        }
+    }
+
+    mod dump {
+        use super::builtin_imports::*;
+        #[derive(Clone, Debug)]
+        pub struct Dump;
+        impl BuiltIn for Dump {}
+        impl Callable for Dump {
+            fn call(&self, interpreter: &mut Interpreter, _args: &[ConValue]) -> IResult<ConValue> {
+                println!("Scope:\n{}", interpreter.scope);
+                println!("Stack:{:#?}", interpreter.stack);
+                Ok(ConValue::Empty)
+            }
+
+            fn name(&self) -> &str {
+                "dump"
             }
         }
     }
@@ -774,13 +819,26 @@ pub mod scope {
         temp_type_impl::ConValue,
         FnDecl,
     };
-    use std::collections::HashMap;
+    use std::{collections::HashMap, fmt::Display};
 
     /// Implements a nested lexical scope
     #[derive(Clone, Debug, Default)]
     pub struct Environment {
         outer: Option<Box<Self>>,
         vars: HashMap<String, Option<ConValue>>,
+    }
+
+    impl Display for Environment {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            for (var, val) in &self.vars {
+                writeln!(f, "{var}: {}", if val.is_some() { "..." } else { "None" })?;
+            }
+            "--- Frame ---\n".fmt(f)?;
+            if let Some(outer) = &self.outer {
+                outer.fmt(f)?;
+            }
+            Ok(())
+        }
     }
 
     impl Environment {
@@ -835,8 +893,10 @@ pub mod scope {
         }
         /// A convenience function for registering a [FnDecl] as a [Function]
         pub fn insert_fn(&mut self, decl: &FnDecl) {
-            self.vars
-                .insert(decl.name.0.clone(), Some(Function::new(decl).into()));
+            self.vars.insert(
+                decl.name.name.name.clone(),
+                Some(Function::new(decl).into()),
+            );
         }
     }
 }

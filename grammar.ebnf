@@ -1,7 +1,14 @@
 (* Conlang Expression Grammar *)
 Start       = Program ;
 Program     = Stmt* EOI ;
-
+(* TODO: 
+- Replace Program with Module
+    Module = Decl* EOI ;
+- Move Fn and Let into "Decl":
+    Decl   = Fn | Let ;
+- allow Decl | ExprStmt in Stmt:
+    Stmt   = Decl | Expr ';' ;
+*)
 (* literal *)
 Literal     = STRING | CHARACTER | FLOAT | INTEGER | Bool ;
 Bool        = "true" | "false" ;
@@ -10,11 +17,22 @@ Identifier  = IDENTIFIER ;
 (* # Statements *)
 (* statement *)
 Stmt        = Fn | Let | Expr ';' ;
-Let         = "let" "mut"? Identifier (':' Type)? ('=' Expr)? ';' ;
+Let         = "let" Name ('=' Expr)? ';' ;
 Fn          = "fn" Identifier '(' Params? ')' Block ;
 (* TODO: Type system *)
-Params      = (Param ',')* Param? ;
-Param       = Identifier (*':' Type *) ;
+Params      = (Name ',')* Name? ;
+Name        = "mut"? Identifier (':' Type )? ;
+
+(* # Type Expressions *)
+(* types *)
+TypeExpr    = Never | Empty | TypeTuple | PathExpr ;
+Never       = '!' ;
+Empty       = '(' ')' ;
+TypeTuple   = '(' (TypeExpr ',')* TypeExpr? ')' ;
+
+PathExpr    = '::'? PathPart ;
+PathPart    = "super" | Identifier ;
+
 
 (* # Expressions *)
 (* expression *)

@@ -1,18 +1,37 @@
 //! Parses [tokens](super::token) into an [AST](super::ast)
 
 use super::{ast::preamble::*, lexer::Lexer, token::preamble::*};
-use error::{Error, Reason::*, *};
+use error::{Error, *};
 
 pub mod error {
     use super::{Token, Type};
     use std::fmt::Display;
+
+    pub trait WrapError {
+        /// Wraps this error in a parent [Error]
+        fn wrap(self, parent: Error) -> Self;
+    }
+    impl WrapError for Error {
+        fn wrap(self, parent: Error) -> Self {
+            Self { child: Some(self.into()), ..parent }
+        }
+    }
+    impl<T> WrapError for Result<T, Error> {
+        fn wrap(self, parent: Error) -> Self {
+            self.map_err(|e| e.wrap(parent))
+        }
+    }
 
     /// The reason for the [Error]
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
     pub enum Reason {
         Expected(Type),
         Unexpected(Type),
+        NotPathSegment(Type),
         NotIdentifier,
+        NotStatement,
+        NotLet,
+        NotFnDecl,
         NotOperator,
         NotLiteral,
         NotString,
@@ -37,7 +56,11 @@ pub mod error {
             match self {
                 Self::Expected(t) => write!(f, "Expected {t}"),
                 Self::Unexpected(t) => write!(f, "Unexpected {t} in bagging area"),
+                Self::NotPathSegment(t) => write!(f, "{t} not a path segment"),
                 Self::NotIdentifier => "Not an identifier".fmt(f),
+                Self::NotStatement => "Not a statement".fmt(f),
+                Self::NotLet => "Not a let statement".fmt(f),
+                Self::NotFnDecl => "Not a valid function declaration".fmt(f),
                 Self::NotOperator => "Not an operator".fmt(f),
                 Self::NotLiteral => "Not a literal".fmt(f),
                 Self::NotString => "Not a string".fmt(f),
@@ -67,11 +90,15 @@ pub mod error {
     #[derive(Clone, Debug, Default, PartialEq)]
     pub struct Error {
         reason: Reason,
+        child: Option<Box<Self>>,
         start: Option<Token>,
     }
     impl std::error::Error for Error {}
     impl Display for Error {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            if let Some(child) = &self.child {
+                write!(f, "{child}: ")?;
+            }
             if let Some(token) = &self.start {
                 write!(f, "{}:{}: ", token.line(), token.col())?;
             }
@@ -84,7 +111,7 @@ pub mod error {
         #[doc = concat!("[`", stringify!($reason), "`]")]
         #[allow(dead_code)]
         pub(crate) fn $fn($($($p : $t),*)?) -> Self {
-            Self { reason: $reason$(($($p)*))?, start: None }
+            Self { reason: $reason$(($($p)*))?, child: None, start: None }
         }
     )*}
     impl Error {
@@ -104,14 +131,14 @@ pub mod error {
         pub fn reason(&self) -> Reason {
             self.reason
         }
-        /// Modifies the [Reason] of this error
-        pub fn with_reason(self, reason: Reason) -> Self {
-            Self { reason, ..self }
-        }
         error_impl! {
             expected(e: Type): Expected,
             unexpected(e: Type): Unexpected,
+            not_path_segment(e: Type): NotPathSegment,
             not_identifier: NotIdentifier,
+            not_statement: NotStatement,
+            not_let: NotLet,
+            not_fn_decl: NotFnDecl,
             not_operator: NotOperator,
             not_literal: NotLiteral,
             not_string: NotString,
@@ -160,20 +187,25 @@ impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
         Self { tokens, panic_stack: vec![], errors: vec![], cursor: 0 }
     }
+    /// Resets the parser, so it can be reused
+    pub fn reset(&mut self) -> &mut Self {
+        *self = Self::new(std::mem::take(&mut self.tokens));
+        self
+    }
     /// Parses the [start of an AST](Start)
     pub fn parse(&mut self) -> PResult<Start> {
         self.consume_comments();
         Ok(Start(self.program()?))
     }
     /// Parses only one expression
-    pub fn parse_expr(&mut self) -> PResult<expression::Expr> {
+    pub fn parse_expr(&mut self) -> PResult<Expr> {
         self.expr()
     }
     /// Peeks at the current token
     pub fn peek(&self) -> PResult<&Token> {
         self.tokens
             .get(self.cursor)
-            .ok_or(Error::end_of_file().maybe_token(self.tokens.last().cloned()))
+            .ok_or_else(|| Error::end_of_file().maybe_token(self.tokens.last().cloned()))
     }
     /// Consumes any number of consecutive comments
     fn consume_comments(&mut self) -> &mut Self {
@@ -212,9 +244,7 @@ impl Parser {
     /// Advances forward until a token with type [`t`](Type) is encountered
     fn advance_until(&mut self, t: Type) -> PResult<&mut Self> {
         while self.matches(t).is_err() {
-            self.check_eof()
-                .map_err(|e| e.with_reason(Expected(t)))?
-                .consume();
+            self.check_eof().wrap(Error::expected(t))?.consume();
         }
         Ok(self)
     }
@@ -244,9 +274,10 @@ impl Parser {
     fn matches(&mut self, t: Type) -> PResult<&Token> {
         let token = self.check_eof()?.peek().expect("self should not be eof");
         if token.ty() != t {
-            Err(Error::expected(t).token(token.clone()))?
+            Err(Error::expected(t).token(token.clone()))
+        } else {
+            Ok(token)
         }
-        Ok(token)
     }
     /// Consumes, without returning, a token with the given [Keyword], or returns an error.
     ///
@@ -282,7 +313,7 @@ impl Parser {
     /// Parses an [Identifier]
     fn identifier(&mut self) -> PResult<Identifier> {
         let out = match self.matches(Type::Identifier)?.data() {
-            Data::Identifier(id) => Identifier(id.to_string()),
+            Data::Identifier(id) => Identifier { name: id.to_string(), index: None },
             _ => Err(Error::not_identifier())?,
         };
         self.consume();
@@ -363,30 +394,25 @@ impl Parser {
     fn stmt(&mut self) -> PResult<Stmt> {
         let token = self.peek()?;
         match token.ty() {
-            Type::Keyword(Keyword::Let) => self.let_stmt().map(Stmt::Let),
-            Type::Keyword(Keyword::Fn) => self.fn_decl().map(Stmt::Fn),
+            Type::Keyword(Keyword::Let) => self.let_stmt().map(Stmt::Let).wrap(Error::not_let()),
+            Type::Keyword(Keyword::Fn) => self.fn_decl().map(Stmt::Fn).wrap(Error::not_fn_decl()),
             _ => {
                 let out = Stmt::Expr(self.expr()?);
                 self.consume_type(Type::Semi)?;
                 Ok(out)
             }
         }
+        .wrap(Error::not_statement())
     }
     /// Parses a [Let] statement
     fn let_stmt(&mut self) -> PResult<Let> {
-        let out = Let {
-            mutable: self.consume().keyword(Keyword::Mut).is_ok(),
-            name: self.identifier()?,
-            ty: self
-                .consume_type(Type::Colon)
-                .and_then(Self::identifier)
-                .ok(),
-            init: self.consume_type(Type::Eq).and_then(Self::expr).ok(),
-        };
+        self.keyword(Keyword::Let)?;
+        let out =
+            Let { name: self.name()?, init: self.consume_type(Type::Eq).and_then(Self::expr).ok() };
         self.consume_type(Type::Semi)?;
         Ok(out)
     }
-    /// Parses a [Function] statement
+    /// Parses a [function declaration](FnDecl) statement
     fn fn_decl(&mut self) -> PResult<FnDecl> {
         self.keyword(Keyword::Fn)?;
         let name = self.identifier()?;
@@ -394,37 +420,98 @@ impl Parser {
         let args = self.params()?;
         self.consume_type(Type::RParen)?;
         // TODO: Parse type-expressions and store return types in the AST
-        if self.consume_type(Type::Arrow).is_ok() {
-            self.expr()?;
-        }
-        Ok(FnDecl { name, args, body: self.block()? })
+        let ty = if self.consume_type(Type::Arrow).is_ok() {
+            Some(self.type_expr()?)
+        } else {
+            None
+        };
+        Ok(FnDecl { name: Name { name, mutable: false, ty }, args, body: self.block()? })
     }
-
-    fn params(&mut self) -> PResult<Vec<Identifier>> {
+    /// Parses a [parameter](Name) list for [FnDecl]
+    fn params(&mut self) -> PResult<Vec<Name>> {
         let mut args = vec![];
-        while let Ok(ident) = self.identifier() {
-            args.push(ident);
-            if self.consume_type(Type::Colon).is_ok() {
-                // TODO: Parse type-expressions and make this mandatory
-                self.expr()?;
-            }
+        while let Ok(name) = self.name() {
+            args.push(name);
             if self.consume_type(Type::Comma).is_err() {
                 break;
             }
         }
         Ok(args)
     }
+    /// Parses a [Name]; the object of a let statement, or a single function parameter.
+    fn name(&mut self) -> PResult<Name> {
+        Ok(Name {
+            mutable: self.keyword(Keyword::Mut).is_ok(),
+            name: self.identifier()?,
+            ty: self
+                .consume_type(Type::Colon)
+                .and_then(|this| this.type_expr())
+                .ok(),
+        })
+    }
 }
+/// Path Expressions
+impl Parser {
+    fn path(&mut self) -> PResult<path::Path> {
+        let absolute = self.consume_type(Type::ColonColon).is_ok();
+        let mut parts = vec![];
+        while let Ok(id) = self.path_part() {
+            parts.push(id);
+            if self.consume_type(Type::ColonColon).is_err() {
+                break;
+            }
+        }
+        Ok(Path { absolute, parts })
+    }
+
+    fn path_part(&mut self) -> PResult<PathPart> {
+        match self.peek()?.ty() {
+            Type::Identifier => self.identifier().map(PathPart::PathIdent),
+            Type::Keyword(Keyword::Super) => {
+                self.keyword(Keyword::Super).map(|_| PathPart::PathSuper)
+            }
+            Type::Keyword(Keyword::SelfKw) => {
+                self.keyword(Keyword::SelfKw).map(|_| PathPart::PathSelf)
+            }
+            e => Err(Error::not_path_segment(e))
+        }
+    }
+}
+/// Type Expressions
+impl Parser {
+    /// Parses a [Type Expression](TypeExpr)
+    fn type_expr(&mut self) -> PResult<TypeExpr> {
+        match self.peek()?.ty() {
+            Type::LParen => self.type_tuple().map(TypeExpr::TupleType),
+            Type::Bang => self.type_never().map(TypeExpr::Never),
+            _ => self.path().map(TypeExpr::TypePath),
+        }
+    }
+    fn type_tuple(&mut self) -> PResult<TupleType> {
+        self.consume_type(Type::LParen)?;
+        let mut types = vec![];
+        while let Ok(ty) = self.type_expr() {
+            types.push(ty);
+            if self.consume_type(Type::Comma).is_err() {
+                break;
+            }
+        }
+        self.consume_type(Type::RParen)?;
+        Ok(TupleType { types })
+    }
+    fn type_never(&mut self) -> PResult<Never> {
+        self.consume_type(Type::Bang).map(|_| Never)
+    }
+}
+
 /// Expressions
 impl Parser {
-    /// Parses an [expression](expression::Expr)
-    fn expr(&mut self) -> PResult<expression::Expr> {
-        use expression::Expr;
+    /// Parses an [expression](Expr)
+    fn expr(&mut self) -> PResult<Expr> {
         Ok(Expr(self.assign()?))
     }
-    /// Parses a [block expression](expression::Block)
-    fn block(&mut self) -> PResult<expression::Block> {
-        use expression::{Block, Expr};
+    /// Parses a [block expression](Block)
+    fn block(&mut self) -> PResult<Block> {
         let mut statements = vec![];
         let mut expr: Option<Box<Expr>> = None;
         self.consume_type(Type::LCurly)?;
@@ -440,11 +527,10 @@ impl Parser {
                 Err(_) => statements.push(self.stmt()?),
             }
         }
-        Ok(Block { statements, expr })
+        Ok(Block { statements, expr, let_count: None })
     }
-    /// Parses a [primary expression](expression::Primary)
-    fn primary(&mut self) -> PResult<expression::Primary> {
-        use expression::Primary;
+    /// Parses a [primary expression](Primary)
+    fn primary(&mut self) -> PResult<Primary> {
         let token = self.peek()?;
         match token.ty() {
             Type::Identifier => self.identifier().map(Primary::Identifier),
@@ -465,7 +551,7 @@ impl Parser {
     /// Parses a [call expression](Call)
     fn call(&mut self) -> PResult<Call> {
         let callee = self.primary()?;
-        let Ok(Type::LParen) = self.peek().map(Token::ty) else {
+        if self.matches(Type::LParen).is_err() {
             return Ok(Call::Primary(callee));
         };
         let mut args = vec![];
@@ -526,12 +612,11 @@ impl Parser {
 /// ```
 /// becomes
 /// ```rust,ignore
-/// fn function_name(&mut self) -> PResult<ret::Value> { ... }
+/// fn function_name(&mut self) -> PResult<ret::Value> {  ... }
 /// ```
 macro binary ($($f:ident = $a:ident, $b:ident);*$(;)?) {$(
-    #[doc = concat!("Parses a(n) [", stringify!($f), " operation](math::Operation::Binary) expression")]
-    fn $f (&mut self) -> PResult<math::Operation> {
-        use math::{Operation, Binary};
+    #[doc = concat!("Parses a(n) [", stringify!($f), " operation](Operation::Binary) expression")]
+    fn $f (&mut self) -> PResult<Operation> {
         let (first, mut other) = (self.$a()?, vec![]);
         while let Ok(op) = self.$b() {
             other.push((op, self.$a()?));
@@ -543,9 +628,7 @@ macro binary ($($f:ident = $a:ident, $b:ident);*$(;)?) {$(
 )*}
 /// # [Arithmetic and Logical Subexpressions](math)
 impl Parser {
-    fn assign(&mut self) -> PResult<math::Operation> {
-        use expression::Primary;
-        use math::{Assign, Operation};
+    fn assign(&mut self) -> PResult<Operation> {
         let next = self.compare()?;
         let Ok(operator) = self.assign_op() else {
             return Ok(next);
@@ -569,9 +652,8 @@ impl Parser {
         term    = factor,  term_op;
         factor  = unary,   factor_op;
     }
-    /// Parses a [unary operation](math::Operation::Unary) expression
-    fn unary(&mut self) -> PResult<math::Operation> {
-        use math::{Operation, Unary};
+    /// Parses a [unary operation](Operation::Unary) expression
+    fn unary(&mut self) -> PResult<Operation> {
         let mut operators = vec![];
         while let Ok(op) = self.unary_op() {
             operators.push(op)
@@ -584,15 +666,15 @@ impl Parser {
             operand: self.primary_operation()?.into(),
         }))
     }
-    /// Parses a [primary operation](math::Operation::Primary) expression
-    fn primary_operation(&mut self) -> PResult<math::Operation> {
-        Ok(math::Operation::Call(self.call()?))
+    /// Parses a [primary operation](Operation::Primary) expression
+    fn primary_operation(&mut self) -> PResult<Operation> {
+        Ok(Operation::Call(self.call()?))
     }
 }
 macro operator_impl ($($(#[$m:meta])* $f:ident : {$($type:pat => $op:ident),*$(,)?})*) {
     $($(#[$m])* fn $f(&mut self) -> PResult<operator::Binary> {
         use operator::Binary;
-        let token = self.peek()?;
+        let token = self.peek().wrap(Error::not_operator())?;
         let out = Ok(match token.ty() {
             $($type => Binary::$op,)*
             _ => Err(Error::not_operator().token(token.clone()))?,
@@ -689,9 +771,8 @@ impl Parser {
 }
 /// # [Control Flow](control)
 impl Parser {
-    /// Parses a [control flow](control::Flow) expression
-    fn flow(&mut self) -> PResult<control::Flow> {
-        use control::Flow;
+    /// Parses a [control flow](Flow) expression
+    fn flow(&mut self) -> PResult<Flow> {
         use Keyword::{Break, Continue, For, If, Return, While};
         let token = self.peek()?;
         match token.ty() {
@@ -703,55 +784,47 @@ impl Parser {
             Type::Keyword(Continue) => self.parse_continue().map(Flow::Continue),
             e => Err(Error::unexpected(e).token(token.clone()))?,
         }
-        .map_err(|e| e.with_reason(IncompleteBranch))
+        .wrap(Error::not_branch())
     }
-    /// Parses an [if](control::If) expression
-    fn parse_if(&mut self) -> PResult<control::If> {
+    /// Parses an [if](If) expression
+    fn parse_if(&mut self) -> PResult<If> {
         self.keyword(Keyword::If)?;
-        Ok(control::If {
-            cond: self.expr()?.into(),
-            body: self.block()?,
-            else_: self.parse_else()?,
-        })
+        Ok(If { cond: self.expr()?.into(), body: self.block()?, else_: self.parse_else()? })
     }
-    /// Parses a [while](control::While) expression
-    fn parse_while(&mut self) -> PResult<control::While> {
+    /// Parses a [while](While) expression
+    fn parse_while(&mut self) -> PResult<While> {
         self.keyword(Keyword::While)?;
-        Ok(control::While {
-            cond: self.expr()?.into(),
-            body: self.block()?,
-            else_: self.parse_else()?,
-        })
+        Ok(While { cond: self.expr()?.into(), body: self.block()?, else_: self.parse_else()? })
     }
-    /// Parses a [for](control::For) expression
-    fn parse_for(&mut self) -> PResult<control::For> {
+    /// Parses a [for](For) expression
+    fn parse_for(&mut self) -> PResult<For> {
         self.keyword(Keyword::For)?;
-        Ok(control::For {
+        Ok(For {
             var: self.identifier()?,
             iter: { self.keyword(Keyword::In)?.expr()?.into() },
             body: self.block()?,
             else_: self.parse_else()?,
         })
     }
-    /// Parses an [else](control::Else) sub-expression
-    fn parse_else(&mut self) -> PResult<Option<control::Else>> {
+    /// Parses an [else](Else) sub-expression
+    fn parse_else(&mut self) -> PResult<Option<Else>> {
         // it's fine for `else` to be missing entirely
         self.keyword(Keyword::Else)
             .ok()
-            .map(|p| Ok(control::Else { expr: p.expr()?.into() }))
+            .map(|p| Ok(Else { expr: p.expr()?.into() }))
             .transpose()
     }
-    /// Parses a [break](control::Break) expression
-    fn parse_break(&mut self) -> PResult<control::Break> {
-        Ok(control::Break { expr: self.keyword(Keyword::Break)?.expr()?.into() })
+    /// Parses a [break](Break) expression
+    fn parse_break(&mut self) -> PResult<Break> {
+        Ok(Break { expr: self.keyword(Keyword::Break)?.expr()?.into() })
     }
-    /// Parses a [return](control::Return) expression
-    fn parse_return(&mut self) -> PResult<control::Return> {
-        Ok(control::Return { expr: self.keyword(Keyword::Return)?.expr()?.into() })
+    /// Parses a [return](Return) expression
+    fn parse_return(&mut self) -> PResult<Return> {
+        Ok(Return { expr: self.keyword(Keyword::Return)?.expr()?.into() })
     }
-    /// Parses a [continue](control::Continue) expression
-    fn parse_continue(&mut self) -> PResult<control::Continue> {
+    /// Parses a [continue](Continue) expression
+    fn parse_continue(&mut self) -> PResult<Continue> {
         self.keyword(Keyword::Continue)?;
-        Ok(control::Continue)
+        Ok(Continue)
     }
 }
