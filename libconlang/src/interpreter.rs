@@ -2,15 +2,15 @@
 #![allow(deprecated)] // TODO: REMOVE
 
 use crate::ast::preamble::*;
+use env::Environment;
 use error::{Error, IResult};
-use scope::Environment;
 use temp_type_impl::ConValue;
 
 /// Callable types can be called from within a Conlang program
 pub trait Callable: std::fmt::Debug {
     /// Calls this [Callable] in the provided [Interpreter], with [ConValue] args  \
     /// The Callable is responsible for checking the argument count and validating types
-    fn call(&self, interpreter: &mut Interpreter, args: &[ConValue]) -> IResult<ConValue>;
+    fn call(&self, interpreter: &mut Environment, args: &[ConValue]) -> IResult<ConValue>;
     /// Returns the common name of this identifier.
     fn name(&self) -> &str;
 }
@@ -25,7 +25,7 @@ pub mod temp_type_impl {
     use super::{
         error::{Error, IResult},
         function::Function,
-        BuiltIn, Callable, Interpreter,
+        BuiltIn, Callable, Environment,
     };
     use std::ops::*;
     /// A Conlang value
@@ -106,7 +106,7 @@ pub mod temp_type_impl {
                 _ => "",
             }
         }
-        fn call(&self, interpreter: &mut Interpreter, args: &[ConValue]) -> IResult<ConValue> {
+        fn call(&self, interpreter: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
             match self {
                 Self::Function(func) => func.call(interpreter, args),
                 Self::BuiltIn(func) => func.call(interpreter, args),
@@ -284,129 +284,76 @@ pub mod temp_type_impl {
 }
 
 /// A work-in-progress tree walk interpreter for Conlang
-#[derive(Clone, Debug)]
-pub struct Interpreter {
-    scope: Box<Environment>,
-    stack: Vec<ConValue>,
+pub trait Interpret {
+    /// Interprets this thing using the given [`Interpreter`].
+    ///
+    /// Everything returns a value!™
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue>;
 }
 
-impl Interpreter {
-    /// Creates a new [Interpreter]
-    pub fn new() -> Self {
-        Default::default()
-    }
-    /// Interprets the [Start] of a syntax tree
-    pub fn interpret(&mut self, start: &Start) -> IResult<()> {
-        self.visit(start)
-    }
-    /// Calls a function inside the interpreter's scope,
-    /// and returns the result
-    pub fn call(&mut self, name: &str, args: &[ConValue]) -> IResult<ConValue> {
-        let function = self.resolve(name)?;
-        function.call(self, args)?;
-        self.pop()
-    }
-    /// Evaluates a single [Expression](expression::Expr) and returns the value stack.
-    pub fn eval(&mut self, expr: &expression::Expr) -> IResult<Vec<ConValue>> {
-        self.visit_expr(expr)?;
-        Ok(std::mem::take(&mut self.stack))
-    }
-    fn push(&mut self, value: impl Into<ConValue>) {
-        self.stack.push(value.into())
-    }
-    fn peek(&mut self) -> IResult<&ConValue> {
-        self.stack.last().ok_or(Error::StackUnderflow)
-    }
-    fn pop(&mut self) -> IResult<ConValue> {
-        self.stack.pop().ok_or(Error::StackUnderflow)
-    }
-    fn pop_two(&mut self) -> IResult<(ConValue, ConValue)> {
-        Ok((self.pop()?, self.pop()?))
-    }
-    fn resolve(&mut self, value: &str) -> IResult<ConValue> {
-        self.scope.get(value).cloned()
+impl Interpret for Start {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        self.0.interpret(env)
     }
 }
-
-impl Visitor<IResult<()>> for Interpreter {
-    fn visit_program(&mut self, prog: &Program) -> IResult<()> {
-        for stmt in &prog.0 {
-            self.visit_statement(stmt)?;
+impl Interpret for Program {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let mut out = ConValue::Empty;
+        for stmt in &self.0 {
+            out = stmt.interpret(env)?;
         }
-        Ok(())
+        Ok(out)
     }
-
-    fn visit_statement(&mut self, stmt: &Stmt) -> IResult<()> {
-        match stmt {
-            Stmt::Let(l) => self.visit_let(l),
-            Stmt::Fn(f) => self.visit_fn_decl(f),
-            Stmt::Expr(e) => {
-                self.visit_expr(e)?;
-                self.pop().map(drop)
-            }
+}
+impl Interpret for Stmt {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        match self {
+            Stmt::Let(l) => l.interpret(env),
+            Stmt::Fn(f) => f.interpret(env),
+            Stmt::Expr(e) => e.interpret(env),
         }
     }
-
-    fn visit_let(&mut self, stmt: &Let) -> IResult<()> {
-        let Let { name: Name { name: Identifier { name, .. }, .. }, init, .. } = stmt;
+}
+impl Interpret for Let {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let Let { name: Name { symbol: Identifier { name, .. }, .. }, init, .. } = self;
         if let Some(init) = init {
-            self.visit_expr(init)?;
-            let init = self.pop()?;
-            self.scope.insert(name, Some(init));
+            let init = init.interpret(env)?;
+            env.insert(name, Some(init));
         } else {
-            self.scope.insert(name, None);
+            env.insert(name, None);
         }
-        Ok(())
+        Ok(ConValue::Empty)
     }
-
-    fn visit_fn_decl(&mut self, function: &FnDecl) -> IResult<()> {
+}
+impl Interpret for FnDecl {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         // register the function in the current environment
-        self.scope.insert_fn(function);
-        Ok(())
+        env.insert_fn(self);
+        Ok(ConValue::Empty)
     }
-
-    fn visit_block(&mut self, block: &expression::Block) -> IResult<()> {
-        for stmt in &block.statements {
-            self.visit_statement(stmt)?;
-        }
-        if let Some(expr) = block.expr.as_ref() {
-            self.visit_expr(expr)
-        } else {
-            self.push(ConValue::Empty);
-            Ok(())
+}
+impl Interpret for Expr {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        self.0.interpret(env)
+    }
+}
+impl Interpret for Operation {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        match self {
+            Operation::Assign(op) => op.interpret(env),
+            Operation::Binary(op) => op.interpret(env),
+            Operation::Unary(op) => op.interpret(env),
+            Operation::Call(op) => op.interpret(env),
         }
     }
-
-    fn visit_tuple(&mut self, tuple: &Tuple) -> IResult<()> {
-        let mut out = vec![];
-        for expr in &tuple.elements {
-            self.visit_expr(expr)?;
-            out.push(self.pop()?);
-        }
-        self.push(out);
-        Ok(())
-    }
-
-    fn visit_fn_call(&mut self, call: &FnCall) -> IResult<()> {
-        // evaluate the callee
-        self.visit_primary(&call.callee)?;
-        for args in &call.args {
-            self.visit_tuple(args)?;
-            let (ConValue::Tuple(args), callee) = self.pop_two()? else {
-                Err(Error::TypeError)?
-            };
-            let return_value = callee.call(self, &args)?;
-            self.push(return_value);
-        }
-        Ok(())
-    }
-
-    fn visit_assign(&mut self, assign: &math::Assign) -> IResult<()> {
+}
+impl Interpret for Assign {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         use operator::Assign;
-        let math::Assign { target, operator, init } = assign;
-        self.visit_operation(init)?;
-        let init = self.pop()?;
-        let resolved = self.scope.get_mut(&target.name)?;
+        let math::Assign { target, operator, init } = self;
+        let init = init.interpret(env)?;
+        let resolved = env.get_mut(&target.name)?;
 
         if let Assign::Assign = operator {
             use std::mem::discriminant as variant;
@@ -418,8 +365,7 @@ impl Visitor<IResult<()>> for Interpreter {
                 None => *resolved = Some(init),
                 _ => Err(Error::TypeError)?,
             }
-            self.push(ConValue::Empty);
-            return Ok(());
+            return Ok(ConValue::Empty);
         }
 
         let Some(target) = resolved.as_mut() else {
@@ -439,262 +385,251 @@ impl Visitor<IResult<()>> for Interpreter {
             Assign::ShrAssign => target.shr_assign(init)?,
             _ => (),
         }
-
-        self.push(ConValue::Empty);
-
-        Ok(())
+        Ok(ConValue::Empty)
     }
-
-    fn visit_binary(&mut self, bin: &math::Binary) -> IResult<()> {
-        let Binary { first, other } = bin;
-
-        self.visit_operation(first)?;
+}
+impl Interpret for Binary {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let Binary { first, other } = self;
+        let mut first = first.interpret(env)?;
         for (op, other) in other {
-            match op {
+            first = match op {
                 operator::Binary::LogAnd => {
-                    if self.peek()?.truthy()? {
-                        self.pop()?;
-                        self.visit_operation(other)?;
+                    if first.truthy()? {
+                        other.interpret(env)
+                    } else {
+                        return Ok(first); // Short circuiting
                     }
                 }
                 operator::Binary::LogOr => {
-                    if !self.peek()?.truthy()? {
-                        self.pop()?;
-                        self.visit_operation(other)?;
+                    if !first.truthy()? {
+                        other.interpret(env)
+                    } else {
+                        return Ok(first); // Short circuiting
                     }
                 }
                 operator::Binary::LogXor => {
-                    let first = self.pop()?.truthy()?;
-                    self.visit_operation(other)?;
-                    let second = self.pop()?.truthy()?;
-                    self.push(first ^ second);
+                    // TODO: It should be possible to assemble better error information from this
+                    let (lhs, rhs) = (first.truthy()?, other.interpret(env)?.truthy()?);
+                    Ok(ConValue::Bool(lhs ^ rhs))
                 }
-                _ => {
-                    self.visit_operation(other)?;
-                    self.visit_binary_op(op)?;
-                }
-            }
+                // TODO: For all overloadable operators, transmute into function call
+                operator::Binary::Mul => first * other.interpret(env)?,
+                operator::Binary::Div => first / other.interpret(env)?,
+                operator::Binary::Rem => first % other.interpret(env)?,
+                operator::Binary::Add => first + other.interpret(env)?,
+                operator::Binary::Sub => first - other.interpret(env)?,
+                operator::Binary::Lsh => first << other.interpret(env)?,
+                operator::Binary::Rsh => first >> other.interpret(env)?,
+                operator::Binary::BitAnd => first & other.interpret(env)?,
+                operator::Binary::BitOr => first | other.interpret(env)?,
+                operator::Binary::BitXor => first ^ other.interpret(env)?,
+                operator::Binary::RangeExc => first.range_exc(other.interpret(env)?),
+                operator::Binary::RangeInc => first.range_inc(other.interpret(env)?),
+                operator::Binary::Less => first.lt(&other.interpret(env)?),
+                operator::Binary::LessEq => first.lt_eq(&other.interpret(env)?),
+                operator::Binary::Equal => first.eq(&other.interpret(env)?),
+                operator::Binary::NotEq => first.neq(&other.interpret(env)?),
+                operator::Binary::GreaterEq => first.gt_eq(&other.interpret(env)?),
+                operator::Binary::Greater => first.gt(&other.interpret(env)?),
+            }?;
         }
-
-        Ok(())
-    }
-
-    fn visit_unary(&mut self, unary: &math::Unary) -> IResult<()> {
-        let Unary { operand, operators } = unary;
-
-        self.visit_operation(operand)?;
-
-        for op in operators.iter().rev() {
-            self.visit_unary_op(op)?;
-        }
-
-        Ok(())
-    }
-
-    fn visit_assign_op(&mut self, _: &operator::Assign) -> IResult<()> {
-        unimplemented!("visit_assign_op is implemented in visit_operation")
-    }
-
-    fn visit_binary_op(&mut self, op: &operator::Binary) -> IResult<()> {
-        use operator::Binary;
-        let (second, first) = self.pop_two()?;
-
-        let out = match op {
-            Binary::Mul => first * second,
-            Binary::Div => first / second,
-            Binary::Rem => first % second,
-            Binary::Add => first + second,
-            Binary::Sub => first - second,
-            Binary::Lsh => first << second,
-            Binary::Rsh => first >> second,
-            Binary::BitAnd => first & second,
-            Binary::BitOr => first | second,
-            Binary::BitXor => first ^ second,
-            Binary::LogAnd | Binary::LogOr | Binary::LogXor => {
-                unimplemented!("Implemented in visit_operation")
-            }
-            Binary::RangeExc => first.range_exc(second),
-            Binary::RangeInc => first.range_inc(second),
-            Binary::Less => first.lt(&second),
-            Binary::LessEq => first.lt_eq(&second),
-            Binary::Equal => first.eq(&second),
-            Binary::NotEq => first.neq(&second),
-            Binary::GreaterEq => first.gt_eq(&second),
-            Binary::Greater => first.gt(&second),
-        }?;
-
-        self.push(out);
-        Ok(())
-    }
-
-    fn visit_unary_op(&mut self, op: &operator::Unary) -> IResult<()> {
-        let operand = self.pop()?;
-
-        self.push(match op {
-            operator::Unary::RefRef => todo!(),
-            operator::Unary::Ref => todo!(),
-            operator::Unary::Deref => todo!(),
-            operator::Unary::Neg => (-operand)?,
-            operator::Unary::Not => (!operand)?,
-            operator::Unary::At => todo!(),
-            operator::Unary::Hash => {
-                println!("{operand}");
-                operand
-            }
-            operator::Unary::Tilde => todo!(),
-        });
-
-        Ok(())
-    }
-
-    fn visit_if(&mut self, expr: &If) -> IResult<()> {
-        self.visit_expr(&expr.cond)?;
-        if self.pop()?.truthy()? {
-            self.visit_block(&expr.body)?;
-        } else if let Some(block) = &expr.else_ {
-            self.visit_else(block)?;
-        } else {
-            self.push(ConValue::Empty)
-        }
-        Ok(())
-    }
-
-    fn visit_while(&mut self, expr: &While) -> IResult<()> {
-        while {
-            self.visit_expr(&expr.cond)?;
-            self.pop()?.truthy()?
-        } {
-            let Err(out) = self.visit_block(&expr.body) else {
-                // Every expression returns a value. If allowed to pile up, they'll overflow the
-                // stack.
-                self.pop()?;
-                continue;
-            };
-            match out {
-                Error::Continue => continue,
-                Error::Break(value) => {
-                    self.push(value);
-                    return Ok(());
-                }
-                r => Err(r)?,
-            }
-        }
-        if let Some(r#else) = &expr.else_ {
-            self.visit_else(r#else)?;
-        } else {
-            self.push(ConValue::Empty);
-        }
-        Ok(())
-    }
-
-    fn visit_for(&mut self, expr: &control::For) -> IResult<()> {
-        self.scope.enter();
-        self.visit_expr(&expr.iter)?;
-        let bounds = match self.pop()? {
-            ConValue::RangeExc(a, b) | ConValue::RangeInc(a, b) => (a, b),
-            _ => Err(Error::NotIterable)?,
-        };
-        for loop_var in bounds.0..=bounds.1 {
-            self.scope.insert(&expr.var.name, Some(loop_var.into()));
-            let Err(out) = self.visit_block(&expr.body) else {
-                self.pop()?;
-                continue;
-            };
-            match out {
-                Error::Continue => continue,
-                Error::Break(value) => {
-                    self.push(value);
-                    return Ok(());
-                }
-                r => Err(r)?,
-            }
-        }
-        if let Some(r#else) = &expr.else_ {
-            self.visit_else(r#else)?;
-        } else {
-            self.push(ConValue::Empty)
-        }
-        self.scope.exit()?;
-        Ok(())
-    }
-
-    fn visit_else(&mut self, else_: &control::Else) -> IResult<()> {
-        self.visit_expr(&else_.expr)
-    }
-
-    fn visit_continue(&mut self, _: &control::Continue) -> IResult<()> {
-        Err(Error::cnt())
-    }
-
-    fn visit_break(&mut self, brk: &control::Break) -> IResult<()> {
-        Err(Error::brk({
-            self.visit_expr(&brk.expr)?;
-            self.pop()?
-        }))
-    }
-
-    fn visit_return(&mut self, ret: &control::Return) -> IResult<()> {
-        Err(Error::ret({
-            self.visit_expr(&ret.expr)?;
-            self.pop()?
-        }))
-    }
-
-    fn visit_identifier(&mut self, ident: &Identifier) -> IResult<()> {
-        let value = self.resolve(&ident.name)?;
-        self.push(value);
-        Ok(())
-    }
-
-    fn visit_string_literal(&mut self, string: &str) -> IResult<()> {
-        self.push(string);
-        Ok(())
-    }
-
-    fn visit_char_literal(&mut self, char: &char) -> IResult<()> {
-        self.push(*char);
-        Ok(())
-    }
-
-    fn visit_bool_literal(&mut self, bool: &bool) -> IResult<()> {
-        self.push(*bool);
-        Ok(())
-    }
-
-    fn visit_float_literal(&mut self, float: &literal::Float) -> IResult<()> {
-        todo!("visit floats in interpreter: {float:?}")
-    }
-
-    fn visit_int_literal(&mut self, int: &u128) -> IResult<()> {
-        self.push((*int) as i128);
-        Ok(())
-    }
-
-    fn visit_empty(&mut self) -> IResult<()> {
-        self.push(());
-        Ok(())
+        Ok(first)
     }
 }
+impl Interpret for Unary {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let Unary { operand, operators } = self;
+        let mut operand = operand.interpret(env)?;
 
-impl Default for Interpreter {
-    fn default() -> Self {
-        Self { scope: Environment::new().into(), stack: Default::default() }
+        for op in operators.iter().rev() {
+            operand = match op {
+                operator::Unary::RefRef => todo!(),
+                operator::Unary::Ref => todo!(),
+                operator::Unary::Deref => todo!(),
+                operator::Unary::Neg => (-operand)?,
+                operator::Unary::Not => (!operand)?,
+                operator::Unary::At => todo!(),
+                operator::Unary::Hash => {
+                    println!("{operand}");
+                    operand
+                }
+                operator::Unary::Tilde => todo!(),
+            };
+        }
+        Ok(operand)
+    }
+}
+impl Interpret for Call {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        match self {
+            Call::FnCall(fncall) => fncall.interpret(env),
+            Call::Primary(primary) => primary.interpret(env),
+        }
+    }
+}
+impl Interpret for FnCall {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        // evaluate the callee
+        let mut callee = self.callee.interpret(env)?;
+        for args in &self.args {
+            let ConValue::Tuple(args) = args.interpret(env)? else {
+                Err(Error::TypeError)?
+            };
+            callee = callee.call(env, &args)?;
+        }
+        Ok(callee)
+    }
+}
+impl Interpret for Primary {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        match self {
+            Primary::Identifier(prim) => prim.interpret(env),
+            Primary::Literal(prim) => prim.interpret(env),
+            Primary::Block(prim) => prim.interpret(env),
+            Primary::Group(prim) => prim.interpret(env),
+            Primary::Branch(prim) => prim.interpret(env),
+        }
+    }
+}
+impl Interpret for Identifier {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        env.resolve(&self.name)
+    }
+}
+impl Interpret for Literal {
+    fn interpret(&self, _env: &mut Environment) -> IResult<ConValue> {
+        Ok(match self {
+            Literal::String(value) => ConValue::from(value.as_str()),
+            Literal::Char(value) => ConValue::Char(*value),
+            Literal::Bool(value) => ConValue::Bool(*value),
+            Literal::Float(value) => todo!("Float values in interpreter: {value:?}"),
+            Literal::Int(value) => ConValue::Int(*value as _),
+        })
+    }
+}
+impl Interpret for Block {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let mut env = env.frame("block");
+        // TODO: this could TOTALLY be done with a binary operator.
+        for stmt in &self.statements {
+            stmt.interpret(&mut env)?;
+        }
+        if let Some(expr) = self.expr.as_ref() {
+            expr.interpret(&mut env)
+        } else {
+            Ok(ConValue::Empty)
+        }
+    }
+}
+impl Interpret for Group {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        match self {
+            Group::Tuple(tuple) => tuple.interpret(env),
+            Group::Single(value) => value.interpret(env),
+            Group::Empty => Ok(ConValue::Empty),
+        }
+    }
+}
+impl Interpret for Tuple {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        Ok(ConValue::Tuple(self.elements.iter().try_fold(
+            vec![],
+            |mut out, element| {
+                out.push(element.interpret(env)?);
+                Ok(out)
+            },
+        )?))
+    }
+}
+impl Interpret for Flow {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        match self {
+            Flow::While(flow) => flow.interpret(env),
+            Flow::If(flow) => flow.interpret(env),
+            Flow::For(flow) => flow.interpret(env),
+            Flow::Continue(flow) => flow.interpret(env),
+            Flow::Return(flow) => flow.interpret(env),
+            Flow::Break(flow) => flow.interpret(env),
+        }
+    }
+}
+impl Interpret for While {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        while self.cond.interpret(env)?.truthy()? {
+            match self.body.interpret(env) {
+                Err(Error::Break(value)) => return Ok(value),
+                Err(Error::Continue) => continue,
+                e => e?,
+            };
+        }
+        if let Some(other) = &self.else_ {
+            other.interpret(env)
+        } else {
+            Ok(ConValue::Empty)
+        }
+    }
+}
+impl Interpret for Else {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        self.expr.interpret(env)
+    }
+}
+impl Interpret for If {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        if self.cond.interpret(env)?.truthy()? {
+            self.body.interpret(env)
+        } else if let Some(other) = &self.else_ {
+            other.interpret(env)
+        } else {
+            Ok(ConValue::Empty)
+        }
+    }
+}
+impl Interpret for For {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let bounds = match self.iter.interpret(env)? {
+            ConValue::RangeExc(a, b) => a..=b,
+            ConValue::RangeInc(a, b) => a..=b,
+            _ => Err(Error::TypeError)?,
+        };
+
+        let mut env = env.frame("loop variable");
+        for loop_var in bounds {
+            env.insert(&self.var.name, Some(loop_var.into()));
+            match self.body.interpret(&mut env) {
+                Err(Error::Break(value)) => return Ok(value),
+                Err(Error::Continue) => continue,
+                result => result?,
+            };
+        }
+        if let Some(other) = &self.else_ {
+            other.interpret(&mut env)
+        } else {
+            Ok(ConValue::Empty)
+        }
+    }
+}
+impl Interpret for Continue {
+    fn interpret(&self, _env: &mut Environment) -> IResult<ConValue> {
+        Err(Error::Continue)
+    }
+}
+impl Interpret for Return {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        Err(Error::Return(self.expr.interpret(env)?))
+    }
+}
+impl Interpret for Break {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        Err(Error::Return(self.expr.interpret(env)?))
     }
 }
 
 pub mod function {
     //! Represents a block of code which lives inside the Interpreter
-    use super::{
-        // scope::Environment,
-        Callable,
-        ConValue,
-        Error,
-        FnDecl,
-        IResult,
-        Identifier,
-        Interpreter,
-    };
-    use crate::ast::{preamble::Name, visitor::Visitor};
+    use super::{Callable, ConValue, Environment, Error, FnDecl, IResult, Identifier, Interpret};
+    use crate::ast::preamble::Name;
     /// Represents a block of code which persists inside the Interpreter
     #[derive(Clone, Debug)]
     pub struct Function {
@@ -716,9 +651,9 @@ pub mod function {
 
     impl Callable for Function {
         fn name(&self) -> &str {
-            &self.declaration.name.name.name
+            &self.declaration.name.symbol.name
         }
-        fn call(&self, interpreter: &mut Interpreter, args: &[ConValue]) -> IResult<ConValue> {
+        fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
             // Check arg mapping
             if args.len() != self.declaration.args.len() {
                 return Err(Error::ArgNumber {
@@ -727,20 +662,18 @@ pub mod function {
                 });
             }
             // TODO: Isolate cross-function scopes!
-            interpreter.scope.enter();
-            for (Name { name: Identifier { name, .. }, .. }, value) in
+
+            let mut frame = env.frame("function args");
+            for (Name { symbol: Identifier { name, .. }, .. }, value) in
                 self.declaration.args.iter().zip(args)
             {
-                interpreter.scope.insert(name, Some(value.clone()));
+                frame.insert(name, Some(value.clone()));
             }
-            match interpreter.visit_block(&self.declaration.body) {
-                Err(Error::Return(value)) => interpreter.push(value),
-                Err(Error::Break(value)) => Err(Error::BadBreak(value))?,
-                Err(e) => Err(e)?,
-                Ok(()) => (),
+            match self.declaration.body.interpret(&mut frame) {
+                Err(Error::Return(value)) => Ok(value),
+                Err(Error::Break(value)) => Err(Error::BadBreak(value)),
+                result => result,
             }
-            interpreter.scope.exit()?;
-            interpreter.pop()
         }
     }
 }
@@ -748,7 +681,7 @@ pub mod function {
 pub mod builtin {
     mod builtin_imports {
         pub use crate::interpreter::{
-            error::IResult, temp_type_impl::ConValue, BuiltIn, Callable, Interpreter,
+            env::Environment, error::IResult, temp_type_impl::ConValue, BuiltIn, Callable,
         };
     }
     use super::BuiltIn;
@@ -765,7 +698,7 @@ pub mod builtin {
         #[rustfmt::skip]
         impl Callable for Print {
             fn name(&self) -> &'static str { "print" }
-            fn call(&self, _inter: &mut Interpreter, args: &[ConValue]) -> IResult<ConValue> {
+            fn call(&self, _inter: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
                 for arg in args {
                     print!("{arg}")
                 }
@@ -783,22 +716,20 @@ pub mod builtin {
         #[rustfmt::skip]
         impl Callable for Dbg {
             fn name(&self) -> &str { "dbg" }
-            fn call(&self, _inter: &mut Interpreter, args: &[ConValue]) -> IResult<ConValue> {
+            fn call(&self, _inter: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
                 println!("{args:?}");
                 Ok(args.into())
             }
         }
     }
-
     mod dump {
         use super::builtin_imports::*;
         #[derive(Clone, Debug)]
         pub struct Dump;
         impl BuiltIn for Dump {}
         impl Callable for Dump {
-            fn call(&self, interpreter: &mut Interpreter, _args: &[ConValue]) -> IResult<ConValue> {
-                println!("Scope:\n{}", interpreter.scope);
-                println!("Stack:{:#?}", interpreter.stack);
+            fn call(&self, env: &mut Environment, _args: &[ConValue]) -> IResult<ConValue> {
+                println!("{}", *env);
                 Ok(ConValue::Empty)
             }
 
@@ -809,7 +740,7 @@ pub mod builtin {
     }
 }
 
-pub mod scope {
+pub mod env {
     //! Lexical and non-lexical scoping for variables
 
     use super::{
@@ -817,52 +748,76 @@ pub mod scope {
         error::{Error, IResult},
         function::Function,
         temp_type_impl::ConValue,
-        FnDecl,
+        Callable, FnDecl, Interpret,
     };
-    use std::{collections::HashMap, fmt::Display};
+    use std::{
+        collections::HashMap,
+        fmt::Display,
+        ops::{Deref, DerefMut},
+    };
 
     /// Implements a nested lexical scope
-    #[derive(Clone, Debug, Default)]
+    #[derive(Clone, Debug)]
     pub struct Environment {
         outer: Option<Box<Self>>,
         vars: HashMap<String, Option<ConValue>>,
+        name: &'static str,
     }
 
     impl Display for Environment {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            writeln!(f, "--- '{}' ---", self.name)?;
             for (var, val) in &self.vars {
-                writeln!(f, "{var}: {}", if val.is_some() { "..." } else { "None" })?;
+                write!(f, "{var}: ")?;
+                match val {
+                    Some(value) => writeln!(f, "{value}"),
+                    None => writeln!(f, "<undefined>"),
+                }?
             }
-            "--- Frame ---\n".fmt(f)?;
             if let Some(outer) = &self.outer {
                 outer.fmt(f)?;
             }
             Ok(())
         }
     }
+    impl Default for Environment {
+        fn default() -> Self {
+            let mut outer = Self::no_builtins("builtins");
+            for &builtin in DEFAULT_BUILTINS {
+                outer.insert(builtin.name(), Some(ConValue::BuiltIn(builtin)));
+            }
+            Self { outer: Some(Box::new(outer)), vars: Default::default(), name: "base" }
+        }
+    }
 
     impl Environment {
         pub fn new() -> Self {
-            let mut out = Self::default();
-            for &builtin in DEFAULT_BUILTINS {
-                out.insert(builtin.name(), Some(ConValue::BuiltIn(builtin)))
-            }
-            out
+            Self::default()
         }
-        /// Enter a nested scope
-        pub fn enter(&mut self) {
-            let outer = std::mem::take(self);
-            self.outer = Some(outer.into());
+        fn no_builtins(name: &'static str) -> Self {
+            Self { outer: None, vars: Default::default(), name }
         }
-        /// Exits the scope, destroying all local variables and
-        /// returning the outer scope, if there is one
-        pub fn exit(&mut self) -> IResult<()> {
-            if let Some(outer) = std::mem::take(&mut self.outer) {
-                *self = *outer;
-                Ok(())
-            } else {
-                Err(Error::ScopeExit)
-            }
+        /// Temporary function
+        #[deprecated]
+        pub fn resolve(&mut self, name: &str) -> IResult<ConValue> {
+            self.get(name).cloned()
+        }
+
+        pub fn eval(&mut self, node: &impl Interpret) -> IResult<ConValue> {
+            node.interpret(self)
+        }
+
+        /// Calls a function inside the interpreter's scope,
+        /// and returns the result
+        pub fn call(&mut self, name: &str, args: &[ConValue]) -> IResult<ConValue> {
+            let function = self.resolve(name)?;
+            function.call(self, args)
+        }
+        /// Enters a nested scope, returning a [`Frame`] stack-guard.
+        ///
+        /// [`Frame`] implements Deref/DerefMut for [`Environment`].
+        pub fn frame(&mut self, name: &'static str) -> Frame {
+            Frame::new(self, name)
         }
         /// Resolves a variable mutably
         ///
@@ -894,11 +849,62 @@ pub mod scope {
         /// A convenience function for registering a [FnDecl] as a [Function]
         pub fn insert_fn(&mut self, decl: &FnDecl) {
             self.vars.insert(
-                decl.name.name.name.clone(),
+                decl.name.symbol.name.clone(),
                 Some(Function::new(decl).into()),
             );
         }
     }
+
+    /// Functions which aid in the implementation of [`Frame`]
+    impl Environment {
+        /// Enters a scope, creating a new namespace for variables
+        fn enter(&mut self, name: &'static str) -> &mut Self {
+            let outer = std::mem::replace(self, Environment::no_builtins(name));
+            self.outer = Some(outer.into());
+            self
+        }
+
+        /// Exits the scope, destroying all local variables and
+        /// returning the outer scope, if there is one
+        fn exit(&mut self) -> &mut Self {
+            if let Some(outer) = std::mem::take(&mut self.outer) {
+                *self = *outer;
+            }
+            self
+        }
+    }
+
+    /// Represents a stack frame
+    #[derive(Debug)]
+    pub struct Frame<'scope> {
+        scope: &'scope mut Environment,
+    }
+    impl<'scope> Frame<'scope> {
+        fn new(scope: &'scope mut Environment, name: &'static str) -> Self {
+            Self { scope: scope.enter(name) }
+        }
+    }
+    impl<'scope> Deref for Frame<'scope> {
+        type Target = Environment;
+        fn deref(&self) -> &Self::Target {
+            self.scope
+        }
+    }
+    impl<'scope> DerefMut for Frame<'scope> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            self.scope
+        }
+    }
+    impl<'scope> Drop for Frame<'scope> {
+        fn drop(&mut self) {
+            self.scope.exit();
+        }
+    }
+}
+
+pub mod module {
+    //! Implements non-lexical "global" scoping rules
+    
 }
 
 pub mod error {

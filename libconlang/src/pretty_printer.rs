@@ -108,7 +108,7 @@ impl PrettyPrintable for Stmt {
 }
 impl PrettyPrintable for Let {
     fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
-        let Let { name: Name { name, mutable, ty }, init } = self;
+        let Let { name: Name { symbol: name, mutable, ty }, init } = self;
         p.put("let")?.space()?;
         if *mutable {
             p.put("mut")?.space()?;
@@ -144,7 +144,7 @@ impl PrettyPrintable for Name {
         if self.mutable {
             p.put("mut")?.space()?;
         }
-        self.name.visit(p)?;
+        self.symbol.visit(p)?;
         if let Some(ty) = &self.ty {
             ty.visit(p.put(':')?.space()?)?;
         }
@@ -168,7 +168,9 @@ impl PrettyPrintable for Path {
             p.put("::")?;
         }
         for (idx, part) in parts.iter().enumerate() {
-            if idx != 0 { p.put("::")?;}
+            if idx != 0 {
+                p.put("::")?;
+            }
             part.visit(p)?;
         }
         Ok(())
@@ -179,7 +181,7 @@ impl PrettyPrintable for PathPart {
         match self {
             PathPart::PathSuper => p.put("super").map(drop),
             PathPart::PathSelf => p.put("self").map(drop),
-            PathPart::PathIdent(id) =>id.visit(p),
+            PathPart::PathIdent(id) => id.visit(p),
         }
     }
 }

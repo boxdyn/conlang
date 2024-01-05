@@ -19,7 +19,6 @@ pub mod preamble {
         path::*,
         statement::*,
         types::*,
-        visitor::Visitor,
         *,
     };
 }
@@ -156,7 +155,7 @@ pub mod statement {
     /// # Syntax
     #[derive(Clone, Debug)]
     pub struct Name {
-        pub name: Identifier,
+        pub symbol: Identifier,
         /// The mutability of the [Name]. Functions are never mutable.
         pub mutable: bool,
         /// The [type](TypeExpr)
@@ -740,166 +739,6 @@ pub mod expression {
         pub struct Return {
             pub expr: Box<Expr>,
         }
-    }
-}
-
-pub mod visitor {
-    //! A [`Visitor`] visits every kind of node in the [Abstract Syntax Tree](super)
-    //!
-    //! This trait is mostly here to ensure that every branch of the tree is accounted for.
-    //!
-    //! Default implementations are provided for
-    use super::{
-        expression::{call::*, control::*, math::*, tuple::*, Block, *},
-        literal::*,
-        statement::*,
-        *,
-    };
-
-    /// A Visitor traverses every kind of node in the [Abstract Syntax Tree](super)
-    #[deprecated]
-    pub trait Visitor<R> {
-        /// Visit the start of an AST
-        fn visit(&mut self, start: &Start) -> R {
-            self.visit_program(&start.0)
-        }
-        /// Visit a [Program]
-        fn visit_program(&mut self, prog: &Program) -> R;
-
-        /// Visit a [Statement](Stmt)
-        fn visit_statement(&mut self, stmt: &Stmt) -> R {
-            match stmt {
-                Stmt::Let(stmt) => self.visit_let(stmt),
-                Stmt::Fn(function) => self.visit_fn_decl(function),
-                Stmt::Expr(expr) => self.visit_expr(expr),
-            }
-        }
-        /// Visit a [Let statement](Let)
-        fn visit_let(&mut self, decl: &Let) -> R;
-        /// Visit a [Fn declaration](FnDecl)
-        fn visit_fn_decl(&mut self, decl: &FnDecl) -> R;
-
-        /// Visit an [Expression](Expr)
-        fn visit_expr(&mut self, expr: &Expr) -> R {
-            self.visit_operation(&expr.0)
-        }
-        // Block expression
-        /// Visit a [Block] expression
-        fn visit_block(&mut self, block: &Block) -> R;
-        /// Visit a [Group] expression
-        fn visit_group(&mut self, group: &Group) -> R {
-            match group {
-                Group::Tuple(tuple) => self.visit_tuple(tuple),
-                Group::Single(expr) => self.visit_expr(expr),
-                Group::Empty => self.visit_empty(),
-            }
-        }
-        /// Visit a [Tuple] expression
-        fn visit_tuple(&mut self, tuple: &Tuple) -> R;
-        /// Visit a [Call] expression
-        fn visit_call(&mut self, call: &Call) -> R {
-            match call {
-                Call::FnCall(call) => self.visit_fn_call(call),
-                Call::Primary(primary) => self.visit_primary(primary),
-            }
-        }
-        /// Visit a [Function Call](FnCall) expression
-        fn visit_fn_call(&mut self, call: &FnCall) -> R;
-
-        // Math expression
-        /// Visit an [Operation]
-        fn visit_operation(&mut self, operation: &Operation) -> R {
-            match operation {
-                Operation::Assign(assign) => self.visit_assign(assign),
-                Operation::Binary(binary) => self.visit_binary(binary),
-                Operation::Unary(unary) => self.visit_unary(unary),
-                Operation::Call(call) => self.visit_call(call),
-            }
-        }
-        /// Visit an [Assignment](Assign) operation
-        fn visit_assign(&mut self, assign: &Assign) -> R;
-        /// Visit a [Binary] Operation
-        fn visit_binary(&mut self, binary: &Binary) -> R;
-        /// Visit a [Unary] Operation
-        fn visit_unary(&mut self, unary: &Unary) -> R;
-        // Math operators
-        /// Visit an [Assignment](Assign) [operator](operator::Assign)
-        fn visit_assign_op(&mut self, op: &operator::Assign) -> R;
-        /// Visit a [Binary] [operator](operator::Binary)
-        fn visit_binary_op(&mut self, op: &operator::Binary) -> R;
-        /// Visit a [Unary] [operator](operator::Unary)
-        fn visit_unary_op(&mut self, op: &operator::Unary) -> R;
-
-        /// Visit a [Primary] expression
-        ///
-        /// [`Primary`]` := `[`Identifier`]` | `[`Literal`]` | `[`Block`]` | `[`Flow`]
-        fn visit_primary(&mut self, primary: &Primary) -> R {
-            match primary {
-                Primary::Identifier(v) => self.visit_identifier(v),
-                Primary::Literal(v) => self.visit_literal(v),
-                Primary::Block(v) => self.visit_block(v),
-                Primary::Group(v) => self.visit_group(v),
-                Primary::Branch(v) => self.visit_branch(v),
-            }
-        }
-
-        /// Visit a [Flow] expression.
-        ///
-        /// [`Flow`]` := `[`While`]` | `[`If`]` | `[`For`]`
-        /// | `[`Continue`]` | `[`Return`]` | `[`Break`]
-        fn visit_branch(&mut self, flow: &Flow) -> R {
-            match flow {
-                Flow::While(e) => self.visit_while(e),
-                Flow::If(e) => self.visit_if(e),
-                Flow::For(e) => self.visit_for(e),
-                Flow::Continue(e) => self.visit_continue(e),
-                Flow::Return(e) => self.visit_return(e),
-                Flow::Break(e) => self.visit_break(e),
-            }
-        }
-        /// Visit an [If] expression
-        fn visit_if(&mut self, expr: &If) -> R;
-        /// Visit a [While] loop expression
-        fn visit_while(&mut self, expr: &While) -> R;
-        /// Visit a [For] loop expression
-        fn visit_for(&mut self, expr: &For) -> R;
-        /// Visit an [Else] expression
-        fn visit_else(&mut self, expr: &Else) -> R;
-        /// Visit a [Continue] expression
-        fn visit_continue(&mut self, expr: &Continue) -> R;
-        /// Visit a [Break] expression
-        fn visit_break(&mut self, expr: &Break) -> R;
-        /// Visit a [Return] expression
-        fn visit_return(&mut self, expr: &Return) -> R;
-
-        // primary symbols
-        /// Visit an [Identifier]
-        fn visit_identifier(&mut self, ident: &Identifier) -> R;
-        /// Visit a [Literal]
-        ///
-        /// [`Literal`]` := `[`String`]` | `[`char`]` | `[`bool`]` | `[`Float`]` | `[`u128`]
-        fn visit_literal(&mut self, literal: &Literal) -> R {
-            match literal {
-                Literal::String(l) => self.visit_string_literal(l),
-                Literal::Char(l) => self.visit_char_literal(l),
-                Literal::Bool(l) => self.visit_bool_literal(l),
-                Literal::Float(l) => self.visit_float_literal(l),
-                Literal::Int(l) => self.visit_int_literal(l),
-            }
-        }
-        /// Visit a [string](str) literal
-        fn visit_string_literal(&mut self, string: &str) -> R;
-        /// Visit a [character](char) literal
-        fn visit_char_literal(&mut self, char: &char) -> R;
-        /// Visit a [boolean](bool) literal
-        fn visit_bool_literal(&mut self, bool: &bool) -> R;
-        /// Visit a [floating point](Float) literal
-        fn visit_float_literal(&mut self, float: &Float) -> R;
-        /// Visit an [integer](u128) literal
-        fn visit_int_literal(&mut self, int: &u128) -> R;
-
-        /// Visit an Empty
-        fn visit_empty(&mut self) -> R;
     }
 }
 

@@ -425,7 +425,7 @@ impl Parser {
         } else {
             None
         };
-        Ok(FnDecl { name: Name { name, mutable: false, ty }, args, body: self.block()? })
+        Ok(FnDecl { name: Name { symbol: name, mutable: false, ty }, args, body: self.block()? })
     }
     /// Parses a [parameter](Name) list for [FnDecl]
     fn params(&mut self) -> PResult<Vec<Name>> {
@@ -442,7 +442,7 @@ impl Parser {
     fn name(&mut self) -> PResult<Name> {
         Ok(Name {
             mutable: self.keyword(Keyword::Mut).is_ok(),
-            name: self.identifier()?,
+            symbol: self.identifier()?,
             ty: self
                 .consume_type(Type::Colon)
                 .and_then(|this| this.type_expr())
@@ -473,7 +473,7 @@ impl Parser {
             Type::Keyword(Keyword::SelfKw) => {
                 self.keyword(Keyword::SelfKw).map(|_| PathPart::PathSelf)
             }
-            e => Err(Error::not_path_segment(e))
+            e => Err(Error::not_path_segment(e)),
         }
     }
 }

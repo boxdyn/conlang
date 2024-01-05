@@ -69,7 +69,7 @@ pub mod program {
 
     use conlang::{
         ast::preamble::{expression::Expr, *},
-        interpreter::{error::IResult, Interpreter},
+        interpreter::{env::Environment, error::IResult},
         lexer::Lexer,
         parser::{error::PResult, Parser},
         pretty_printer::{PrettyPrintable, Printer},
@@ -137,16 +137,15 @@ pub mod program {
             .map(|ty| println!("{ty}"))
         }
         /// Runs the [Program] in the specified [Interpreter]
-        pub fn run(&self, interpreter: &mut Interpreter) -> IResult<()> {
-            match &self.data {
-                Parsed::Program(start) => interpreter.interpret(start),
-                Parsed::Expr(expr) => {
-                    for value in interpreter.eval(expr)? {
-                        println!("{value}")
-                    }
-                    Ok(())
+        pub fn run(&self, env: &mut Environment) -> IResult<()> {
+            println!(
+                "{}",
+                match &self.data {
+                    Parsed::Program(start) => env.eval(start)?,
+                    Parsed::Expr(expr) => env.eval(expr)?,
                 }
-            }
+            );
+            Ok(())
         }
     }
 
@@ -162,7 +161,8 @@ pub mod program {
 
 pub mod cli {
     use conlang::{
-        interpreter::Interpreter, pretty_printer::PrettyPrintable, resolver::Resolver, token::Token,
+        interpreter::env::Environment, pretty_printer::PrettyPrintable, resolver::Resolver,
+        token::Token,
     };
 
     use crate::{
@@ -231,7 +231,7 @@ pub mod cli {
                 }
                 (Mode::Beautify, Ok(program)) => Self::beautify(program),
                 (Mode::Resolve, Ok(program)) => Self::resolve(program, Default::default()),
-                (Mode::Interpret, Ok(program)) => Self::interpret(program, Default::default()),
+                (Mode::Interpret, Ok(program)) => Self::interpret(program, Environment::new()),
                 (_, Err(errors)) => {
                     for error in errors {
                         if let Some(path) = path {
@@ -260,7 +260,7 @@ pub mod cli {
                 eprintln!("{e}");
             }
         }
-        fn interpret(program: Program<Tokenized>, mut interpreter: Interpreter) {
+        fn interpret(program: Program<Tokenized>, mut interpreter: Environment) {
             let program = match program.parse() {
                 Ok(program) => program,
                 Err(e) => {
@@ -316,7 +316,7 @@ pub mod cli {
         prompt_again: &'static str, // " ?>"
         prompt_begin: &'static str, // "cl>"
         prompt_error: &'static str, // "! >"
-        interpreter: Interpreter,
+        env: Environment,
         resolver: Resolver,
         mode: Mode,
     }
@@ -327,7 +327,7 @@ pub mod cli {
                 prompt_begin: "cl>",
                 prompt_again: " ?>",
                 prompt_error: "! >",
-                interpreter: Default::default(),
+                env: Default::default(),
                 resolver: Default::default(),
                 mode: Default::default(),
             }
@@ -457,7 +457,7 @@ pub mod cli {
             }
         }
         fn interpret(&mut self, code: &Program<Parsed>) {
-            if let Err(e) = code.run(&mut self.interpreter) {
+            if let Err(e) = code.run(&mut self.env) {
                 self.prompt_error(&e)
             }
         }
