@@ -12,6 +12,8 @@ pub mod parser;
 
 pub mod pretty_printer;
 
+pub mod resolver;
+
 pub mod interpreter;
 
 #[cfg(test)]
