@@ -1,8 +1,6 @@
 //! # The Abstract Syntax Tree
 //! Contains definitions of AST Nodes, to be derived by a [parser](super::parser).
 //!
-//! Also contains a [Visitor](visitor::Visitor) trait for visiting nodes
-//!
 //! ## Syntax
 //! [`Start`]`      := `[`Program`]  \
 //! [`Program`]`    := `[`statement::Stmt`]`* EOI`  \
@@ -181,7 +179,7 @@ pub mod path {
         pub parts: Vec<PathPart>,
     }
 
-    /// A component of a [`TypePath`]
+    /// A component of a [`Path`]
     /// # Syntax
     /// [`PathPart`]` := "super" | `[`Identifier`]
     #[derive(Clone, Debug)]
@@ -747,8 +745,7 @@ pub mod todo {
     //! when an item is in progress, remove it from todo.
     //!
     //! # General TODOs:
-    //! - [ ] REMOVE VISITOR TRAIT
-    //! - [ ]
+    //! - [x] REMOVE VISITOR TRAIT
     //! - [x] Implement support for storing items in the AST
     //! - [ ] Keep track of the source location of each node
     //! - [ ] Implement paths
