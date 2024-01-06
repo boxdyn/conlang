@@ -136,7 +136,7 @@ pub mod program {
             }
             .map(|ty| println!("{ty}"))
         }
-        /// Runs the [Program] in the specified [Interpreter]
+        /// Runs the [Program] in the specified [Environment]
         pub fn run(&self, env: &mut Environment) -> IResult<()> {
             println!(
                 "{}",
