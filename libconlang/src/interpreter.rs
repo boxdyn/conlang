@@ -8,7 +8,7 @@ use temp_type_impl::ConValue;
 
 /// Callable types can be called from within a Conlang program
 pub trait Callable: std::fmt::Debug {
-    /// Calls this [Callable] in the provided [Interpreter], with [ConValue] args  \
+    /// Calls this [Callable] in the provided [Environment], with [ConValue] args  \
     /// The Callable is responsible for checking the argument count and validating types
     fn call(&self, interpreter: &mut Environment, args: &[ConValue]) -> IResult<ConValue>;
     /// Returns the common name of this identifier.
@@ -285,7 +285,7 @@ pub mod temp_type_impl {
 
 /// A work-in-progress tree walk interpreter for Conlang
 pub trait Interpret {
-    /// Interprets this thing using the given [`Interpreter`].
+    /// Interprets this thing in the given [`Environment`].
     ///
     /// Everything returns a value!™
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue>;
@@ -353,24 +353,19 @@ impl Interpret for Assign {
         use operator::Assign;
         let math::Assign { target, operator, init } = self;
         let init = init.interpret(env)?;
-        let resolved = env.get_mut(&target.name)?;
+        let target = env.get_mut(&target.name)?;
 
         if let Assign::Assign = operator {
             use std::mem::discriminant as variant;
             // runtime typecheck
-            match resolved.as_mut() {
-                Some(value) if variant(value) == variant(&init) => {
+            match target {
+                value if variant(value) == variant(&init) => {
                     *value = init;
                 }
-                None => *resolved = Some(init),
                 _ => Err(Error::TypeError)?,
             }
             return Ok(ConValue::Empty);
         }
-
-        let Some(target) = resolved.as_mut() else {
-            Err(Error::NotInitialized(target.name.to_owned()))?
-        };
 
         match operator {
             Assign::AddAssign => target.add_assign(init)?,
@@ -494,7 +489,7 @@ impl Interpret for Primary {
 }
 impl Interpret for Identifier {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        env.resolve(&self.name)
+        env.get(&self.name).cloned()
     }
 }
 impl Interpret for Literal {
@@ -622,7 +617,7 @@ impl Interpret for Return {
 }
 impl Interpret for Break {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        Err(Error::Return(self.expr.interpret(env)?))
+        Err(Error::Break(self.expr.interpret(env)?))
     }
 }
 
@@ -634,42 +629,35 @@ pub mod function {
     #[derive(Clone, Debug)]
     pub struct Function {
         /// Stores the contents of the function declaration
-        declaration: Box<FnDecl>,
-        // /// Stores the enclosing scope of the function
-        // TODO: Capture variables
-        //environment: Box<Environment>,
+        decl: Box<FnDecl>,
+        /// Stores the enclosing scope of the function
+        env: Box<Environment>,
     }
 
     impl Function {
-        pub fn new(declaration: &FnDecl) -> Self {
-            Self {
-                declaration: declaration.clone().into(),
-                //environment: Box::new(Environment::new()),
-            }
+        pub fn new(decl: &FnDecl, env: Environment) -> Self {
+            Self { decl: decl.clone().into(), env: Box::new(env) }
         }
     }
 
     impl Callable for Function {
         fn name(&self) -> &str {
-            &self.declaration.name.symbol.name
+            &self.decl.name.symbol.name
         }
-        fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
+        fn call(&self, _env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
             // Check arg mapping
-            if args.len() != self.declaration.args.len() {
-                return Err(Error::ArgNumber {
-                    want: self.declaration.args.len(),
-                    got: args.len(),
-                });
+            if args.len() != self.decl.args.len() {
+                return Err(Error::ArgNumber { want: self.decl.args.len(), got: args.len() });
             }
             // TODO: Isolate cross-function scopes!
-
-            let mut frame = env.frame("function args");
+            let mut env = self.env.clone();
+            let mut frame = env.frame("fn args");
             for (Name { symbol: Identifier { name, .. }, .. }, value) in
-                self.declaration.args.iter().zip(args)
+                self.decl.args.iter().zip(args)
             {
                 frame.insert(name, Some(value.clone()));
             }
-            match self.declaration.body.interpret(&mut frame) {
+            match self.decl.body.interpret(&mut frame) {
                 Err(Error::Return(value)) => Ok(value),
                 Err(Error::Break(value)) => Err(Error::BadBreak(value)),
                 result => result,
@@ -679,6 +667,7 @@ pub mod function {
 }
 
 pub mod builtin {
+    //! Implementations of built-in functions
     mod builtin_imports {
         pub use crate::interpreter::{
             env::Environment, error::IResult, temp_type_impl::ConValue, BuiltIn, Callable,
@@ -759,34 +748,32 @@ pub mod env {
     /// Implements a nested lexical scope
     #[derive(Clone, Debug)]
     pub struct Environment {
-        outer: Option<Box<Self>>,
-        vars: HashMap<String, Option<ConValue>>,
-        name: &'static str,
+        frames: Vec<(HashMap<String, Option<ConValue>>, &'static str)>,
     }
 
     impl Display for Environment {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            writeln!(f, "--- '{}' ---", self.name)?;
-            for (var, val) in &self.vars {
-                write!(f, "{var}: ")?;
-                match val {
-                    Some(value) => writeln!(f, "{value}"),
-                    None => writeln!(f, "<undefined>"),
-                }?
-            }
-            if let Some(outer) = &self.outer {
-                outer.fmt(f)?;
+            for (frame, name) in self.frames.iter().rev() {
+                writeln!(f, "--- {name} ---")?;
+                for (var, val) in frame {
+                    write!(f, "- {var}: ")?;
+                    match val {
+                        Some(value) => writeln!(f, "{value}"),
+                        None => writeln!(f, "<undefined>"),
+                    }?
+                }
             }
             Ok(())
         }
     }
     impl Default for Environment {
         fn default() -> Self {
-            let mut outer = Self::no_builtins("builtins");
+            let mut builtins = HashMap::new();
             for &builtin in DEFAULT_BUILTINS {
-                outer.insert(builtin.name(), Some(ConValue::BuiltIn(builtin)));
+                builtins.insert(builtin.name().into(), Some(ConValue::BuiltIn(builtin)));
             }
-            Self { outer: Some(Box::new(outer)), vars: Default::default(), name: "base" }
+            // FIXME: Temporary until modules are implemented
+            Self { frames: vec![(builtins, "builtins"), (HashMap::new(), "globals")] }
         }
     }
 
@@ -794,13 +781,9 @@ pub mod env {
         pub fn new() -> Self {
             Self::default()
         }
-        fn no_builtins(name: &'static str) -> Self {
-            Self { outer: None, vars: Default::default(), name }
-        }
-        /// Temporary function
-        #[deprecated]
-        pub fn resolve(&mut self, name: &str) -> IResult<ConValue> {
-            self.get(name).cloned()
+        /// Creates an [Environment] with no [builtins](super::builtin)
+        pub fn no_builtins(name: &'static str) -> Self {
+            Self { frames: vec![(Default::default(), name)] }
         }
 
         pub fn eval(&mut self, node: &impl Interpret) -> IResult<ConValue> {
@@ -810,7 +793,8 @@ pub mod env {
         /// Calls a function inside the interpreter's scope,
         /// and returns the result
         pub fn call(&mut self, name: &str, args: &[ConValue]) -> IResult<ConValue> {
-            let function = self.resolve(name)?;
+            // FIXME: Clone to satisfy the borrow checker
+            let function = self.get(name)?.clone();
             function.call(self, args)
         }
         /// Enters a nested scope, returning a [`Frame`] stack-guard.
@@ -822,36 +806,42 @@ pub mod env {
         /// Resolves a variable mutably
         ///
         /// Returns a mutable reference to the variable's record, if it exists
-        pub fn get_mut(&mut self, id: &str) -> IResult<&mut Option<ConValue>> {
-            match self.vars.get_mut(id) {
-                Some(var) => Ok(var),
-                None => self
-                    .outer
-                    .as_mut()
-                    .ok_or_else(|| Error::NotDefined(id.into()))?
-                    .get_mut(id),
+        pub fn get_mut(&mut self, id: &str) -> IResult<&mut ConValue> {
+            for (frame, _) in self.frames.iter_mut() {
+                match frame.get_mut(id) {
+                    Some(Some(var)) => return Ok(var),
+                    Some(None) => return Err(Error::NotInitialized(id.into())),
+                    _ => (),
+                }
             }
+            Err(Error::NotDefined(id.into()))
         }
         /// Resolves a variable immutably
         pub fn get(&self, id: &str) -> IResult<&ConValue> {
-            match self.vars.get(id) {
-                Some(var) => var.as_ref().ok_or_else(|| Error::NotInitialized(id.into())),
-                None => self
-                    .outer
-                    .as_ref()
-                    .ok_or_else(|| Error::NotDefined(id.into()))?
-                    .get(id),
+            for (frame, _) in self.frames.iter() {
+                match frame.get(id) {
+                    Some(Some(var)) => return Ok(var),
+                    Some(None) => return Err(Error::NotInitialized(id.into())),
+                    _ => (),
+                }
             }
+            Err(Error::NotDefined(id.into()))
         }
+        /// Inserts a new [ConValue] into this [Environment]
         pub fn insert(&mut self, id: &str, value: Option<ConValue>) {
-            self.vars.insert(id.to_string(), value);
+            if let Some((frame, _)) = self.frames.last_mut() {
+                frame.insert(id.into(), value);
+            }
         }
         /// A convenience function for registering a [FnDecl] as a [Function]
         pub fn insert_fn(&mut self, decl: &FnDecl) {
-            self.vars.insert(
+            let (name, function) = (
                 decl.name.symbol.name.clone(),
-                Some(Function::new(decl).into()),
+                Some(Function::new(decl, self.clone()).into()),
             );
+            if let Some((frame, _)) = self.frames.last_mut() {
+                frame.insert(name, function);
+            }
         }
     }
 
@@ -859,16 +849,15 @@ pub mod env {
     impl Environment {
         /// Enters a scope, creating a new namespace for variables
         fn enter(&mut self, name: &'static str) -> &mut Self {
-            let outer = std::mem::replace(self, Environment::no_builtins(name));
-            self.outer = Some(outer.into());
+            self.frames.push((Default::default(), name));
             self
         }
 
         /// Exits the scope, destroying all local variables and
         /// returning the outer scope, if there is one
         fn exit(&mut self) -> &mut Self {
-            if let Some(outer) = std::mem::take(&mut self.outer) {
-                *self = *outer;
+            if self.frames.len() > 2 {
+                self.frames.pop();
             }
             self
         }
@@ -902,34 +891,14 @@ pub mod env {
     }
 }
 
-pub mod module {
-    //! Implements non-lexical "global" scoping rules
-    
-}
-
 pub mod error {
-    //! The [Error] type represents any error thrown by the [Interpreter](super::Interpreter)
+    //! The [Error] type represents any error thrown by the [Environment](super::Environment)
 
     use super::temp_type_impl::ConValue;
 
     pub type IResult<T> = Result<T, Error>;
-    /// Represents any error thrown by the [Interpreter](super::Interpreter)
-    impl Error {
-        /// Creates a [Return](Error::Return) error, with the given [value](ConValue)
-        pub fn ret(value: ConValue) -> Self {
-            Error::Return(value)
-        }
-        /// Creates a [Break](Error::Break) error, with the given [value](ConValue)
-        pub fn brk(value: ConValue) -> Self {
-            Error::Break(value)
-        }
-        /// Creates a [Continue](Error::Continue) error
-        pub fn cnt() -> Self {
-            Error::Continue
-        }
-    }
 
-    /// The reason for the [Error]
+    /// Represents any error thrown by the [Environment](super::Environment)
     #[derive(Clone, Debug)]
     pub enum Error {
         /// Propagate a Return value
