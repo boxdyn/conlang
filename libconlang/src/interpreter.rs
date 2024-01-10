@@ -1,5 +1,4 @@
 //! Interprets an AST as a program
-#![allow(deprecated)] // TODO: REMOVE
 
 use crate::ast::preamble::*;
 use env::Environment;
@@ -634,13 +633,13 @@ pub mod function {
     pub struct Function {
         /// Stores the contents of the function declaration
         decl: Box<FnDecl>,
-        /// Stores the enclosing scope of the function
-        env: Box<Environment>,
+        // /// Stores the enclosing scope of the function
+        // env: Box<Environment>,
     }
 
     impl Function {
-        pub fn new(decl: &FnDecl, env: Environment) -> Self {
-            Self { decl: decl.clone().into(), env: Box::new(env) }
+        pub fn new(decl: &FnDecl) -> Self {
+            Self { decl: decl.clone().into() }
         }
     }
 
@@ -648,13 +647,13 @@ pub mod function {
         fn name(&self) -> &str {
             &self.decl.name.symbol.name
         }
-        fn call(&self, _env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
+        fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
             // Check arg mapping
             if args.len() != self.decl.args.len() {
                 return Err(Error::ArgNumber { want: self.decl.args.len(), got: args.len() });
             }
             // TODO: Isolate cross-function scopes!
-            let mut env = self.env.clone();
+            // let mut env = self.env.clone();
             let mut frame = env.frame("fn args");
             for (Name { symbol: Identifier { name, .. }, .. }, value) in
                 self.decl.args.iter().zip(args)
@@ -841,7 +840,7 @@ pub mod env {
         pub fn insert_fn(&mut self, decl: &FnDecl) {
             let (name, function) = (
                 decl.name.symbol.name.clone(),
-                Some(Function::new(decl, self.clone()).into()),
+                Some(Function::new(decl).into()),
             );
             if let Some((frame, _)) = self.frames.last_mut() {
                 frame.insert(name, function);
