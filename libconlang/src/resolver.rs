@@ -417,17 +417,6 @@ impl Resolver {
     pub fn exit_scope(&mut self) -> Option<usize> {
         self.scopes.pop().map(|scope| scope.count)
     }
-    //#[deprecated]
-    pub fn push_ty(&mut self, ty: Type) {
-        debugln!("Pushed {ty}");
-        self.types.push(ty)
-    }
-    //#[deprecated]
-    pub fn pop_ty(&mut self) -> TyResult<Type> {
-        self.types
-            .pop()
-            .ok_or_else(|| panic!("Underflow in resolver type stack"))
-    }
     /// Resolves a name to a [Variable]
     pub fn get(&self, name: &str) -> TyResult<&Variable> {
         if let Some(var) = self.scopes.iter().rev().find_map(|s| s.get(name)) {
@@ -542,7 +531,7 @@ impl Resolve for Let {
 impl Resolve for FnDecl {
     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
         let FnDecl { name: Name { symbol: Identifier { name, index }, .. }, args, body } = self;
-        debugln!("> fn {name} ...");
+        debugln!("ty> fn {name} ...");
         // register the name at module scope
         *index = Some(resolver.insert_module(name, false)?);
         // create a new lexical scope
