@@ -351,21 +351,25 @@ impl Interpret for Operation {
 impl Interpret for Assign {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         use operator::Assign;
-        let math::Assign { target, operator, init } = self;
+        let math::Assign { target: Identifier { name, .. }, operator, init } = self;
         let init = init.interpret(env)?;
-        let target = env.get_mut(&target.name)?;
+        let target = env.get_mut(name)?;
 
         if let Assign::Assign = operator {
             use std::mem::discriminant as variant;
             // runtime typecheck
             match target {
-                value if variant(value) == variant(&init) => {
+                Some(value) if variant(value) == variant(&init) => {
                     *value = init;
                 }
+                value @ None => *value = Some(init),
                 _ => Err(Error::TypeError)?,
             }
             return Ok(ConValue::Empty);
         }
+        let Some(target) = target else {
+            return Err(Error::NotInitialized(name.into()));
+        };
 
         match operator {
             Assign::AddAssign => target.add_assign(init)?,
@@ -803,22 +807,22 @@ pub mod env {
         pub fn frame(&mut self, name: &'static str) -> Frame {
             Frame::new(self, name)
         }
-        /// Resolves a variable mutably
+        /// Resolves a variable mutably.
         ///
-        /// Returns a mutable reference to the variable's record, if it exists
-        pub fn get_mut(&mut self, id: &str) -> IResult<&mut ConValue> {
-            for (frame, _) in self.frames.iter_mut() {
-                match frame.get_mut(id) {
-                    Some(Some(var)) => return Ok(var),
-                    Some(None) => return Err(Error::NotInitialized(id.into())),
-                    _ => (),
+        /// Returns a mutable reference to the variable's record, if it exists.
+        pub fn get_mut(&mut self, id: &str) -> IResult<&mut Option<ConValue>> {
+            for (frame, _) in self.frames.iter_mut().rev() {
+                if let Some(var) = frame.get_mut(id) {
+                    return Ok(var);
                 }
             }
             Err(Error::NotDefined(id.into()))
         }
-        /// Resolves a variable immutably
+        /// Resolves a variable immutably.
+        ///
+        /// Returns a reference to the variable's contents, if it is defined and initialized.
         pub fn get(&self, id: &str) -> IResult<&ConValue> {
-            for (frame, _) in self.frames.iter() {
+            for (frame, _) in self.frames.iter().rev() {
                 match frame.get(id) {
                     Some(Some(var)) => return Ok(var),
                     Some(None) => return Err(Error::NotInitialized(id.into())),
