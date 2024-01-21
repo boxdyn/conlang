@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.package]
 repository = "https://github.com/boxdyn/conlang"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["John <j@soft.fish>"]
 edition = "2021"
 license = "MIT"

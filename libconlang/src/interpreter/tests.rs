@@ -49,12 +49,30 @@ mod macros {
     //! env_eq!(env.x, 10); // like assert_eq! for Environments
     //! ```
     #![allow(unused_macros)]
+    use crate::interpreter::IResult;
+
     use super::*;
+
+    pub fn test_inside_block(block: &Block, env: &mut Environment) -> IResult<()> {
+        let Block { stmts } = block;
+        for stmt in stmts {
+            stmt.interpret(env)?;
+        }
+        Ok(())
+    }
+
     /// Stringifies, lexes, and parses everything you give to it
     ///
-    /// Returns a `Result<`[`Start`]`, ParseError>`
-    pub macro parse($($t:tt)*) {
-        Parser::from(Lexer::new(stringify!( $($t)* ))).parse()
+    /// Returns a `Result<`[`File`]`, ParseError>`
+    pub macro file($($t:tt)*) {
+        Parser::new(Lexer::new(stringify!( $($t)* ))).file()
+    }
+
+    /// Stringifies, lexes, and parses everything you give to it
+    ///
+    /// Returns a `Result<`[`Block`]`, ParseError>`
+    pub macro block($($t:tt)*) {
+        Parser::new(Lexer::new(stringify!({ $($t)* }))).block()
     }
 
     /// Evaluates a block of code in the given environment
@@ -68,9 +86,9 @@ mod macros {
     /// )
     /// ```
     pub macro eval($env: path, $($t:tt)*) {{
-        parse!($($t)*)
-            .expect("code passed to eval! should parse correctly")
-            .interpret(&mut $env)
+        test_inside_block(&block!($($t)*)
+            .expect("code passed to eval! should parse correctly"),
+            &mut $env)
     }}
 
     /// Evaluates a block of code in the given environment, expecting the interpreter to succeed
@@ -194,7 +212,7 @@ mod fn_declarations {
 }
 
 mod operators {
-    use crate::ast::preamble::expression::tuple;
+    use crate::ast::Tuple;
 
     use super::*;
     #[test]
@@ -337,6 +355,7 @@ mod operators {
             let is_20_ne_10 = 20 != 10;
             let is_20_ge_10 = 20 >= 10;
             let is_20_gt_10 = 20 >  10;
+            dump();
         );
 
         // Less than

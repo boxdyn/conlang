@@ -1,84 +1,130 @@
 (* Conlang Expression Grammar *)
-Start       = Program ;
-Program     = Stmt* EOI ;
-(* TODO: 
-- Replace Program with Module
-    Module = Decl* EOI ;
-- Move Fn and Let into "Decl":
-    Decl   = Fn | Let ;
-- allow Decl | ExprStmt in Stmt:
-    Stmt   = Decl | Expr ';' ;
-*)
-(* literal *)
-Literal     = STRING | CHARACTER | FLOAT | INTEGER | Bool ;
-Bool        = "true" | "false" ;
-Identifier  = IDENTIFIER ;
+Start       = File ;
 
-(* # Statements *)
+Mutability  = "mut"? ;
+Visibility  = "pub"? ;
+
+
+File        = Item* EOI ;
+
+
+Item        = Visibility (
+                Const | Static | Module 
+                | Function | Struct | Enum 
+                | Impl
+            ) ;
+
+
+(* item *)
+Const       = "const" Identifier ':' Type = Expr ';' ;
+
+Static      = "static" Mutability Identifier ':' Type = Expr ';' ;
+
+Module      = "mod" Identifier '{' (Item)* '}' ;
+
+Function    = "fn" Identifier '(' (Param ',')* Param? ')' ( '->' Type) Block ;
+Param       = Identifier ':' Type ;
+
+Struct      = "struct" Identifier (TupleStruct | StructStruct)?;
+StructStruct= '{' (Identifier ':' Type),* '}' ;
+TupleStruct = TyTuple ;
+
+Enum        = "enum" Identifier (TupleEnum | StructEnum)? ;
+TupleEnum   = TyTuple;
+StructEnum  = '{' (Identifier ':' Type)* '}' ;
+
+
 (* statement *)
-Stmt        = Fn | Let | Expr ';' ;
-Let         = "let" Name ('=' Expr)? ';' ;
-Fn          = "fn" Identifier '(' Params? ')' Block ;
-(* TODO: Type system *)
-Params      = (Name ',')* Name? ;
-Name        = "mut"? Identifier (':' Type )? ;
+Stmt        = ';' | (Let | Item | Expr ';'?) ;
+Let         = "let" Mutability Identifier (':' Ty)? ('=' Expr)? ;
+(* TODO: Closure syntax *)
+Closure     = "cl" '(' Param* ')' Block ;
 
-(* # Type Expressions *)
-(* types *)
-TypeExpr    = Never | Empty | TypeTuple | PathExpr ;
+
+(* type *)
+Ty          = Never | Empty | TyTuple | Path | TyRef | TyFn ;
 Never       = '!' ;
 Empty       = '(' ')' ;
-TypeTuple   = '(' (TypeExpr ',')* TypeExpr? ')' ;
+TyTuple     = '(' (Ty ',')* Ty? ')' ;
+TyRef       = ('&' | '&&')* Path ;
+TyFn        = "fn" TyTuple (-> Ty)? ;
 
-PathExpr    = '::'? PathPart ;
-PathPart    = "super" | Identifier ;
+
+(* path *)
+Path        = '::'? PathPart ('::' PathPart)* ;
+PathPart    = "super" | "self" | Identifier ;
+Identifier  = IDENTIFIER ;
 
 
-(* # Expressions *)
-(* expression *)
+(* literal *)
+Bool        = "true" | "false" ;
+
+
+(* expr *)
+ExprKind    = Assign  | Compare | Range  | Logic    | Bitwise | Shift
+            | Factor  | Term    | Unary  | Member   | Call    | Index
+            | Path    | Literal | Array  | ArrayRep | AddrOf
+            | Block   | Group    
+            | While   | If      | For    | Break    | Return  | Continue ;
+
 Expr        = Assign ;
-Block       = '{' Stmt* Expr? '}' ;
-Primary     = Identifier | Literal
-              | Block | Group | Branch ;
 
-(* expression::call *)
-Call        = FnCall | Primary ;
-FnCall      = Primary ('(' Tuple? ')')? ;
+Assign      = Path (AssignOp  Assign ) | Compare ;
 
-(* expression::tuple *)
-Group       = '(' Tuple? ')' ;
-Tuple       = Expr (',' Expr)* ;
+Binary      = Compare | Range | Logic  | Bitwise | Shift | Factor | Term ;
+Compare     = Range    (CompareOp Range  )* ;
+Range       = Logic    (RangeOp   Logic  )* ;
+Logic       = Bitwise  (LogicOp   Bitwise)* ;
+Bitwise     = Shift    (BitwiseOp Shift  )* ;
+Shift       = Factor   (ShiftOp   Factor )* ;
+Factor      = Term     (FactorOp  Term   )* ;
+Term        = Unary    (FactorOp  Unary  )* ;
 
-(* expression::math *)
-Assign      = Identifier (AssignOp  Assign) | Compare ;
-Compare     = Range   (CompareOp Range  )* ;
-Range       = Logic   (RangeOp   Logic  )* ;
-Logic       = Bitwise (LogicOp   Bitwise)* ;
-Bitwise     = Shift   (BitwiseOp Shift  )* ;
-Shift       = Term    (ShiftOp   Term   )* ;
-Term        = Factor  (TermOp    Factor )* ;
-Factor      = Unary   (FactorOp  Unary  )* ;
-Unary       = (UnaryOp)* Call ;
+Unary       = (UnaryOp)* Member ;
 
-(* expression::math::operator *)
-AssignOp    =  '=' | "+=" | "-=" | "*=" | "/=" |
-              "&=" | "|=" | "^=" |"<<=" |">>=" ;
-CompareOp   =  '<' | "<=" | "==" | "!=" | ">=" | '>' ;
-RangeOp     = ".." | "..=" ;
-LogicOp     = "&&" | "||" | "^^" ;
+Member      = Call ('.' Call)* ;
 
-BitwiseOp   =  '&' | '|' | '^' ;
-ShiftOp     = "<<" | ">>";
-TermOp      =  '+' | '-' ;
-FactorOp    =  '*' | '/' | '%' ;
-UnaryOp     =  '*' | '&' | '-' | '!' ;
+Call        = Index  ('(' Tuple? ')')* ;
 
-(* expression::control *)
-Branch      = While | If | For | Break | Return | Continue ;
-If          = "if"    Expr Block (Else)? ;
-While       = "while" Expr Block (Else)? ;
-For         = "for"   Identifier "in" Expr Block (Else)? ;
-Else        = "else"   Expr ;
+Index       = Primary ('[' Indices ']')* ;
+Indices     = (Expr ',')* Expr? ;
+
+Primary     = Literal | Path  | Array | ArrayRep | AddrOf 
+            | Block   | Group 
+            | If      | While | For   | Break    | Return | Continue;
+
+Literal     = STRING | CHARACTER | FLOAT | INTEGER | Bool ;
+
+Array       = '[' (Expr ',')* Expr? ']' ;
+ArrayRep    = '[' Expr ';' Expr ']' ;
+
+AddrOf      = ('&' | '&&')* Expr ;
+
+Block       = '{' Stmt* '}';
+
+Group       = '(' (Empty | Expr | Tuple) ')' ;
+Tuple       = (Expr ',')* Expr? ;
+Empty       = ;
+
+While       = "while" Expr Block Else? ;
+If          = "if"    Expr Block Else? ;
+For         = "for"   Identifier "in" Expr Block Else? ;
+Else        = "else"  Expr ;
 Break       = "break"  Expr ;
 Return      = "return" Expr ;
 Continue    = "continue" ;
+
+AssignKind  =  '=' | '+=' | '-=' | '*=' | '/=' |
+              '&=' | '|=' | '^=' |'<<=' |'>>=' ;
+
+BinaryKind  = CompareOp | RangeOp | LogicOp  | BitwiseOp 
+            | ShiftOp   | TermOp  | FactorOp ;
+CompareOp   =  '<' | '<=' | '==' | '!=' | '>=' | '>' ;
+RangeOp     = '..' | '..=' ;
+LogicOp     = '&&' | '||' | '^^' ;
+BitwiseOp   =  '&' | '|' | '^' ;
+ShiftOp     = '<<' | '>>';
+TermOp      =  '+' | '-' ;
+FactorOp    =  '*' | '/' | '%' ;
+
+UnaryKind   =  '*' | '-' | '!' | '@' | '#' | '~' ;

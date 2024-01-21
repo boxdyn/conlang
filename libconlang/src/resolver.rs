@@ -456,6 +456,7 @@ impl Resolver {
         self.get_mut(name)?.assign(name, ty)
     }
 }
+#[allow(unused_macros)]
 /// Manages a module scope
 /// ```rust,ignore
 /// macro module(self, name: &str, inner: {...}) -> Result<_, Error>
@@ -487,372 +488,375 @@ pub trait Resolve {
     }
 }
 mod ast1 {
-    #![allow(deprecated)]
-    use super::*;
-    use crate::ast::preamble::*;
-    impl Resolve for Start {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            let Self(program) = self;
-            program.resolve(resolver)
-        }
-    }
-    impl Resolve for Program {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            let Self(module) = self;
-            for decl in module {
-                decl.resolve(resolver)?;
-            }
-            // TODO: record the number of module-level assignments into the AST
-            Ok(Type::Empty)
-        }
-    }
-    impl Resolve for Stmt {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            match self {
-                Stmt::Let(value) => value.resolve(resolver),
-                Stmt::Fn(value) => value.resolve(resolver),
-                Stmt::Expr(value) => value.resolve(resolver),
-            }
-        }
-    }
-    impl Resolve for Let {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            let Let { name: Name { symbol: Identifier { name, index }, mutable, ty: _ }, init } =
-                self;
-            debugln!("ty> let {name} ...");
-            if let Some(init) = init {
-                let ty = init.resolve(resolver)?;
-                *index = Some(resolver.insert_scope(name, *mutable)?);
-                resolver.get_mut(name)?.assign(name, &ty)?;
-            } else {
-                resolver.insert_scope(name, *mutable)?;
-            }
-            Ok(Type::Empty)
-        }
-    }
-    impl Resolve for FnDecl {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            let FnDecl { name: Name { symbol: Identifier { name, index }, .. }, args, body } = self;
-            debugln!("ty> fn {name} ...");
-            // register the name at module scope
-            *index = Some(resolver.insert_module(name, false)?);
-            // create a new lexical scope
-            let scopes = std::mem::take(&mut resolver.scopes);
-            // type-check the function body
-            let out = {
-                let mut resolver = resolver.frame();
-                let mut evaluated_args = vec![];
-                for arg in args {
-                    evaluated_args.push(arg.resolve(&mut resolver)?)
-                }
-                let fn_decl = Type::Fn { args: evaluated_args.clone(), ret: Box::new(Type::Empty) };
-                resolver.get_mut(name)?.assign(name, &fn_decl)?;
-                module!(resolver, name, { body.resolve(&mut resolver) })
-            };
-            let _ = std::mem::replace(&mut resolver.scopes, scopes);
-            out
-        }
-    }
-    impl Resolve for Name {
-        fn resolve(&mut self, _resolver: &mut Resolver) -> TyResult<Type> {
-            Ok(Type::Empty)
-        }
-    }
-    impl Resolve for Block {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            let Block { let_count: _, statements, expr } = self;
-            let mut resolver = resolver.frame();
-            for stmt in statements {
-                stmt.resolve(&mut resolver)?;
-            }
-            expr.resolve(&mut resolver)
-        }
-    }
-    impl Resolve for Expr {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            let Expr(expr) = self;
-            expr.resolve(resolver)
-        }
-    }
+    // #![allow(deprecated)]
+    // use super::*;
+    // use crate::ast::preamble::*;
+    // impl Resolve for Start {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         let Self(program) = self;
+    //         program.resolve(resolver)
+    //     }
+    // }
+    // impl Resolve for Program {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         let Self(module) = self;
+    //         for decl in module {
+    //             decl.resolve(resolver)?;
+    //         }
+    //         // TODO: record the number of module-level assignments into the AST
+    //         Ok(Type::Empty)
+    //     }
+    // }
+    // impl Resolve for Stmt {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         match self {
+    //             Stmt::Let(value) => value.resolve(resolver),
+    //             Stmt::Fn(value) => value.resolve(resolver),
+    //             Stmt::Expr(value) => value.resolve(resolver),
+    //         }
+    //     }
+    // }
+    // impl Resolve for Let {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         let Let { name: Name { symbol: Identifier { name, index }, mutable, ty: _ }, init } =
+    //             self;
+    //         debugln!("ty> let {name} ...");
+    //         if let Some(init) = init {
+    //             let ty = init.resolve(resolver)?;
+    //             *index = Some(resolver.insert_scope(name, *mutable)?);
+    //             resolver.get_mut(name)?.assign(name, &ty)?;
+    //         } else {
+    //             resolver.insert_scope(name, *mutable)?;
+    //         }
+    //         Ok(Type::Empty)
+    //     }
+    // }
+    // impl Resolve for FnDecl {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         let FnDecl { name: Name { symbol: Identifier { name, index }, .. }, args, body } =
+    // self;         debugln!("ty> fn {name} ...");
+    //         // register the name at module scope
+    //         *index = Some(resolver.insert_module(name, false)?);
+    //         // create a new lexical scope
+    //         let scopes = std::mem::take(&mut resolver.scopes);
+    //         // type-check the function body
+    //         let out = {
+    //             let mut resolver = resolver.frame();
+    //             let mut evaluated_args = vec![];
+    //             for arg in args {
+    //                 evaluated_args.push(arg.resolve(&mut resolver)?)
+    //             }
+    //             let fn_decl = Type::Fn { args: evaluated_args.clone(), ret: Box::new(Type::Empty)
+    // };             resolver.get_mut(name)?.assign(name, &fn_decl)?;
+    //             module!(resolver, name, { body.resolve(&mut resolver) })
+    //         };
+    //         let _ = std::mem::replace(&mut resolver.scopes, scopes);
+    //         out
+    //     }
+    // }
+    // impl Resolve for Name {
+    //     fn resolve(&mut self, _resolver: &mut Resolver) -> TyResult<Type> {
+    //         Ok(Type::Empty)
+    //     }
+    // }
+    // impl Resolve for Block {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         let Block { let_count: _, statements, expr } = self;
+    //         let mut resolver = resolver.frame();
+    //         for stmt in statements {
+    //             stmt.resolve(&mut resolver)?;
+    //         }
+    //         expr.resolve(&mut resolver)
+    //     }
+    // }
+    // impl Resolve for Expr {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         let Expr(expr) = self;
+    //         expr.resolve(resolver)
+    //     }
+    // }
 
-    impl Resolve for Operation {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            match self {
-                Operation::Assign(value) => value.resolve(resolver),
-                Operation::Binary(value) => value.resolve(resolver),
-                Operation::Unary(value) => value.resolve(resolver),
-                Operation::Call(value) => value.resolve(resolver),
-            }
-        }
-    }
-    impl Resolve for Assign {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            let Assign { target, operator, init } = self;
-            // Evaluate the initializer expression
-            let ty = init.resolve(resolver)?;
-            // Resolve the variable
-            match (operator, resolver.get_mut(&target.name)?) {
-                (
-                    operator::Assign::Assign,
-                    Variable { status: Status::Initialized(_), mutable: false, index },
-                ) => Err(Error::ImmutableAssign(target.name.clone(), *index)),
-                // TODO: make typing more expressive for modifying assignment
-                (_, variable) => variable
-                    .modify_assign(&target.name, &ty)
-                    .map(|_| Type::Empty),
-            }
-        }
-    }
+    // impl Resolve for Operation {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         match self {
+    //             Operation::Assign(value) => value.resolve(resolver),
+    //             Operation::Binary(value) => value.resolve(resolver),
+    //             Operation::Unary(value) => value.resolve(resolver),
+    //             Operation::Call(value) => value.resolve(resolver),
+    //         }
+    //     }
+    // }
+    // impl Resolve for Assign {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         let Assign { target, operator, init } = self;
+    //         // Evaluate the initializer expression
+    //         let ty = init.resolve(resolver)?;
+    //         // Resolve the variable
+    //         match (operator, resolver.get_mut(&target.name)?) {
+    //             (
+    //                 operator::Assign::Assign,
+    //                 Variable { status: Status::Initialized(_), mutable: false, index },
+    //             ) => Err(Error::ImmutableAssign(target.name.clone(), *index)),
+    //             // TODO: make typing more expressive for modifying assignment
+    //             (_, variable) => variable
+    //                 .modify_assign(&target.name, &ty)
+    //                 .map(|_| Type::Empty),
+    //         }
+    //     }
+    // }
 
-    impl Resolve for Binary {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            let Binary { first, other } = self;
+    // impl Resolve for Binary {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         let Binary { first, other } = self;
 
-            let mut first = first.resolve(resolver)?;
-            for (op, other) in other {
-                let other = other.resolve(resolver)?;
-                first = resolver.resolve_binary_operator(first, other, op)?;
-            }
-            Ok(first)
-        }
-    }
-    impl Resolve for Unary {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            let Unary { operators, operand } = self;
-            let mut operand = operand.resolve(resolver)?;
-            for op in operators {
-                operand = resolver.resolve_unary_operator(operand, op)?;
-            }
-            Ok(operand)
-        }
-    }
-    /// Resolve [operator]s
-    impl Resolver {
-        fn resolve_binary_operator(
-            &mut self,
-            first: Type,
-            other: Type,
-            op: &operator::Binary,
-        ) -> TyResult<Type> {
-            // TODO: check type compatibility for binary ops
-            // TODO: desugar binary ops into function calls, when member functions are a thing
-            eprintln!("Resolve binary operators {first} {op:?} {other}");
-            if first != other {
-                Err(Error::TypeMismatch { want: first, got: other })
-            } else {
-                Ok(first)
-            }
-        }
-        fn resolve_unary_operator(
-            &mut self,
-            operand: Type,
-            op: &operator::Unary,
-        ) -> TyResult<Type> {
-            // TODO: Allow more expressive unary operator type conversions
-            todo!("Resolve unary operators {op:?} {operand}")
-        }
-    }
-    impl Resolve for Call {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            match self {
-                Call::FnCall(value) => value.resolve(resolver),
-                Call::Primary(value) => value.resolve(resolver),
-            }
-        }
-    }
-    impl Resolve for FnCall {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            let FnCall { callee, args } = self;
-            let mut callee = callee.resolve(resolver)?;
-            for argset in args {
-                // arguments should always be a tuple here
-                let arguments = argset.resolve(resolver)?;
-                let Type::Tuple(arguments) = arguments else {
-                    Err(Error::TypeMismatch {
-                        want: Type::Tuple(vec![Type::ManyInferred]),
-                        got: arguments,
-                    })?
-                };
-                // Verify that the callee is a function, and the arguments match.
-                // We need the arguments
-                let Type::Fn { args, ret } = callee else {
-                    return Err(Error::TypeMismatch {
-                        want: Type::Fn { args: arguments, ret: Type::Inferred.into() },
-                        got: callee,
-                    })?;
-                };
-                for (want, got) in args.iter().zip(&arguments) {
-                    // TODO: verify generics
-                    if let Type::Generic(_) = want {
-                        continue;
-                    }
-                    if want != got {
-                        return Err(Error::TypeMismatch {
-                            want: Type::Fn { args: arguments, ret: Type::Inferred.into() },
-                            got: Type::Fn { args, ret },
-                        })?;
-                    }
-                }
-                callee = *ret;
-            }
-            Ok(callee)
-        }
-    }
-    impl Resolve for Primary {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            match self {
-                Primary::Identifier(value) => value.resolve(resolver),
-                Primary::Literal(value) => value.resolve(resolver),
-                Primary::Block(value) => value.resolve(resolver),
-                Primary::Group(value) => value.resolve(resolver),
-                Primary::Branch(value) => value.resolve(resolver),
-            }
-        }
-    }
+    //         let mut first = first.resolve(resolver)?;
+    //         for (op, other) in other {
+    //             let other = other.resolve(resolver)?;
+    //             first = resolver.resolve_binary_operator(first, other, op)?;
+    //         }
+    //         Ok(first)
+    //     }
+    // }
+    // impl Resolve for Unary {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         let Unary { operators, operand } = self;
+    //         let mut operand = operand.resolve(resolver)?;
+    //         for op in operators {
+    //             operand = resolver.resolve_unary_operator(operand, op)?;
+    //         }
+    //         Ok(operand)
+    //     }
+    // }
+    // /// Resolve [operator]s
+    // impl Resolver {
+    //     fn resolve_binary_operator(
+    //         &mut self,
+    //         first: Type,
+    //         other: Type,
+    //         op: &operator::Binary,
+    //     ) -> TyResult<Type> {
+    //         // TODO: check type compatibility for binary ops
+    //         // TODO: desugar binary ops into function calls, when member functions are a thing
+    //         eprintln!("Resolve binary operators {first} {op:?} {other}");
+    //         if first != other {
+    //             Err(Error::TypeMismatch { want: first, got: other })
+    //         } else {
+    //             Ok(first)
+    //         }
+    //     }
+    //     fn resolve_unary_operator(
+    //         &mut self,
+    //         operand: Type,
+    //         op: &operator::Unary,
+    //     ) -> TyResult<Type> {
+    //         // TODO: Allow more expressive unary operator type conversions
+    //         todo!("Resolve unary operators {op:?} {operand}")
+    //     }
+    // }
+    // impl Resolve for Call {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         match self {
+    //             Call::FnCall(value) => value.resolve(resolver),
+    //             Call::Primary(value) => value.resolve(resolver),
+    //         }
+    //     }
+    // }
+    // impl Resolve for FnCall {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         let FnCall { callee, args } = self;
+    //         let mut callee = callee.resolve(resolver)?;
+    //         for argset in args {
+    //             // arguments should always be a tuple here
+    //             let arguments = argset.resolve(resolver)?;
+    //             let Type::Tuple(arguments) = arguments else {
+    //                 Err(Error::TypeMismatch {
+    //                     want: Type::Tuple(vec![Type::ManyInferred]),
+    //                     got: arguments,
+    //                 })?
+    //             };
+    //             // Verify that the callee is a function, and the arguments match.
+    //             // We need the arguments
+    //             let Type::Fn { args, ret } = callee else {
+    //                 return Err(Error::TypeMismatch {
+    //                     want: Type::Fn { args: arguments, ret: Type::Inferred.into() },
+    //                     got: callee,
+    //                 })?;
+    //             };
+    //             for (want, got) in args.iter().zip(&arguments) {
+    //                 // TODO: verify generics
+    //                 if let Type::Generic(_) = want {
+    //                     continue;
+    //                 }
+    //                 if want != got {
+    //                     return Err(Error::TypeMismatch {
+    //                         want: Type::Fn { args: arguments, ret: Type::Inferred.into() },
+    //                         got: Type::Fn { args, ret },
+    //                     })?;
+    //                 }
+    //             }
+    //             callee = *ret;
+    //         }
+    //         Ok(callee)
+    //     }
+    // }
+    // impl Resolve for Primary {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         match self {
+    //             Primary::Identifier(value) => value.resolve(resolver),
+    //             Primary::Literal(value) => value.resolve(resolver),
+    //             Primary::Block(value) => value.resolve(resolver),
+    //             Primary::Group(value) => value.resolve(resolver),
+    //             Primary::Branch(value) => value.resolve(resolver),
+    //         }
+    //     }
+    // }
 
-    impl Resolve for Group {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            match self {
-                Group::Tuple(tuple) => tuple.resolve(resolver),
-                Group::Single(expr) => expr.resolve(resolver),
-                Group::Empty => Ok(Type::Empty),
-            }
-        }
-    }
+    // impl Resolve for Group {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         match self {
+    //             Group::Tuple(tuple) => tuple.resolve(resolver),
+    //             Group::Single(expr) => expr.resolve(resolver),
+    //             Group::Empty => Ok(Type::Empty),
+    //         }
+    //     }
+    // }
 
-    impl Resolve for Tuple {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            let Tuple { elements } = self;
-            let mut types = vec![];
-            for expr in elements.iter_mut() {
-                types.push(expr.resolve(resolver)?);
-            }
-            Ok(Type::Tuple(types))
-        }
-    }
+    // impl Resolve for Tuple {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         let Tuple { elements } = self;
+    //         let mut types = vec![];
+    //         for expr in elements.iter_mut() {
+    //             types.push(expr.resolve(resolver)?);
+    //         }
+    //         Ok(Type::Tuple(types))
+    //     }
+    // }
 
-    impl Resolve for Identifier {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            let Identifier { name, index: id_index } = self;
-            let Variable { index, status, .. } = resolver.get(name)?;
-            *id_index = Some(*index);
-            let ty = match status {
-                Status::Initialized(t) => t,
-                _ => Err(Error::Uninitialized(name.to_owned(), *index))?,
-            };
-            debugln!("ty> Resolved {} #{index}: {ty}", name);
-            Ok(ty.to_owned())
-        }
-    }
-    impl Resolve for Literal {
-        fn resolve(&mut self, _resolver: &mut Resolver) -> TyResult<Type> {
-            Ok(match self {
-                Literal::String(_) => Type::String,
-                Literal::Char(_) => Type::Char,
-                Literal::Bool(_) => Type::Bool,
-                Literal::Float(_) => Type::Float,
-                Literal::Int(_) => Type::Int,
-            })
-        }
-    }
+    // impl Resolve for Identifier {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         let Identifier { name, index: id_index } = self;
+    //         let Variable { index, status, .. } = resolver.get(name)?;
+    //         *id_index = Some(*index);
+    //         let ty = match status {
+    //             Status::Initialized(t) => t,
+    //             _ => Err(Error::Uninitialized(name.to_owned(), *index))?,
+    //         };
+    //         debugln!("ty> Resolved {} #{index}: {ty}", name);
+    //         Ok(ty.to_owned())
+    //     }
+    // }
+    // impl Resolve for Literal {
+    //     fn resolve(&mut self, _resolver: &mut Resolver) -> TyResult<Type> {
+    //         Ok(match self {
+    //             Literal::String(_) => Type::String,
+    //             Literal::Char(_) => Type::Char,
+    //             Literal::Bool(_) => Type::Bool,
+    //             Literal::Float(_) => Type::Float,
+    //             Literal::Int(_) => Type::Int,
+    //         })
+    //     }
+    // }
 
-    impl Resolve for Flow {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            // TODO: Finish this
-            match self {
-                Flow::While(value) => value.resolve(resolver),
-                Flow::If(value) => value.resolve(resolver),
-                Flow::For(value) => value.resolve(resolver),
-                Flow::Continue(value) => value.resolve(resolver),
-                Flow::Return(value) => value.resolve(resolver),
-                Flow::Break(value) => value.resolve(resolver),
-            }
-        }
-    }
-    impl Resolve for While {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            // TODO: Finish this
-            // Visit else first, save that to a break-pattern stack in the Resolver,
-            // and check it inside Break::resolve()
-            let While { cond, body, else_ } = self;
-            cond.resolve(resolver)?; // must be Type::Bool
-            body.resolve(resolver)?; // discard
-            else_.resolve(resolver) // compare with returns inside body
-        }
-    }
-    impl Resolve for If {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            let If { cond, body, else_ } = self;
-            let cond = cond.resolve(resolver)?;
-            if Type::Bool != cond {
-                return Err(Error::TypeMismatch { want: Type::Bool, got: cond });
-            }
-            let body_ty = body.resolve(resolver)?;
-            let else_ty = else_.resolve(resolver)?;
-            if body_ty == else_ty {
-                Ok(body_ty)
-            } else {
-                Err(Error::TypeMismatch { want: body_ty, got: else_ty })
-            }
-        }
-    }
+    // impl Resolve for Flow {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         // TODO: Finish this
+    //         match self {
+    //             Flow::While(value) => value.resolve(resolver),
+    //             Flow::If(value) => value.resolve(resolver),
+    //             Flow::For(value) => value.resolve(resolver),
+    //             Flow::Continue(value) => value.resolve(resolver),
+    //             Flow::Return(value) => value.resolve(resolver),
+    //             Flow::Break(value) => value.resolve(resolver),
+    //         }
+    //     }
+    // }
+    // impl Resolve for While {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         // TODO: Finish this
+    //         // Visit else first, save that to a break-pattern stack in the Resolver,
+    //         // and check it inside Break::resolve()
+    //         let While { cond, body, else_ } = self;
+    //         cond.resolve(resolver)?; // must be Type::Bool
+    //         body.resolve(resolver)?; // discard
+    //         else_.resolve(resolver) // compare with returns inside body
+    //     }
+    // }
+    // impl Resolve for If {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         let If { cond, body, else_ } = self;
+    //         let cond = cond.resolve(resolver)?;
+    //         if Type::Bool != cond {
+    //             return Err(Error::TypeMismatch { want: Type::Bool, got: cond });
+    //         }
+    //         let body_ty = body.resolve(resolver)?;
+    //         let else_ty = else_.resolve(resolver)?;
+    //         if body_ty == else_ty {
+    //             Ok(body_ty)
+    //         } else {
+    //             Err(Error::TypeMismatch { want: body_ty, got: else_ty })
+    //         }
+    //     }
+    // }
 
-    impl Resolve for For {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            let For { var: Identifier { name, index }, iter, body, else_ } = self;
-            debugln!("> for {name} in ...");
-            // Visit the iter expression and get its type
-            let range = iter.resolve(resolver)?;
-            let ty = match range {
-                Type::Range(t) => t,
-                got => Err(Error::TypeMismatch { want: Type::Range(Type::Inferred.into()), got })?,
-            };
-            let body_ty = {
-                let mut resolver = resolver.frame();
-                // bind the variable in the loop scope
-                *index = Some(resolver.insert_scope(name, false)?);
-                resolver.get_mut(name)?.assign(name, &ty)?;
-                body.resolve(&mut resolver)
-            }?;
-            // visit the else block
-            let else_ty = else_.resolve(resolver)?;
-            if body_ty != else_ty {
-                Err(Error::TypeMismatch { want: body_ty, got: else_ty })
-            } else {
-                Ok(body_ty)
-            }
-        }
-    }
-    impl Resolve for Else {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            let Else { expr } = self;
-            expr.resolve(resolver)
-        }
-    }
+    // impl Resolve for For {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         let For { var: Identifier { name, index }, iter, body, else_ } = self;
+    //         debugln!("> for {name} in ...");
+    //         // Visit the iter expression and get its type
+    //         let range = iter.resolve(resolver)?;
+    //         let ty = match range {
+    //             Type::Range(t) => t,
+    //             got => Err(Error::TypeMismatch { want: Type::Range(Type::Inferred.into()), got
+    // })?,         };
+    //         let body_ty = {
+    //             let mut resolver = resolver.frame();
+    //             // bind the variable in the loop scope
+    //             *index = Some(resolver.insert_scope(name, false)?);
+    //             resolver.get_mut(name)?.assign(name, &ty)?;
+    //             body.resolve(&mut resolver)
+    //         }?;
+    //         // visit the else block
+    //         let else_ty = else_.resolve(resolver)?;
+    //         if body_ty != else_ty {
+    //             Err(Error::TypeMismatch { want: body_ty, got: else_ty })
+    //         } else {
+    //             Ok(body_ty)
+    //         }
+    //     }
+    // }
+    // impl Resolve for Else {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         let Else { expr } = self;
+    //         expr.resolve(resolver)
+    //     }
+    // }
 
-    impl Resolve for Continue {
-        fn resolve(&mut self, _resolver: &mut Resolver) -> TyResult<Type> {
-            // TODO: Finish control flow
-            Ok(Type::Never)
-        }
-    }
-    impl Resolve for Break {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            // TODO: Finish control flow
-            let Break { expr } = self;
-            expr.resolve(resolver)
-        }
-    }
-    impl Resolve for Return {
-        fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
-            // TODO: Finish control flow
-            let Return { expr } = self;
-            expr.resolve(resolver)
-        }
-    }
+    // impl Resolve for Continue {
+    //     fn resolve(&mut self, _resolver: &mut Resolver) -> TyResult<Type> {
+    //         // TODO: Finish control flow
+    //         Ok(Type::Never)
+    //     }
+    // }
+    // impl Resolve for Break {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         // TODO: Finish control flow
+    //         let Break { expr } = self;
+    //         expr.resolve(resolver)
+    //     }
+    // }
+    // impl Resolve for Return {
+    //     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {
+    //         // TODO: Finish control flow
+    //         let Return { expr } = self;
+    //         expr.resolve(resolver)
+    //     }
+    // }
 }
 
-mod ast2 {}
+mod ast {
+    #![allow(unused_imports)]
+    use crate::ast::*;
+}
 
 // heakc yea man, generics
 impl<T: Resolve> Resolve for Option<T> {

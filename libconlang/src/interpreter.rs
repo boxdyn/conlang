@@ -1,8 +1,8 @@
 //! Interprets an AST as a program
 
-use crate::ast::preamble::*;
 use env::Environment;
 use error::{Error, IResult};
+use interpret::Interpret;
 use temp_type_impl::ConValue;
 
 /// Callable types can be called from within a Conlang program
@@ -44,6 +44,8 @@ pub mod temp_type_impl {
         Char(char),
         /// A string
         String(String),
+        /// An Array
+        Array(Vec<ConValue>),
         /// A tuple
         Tuple(Vec<ConValue>),
         /// An exclusive range
@@ -74,6 +76,17 @@ pub mod temp_type_impl {
                 Err(Error::TypeError)?
             };
             Ok(Self::RangeInc(a, b))
+        }
+        pub fn index(&self, index: &Self) -> IResult<ConValue> {
+            let Self::Int(index) = index else {
+                Err(Error::TypeError)?
+            };
+            let Self::Array(arr) = self else {
+                Err(Error::TypeError)?
+            };
+            arr.get(*index as usize)
+                .cloned()
+                .ok_or(Error::OobIndex(*index as usize, arr.len()))
         }
         cmp! {
             lt: false, <;
@@ -259,6 +272,16 @@ pub mod temp_type_impl {
                 ConValue::Bool(v) => v.fmt(f),
                 ConValue::Char(v) => v.fmt(f),
                 ConValue::String(v) => v.fmt(f),
+                ConValue::Array(array) => {
+                    '['.fmt(f)?;
+                    for (idx, element) in array.iter().enumerate() {
+                        if idx > 0 {
+                            ", ".fmt(f)?
+                        }
+                        element.fmt(f)?
+                    }
+                    ']'.fmt(f)
+                }
                 ConValue::RangeExc(a, b) => write!(f, "{a}..{}", b + 1),
                 ConValue::RangeInc(a, b) => write!(f, "{a}..={b}"),
                 ConValue::Tuple(tuple) => {
@@ -282,352 +305,472 @@ pub mod temp_type_impl {
     }
 }
 
-/// A work-in-progress tree walk interpreter for Conlang
-pub trait Interpret {
-    /// Interprets this thing in the given [`Environment`].
-    ///
-    /// Everything returns a value!™
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue>;
-}
+pub mod interpret {
+    use super::*;
+    use crate::ast::*;
+    /// A work-in-progress tree walk interpreter for Conlang
+    pub trait Interpret {
+        /// Interprets this thing in the given [`Environment`].
+        ///
+        /// Everything returns a value!™
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue>;
+    }
 
-impl Interpret for Start {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        self.0.interpret(env)
-    }
-}
-impl Interpret for Program {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let mut out = ConValue::Empty;
-        for stmt in &self.0 {
-            out = stmt.interpret(env)?;
-        }
-        Ok(out)
-    }
-}
-impl Interpret for Stmt {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        match self {
-            Stmt::Let(l) => l.interpret(env),
-            Stmt::Fn(f) => f.interpret(env),
-            Stmt::Expr(e) => e.interpret(env),
-        }
-    }
-}
-impl Interpret for Let {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Let { name: Name { symbol: Identifier { name, .. }, .. }, init, .. } = self;
-        if let Some(init) = init {
-            let init = init.interpret(env)?;
-            env.insert(name, Some(init));
-        } else {
-            env.insert(name, None);
-        }
-        Ok(ConValue::Empty)
-    }
-}
-impl Interpret for FnDecl {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        // register the function in the current environment
-        env.insert_fn(self);
-        Ok(ConValue::Empty)
-    }
-}
-impl Interpret for Expr {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        self.0.interpret(env)
-    }
-}
-impl Interpret for Operation {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        match self {
-            Operation::Assign(op) => op.interpret(env),
-            Operation::Binary(op) => op.interpret(env),
-            Operation::Unary(op) => op.interpret(env),
-            Operation::Call(op) => op.interpret(env),
-        }
-    }
-}
-impl Interpret for Assign {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        use operator::Assign;
-        let math::Assign { target: Identifier { name, .. }, operator, init } = self;
-        let init = init.interpret(env)?;
-        let target = env.get_mut(name)?;
-
-        if let Assign::Assign = operator {
-            use std::mem::discriminant as variant;
-            // runtime typecheck
-            match target {
-                Some(value) if variant(value) == variant(&init) => {
-                    *value = init;
-                }
-                value @ None => *value = Some(init),
-                _ => Err(Error::TypeError)?,
+    impl Interpret for File {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            for item in &self.items {
+                item.interpret(env)?;
             }
-            return Ok(ConValue::Empty);
+            Ok(ConValue::Empty)
         }
-        let Some(target) = target else {
-            return Err(Error::NotInitialized(name.into()));
-        };
-
-        match operator {
-            Assign::AddAssign => target.add_assign(init)?,
-            Assign::SubAssign => target.sub_assign(init)?,
-            Assign::MulAssign => target.mul_assign(init)?,
-            Assign::DivAssign => target.div_assign(init)?,
-            Assign::RemAssign => target.rem_assign(init)?,
-            Assign::BitAndAssign => target.bitand_assign(init)?,
-            Assign::BitOrAssign => target.bitor_assign(init)?,
-            Assign::BitXorAssign => target.bitxor_assign(init)?,
-            Assign::ShlAssign => target.shl_assign(init)?,
-            Assign::ShrAssign => target.shr_assign(init)?,
-            _ => (),
-        }
-        Ok(ConValue::Empty)
     }
-}
-impl Interpret for Binary {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Binary { first, other } = self;
-        let mut first = first.interpret(env)?;
-        for (op, other) in other {
-            first = match op {
-                operator::Binary::LogAnd => {
-                    if first.truthy()? {
-                        other.interpret(env)
-                    } else {
-                        return Ok(first); // Short circuiting
+    impl Interpret for Item {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            match &self.kind {
+                ItemKind::Const(item) => item.interpret(env),
+                ItemKind::Static(item) => item.interpret(env),
+                ItemKind::Module(item) => item.interpret(env),
+                ItemKind::Function(item) => item.interpret(env),
+                ItemKind::Struct(item) => item.interpret(env),
+                ItemKind::Enum(item) => item.interpret(env),
+                ItemKind::Impl(item) => item.interpret(env),
+            }
+        }
+    }
+    impl Interpret for Const {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            todo!("interpret const in {env}")
+        }
+    }
+    impl Interpret for Static {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            todo!("interpret static in {env}")
+        }
+    }
+    impl Interpret for Module {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            // TODO: Enter this module's namespace
+            match &self.kind {
+                ModuleKind::Inline(file) => file.interpret(env),
+                ModuleKind::Outline => todo!("Load and parse external files"),
+            }
+        }
+    }
+    impl Interpret for Function {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            // register the function in the current environment
+            env.insert_fn(self);
+            Ok(ConValue::Empty)
+        }
+    }
+    impl Interpret for Struct {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            todo!("Interpret structs in {env}")
+        }
+    }
+    impl Interpret for Enum {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            todo!("Interpret enums in {env}")
+        }
+    }
+    impl Interpret for Impl {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            todo!("Enter a struct's namespace and insert function definitions into it in {env}");
+        }
+    }
+    impl Interpret for Stmt {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Self { extents: _, kind, semi } = self;
+            let out = match kind {
+                StmtKind::Empty => ConValue::Empty,
+                StmtKind::Local(stmt) => stmt.interpret(env)?,
+                StmtKind::Item(stmt) => stmt.interpret(env)?,
+                StmtKind::Expr(stmt) => stmt.interpret(env)?,
+            };
+            Ok(match semi {
+                Semi::Terminated => ConValue::Empty,
+                Semi::Unterminated => out,
+            })
+        }
+    }
+    impl Interpret for Let {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Let { mutable: _, name: Identifier(name), init } = self;
+            if let Some(init) = init {
+                let init = init.interpret(env)?;
+                env.insert(name, Some(init));
+            } else {
+                env.insert(name, None);
+            }
+            Ok(ConValue::Empty)
+        }
+    }
+    impl Interpret for Expr {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Self { extents: _, kind } = self;
+            match kind {
+                ExprKind::Assign(v) => v.interpret(env),
+                ExprKind::Binary(v) => v.interpret(env),
+                ExprKind::Unary(v) => v.interpret(env),
+                ExprKind::Member(v) => v.interpret(env),
+                ExprKind::Call(v) => v.interpret(env),
+                ExprKind::Index(v) => v.interpret(env),
+                ExprKind::Path(v) => v.interpret(env),
+                ExprKind::Literal(v) => v.interpret(env),
+                ExprKind::Array(v) => v.interpret(env),
+                ExprKind::ArrayRep(v) => v.interpret(env),
+                ExprKind::AddrOf(v) => v.interpret(env),
+                ExprKind::Block(v) => v.interpret(env),
+                ExprKind::Empty => Ok(ConValue::Empty),
+                ExprKind::Group(v) => v.interpret(env),
+                ExprKind::Tuple(v) => v.interpret(env),
+                ExprKind::While(v) => v.interpret(env),
+                ExprKind::If(v) => v.interpret(env),
+                ExprKind::For(v) => v.interpret(env),
+                ExprKind::Break(v) => v.interpret(env),
+                ExprKind::Return(v) => v.interpret(env),
+                ExprKind::Continue(v) => v.interpret(env),
+            }
+        }
+    }
+    impl Interpret for Assign {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Assign { head, op, tail } = self;
+            // Resolve the head pattern
+            let head = match &head.kind {
+                ExprKind::Path(Path { parts, .. }) if parts.len() == 1 => {
+                    match parts.last().expect("parts should not be empty") {
+                        PathPart::SuperKw => Err(Error::NotAssignable(head.extents.head))?,
+                        PathPart::SelfKw => todo!("Assignment to `self`"),
+                        PathPart::Ident(Identifier(s)) => s,
                     }
                 }
-                operator::Binary::LogOr => {
-                    if !first.truthy()? {
-                        other.interpret(env)
-                    } else {
-                        return Ok(first); // Short circuiting
+                ExprKind::Member(_) => todo!("Member access assignment"),
+                ExprKind::Call(_) => todo!("Assignment to the result of a function call?"),
+                ExprKind::Index(_) => todo!("Assignment to an index operation"),
+                ExprKind::Path(_) => todo!("Path expression resolution (IMPORTANT)"),
+                ExprKind::Empty | ExprKind::Group(_) | ExprKind::Tuple(_) => {
+                    todo!("Pattern Destructuring?")
+                }
+                _ => Err(Error::NotAssignable(head.extents.head))?,
+            };
+            // Get the initializer and the tail
+            let init = tail.interpret(env)?;
+            let target = env.get_mut(head)?;
+
+            if let AssignKind::Plain = op {
+                use std::mem::discriminant as variant;
+                // runtime typecheck
+                match target {
+                    Some(value) if variant(value) == variant(&init) => {
+                        *value = init;
+                    }
+                    value @ None => *value = Some(init),
+                    _ => Err(Error::TypeError)?,
+                }
+                return Ok(ConValue::Empty);
+            }
+            let Some(target) = target else {
+                return Err(Error::NotInitialized(head.into()));
+            };
+
+            match op {
+                AssignKind::Add => target.add_assign(init)?,
+                AssignKind::Sub => target.sub_assign(init)?,
+                AssignKind::Mul => target.mul_assign(init)?,
+                AssignKind::Div => target.div_assign(init)?,
+                AssignKind::Rem => target.rem_assign(init)?,
+                AssignKind::And => target.bitand_assign(init)?,
+                AssignKind::Or => target.bitor_assign(init)?,
+                AssignKind::Xor => target.bitxor_assign(init)?,
+                AssignKind::Shl => target.shl_assign(init)?,
+                AssignKind::Shr => target.shr_assign(init)?,
+                _ => (),
+            }
+            Ok(ConValue::Empty)
+        }
+    }
+    impl Interpret for Binary {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Binary { head, tail } = self;
+            let mut head = head.interpret(env)?;
+            for (op, tail) in tail {
+                head = match op {
+                    BinaryKind::LogAnd => {
+                        if head.truthy()? {
+                            tail.interpret(env)
+                        } else {
+                            return Ok(head); // Short circuiting
+                        }
+                    }
+                    BinaryKind::LogOr => {
+                        if !head.truthy()? {
+                            tail.interpret(env)
+                        } else {
+                            return Ok(head); // Short circuiting
+                        }
+                    }
+                    BinaryKind::LogXor => {
+                        // TODO: It should be possible to assemble better error information from
+                        // this
+                        let (lhs, rhs) = (head.truthy()?, tail.interpret(env)?.truthy()?);
+                        Ok(ConValue::Bool(lhs ^ rhs))
+                    }
+                    // TODO: For all overloadable operators, transmute into function call
+                    BinaryKind::Mul => head * tail.interpret(env)?,
+                    BinaryKind::Div => head / tail.interpret(env)?,
+                    BinaryKind::Rem => head % tail.interpret(env)?,
+                    BinaryKind::Add => head + tail.interpret(env)?,
+                    BinaryKind::Sub => head - tail.interpret(env)?,
+                    BinaryKind::Shl => head << tail.interpret(env)?,
+                    BinaryKind::Shr => head >> tail.interpret(env)?,
+                    BinaryKind::BitAnd => head & tail.interpret(env)?,
+                    BinaryKind::BitOr => head | tail.interpret(env)?,
+                    BinaryKind::BitXor => head ^ tail.interpret(env)?,
+                    BinaryKind::RangeExc => head.range_exc(tail.interpret(env)?),
+                    BinaryKind::RangeInc => head.range_inc(tail.interpret(env)?),
+                    BinaryKind::Lt => head.lt(&tail.interpret(env)?),
+                    BinaryKind::LtEq => head.lt_eq(&tail.interpret(env)?),
+                    BinaryKind::Equal => head.eq(&tail.interpret(env)?),
+                    BinaryKind::NotEq => head.neq(&tail.interpret(env)?),
+                    BinaryKind::GtEq => head.gt_eq(&tail.interpret(env)?),
+                    BinaryKind::Gt => head.gt(&tail.interpret(env)?),
+                    BinaryKind::Dot => todo!("search within a type's namespace!"),
+                }?;
+            }
+            Ok(head)
+        }
+    }
+    impl Interpret for Unary {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Unary { tail, ops } = self;
+            let mut operand = tail.interpret(env)?;
+
+            for op in ops.iter().rev() {
+                operand = match op {
+                    UnaryKind::Deref => todo!("Deref operator"),
+                    UnaryKind::Neg => (-operand)?,
+                    UnaryKind::Not => (!operand)?,
+                    UnaryKind::At => unimplemented!("At operator"),
+                    UnaryKind::Hash => {
+                        println!("{operand}");
+                        operand
+                    }
+                    UnaryKind::Tilde => unimplemented!("Tilde operator"),
+                };
+            }
+            Ok(operand)
+        }
+    }
+    impl Interpret for Member {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            todo!("Interpret member accesses in {env}")
+        }
+    }
+    impl Interpret for Call {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Self { callee, args } = self;
+            // evaluate the callee
+            let mut callee = callee.interpret(env)?;
+            for args in args {
+                let ConValue::Tuple(args) = args.interpret(env)? else {
+                    Err(Error::TypeError)?
+                };
+                callee = callee.call(env, &args)?;
+            }
+            Ok(callee)
+        }
+    }
+    impl Interpret for Index {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Self { head, indices } = self;
+            let mut head = head.interpret(env)?;
+            for indices in indices {
+                let Indices { exprs } = indices;
+                for index in exprs {
+                    head = head.index(&index.interpret(env)?)?;
+                }
+            }
+            Ok(head)
+        }
+    }
+    impl Interpret for Path {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Self { absolute: _, parts } = self;
+
+            if parts.len() == 1 {
+                match parts.last().expect("parts should not be empty") {
+                    PathPart::SuperKw | PathPart::SelfKw => todo!("Path navigation"),
+                    PathPart::Ident(Identifier(s)) => env.get(s).cloned(),
+                }
+            } else {
+                todo!("Path navigation!")
+            }
+        }
+    }
+    impl Interpret for Literal {
+        fn interpret(&self, _env: &mut Environment) -> IResult<ConValue> {
+            Ok(match self {
+                Literal::String(value) => ConValue::from(value.as_str()),
+                Literal::Char(value) => ConValue::Char(*value),
+                Literal::Bool(value) => ConValue::Bool(*value),
+                // Literal::Float(value) => todo!("Float values in interpreter: {value:?}"),
+                Literal::Int(value) => ConValue::Int(*value as _),
+            })
+        }
+    }
+    impl Interpret for Array {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Self { values } = self;
+            let mut out = vec![];
+            for expr in values {
+                out.push(expr.interpret(env)?)
+            }
+            Ok(ConValue::Array(out))
+        }
+    }
+    impl Interpret for ArrayRep {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Self { value, repeat } = self;
+            let repeat = match repeat.interpret(env)? {
+                ConValue::Int(v) => v,
+                _ => Err(Error::TypeError)?,
+            };
+            let value = value.interpret(env)?;
+            Ok(ConValue::Array(vec![value; repeat as usize]))
+        }
+    }
+    impl Interpret for AddrOf {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            todo!("Implement AddrOf in {env}")
+        }
+    }
+    impl Interpret for Block {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Self { stmts } = self;
+            let mut env = env.frame("block");
+            let mut out = ConValue::Empty;
+            for stmt in stmts {
+                let Stmt { kind, semi, .. } = stmt;
+                out = match (kind, semi) {
+                    (StmtKind::Expr(_), Semi::Unterminated) => stmt.interpret(&mut env)?,
+                    (StmtKind::Expr(_), _) => {
+                        stmt.interpret(&mut env)?;
+                        ConValue::Empty
+                    }
+                    _ => {
+                        stmt.interpret(&mut env)?;
+                        continue;
                     }
                 }
-                operator::Binary::LogXor => {
-                    // TODO: It should be possible to assemble better error information from this
-                    let (lhs, rhs) = (first.truthy()?, other.interpret(env)?.truthy()?);
-                    Ok(ConValue::Bool(lhs ^ rhs))
+            }
+            Ok(out)
+        }
+    }
+    impl Interpret for Group {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Self { expr } = self;
+            expr.interpret(env)
+        }
+    }
+    impl Interpret for Tuple {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Self { exprs } = self;
+            Ok(ConValue::Tuple(exprs.iter().try_fold(
+                vec![],
+                |mut out, element| {
+                    out.push(element.interpret(env)?);
+                    Ok(out)
+                },
+            )?))
+        }
+    }
+    impl Interpret for While {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Self { cond, pass, fail } = self;
+            while cond.interpret(env)?.truthy()? {
+                match pass.interpret(env) {
+                    Err(Error::Break(value)) => return Ok(value),
+                    Err(Error::Continue) => continue,
+                    e => e?,
+                };
+            }
+            fail.interpret(env)
+        }
+    }
+    impl Interpret for If {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Self { cond, pass, fail } = self;
+            if cond.interpret(env)?.truthy()? {
+                pass.interpret(env)
+            } else {
+                fail.interpret(env)
+            }
+        }
+    }
+    impl Interpret for For {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Self { bind: Identifier(name), cond, pass, fail } = self;
+            // TODO: A better iterator model
+            let bounds = match cond.interpret(env)? {
+                ConValue::RangeExc(a, b) => a..=b,
+                ConValue::RangeInc(a, b) => a..=b,
+                _ => Err(Error::TypeError)?,
+            };
+            {
+                let mut env = env.frame("loop variable");
+                for loop_var in bounds {
+                    env.insert(name, Some(loop_var.into()));
+                    match pass.interpret(&mut env) {
+                        Err(Error::Break(value)) => return Ok(value),
+                        Err(Error::Continue) => continue,
+                        result => result?,
+                    };
                 }
-                // TODO: For all overloadable operators, transmute into function call
-                operator::Binary::Mul => first * other.interpret(env)?,
-                operator::Binary::Div => first / other.interpret(env)?,
-                operator::Binary::Rem => first % other.interpret(env)?,
-                operator::Binary::Add => first + other.interpret(env)?,
-                operator::Binary::Sub => first - other.interpret(env)?,
-                operator::Binary::Lsh => first << other.interpret(env)?,
-                operator::Binary::Rsh => first >> other.interpret(env)?,
-                operator::Binary::BitAnd => first & other.interpret(env)?,
-                operator::Binary::BitOr => first | other.interpret(env)?,
-                operator::Binary::BitXor => first ^ other.interpret(env)?,
-                operator::Binary::RangeExc => first.range_exc(other.interpret(env)?),
-                operator::Binary::RangeInc => first.range_inc(other.interpret(env)?),
-                operator::Binary::Less => first.lt(&other.interpret(env)?),
-                operator::Binary::LessEq => first.lt_eq(&other.interpret(env)?),
-                operator::Binary::Equal => first.eq(&other.interpret(env)?),
-                operator::Binary::NotEq => first.neq(&other.interpret(env)?),
-                operator::Binary::GreaterEq => first.gt_eq(&other.interpret(env)?),
-                operator::Binary::Greater => first.gt(&other.interpret(env)?),
-            }?;
-        }
-        Ok(first)
-    }
-}
-impl Interpret for Unary {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Unary { operand, operators } = self;
-        let mut operand = operand.interpret(env)?;
-
-        for op in operators.iter().rev() {
-            operand = match op {
-                operator::Unary::RefRef => todo!(),
-                operator::Unary::Ref => todo!(),
-                operator::Unary::Deref => todo!(),
-                operator::Unary::Neg => (-operand)?,
-                operator::Unary::Not => (!operand)?,
-                operator::Unary::At => todo!(),
-                operator::Unary::Hash => {
-                    println!("{operand}");
-                    operand
-                }
-                operator::Unary::Tilde => todo!(),
-            };
-        }
-        Ok(operand)
-    }
-}
-impl Interpret for Call {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        match self {
-            Call::FnCall(fncall) => fncall.interpret(env),
-            Call::Primary(primary) => primary.interpret(env),
+            }
+            fail.interpret(env)
         }
     }
-}
-impl Interpret for FnCall {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        // evaluate the callee
-        let mut callee = self.callee.interpret(env)?;
-        for args in &self.args {
-            let ConValue::Tuple(args) = args.interpret(env)? else {
-                Err(Error::TypeError)?
-            };
-            callee = callee.call(env, &args)?;
-        }
-        Ok(callee)
-    }
-}
-impl Interpret for Primary {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        match self {
-            Primary::Identifier(prim) => prim.interpret(env),
-            Primary::Literal(prim) => prim.interpret(env),
-            Primary::Block(prim) => prim.interpret(env),
-            Primary::Group(prim) => prim.interpret(env),
-            Primary::Branch(prim) => prim.interpret(env),
+    impl Interpret for Else {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Self { body } = self;
+            match body {
+                Some(body) => body.interpret(env),
+                None => Ok(ConValue::Empty),
+            }
         }
     }
-}
-impl Interpret for Identifier {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        env.get(&self.name).cloned()
-    }
-}
-impl Interpret for Literal {
-    fn interpret(&self, _env: &mut Environment) -> IResult<ConValue> {
-        Ok(match self {
-            Literal::String(value) => ConValue::from(value.as_str()),
-            Literal::Char(value) => ConValue::Char(*value),
-            Literal::Bool(value) => ConValue::Bool(*value),
-            Literal::Float(value) => todo!("Float values in interpreter: {value:?}"),
-            Literal::Int(value) => ConValue::Int(*value as _),
-        })
-    }
-}
-impl Interpret for Block {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let mut env = env.frame("block");
-        // TODO: this could TOTALLY be done with a binary operator.
-        for stmt in &self.statements {
-            stmt.interpret(&mut env)?;
-        }
-        if let Some(expr) = self.expr.as_ref() {
-            expr.interpret(&mut env)
-        } else {
-            Ok(ConValue::Empty)
+    impl Interpret for Continue {
+        fn interpret(&self, _env: &mut Environment) -> IResult<ConValue> {
+            Err(Error::Continue)
         }
     }
-}
-impl Interpret for Group {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        match self {
-            Group::Tuple(tuple) => tuple.interpret(env),
-            Group::Single(value) => value.interpret(env),
-            Group::Empty => Ok(ConValue::Empty),
+    impl Interpret for Return {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Self { body } = self;
+            Err(Error::Return(
+                body.as_ref()
+                    .map(|body| body.interpret(env))
+                    .unwrap_or(Ok(ConValue::Empty))?,
+            ))
         }
     }
-}
-impl Interpret for Tuple {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        Ok(ConValue::Tuple(self.elements.iter().try_fold(
-            vec![],
-            |mut out, element| {
-                out.push(element.interpret(env)?);
-                Ok(out)
-            },
-        )?))
-    }
-}
-impl Interpret for Flow {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        match self {
-            Flow::While(flow) => flow.interpret(env),
-            Flow::If(flow) => flow.interpret(env),
-            Flow::For(flow) => flow.interpret(env),
-            Flow::Continue(flow) => flow.interpret(env),
-            Flow::Return(flow) => flow.interpret(env),
-            Flow::Break(flow) => flow.interpret(env),
+    impl Interpret for Break {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            let Self { body } = self;
+            Err(Error::Return(
+                body.as_ref()
+                    .map(|body| body.interpret(env))
+                    .unwrap_or(Ok(ConValue::Empty))?,
+            ))
         }
-    }
-}
-impl Interpret for While {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        while self.cond.interpret(env)?.truthy()? {
-            match self.body.interpret(env) {
-                Err(Error::Break(value)) => return Ok(value),
-                Err(Error::Continue) => continue,
-                e => e?,
-            };
-        }
-        if let Some(other) = &self.else_ {
-            other.interpret(env)
-        } else {
-            Ok(ConValue::Empty)
-        }
-    }
-}
-impl Interpret for Else {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        self.expr.interpret(env)
-    }
-}
-impl Interpret for If {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        if self.cond.interpret(env)?.truthy()? {
-            self.body.interpret(env)
-        } else if let Some(other) = &self.else_ {
-            other.interpret(env)
-        } else {
-            Ok(ConValue::Empty)
-        }
-    }
-}
-impl Interpret for For {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let bounds = match self.iter.interpret(env)? {
-            ConValue::RangeExc(a, b) => a..=b,
-            ConValue::RangeInc(a, b) => a..=b,
-            _ => Err(Error::TypeError)?,
-        };
-
-        let mut env = env.frame("loop variable");
-        for loop_var in bounds {
-            env.insert(&self.var.name, Some(loop_var.into()));
-            match self.body.interpret(&mut env) {
-                Err(Error::Break(value)) => return Ok(value),
-                Err(Error::Continue) => continue,
-                result => result?,
-            };
-        }
-        if let Some(other) = &self.else_ {
-            other.interpret(&mut env)
-        } else {
-            Ok(ConValue::Empty)
-        }
-    }
-}
-impl Interpret for Continue {
-    fn interpret(&self, _env: &mut Environment) -> IResult<ConValue> {
-        Err(Error::Continue)
-    }
-}
-impl Interpret for Return {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        Err(Error::Return(self.expr.interpret(env)?))
-    }
-}
-impl Interpret for Break {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        Err(Error::Break(self.expr.interpret(env)?))
     }
 }
 
 pub mod function {
     //! Represents a block of code which lives inside the Interpreter
-    use super::{Callable, ConValue, Environment, Error, FnDecl, IResult, Identifier, Interpret};
-    use crate::ast::preamble::Name;
+    use super::{Callable, ConValue, Environment, Error, IResult, Interpret};
+    use crate::ast::{Function as FnDecl, Identifier, Param};
     /// Represents a block of code which persists inside the Interpreter
     #[derive(Clone, Debug)]
     pub struct Function {
@@ -645,22 +788,26 @@ pub mod function {
 
     impl Callable for Function {
         fn name(&self) -> &str {
-            &self.decl.name.symbol.name
+            let FnDecl { name: Identifier(ref name), .. } = *self.decl;
+            name
         }
         fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
+            let FnDecl { name: Identifier(name), args: declargs, body, rety: _ } = &*self.decl;
             // Check arg mapping
-            if args.len() != self.decl.args.len() {
-                return Err(Error::ArgNumber { want: self.decl.args.len(), got: args.len() });
+            if args.len() != declargs.len() {
+                return Err(Error::ArgNumber { want: declargs.len(), got: args.len() });
             }
-            // TODO: Isolate cross-function scopes!
-            // let mut env = self.env.clone();
+            let Some(body) = body else {
+                return Err(Error::NotDefined(name.into()));
+            };
+            // TODO: completely refactor data storage
             let mut frame = env.frame("fn args");
-            for (Name { symbol: Identifier { name, .. }, .. }, value) in
-                self.decl.args.iter().zip(args)
+            for (Param { mutability: _, name: Identifier(name), ty: _ }, value) in
+                declargs.iter().zip(args)
             {
                 frame.insert(name, Some(value.clone()));
             }
-            match self.decl.body.interpret(&mut frame) {
+            match body.interpret(&mut frame) {
                 Err(Error::Return(value)) => Ok(value),
                 Err(Error::Break(value)) => Err(Error::BadBreak(value)),
                 result => result,
@@ -734,14 +881,14 @@ pub mod builtin {
 
 pub mod env {
     //! Lexical and non-lexical scoping for variables
-
     use super::{
         builtin::DEFAULT_BUILTINS,
         error::{Error, IResult},
         function::Function,
         temp_type_impl::ConValue,
-        Callable, FnDecl, Interpret,
+        Callable, Interpret,
     };
+    use crate::ast::{Function as FnDecl, Identifier};
     use std::{
         collections::HashMap,
         fmt::Display,
@@ -838,10 +985,8 @@ pub mod env {
         }
         /// A convenience function for registering a [FnDecl] as a [Function]
         pub fn insert_fn(&mut self, decl: &FnDecl) {
-            let (name, function) = (
-                decl.name.symbol.name.clone(),
-                Some(Function::new(decl).into()),
-            );
+            let FnDecl { name: Identifier(name), .. } = decl;
+            let (name, function) = (name.clone(), Some(Function::new(decl).into()));
             if let Some((frame, _)) = self.frames.last_mut() {
                 frame.insert(name, function);
             }
@@ -898,6 +1043,7 @@ pub mod error {
     //! The [Error] type represents any error thrown by the [Environment](super::Environment)
 
     use super::temp_type_impl::ConValue;
+    use crate::ast::Loc;
 
     pub type IResult<T> = Result<T, Error>;
 
@@ -921,6 +1067,12 @@ pub mod error {
         TypeError,
         /// In clause of For loop didn't yield a Range
         NotIterable,
+        /// A value at this [location](struct@Loc) can't be indexed
+        NotIndexable(Loc),
+        /// An array index went out of bounds
+        OobIndex(usize, usize),
+        /// An expression at this [location](struct@Loc)ation is not assignable
+        NotAssignable(Loc),
         /// A name was not defined in scope before being used
         NotDefined(String),
         /// A name was defined but not initialized
@@ -943,6 +1095,15 @@ pub mod error {
                 Error::ScopeExit => "Exited the last scope. This is a logic bug.".fmt(f),
                 Error::TypeError => "Incompatible types".fmt(f),
                 Error::NotIterable => "`in` clause of `for` loop did not yield an iterable".fmt(f),
+                Error::NotIndexable(location) => {
+                    write!(f, "{location} expression cannot be indexed")
+                }
+                Error::OobIndex(idx, len) => {
+                    write!(f, "Index out of bounds: index was {idx}. but len is {len}")
+                }
+                Error::NotAssignable(location) => {
+                    write!(f, "{location} expression is not assignable")
+                }
                 Error::NotDefined(value) => {
                     write!(f, "{value} not bound. Did you mean `let {value};`?")
                 }
@@ -950,7 +1111,7 @@ pub mod error {
                     write!(f, "{value} bound, but not initialized")
                 }
                 Error::NotCallable(value) => {
-                    write!(f, "{value} is not a function, and cannot be called")
+                    write!(f, "{value} is not callable.")
                 }
                 Error::ArgNumber { want, got } => {
                     write!(f, "Expected {want} arguments, got {got}")

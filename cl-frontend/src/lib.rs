@@ -1,4 +1,8 @@
 //! Utilities for cl-frontend
+//!
+//! # TODO
+//! - [ ] Readline-like line editing
+//! - [ ] Raw mode?
 
 pub mod args {
     use crate::cli::Mode;
@@ -14,7 +18,7 @@ pub mod args {
         pub repl: bool,            // defaults true if stdin is terminal
         pub mode: Mode,            // defaults Interpret
     }
-    const HELP: &str = "[( --repl | --no-repl )] [( -f | --file ) <filename>]";
+    const HELP: &str = "[( --repl | --no-repl )] [--mode (tokens | pretty | type | run)] [( -f | --file ) <filename>]";
 
     impl Args {
         pub fn new() -> Self {
@@ -65,109 +69,132 @@ pub mod args {
 }
 
 pub mod program {
-    use std::io::{Result as IOResult, Write};
+    use std::{fmt::Display, io::Write};
 
     use conlang::{
-        ast::preamble::{expression::Expr, *},
-        interpreter::{env::Environment, error::IResult},
+        ast::{self, ast_impl::format::Pretty},
+        interpreter::{
+            env::Environment, error::IResult, interpret::Interpret, temp_type_impl::ConValue,
+        },
+        // pretty_printer::{PrettyPrintable, Printer},
         lexer::Lexer,
         parser::{error::PResult, Parser},
-        pretty_printer::{PrettyPrintable, Printer},
-        resolver::{error::TyResult, Resolve, Resolver},
-        token::Token,
+        resolver::{error::TyResult, Resolver},
     };
 
-    pub struct Tokenized {
-        tokens: Vec<Token>,
-    }
+    pub struct Parsable;
 
     pub enum Parsed {
-        Program(Start),
-        Expr(Expr),
+        File(ast::File),
+        Stmt(ast::Stmt),
+        Expr(ast::Expr),
     }
 
-    impl TryFrom<Tokenized> for Parsed {
-        type Error = conlang::parser::error::Error;
-        fn try_from(value: Tokenized) -> Result<Self, Self::Error> {
-            let mut parser = Parser::new(value.tokens);
-            let ast = parser.parse()?;
-            //if let Ok(ast) = ast {
-            //return
-            Ok(Self::Program(ast))
-            //}
-
-            //Ok(Self::Expr(parser.reset().parse_expr()?))
-        }
-    }
-
-    pub struct Program<Variant> {
+    pub struct Program<'t, Variant> {
+        text: &'t str,
         data: Variant,
     }
-
-    impl Program<Tokenized> {
-        pub fn new(input: &str) -> Result<Self, Vec<conlang::lexer::error::Error>> {
-            let mut tokens = vec![];
-            let mut errors = vec![];
-            for token in Lexer::new(input) {
-                match token {
-                    Ok(token) => tokens.push(token),
-                    Err(error) => errors.push(error),
-                }
-            }
-            if errors.is_empty() {
-                Ok(Self { data: Tokenized { tokens } })
-            } else {
-                Err(errors)
-            }
-        }
-        pub fn tokens(&self) -> &[Token] {
-            &self.data.tokens
-        }
-        pub fn parse(self) -> PResult<Program<Parsed>> {
-            Ok(Program { data: Parsed::try_from(self.data)? })
+    impl<'t, V> Program<'t, V> {
+        pub fn lex(&self) -> Lexer {
+            Lexer::new(self.text)
         }
     }
 
-    impl Program<Parsed> {
-        pub fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<()> {
-            match &mut self.data {
-                Parsed::Program(start) => start.resolve(resolver),
-                Parsed::Expr(expr) => expr.resolve(resolver),
-            }
-            .map(|ty| println!("{ty}"))
+    impl<'t> Program<'t, Parsable> {
+        pub fn new(text: &'t str) -> Self {
+            Self { text, data: Parsable }
         }
-        /// Runs the [Program] in the specified [Environment]
-        pub fn run(&self, env: &mut Environment) -> IResult<()> {
-            println!(
-                "{}",
-                match &self.data {
-                    Parsed::Program(start) => env.eval(start)?,
-                    Parsed::Expr(expr) => env.eval(expr)?,
-                }
-            );
-            Ok(())
+        pub fn parse(self) -> PResult<Program<'t, Parsed>> {
+            self.parse_file().or_else(|_| self.parse_stmt())
+        }
+        pub fn parse_expr(&self) -> PResult<Program<'t, Parsed>> {
+            Ok(Program { data: Parsed::Expr(Parser::new(self.lex()).expr()?), text: self.text })
+        }
+        pub fn parse_stmt(&self) -> PResult<Program<'t, Parsed>> {
+            Ok(Program { data: Parsed::Stmt(Parser::new(self.lex()).stmt()?), text: self.text })
+        }
+        pub fn parse_file(&self) -> PResult<Program<'t, Parsed>> {
+            Ok(Program { data: Parsed::File(Parser::new(self.lex()).file()?), text: self.text })
         }
     }
 
-    impl PrettyPrintable for Program<Parsed> {
-        fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+    impl<'t> Program<'t, Parsed> {
+        pub fn debug(&self) {
             match &self.data {
-                Parsed::Program(value) => value.visit(p),
-                Parsed::Expr(value) => value.visit(p),
+                Parsed::File(v) => eprintln!("{v:?}"),
+                Parsed::Stmt(v) => eprintln!("{v:?}"),
+                Parsed::Expr(v) => eprintln!("{v:?}"),
+            }
+        }
+        pub fn print(&self) {
+            let mut f = std::io::stdout().pretty();
+            let _ = match &self.data {
+                Parsed::File(v) => writeln!(f, "{v}"),
+                Parsed::Stmt(v) => writeln!(f, "{v}"),
+                Parsed::Expr(v) => writeln!(f, "{v}"),
+            };
+            // println!("{self}")
+        }
+
+        pub fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<()> {
+            todo!("Program::resolve(\n{self},\n{resolver:?}\n)")
+        }
+
+        pub fn run(&self, env: &mut Environment) -> IResult<ConValue> {
+            match &self.data {
+                Parsed::File(v) => v.interpret(env),
+                Parsed::Stmt(v) => v.interpret(env),
+                Parsed::Expr(v) => v.interpret(env),
+            }
+        }
+
+        // pub fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<()> {
+        //     match &mut self.data {
+        //         Parsed::Program(start) => start.resolve(resolver),
+        //         Parsed::Expr(expr) => expr.resolve(resolver),
+        //     }
+        //     .map(|ty| println!("{ty}"))
+        // }
+
+        // /// Runs the [Program] in the specified [Environment]
+        // pub fn run(&self, env: &mut Environment) -> IResult<()> {
+        //     println!(
+        //         "{}",
+        //         match &self.data {
+        //             Parsed::Program(start) => env.eval(start)?,
+        //             Parsed::Expr(expr) => env.eval(expr)?,
+        //         }
+        //     );
+        //     Ok(())
+        // }
+    }
+
+    impl<'t> Display for Program<'t, Parsed> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match &self.data {
+                Parsed::File(v) => write!(f, "{v}"),
+                Parsed::Stmt(v) => write!(f, "{v}"),
+                Parsed::Expr(v) => write!(f, "{v}"),
             }
         }
     }
+
+    // impl PrettyPrintable for Program<Parsed> {
+    //     fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
+    //         match &self.data {
+    //             Parsed::Program(value) => value.visit(p),
+    //             Parsed::Expr(value) => value.visit(p),
+    //         }
+    //     }
+    // }
 }
 
 pub mod cli {
-    use conlang::{
-        interpreter::env::Environment, pretty_printer::PrettyPrintable, resolver::Resolver,
-        token::Token,
-    };
+    use conlang::{interpreter::env::Environment, resolver::Resolver, token::Token};
 
     use crate::{
         args::Args,
-        program::{Parsed, Program, Tokenized},
+        program::{Parsable, Parsed, Program},
     };
     use std::{
         convert::Infallible,
@@ -220,35 +247,30 @@ pub mod cli {
         }
         fn no_repl(mode: Mode, path: Option<&Path>, code: &str) {
             let program = Program::new(code);
-            match (mode, program) {
-                (Mode::Tokenize, Ok(program)) => {
-                    for token in program.tokens() {
+            match mode {
+                Mode::Tokenize => {
+                    for token in program.lex() {
                         if let Some(path) = path {
                             print!("{}:", path.display());
                         }
-                        print_token(token)
-                    }
-                }
-                (Mode::Beautify, Ok(program)) => Self::beautify(program),
-                (Mode::Resolve, Ok(program)) => Self::resolve(program, Default::default()),
-                (Mode::Interpret, Ok(program)) => Self::interpret(program, Environment::new()),
-                (_, Err(errors)) => {
-                    for error in errors {
-                        if let Some(path) = path {
-                            eprint!("{}:", path.display());
+                        match token {
+                            Ok(token) => print_token(&token),
+                            Err(e) => println!("{e}"),
                         }
-                        eprintln!("{error}")
                     }
                 }
+                Mode::Beautify => Self::beautify(program),
+                Mode::Resolve => Self::resolve(program, Default::default()),
+                Mode::Interpret => Self::interpret(program, Environment::new()),
             }
         }
-        fn beautify(program: Program<Tokenized>) {
+        fn beautify(program: Program<Parsable>) {
             match program.parse() {
                 Ok(program) => program.print(),
                 Err(e) => eprintln!("{e}"),
             };
         }
-        fn resolve(program: Program<Tokenized>, mut resolver: Resolver) {
+        fn resolve(program: Program<Parsable>, mut resolver: Resolver) {
             let mut program = match program.parse() {
                 Ok(program) => program,
                 Err(e) => {
@@ -260,7 +282,7 @@ pub mod cli {
                 eprintln!("{e}");
             }
         }
-        fn interpret(program: Program<Tokenized>, mut interpreter: Environment) {
+        fn interpret(program: Program<Parsable>, mut interpreter: Environment) {
             let program = match program.parse() {
                 Ok(program) => program,
                 Err(e) => {
@@ -301,10 +323,10 @@ pub mod cli {
         type Err = Infallible;
         fn from_str(s: &str) -> Result<Self, Infallible> {
             Ok(match s {
-                "i" | "interpret" => Mode::Interpret,
+                "i" | "interpret" | "run" => Mode::Interpret,
                 "b" | "beautify" | "p" | "pretty" => Mode::Beautify,
-                "r" | "resolve" | "typecheck" => Mode::Resolve,
-                "t" | "tokenize" => Mode::Tokenize,
+                "r" | "resolve" | "typecheck" | "type" => Mode::Resolve,
+                "t" | "tokenize" | "tokens" => Mode::Tokenize,
                 _ => Mode::Interpret,
             })
         }
@@ -386,12 +408,12 @@ pub mod cli {
                     continue;
                 }
                 // Lex the buffer, or reset and output the error
-                let code = match Program::new(&buf) {
-                    Ok(code) => code,
-                    Err(e) => {
-                        for error in e {
-                            eprintln!("{error}");
-                        }
+                let code = Program::new(&buf);
+                match code.lex().into_iter().find(|l| l.is_err()) {
+                    None => (),
+                    Some(Ok(_)) => unreachable!(),
+                    Some(Err(error)) => {
+                        eprintln!("{error}");
                         self.reprompt(&mut buf);
                         continue;
                     }
@@ -451,9 +473,12 @@ pub mod cli {
                 Mode::Interpret => self.interpret(code),
             }
         }
-        fn tokenize(&mut self, code: &Program<Tokenized>) {
-            for token in code.tokens() {
-                print_token(token);
+        fn tokenize(&mut self, code: &Program<Parsable>) {
+            for token in code.lex() {
+                match token {
+                    Ok(token) => print_token(&token),
+                    Err(e) => println!("{e}"),
+                }
             }
         }
         fn interpret(&mut self, code: &Program<Parsed>) {
