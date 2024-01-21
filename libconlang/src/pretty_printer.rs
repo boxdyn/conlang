@@ -1,5 +1,6 @@
 //! A [Printer] pretty-prints a Conlang [syntax tree](crate::ast)
-
+#![deprecated]
+#![allow(deprecated)]
 use super::ast::preamble::*;
 use std::{
     fmt::Display,

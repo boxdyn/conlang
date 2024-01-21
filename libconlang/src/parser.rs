@@ -1,5 +1,6 @@
 //! Parses [tokens](super::token) into an [AST](super::ast)
-
+#![deprecated]
+#![allow(deprecated)]
 use super::{ast::preamble::*, lexer::Lexer, token::preamble::*};
 use error::{Error, *};
 

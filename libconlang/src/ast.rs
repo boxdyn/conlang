@@ -7,7 +7,7 @@
 //! [`Identifier`]` := `[`IDENTIFIER`](crate::token::token_type::Type::Identifier)
 //!
 //! See [statement], [literal], and [expression] for more information.
-
+#![deprecated]
 pub mod preamble {
     #![allow(deprecated)]
     //! Common imports for working with the [ast](super)
@@ -123,10 +123,28 @@ pub mod statement {
         /// # Syntax
         /// [`Fn`](Stmt::Fn) := `"fn"` [`Identifier`] `'('` `Args...` `')'` [`Block`]
         Fn(FnDecl),
+        /// Contains a module declaration
+        /// # Syntax
+        /// [`Mod`](Stmt::Mod) := `"mod"` [`Identifier`] `'{'`
+        ///
+        /// `'}'`
         /// Contains an expression statement
         /// # Syntax
         /// [`Expr`](Stmt::Expr) := [`Expr`] `;`
         Expr(Expr),
+    }
+
+    /// Contains the declarations allowed in a module
+    ///
+    /// # Syntax
+    /// [Mod](Module::Mod) := "mod" [Identifier] '{' [Module] '}'
+    /// [`Let`](Module::Let) := `"let"` [`Identifier`] (`:` `Type`)? (`=` [`Expr`])? `;`
+    #[derive(Clone, Debug)]
+    pub enum Module {
+        Struct(StructDecl),
+        Mod(ModuleDecl),
+        Let(Let),
+        Fn(FnDecl),
     }
 
     /// Contains a variable declaration
@@ -160,7 +178,22 @@ pub mod statement {
         pub ty: Option<TypeExpr>,
     }
 
+    /// Contains the name and declaration
+    #[derive(Clone, Debug)]
+    pub struct ModuleDecl {}
+
     // TODO: Create closure, transmute fndecl into a name and closure
+    /// Contains the name and field information for a struct
+    ///
+    /// # Syntax
+    /// [`StructDecl`]` := "struct" `[`Identifier`]` '{'
+    /// (`[`Identifier`]` ':' `[`TypeExpr`]`),*
+    /// '}'`
+    #[derive(Clone, Debug)]
+    pub struct StructDecl {
+        pub name: Identifier,
+        pub data: Vec<(Identifier, TypeExpr)>,
+    }
 }
 
 pub mod path {
@@ -323,6 +356,10 @@ pub mod expression {
         pub struct FnCall {
             pub callee: Box<Primary>,
             pub args: Vec<Tuple>,
+        }
+        #[allow(non_snake_case)]
+        pub fn FnCall(callee: Box<Primary>, args: Vec<Tuple>) -> FnCall {
+            FnCall { callee, args }
         }
     }
 
@@ -760,6 +797,16 @@ pub mod todo {
         //!
         //! Path resolution will be vital to the implementation of structs, enums, impl blocks,
         //! traits, modules, etc.
+    }
+
+    pub mod module {
+        //! Module support
+        //! - [ ] Add Module Declaration type : ModDecl = "mod" Identifier '{' Module '}' ;
+        //! - [ ] Change Program to Module : Module = (ModDecl | FnDecl | Let)*
+        //!   - [ ] Implementer's note: Modules must be traversed breadth-first, with no
+        //!     alpha-renaming
+        //!   - [ ] Blocks should probably also be traversed breadth-first, and Let declarations
+        //!     hoisted up, leaving initialization assignments in-place
     }
 
     pub mod structure {
