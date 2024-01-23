@@ -1,5 +1,5 @@
 //! # Token
-//! 
+//!
 //! Stores a component of a file as a [Type], some [Data], and a line and column number
 
 pub mod token_data;

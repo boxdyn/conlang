@@ -2,6 +2,8 @@
 #![warn(clippy::all)]
 #![feature(decl_macro)]
 
+pub mod common;
+
 pub mod token;
 
 pub mod ast;

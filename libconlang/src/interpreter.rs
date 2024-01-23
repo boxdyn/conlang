@@ -1043,7 +1043,7 @@ pub mod error {
     //! The [Error] type represents any error thrown by the [Environment](super::Environment)
 
     use super::temp_type_impl::ConValue;
-    use crate::ast::Loc;
+    use crate::common::Loc;
 
     pub type IResult<T> = Result<T, Error>;
 

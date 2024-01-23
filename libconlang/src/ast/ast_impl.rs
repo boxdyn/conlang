@@ -54,12 +54,6 @@ mod display {
         }
     }
 
-    impl Display for Loc {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Loc { line, col } = self;
-            write!(f, "{line}:{col}:")
-        }
-    }
     impl Display for Mutability {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
@@ -630,7 +624,6 @@ pub mod format {
 mod convert {
     //! Converts between major enums and enum variants
     use super::*;
-    use crate::lexer::Lexer;
 
     impl<T: AsRef<str>> From<T> for Identifier {
         fn from(value: T) -> Self {
@@ -733,12 +726,6 @@ mod convert {
     impl From<Expr> for Else {
         fn from(value: Expr) -> Self {
             Self { body: Some(value.into()) }
-        }
-    }
-
-    impl<'t> From<&Lexer<'t>> for Loc {
-        fn from(value: &Lexer<'t>) -> Self {
-            Self { line: value.line(), col: value.col() }
         }
     }
 }
