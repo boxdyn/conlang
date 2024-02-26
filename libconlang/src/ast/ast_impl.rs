@@ -367,7 +367,6 @@ mod display {
                 UnaryKind::Neg => "-",
                 UnaryKind::Not => "!",
                 UnaryKind::At => "@",
-                UnaryKind::Hash => "#",
                 UnaryKind::Tilde => "~",
             }
             .fmt(f)

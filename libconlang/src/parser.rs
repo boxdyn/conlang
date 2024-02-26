@@ -1215,7 +1215,6 @@ impl<'t> Parser<'t> {
             Minus => Neg,   // -
             Bang => Not,    // !
             At => At,       // @
-            Hash => Hash,   // #
             Tilde => Tilde, // ~
         };
     }

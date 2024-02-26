@@ -551,8 +551,7 @@ pub mod interpret {
                     UnaryKind::Deref => todo!("Deref operator"),
                     UnaryKind::Neg => (-operand)?,
                     UnaryKind::Not => (!operand)?,
-                    UnaryKind::At => unimplemented!("At operator"),
-                    UnaryKind::Hash => {
+                    UnaryKind::At => {
                         println!("{operand}");
                         operand
                     }

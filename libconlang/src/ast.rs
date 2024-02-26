@@ -367,8 +367,6 @@ pub enum UnaryKind {
     /// Unused
     At,
     /// Unused
-    Hash,
-    /// Unused
     Tilde,
 }
 
