@@ -27,6 +27,9 @@ pub mod temp_type_impl {
         BuiltIn, Callable, Environment,
     };
     use std::ops::*;
+
+    type Integer = isize;
+
     /// A Conlang value
     ///
     /// This is a hack to work around the fact that Conlang doesn't
@@ -37,7 +40,7 @@ pub mod temp_type_impl {
         #[default]
         Empty,
         /// An integer
-        Int(i128),
+        Int(Integer),
         /// A boolean
         Bool(bool),
         /// A unicode character
@@ -49,9 +52,9 @@ pub mod temp_type_impl {
         /// A tuple
         Tuple(Vec<ConValue>),
         /// An exclusive range
-        RangeExc(i128, i128),
+        RangeExc(Integer, Integer),
         /// An inclusive range
-        RangeInc(i128, i128),
+        RangeInc(Integer, Integer),
         /// A callable thing
         Function(Function),
         /// A built-in function
@@ -154,7 +157,7 @@ pub mod temp_type_impl {
         })*
     }
     from! {
-        i128 => ConValue::Int,
+        Integer => ConValue::Int,
         bool => ConValue::Bool,
         char => ConValue::Char,
         &str => ConValue::String,
