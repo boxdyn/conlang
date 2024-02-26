@@ -19,8 +19,8 @@ Const       = "const" Identifier ':' Type = Expr ';' ;
 
 Static      = "static" Mutability Identifier ':' Type = Expr ';' ;
 
-Module      = "mod" Identifier '{' (Item)* '}' ;
-ModuleKind  = (Item+)? ;
+Module      = "mod" Identifier ModuleKind ;
+ModuleKind  = '{' Item* '}' | ';' ;
 
 Function    = "fn" Identifier '(' (Param ',')* Param? ')' ('->' Type)? Block? ;
 Param       = Mutability Identifier ':' Type ;
