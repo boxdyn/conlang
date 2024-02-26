@@ -760,7 +760,7 @@ pub mod interpret {
     impl Interpret for Break {
         fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
             let Self { body } = self;
-            Err(Error::Return(
+            Err(Error::Break(
                 body.as_ref()
                     .map(|body| body.interpret(env))
                     .unwrap_or(Ok(ConValue::Empty))?,
