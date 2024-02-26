@@ -32,7 +32,7 @@ pub struct File {
 }
 
 // Items
-/// Holds an abstract Item and associated metadata
+/// Stores an [ItemKind] and associated metadata
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Item {
     pub extents: Span,
@@ -253,45 +253,46 @@ pub struct Expr {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ExprKind {
+    /// An [Assign]ment expression: [`Expr`] ([`AssignKind`] [`Expr`])\+
     Assign(Box<Assign>),
-    /// A [Binary] expression, with a leading and trailing side
+    /// A [Binary] expression: [`Expr`] ([`BinaryKind`] [`Expr`])\+
     Binary(Binary),
-    /// A [Unary] expression, with a trailing side
+    /// A [Unary] expression: [`UnaryKind`]\* [`Expr`]
     Unary(Unary),
-    /// A [Member] access expression
+    /// A [Member] access expression: [`Expr`] (`.` [`Expr`])+
     Member(Member),
-    /// A [Call] expression, with arguments
+    /// A [Call] expression, with arguments: a(foo, bar)
     Call(Call),
-    /// An Array [Index] expression
+    /// An Array [Index] expression: a[10, 20, 30]
     Index(Index),
     /// A [path expression](Path): `::`? [PathPart] (`::` [PathPart])*
     Path(Path),
     /// A [Literal]: 0x42, 1e123, 2.4, "Hello"
     Literal(Literal),
-    /// An [Array] literal: `[` Expr (`,` Expr)* `]`
+    /// An [Array] literal: `[` [`Expr`] (`,` [`Expr`])\* `]`
     Array(Array),
     /// An Array literal constructed with [repeat syntax](ArrayRep)
     /// `[` [Expr] `;` [Literal] `]`
     ArrayRep(ArrayRep),
-    /// An address-of expression: `&`foo
+    /// An address-of expression: `&` `mut`? [`Expr`]
     AddrOf(AddrOf),
-    /// A [Block] expression: `{` Stmt* Expr? `}`
+    /// A [Block] expression: `{` [`Stmt`]\* [`Expr`]? `}`
     Block(Block),
     /// An empty expression: `(` `)`
     Empty,
-    /// A [Grouping](Group) expression `(` Expr `)`
+    /// A [Grouping](Group) expression `(` [`Expr`] `)`
     Group(Group),
-    /// A [Tuple] expression: `(` Expr (`,` Expr)+ `)`
+    /// A [Tuple] expression: `(` [`Expr`] (`,` [`Expr`])+ `)`
     Tuple(Tuple),
-    /// A [While] expression: `while` Expr Block Else?
+    /// A [While] expression: `while` [`Expr`] [`Block`] [`Else`]?
     While(While),
-    /// An [If] expression: `if` Expr Block Else?
+    /// An [If] expression: `if` [`Expr`] [`Block`] [`Else`]?
     If(If),
-    /// A [For] expression: `for` Pattern in Expr Block Else?
+    /// A [For] expression: `for` Pattern `in` [`Expr`] [`Block`] [`Else`]?
     For(For),
-    /// A [Break] expression: `break` Expr?
+    /// A [Break] expression: `break` [`Expr`]?
     Break(Break),
-    /// A [Return] expression `return` Expr?
+    /// A [Return] expression `return` [`Expr`]?
     Return(Return),
     /// A continue expression: `continue`
     Continue(Continue),
