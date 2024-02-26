@@ -65,7 +65,6 @@ pub struct Const {
     pub name: Identifier,
     pub ty: Box<Ty>,
     pub init: Box<Expr>,
-    // TODO: Type path in const
 }
 
 /// Stores a `static` variable
@@ -75,7 +74,6 @@ pub struct Static {
     pub name: Identifier,
     pub ty: Box<Ty>,
     pub init: Box<Expr>,
-    // TODO: Type path in static
 }
 
 /// Stores a collection of [Items](Item)
@@ -157,9 +155,9 @@ pub enum VariantKind {
 pub struct Impl {
     pub target: Ty,
     pub body: Vec<Item>,
-    // TODO: `impl` <Target> { }
 }
 
+/// TODO: `impl` Trait for <Target> { }
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ImplKind {
     Type(Box<Ty>),
