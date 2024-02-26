@@ -1,7 +1,8 @@
 // Calculate Fibonacci numbers
 
 fn main() -> i128 {
-    print("fib(10): ", fib(10));
+    let num = 10;
+    print("fib(", num, "): ", fib(num));
 }
 
 /// Implements the classic recursive definition of fib()
