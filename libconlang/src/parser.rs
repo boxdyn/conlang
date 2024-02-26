@@ -802,7 +802,7 @@ macro binary($($name:ident {$lower:ident, $op:ident})*) {
         loop {
             match self.$op() {
                 Ok(op) => tail.push((op, self.expr_from(Self::$lower)?)),
-                Err(Error { reason: Unexpected(_), ..}) => break,
+                Err(Error { reason: Unexpected(_) | EndOfInput, ..}) => break,
                 Err(e) => Err(e)?,
             }
         }
@@ -902,7 +902,7 @@ impl<'t> Parser<'t> {
     pub fn exprkind_index(&mut self) -> PResult<ExprKind> {
         const PARSING: Parsing = Parsing::Index;
         let head = self.expr_from(Self::exprkind_primary)?;
-        if Type::LBrack != self.peek_type(PARSING)? {
+        if Ok(Type::LBrack) != self.peek_type(PARSING) {
             return Ok(head.kind);
         }
 
