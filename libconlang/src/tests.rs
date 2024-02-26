@@ -6,10 +6,7 @@ mod ast {
 }
 mod lexer {
     #[allow(unused_imports)]
-    use crate::{
-        lexer::Lexer,
-        token::preamble::*,
-    };
+    use crate::{lexer::Lexer, token::preamble::*};
 
     macro test_lexer_output_type  ($($f:ident {$($test:expr => $expect:expr),*$(,)?})*) {$(
         #[test]
