@@ -649,18 +649,7 @@ pub mod interpret {
             let mut env = env.frame("block");
             let mut out = ConValue::Empty;
             for stmt in stmts {
-                let Stmt { kind, semi, .. } = stmt;
-                out = match (kind, semi) {
-                    (StmtKind::Expr(_), Semi::Unterminated) => stmt.interpret(&mut env)?,
-                    (StmtKind::Expr(_), _) => {
-                        stmt.interpret(&mut env)?;
-                        ConValue::Empty
-                    }
-                    _ => {
-                        stmt.interpret(&mut env)?;
-                        continue;
-                    }
-                }
+                out = stmt.interpret(&mut env)?;
             }
             Ok(out)
         }
