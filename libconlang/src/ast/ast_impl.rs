@@ -186,7 +186,8 @@ mod display {
     impl Display for VariantKind {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
-                VariantKind::Named(n) => n.fmt(f),
+                VariantKind::Plain => Ok(()),
+                VariantKind::CLike(n) => n.fmt(f),
                 VariantKind::Tuple(v) => delimit(separate(v, ", "), INLINE_PARENS)(f),
                 VariantKind::Struct(v) => delimit(separate(v, ",\n"), BRACES)(f),
             }
@@ -664,7 +665,7 @@ mod convert {
             Vec<Variant> => EnumKind::Variants,
         }
         impl From for VariantKind {
-            Identifier => VariantKind::Named,
+            u128 => VariantKind::CLike,
             Vec<Ty> => VariantKind::Tuple,
             // TODO: enum struct variants
         }

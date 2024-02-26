@@ -146,7 +146,8 @@ pub struct Variant {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum VariantKind {
-    Named(Identifier),
+    Plain,
+    CLike(u128),
     Tuple(Vec<Ty>),
     Struct(Vec<StructMember>),
 }
