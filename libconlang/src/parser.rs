@@ -439,12 +439,7 @@ impl<'t> Parser<'t> {
         const PARSING: Parsing = Parsing::Stmt;
         let start = self.loc();
         Ok(Stmt {
-            kind: match self.peek_type(PARSING)? {
-                Type::Semi => Ok(StmtKind::Empty),
-                Type::Keyword(Keyword::Let) => self.stmtkind_local(),
-                item_like!() => self.stmtkind_item(),
-                _ => self.stmtkind_expr(),
-            }?,
+            kind: self.stmtkind()?,
             semi: match self.peek_type(PARSING) {
                 Ok(Type::Semi) => {
                     self.consume_peeked();
