@@ -8,11 +8,10 @@ Visibility  = "pub"? ;
 File        = Item* EOI ;
 
 
-Item        = Visibility (
-                Const | Static | Module 
+Item        = Visibility ItemKind ;
+ItemKind    = Const    | Static | Module 
                 | Function | Struct | Enum 
-                | Impl
-            ) ;
+            | Impl ;
 
 
 (* item *)
@@ -21,28 +20,28 @@ Const       = "const" Identifier ':' Type = Expr ';' ;
 Static      = "static" Mutability Identifier ':' Type = Expr ';' ;
 
 Module      = "mod" Identifier '{' (Item)* '}' ;
+ModuleKind  = (Item+)? ;
 
-Function    = "fn" Identifier '(' (Param ',')* Param? ')' ( '->' Type) Block ;
-Param       = Identifier ':' Type ;
+Function    = "fn" Identifier '(' (Param ',')* Param? ')' ('->' Type)? Block? ;
+Param       = Mutability Identifier ':' Type ;
 
-Struct      = "struct" Identifier (TupleStruct | StructStruct)?;
-StructStruct= '{' (Identifier ':' Type),* '}' ;
-TupleStruct = TyTuple ;
+Struct      = "struct" Identifier (StructTuple | StructBody)?;
+StructBody  = '{' (StructMember ',')* StructMember? '}' ;
+StructTuple = TyTuple ;
+StructMember = Visibility Identifier ':' Type ;
 
-Enum        = "enum" Identifier (TupleEnum | StructEnum)? ;
-TupleEnum   = TyTuple;
-StructEnum  = '{' (Identifier ':' Type)* '}' ;
+Enum        = "enum" Identifier '{' (Variant ',')* Variant? '}' ;
+Variant     = Identifier (VarStruct | VarTuple | VarCLike)? ;
+VarStruct   = '{' (StructMember ',')* StructMember? '}' ;
+VarTuple    = TyTuple ;
+VarCLike    = '=' INTEGER ;
 
-
-(* statement *)
-Stmt        = ';' | (Let | Item | Expr ';'?) ;
-Let         = "let" Mutability Identifier (':' Ty)? ('=' Expr)? ;
-(* TODO: Closure syntax *)
-Closure     = "cl" '(' Param* ')' Block ;
+Impl        = "impl" Path '{' Item* '}' ;
+(* TODO: Impl Trait for Target*)
 
 
 (* type *)
-Ty          = Never | Empty | TyTuple | Path | TyRef | TyFn ;
+Ty          = Never | Empty | Path | TyTuple | TyRef | TyFn ;
 Never       = '!' ;
 Empty       = '(' ')' ;
 TyTuple     = '(' (Ty ',')* Ty? ')' ;
@@ -54,6 +53,14 @@ TyFn        = "fn" TyTuple (-> Ty)? ;
 Path        = '::'? PathPart ('::' PathPart)* ;
 PathPart    = "super" | "self" | Identifier ;
 Identifier  = IDENTIFIER ;
+
+
+(* statement *)
+Stmt        = ';' | (Let | Item | Expr) Semi ;
+Semi        = ';'? ;
+Let         = "let" Mutability Identifier (':' Ty)? ('=' Expr)? ;
+(* TODO: Closure syntax *)
+(* Closure     = "cl" '(' Param* ')' Block ; *)
 
 
 (* literal *)
@@ -69,7 +76,7 @@ ExprKind    = Assign  | Compare | Range  | Logic    | Bitwise | Shift
 
 Expr        = Assign ;
 
-Assign      = Path (AssignOp  Assign ) | Compare ;
+Assign      = Path (AssignKind  Assign ) | Compare ;
 
 Binary      = Compare | Range | Logic  | Bitwise | Shift | Factor | Term ;
 Compare     = Range    (CompareOp Range  )* ;
@@ -80,7 +87,7 @@ Shift       = Factor   (ShiftOp   Factor )* ;
 Factor      = Term     (FactorOp  Term   )* ;
 Term        = Unary    (FactorOp  Unary  )* ;
 
-Unary       = (UnaryOp)* Member ;
+Unary       = (UnaryKind)* Member ;
 
 Member      = Call ('.' Call)* ;
 
@@ -98,7 +105,7 @@ Literal     = STRING | CHARACTER | FLOAT | INTEGER | Bool ;
 Array       = '[' (Expr ',')* Expr? ']' ;
 ArrayRep    = '[' Expr ';' Expr ']' ;
 
-AddrOf      = ('&' | '&&')* Expr ;
+AddrOf      = ('&' | '&&')* Mutability? Expr ;
 
 Block       = '{' Stmt* '}';
 
@@ -106,10 +113,10 @@ Group       = '(' (Empty | Expr | Tuple) ')' ;
 Tuple       = (Expr ',')* Expr? ;
 Empty       = ;
 
-While       = "while" Expr Block Else? ;
-If          = "if"    Expr Block Else? ;
-For         = "for"   Identifier "in" Expr Block Else? ;
-Else        = "else"  Expr ;
+While       = "while" Expr Block Else ;
+If          = "if"    Expr Block Else ;
+For         = "for"   Identifier "in" Expr Block Else ;
+Else        = ("else"  Expr)? ;
 Break       = "break"  Expr ;
 Return      = "return" Expr ;
 Continue    = "continue" ;
@@ -127,4 +134,4 @@ ShiftOp     = '<<' | '>>';
 TermOp      =  '+' | '-' ;
 FactorOp    =  '*' | '/' | '%' ;
 
-UnaryKind   =  '*' | '-' | '!' | '@' | '#' | '~' ;
+UnaryKind   =  '*' | '-' | '!' | '@' | '~' ;
