@@ -398,13 +398,9 @@ pub mod interpret {
     }
     impl Interpret for Let {
         fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-            let Let { mutable: _, name: Identifier(name), init } = self;
-            if let Some(init) = init {
-                let init = init.interpret(env)?;
-                env.insert(name, Some(init));
-            } else {
-                env.insert(name, None);
-            }
+            let Let { mutable: _, name: Identifier(name), ty: _, init } = self;
+            let init = init.as_ref().map(|i| i.interpret(env)).transpose()?;
+            env.insert(name, init);
             Ok(ConValue::Empty)
         }
     }

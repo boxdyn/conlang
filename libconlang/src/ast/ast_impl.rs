@@ -252,8 +252,11 @@ mod display {
     }
     impl Display for Let {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { mutable, name, init } = self;
+            let Self { mutable, name, ty, init } = self;
             write!(f, "let {mutable}{name}")?;
+            if let Some(value) = ty {
+                write!(f, ": {value}")?;
+            }
             if let Some(value) = init {
                 write!(f, " = {value}")?;
             }

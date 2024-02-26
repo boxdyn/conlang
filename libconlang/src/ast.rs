@@ -241,6 +241,7 @@ pub enum StmtKind {
 pub struct Let {
     pub mutable: Mutability,
     pub name: Identifier,
+    pub ty: Option<Box<Ty>>,
     pub init: Option<Box<Expr>>,
 }
 

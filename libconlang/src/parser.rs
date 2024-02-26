@@ -785,7 +785,13 @@ impl<'t> Parser<'t> {
         Ok(Let {
             mutable: self.mutability()?,
             name: self.identifier()?,
-            init: if Type::Eq == self.peek_type(Parsing::Let)? {
+            ty: if Ok(Type::Colon) == self.peek_type(Parsing::Let) {
+                self.consume_peeked();
+                Some(self.ty()?.into())
+            } else {
+                None
+            },
+            init: if Ok(Type::Eq) == self.peek_type(Parsing::Let) {
                 self.consume_peeked();
                 Some(self.expr()?.into())
             } else {
