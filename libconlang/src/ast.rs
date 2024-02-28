@@ -187,6 +187,7 @@ pub struct Ty {
 pub enum TyKind {
     Never,
     Empty,
+    SelfTy,
     Path(Path),
     Tuple(TyTuple),
     Ref(TyRef),

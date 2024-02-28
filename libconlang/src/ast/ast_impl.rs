@@ -214,6 +214,7 @@ mod display {
             match &self.kind {
                 TyKind::Never => "!".fmt(f),
                 TyKind::Empty => "()".fmt(f),
+                TyKind::SelfTy => "Self".fmt(f),
                 TyKind::Path(v) => v.fmt(f),
                 TyKind::Tuple(v) => v.fmt(f),
                 TyKind::Ref(v) => v.fmt(f),

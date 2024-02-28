@@ -676,6 +676,10 @@ impl<'t> Parser<'t> {
                 self.consume_peeked();
                 TyKind::Never
             }
+            Type::Keyword(Keyword::SelfTy) => {
+                self.consume_peeked();
+                TyKind::SelfTy
+            }
             Type::Amp | Type::AmpAmp => self.tyref()?.into(),
             Type::LParen => self.tytuple()?.into(),
             Type::Keyword(Keyword::Fn) => self.tyfn()?.into(),
