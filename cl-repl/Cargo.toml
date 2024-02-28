@@ -1,5 +1,5 @@
 [package]
-name = "cl-frontend"
+name = "cl-repl"
 repository.workspace = true
 version.workspace = true
 authors.workspace = true

@@ -1,5 +1,5 @@
 [workspace]
-members = ["libconlang", "cl-frontend"]
+members = ["libconlang", "cl-repl"]
 resolver = "2"
 
 [workspace.package]

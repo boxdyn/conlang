@@ -1,6 +1,6 @@
 //! Collects identifiers into a list
 
-use cl_frontend::repline::Repline;
+use cl_repl::repline::Repline;
 use conlang::{common::Loc, lexer::Lexer, parser::Parser};
 use std::{
     collections::HashMap,

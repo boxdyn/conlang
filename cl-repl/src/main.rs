@@ -1,4 +1,4 @@
-use cl_frontend::{args::Args, cli::CLI};
+use cl_repl::{args::Args, cli::CLI};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {

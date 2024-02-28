@@ -255,7 +255,9 @@ impl<'a, R: Read> Repline<'a, R> {
                     }
                 }
                 c if c.is_ascii_control() => {
-                    eprint!("\\x{:02x}", c as u32);
+                    if cfg!(debug_assertions) {
+                        eprint!("\\x{:02x}", c as u32);
+                    }
                 }
                 c => {
                     self.ed.push(c, stdout)?;
@@ -296,7 +298,9 @@ impl<'a, R: Read> Repline<'a, R> {
                 }
             }
             other => {
-                eprint!("{}", other.escape_unicode());
+                if cfg!(debug_assertions) {
+                    eprint!("{}", other.escape_unicode());
+                }
             }
         }
         Ok(())
