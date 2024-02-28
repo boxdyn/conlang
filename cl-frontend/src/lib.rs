@@ -213,6 +213,8 @@ pub mod cli {
     const ANSI_RESET: &str = "\x1b[0m";
     const ANSI_OUTPUT: &str = "\x1b[38;5;117m";
 
+    const ANSI_CLEAR_LINES: &str = "\x1b[G\x1b[J";
+
     #[derive(Clone, Debug)]
     pub enum CLI {
         Repl(Repl),
@@ -358,11 +360,15 @@ pub mod cli {
     /// Prompt functions
     impl Repl {
         pub fn prompt_error(&self, err: &impl Error) {
-            println!("{ANSI_RED}{} {err}{ANSI_RESET}", self.prompt_error)
+            let Self { prompt_error: prompt, .. } = self;
+            println!("{ANSI_CLEAR_LINES}{ANSI_RED}{prompt} {err}{ANSI_RESET}",)
         }
+        /// Resets the cursor to the start of the line, clears the terminal,
+        /// and sets the output color
         pub fn begin_output(&self) {
-            print!("{ANSI_OUTPUT}")
+            print!("{ANSI_CLEAR_LINES}{ANSI_OUTPUT}")
         }
+        pub fn clear_line(&self) {}
     }
     /// The actual REPL
     impl Repl {
@@ -372,7 +378,7 @@ pub mod cli {
         }
         /// Runs the main REPL loop
         pub fn repl(&mut self) {
-            use crate::repline::Repline;
+            use crate::repline::{error::Error, Repline};
             let mut rl = Repline::new(
                 // std::fs::File::open("/dev/stdin").unwrap(),
                 self.mode.ansi_color(),
@@ -380,53 +386,59 @@ pub mod cli {
                 self.prompt_again,
             );
             // self.prompt_begin();
-            while let Ok(line) = rl.read() {
-                // Exit the loop
-                if line.is_empty() {
-                    println!();
-                    break;
-                }
-                self.begin_output();
-                // Process mode-change commands
-                if self.command(&line) {
-                    rl.accept();
-                    rl.set_color(self.mode.ansi_color());
-                    continue;
-                }
-                // Lex the buffer, or reset and output the error
-                let code = Program::new(&line);
-                match code.lex().into_iter().find(|l| l.is_err()) {
-                    None => (),
-                    Some(Ok(_)) => unreachable!(),
-                    Some(Err(error)) => {
-                        eprintln!("{error}");
+            fn clear_line() {
+                print!("\x1b[G\x1b[J");
+            }
+            loop {
+                let buf = match rl.read() {
+                    Ok(buf) => buf,
+                    // Ctrl-C: break if current line is empty
+                    Err(Error::CtrlC(buf)) => {
+                        if buf.is_empty() || buf.ends_with('\n') {
+                            return;
+                        }
+                        continue;
+                    }
+                    // Ctrl-D: reset input, and parse it for errors
+                    Err(Error::CtrlD(buf)) => {
+                        if let Err(e) = Program::new(&buf).parse() {
+                            println!();
+                            clear_line();
+                            self.prompt_error(&e);
+                        }
                         rl.deny();
                         continue;
                     }
+                    Err(e) => {
+                        self.prompt_error(&e);
+                        return;
+                    }
                 };
-                // TODO: only lex the program once
-                // Tokenize mode doesn't require valid parse, so it gets processed first
+
+                self.begin_output();
+                if self.command(&buf) {
+                    rl.deny();
+                    rl.set_color(self.mode.ansi_color());
+                    continue;
+                }
+                let code = Program::new(&buf);
                 if self.mode == Mode::Tokenize {
                     self.tokenize(&code);
                     rl.deny();
                     continue;
                 }
-                // Parse code and dispatch to the proper function
-                match (line.len(), code.parse()) {
-                    (0, Ok(_)) => {
-                        println!();
-                        break;
-                    }
-                    // If the code is OK, run it and print any errors
-                    (_, Ok(mut code)) => {
-                        println!();
-                        self.dispatch(&mut code);
-                        rl.accept();
-                    }
-                    (_, Err(e)) => {
-                        print!("\x1b[100G\x1b[37m//{e}");
+                match code.lex().into_iter().find(|l| l.is_err()) {
+                    None => {}
+                    Some(Ok(_)) => unreachable!(),
+                    Some(Err(error)) => {
+                        rl.deny();
+                        eprintln!("{error}");
                         continue;
                     }
+                }
+                if let Ok(mut code) = code.parse() {
+                    rl.accept();
+                    self.dispatch(&mut code);
                 }
             }
         }
@@ -442,11 +454,10 @@ pub mod cli {
                 "$tokens" => self.mode = Mode::Tokenize,
                 "$type" => self.mode = Mode::Resolve,
                 "$run" => self.mode = Mode::Interpret,
-                "$mode" => print!("{:?} Mode", self.mode),
+                "$mode" => println!("{:?} Mode", self.mode),
                 "$help" => self.help(),
                 _ => return false,
             }
-            println!();
             true
         }
         /// Dispatches calls to repl functions based on the program

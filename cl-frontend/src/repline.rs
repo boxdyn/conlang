@@ -221,15 +221,14 @@ impl<'a, R: Read> Repline<'a, R> {
                 // Ctrl+C: End of Text. Immediately exits.
                 // Ctrl+D: End of Transmission. Ends the current line.
                 '\x03' => {
+                    self.ed.render(&mut stdout)?;
                     drop(_make_raw);
                     return Err(Error::CtrlC(self.ed.to_string()));
                 }
                 '\x04' => {
-                    drop(_make_raw);
-                    writeln!(stdout).ignore();
                     self.ed.render(&mut stdout)?; // TODO: this, better
-                    return Ok(self.ed.to_string());
-                    // return Err(Error::CtrlD(self.ed.to_string()));
+                    drop(_make_raw);
+                    return Err(Error::CtrlD(self.ed.to_string()));
                 }
                 // Tab: extend line by 4 spaces
                 '\t' => {
@@ -333,7 +332,9 @@ impl<'a, R: Read> Repline<'a, R> {
         }
     }
     /// Clear the line
-    pub fn deny(&mut self) {}
+    pub fn deny(&mut self) {
+        self.ed.clear()
+    }
 }
 
 impl<'a> Repline<'a, std::io::Stdin> {
