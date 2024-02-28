@@ -68,6 +68,9 @@ pub mod error {
     pub enum Parsing {
         File,
 
+        Attrs,
+        Meta,
+
         Item,
         Visibility,
         Mutability,
@@ -161,6 +164,10 @@ pub mod error {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 Parsing::File => "a file",
+
+                Parsing::Attrs => "an attribute-set",
+                Parsing::Meta => "an attribute",
+
                 Parsing::Item => "an item",
                 Parsing::Visibility => "a visibility qualifier",
                 Parsing::Mutability => "a mutability qualifier",
@@ -371,7 +378,8 @@ fn rep<'t, T>(
 
 /// Expands to a pattern which matches item-like [Token] [Type]s
 macro item_like() {
-    Type::Keyword(
+    Type::Hash
+        | Type::Keyword(
         Keyword::Pub
             | Keyword::Type
             | Keyword::Const
@@ -406,6 +414,7 @@ impl<'t> Parser<'t> {
         let start = self.loc();
         Ok(Item {
             vis: self.visibility()?,
+            attrs: self.attributes()?,
             kind: self.itemkind()?,
             extents: Span(start, self.loc()),
         })
@@ -461,6 +470,41 @@ impl<'t> Parser<'t> {
     /// See also: [Parser::exprkind]
     pub fn expr(&mut self) -> PResult<Expr> {
         self.expr_from(Self::exprkind)
+    }
+}
+
+/// Attribute parsing
+impl<'t> Parser<'t> {
+    /// Parses an [attribute set](Attrs)
+    pub fn attributes(&mut self) -> PResult<Attrs> {
+        if self.match_type(Type::Hash, Parsing::Attrs).is_err() {
+            return Ok(Attrs { meta: vec![] });
+        }
+        let meta = delim(
+            sep(Self::meta, Type::Comma, BRACKETS.1, Parsing::Attrs),
+            BRACKETS,
+            Parsing::Attrs,
+        );
+        Ok(Attrs { meta: meta(self)? })
+    }
+    pub fn meta(&mut self) -> PResult<Meta> {
+        Ok(Meta { name: self.identifier()?, kind: self.meta_kind()? })
+    }
+    pub fn meta_kind(&mut self) -> PResult<MetaKind> {
+        const PARSING: Parsing = Parsing::Meta;
+        let lit_tuple = delim(
+            sep(Self::literal, Type::Comma, PARENS.1, PARSING),
+            PARENS,
+            PARSING,
+        );
+        Ok(match self.peek_type(PARSING) {
+            Ok(Type::Eq) => {
+                self.consume_peeked();
+                MetaKind::Equals(self.literal()?)
+            }
+            Ok(Type::LParen) => MetaKind::Func(lit_tuple(self)?),
+            _ => MetaKind::Plain,
+        })
     }
 }
 

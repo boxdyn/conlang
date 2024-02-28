@@ -32,11 +32,31 @@ pub struct File {
     pub items: Vec<Item>,
 }
 
+// Metadata decorators
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Attrs {
+    pub meta: Vec<Meta>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Meta {
+    pub name: Identifier,
+    pub kind: MetaKind,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MetaKind {
+    Plain,
+    Equals(Literal),
+    Func(Vec<Literal>),
+}
+
 // Items
 /// Stores an [ItemKind] and associated metadata
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Item {
     pub extents: Span,
+    pub attrs: Attrs,
     pub vis: Visibility,
     pub kind: ItemKind,
 }

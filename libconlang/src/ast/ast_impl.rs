@@ -77,10 +77,39 @@ mod display {
         }
     }
 
+    impl Display for Attrs {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let Self { meta } = self;
+            if meta.is_empty() {
+                return Ok(());
+            }
+            "#".fmt(f)?;
+            delimit(separate(meta, ", "), INLINE_SQUARE)(f)?;
+            "\n".fmt(f)
+        }
+    }
+    impl Display for Meta {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let Self { name, kind } = self;
+            write!(f, "{name}{kind}")
+        }
+    }
+    impl Display for MetaKind {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                MetaKind::Plain => Ok(()),
+                MetaKind::Equals(v) => write!(f, " = {v}"),
+                MetaKind::Func(args) => delimit(separate(args, ", "), INLINE_PARENS)(f),
+            }
+        }
+    }
+
     impl Display for Item {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            self.vis.fmt(f)?;
-            match &self.kind {
+            let Self { extents: _, attrs, vis, kind } = self;
+            attrs.fmt(f)?;
+            vis.fmt(f)?;
+            match kind {
                 ItemKind::Alias(v) => v.fmt(f),
                 ItemKind::Const(v) => v.fmt(f),
                 ItemKind::Static(v) => v.fmt(f),

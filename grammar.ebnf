@@ -8,9 +8,13 @@ Visibility  = "pub"? ;
 File        = Item* EOI ;
 
 
-Item        = Visibility ItemKind ;
+Attrs       = ('#' '[' (Meta ',') Meta? ']')* ;
+Meta        = Identifier ('=' Literal | '(' (Literal ',')* Literal? ')')? ;
+
+
+Item        = Attrs* Visibility ItemKind ;
 ItemKind    = Const    | Static | Module 
-                | Function | Struct | Enum 
+            | Function | Struct | Enum 
             | Alias    | Impl ;
 
 
