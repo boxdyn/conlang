@@ -99,6 +99,7 @@ pub enum Keyword {
     Struct,
     Super,
     True,
+    Type,
     While,
 }
 
@@ -197,6 +198,7 @@ impl Display for Keyword {
             Self::Struct => "struct".fmt(f),
             Self::Super => "super".fmt(f),
             Self::True => "true".fmt(f),
+            Self::Type => "type".fmt(f),
             Self::While => "while".fmt(f),
         }
     }
@@ -229,6 +231,7 @@ impl FromStr for Keyword {
             "struct" => Self::Struct,
             "super" => Self::Super,
             "true" => Self::True,
+            "type" => Self::Type,
             "while" => Self::While,
             _ => Err(())?,
         })

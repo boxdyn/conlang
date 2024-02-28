@@ -72,6 +72,7 @@ pub mod error {
         Visibility,
         Mutability,
         ItemKind,
+        Alias,
         Const,
         Static,
         Module,
@@ -164,6 +165,7 @@ pub mod error {
                 Parsing::Visibility => "a visibility qualifier",
                 Parsing::Mutability => "a mutability qualifier",
                 Parsing::ItemKind => "an item",
+                Parsing::Alias => "a type alias",
                 Parsing::Const => "a const item",
                 Parsing::Static => "a static variable",
                 Parsing::Module => "a module",
@@ -369,6 +371,7 @@ impl<'t> Parser<'t> {
 macro item_like() {
     Type::Keyword(
         Keyword::Pub
+            | Keyword::Type
             | Keyword::Const
             | Keyword::Static
             | Keyword::Mod
@@ -466,6 +469,7 @@ impl<'t> Parser<'t> {
     /// See also: [Parser::item]
     pub fn itemkind(&mut self) -> PResult<ItemKind> {
         Ok(match self.peek_type(Parsing::Item)? {
+            Type::Keyword(Keyword::Type) => self.parse_alias()?.into(),
             Type::Keyword(Keyword::Const) => self.parse_const()?.into(),
             Type::Keyword(Keyword::Static) => self.parse_static()?.into(),
             Type::Keyword(Keyword::Mod) => self.parse_module()?.into(),
@@ -475,6 +479,21 @@ impl<'t> Parser<'t> {
             Type::Keyword(Keyword::Impl) => self.parse_impl()?.into(),
             t => Err(self.error(Unexpected(t), Parsing::Item))?,
         })
+    }
+
+    pub fn parse_alias(&mut self) -> PResult<Alias> {
+        const PARSING: Parsing = Parsing::Alias;
+        self.match_kw(Keyword::Type, PARSING)?;
+        let out = Ok(Alias {
+            to: self.ty()?.into(),
+            from: if self.match_type(Type::Eq, PARSING).is_ok() {
+                Some(self.ty()?.into())
+            } else {
+                None
+            },
+        });
+        self.match_type(Type::Semi, PARSING)?;
+        out
     }
 
     pub fn parse_const(&mut self) -> PResult<Const> {

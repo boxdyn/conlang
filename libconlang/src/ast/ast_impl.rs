@@ -81,6 +81,7 @@ mod display {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             self.vis.fmt(f)?;
             match &self.kind {
+                ItemKind::Alias(v) => v.fmt(f),
                 ItemKind::Const(v) => v.fmt(f),
                 ItemKind::Static(v) => v.fmt(f),
                 ItemKind::Module(v) => v.fmt(f),
@@ -88,6 +89,15 @@ mod display {
                 ItemKind::Struct(v) => v.fmt(f),
                 ItemKind::Enum(v) => v.fmt(f),
                 ItemKind::Impl(v) => v.fmt(f),
+            }
+        }
+    }
+    impl Display for Alias {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let Self { to, from } = self;
+            match from {
+                Some(from) => write!(f, "type {to} = {from};"),
+                None => write!(f, "type {to};"),
             }
         }
     }
@@ -649,6 +659,7 @@ mod convert {
 
     impl_from! {
         impl From for ItemKind {
+            Alias => ItemKind::Alias,
             Const => ItemKind::Const,
             Static => ItemKind::Static,
             Module => ItemKind::Module,

@@ -44,6 +44,10 @@ pub struct Item {
 /// Stores a concrete Item
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ItemKind {
+    // TODO: Import declaration ("use") item
+    // TODO: Trait declaration ("trait") item?
+    /// A [type alias](Alias)
+    Alias(Alias),
     /// A [constant](Const)
     Const(Const),
     /// A [static](Static) variable
@@ -58,6 +62,12 @@ pub enum ItemKind {
     Enum(Enum),
     /// An [implementation](Impl)
     Impl(Impl),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Alias {
+    pub to: Box<Ty>,
+    pub from: Option<Box<Ty>>,
 }
 
 /// Stores a `const` value

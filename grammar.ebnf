@@ -11,7 +11,7 @@ File        = Item* EOI ;
 Item        = Visibility ItemKind ;
 ItemKind    = Const    | Static | Module 
                 | Function | Struct | Enum 
-            | Impl ;
+            | Alias    | Impl ;
 
 
 (* item *)
@@ -35,6 +35,8 @@ Variant     = Identifier (VarStruct | VarTuple | VarCLike)? ;
 VarStruct   = '{' (StructMember ',')* StructMember? '}' ;
 VarTuple    = TyTuple ;
 VarCLike    = '=' INTEGER ;
+
+Alias       = "type" Ty ('=' Ty)? ';' ;
 
 Impl        = "impl" Path '{' Item* '}' ;
 (* TODO: Impl Trait for Target*)

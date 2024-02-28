@@ -330,6 +330,7 @@ pub mod interpret {
     impl Interpret for Item {
         fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
             match &self.kind {
+                ItemKind::Alias(item) => item.interpret(env),
                 ItemKind::Const(item) => item.interpret(env),
                 ItemKind::Static(item) => item.interpret(env),
                 ItemKind::Module(item) => item.interpret(env),
@@ -338,6 +339,11 @@ pub mod interpret {
                 ItemKind::Enum(item) => item.interpret(env),
                 ItemKind::Impl(item) => item.interpret(env),
             }
+        }
+    }
+    impl Interpret for Alias {
+        fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+            todo!("Interpret type alias in {env}")
         }
     }
     impl Interpret for Const {
