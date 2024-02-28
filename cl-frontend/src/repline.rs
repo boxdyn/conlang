@@ -211,109 +211,112 @@ impl<'a, R: Read> Repline<'a, R> {
     pub fn read(&mut self) -> ReplResult<String> {
         const INDENT: &str = "    ";
         let mut stdout = stdout().lock();
+        let stdout = &mut stdout;
         let _make_raw = raw();
-        self.ed.begin_frame(&mut stdout)?;
-        self.ed.render(&mut stdout)?;
+        // self.ed.begin_frame(stdout)?;
+        // self.ed.redraw_frame(stdout)?;
+        self.ed.print_head(stdout)?;
         loop {
             stdout.flush()?;
-            self.ed.begin_frame(&mut stdout)?;
             match self.input.next().ok_or(Error::EndOfInput)?? {
                 // Ctrl+C: End of Text. Immediately exits.
                 // Ctrl+D: End of Transmission. Ends the current line.
                 '\x03' => {
-                    self.ed.render(&mut stdout)?;
                     drop(_make_raw);
+                    writeln!(stdout)?;
                     return Err(Error::CtrlC(self.ed.to_string()));
                 }
                 '\x04' => {
-                    self.ed.render(&mut stdout)?; // TODO: this, better
                     drop(_make_raw);
+                    writeln!(stdout)?;
                     return Err(Error::CtrlD(self.ed.to_string()));
                 }
                 // Tab: extend line by 4 spaces
                 '\t' => {
-                    self.ed.extend(INDENT.chars());
+                    self.ed.extend(INDENT.chars(), stdout)?;
                 }
                 // ignore newlines, process line feeds. Not sure how cross-platform this is.
                 '\n' => {}
                 '\r' => {
-                    self.ed.push('\n').ignore();
-                    self.ed.render(&mut stdout)?;
+                    self.ed.push('\n', stdout)?;
                     return Ok(self.ed.to_string());
                 }
                 // Escape sequence
-                '\x1b' => self.escape()?,
+                '\x1b' => self.escape(stdout)?,
                 // backspace
                 '\x08' | '\x7f' => {
                     let ed = &mut self.ed;
                     if ed.ends_with(INDENT.chars()) {
                         for _ in 0..INDENT.len() {
-                            ed.pop().ignore();
+                            ed.pop(stdout)?;
                         }
                     } else {
-                        self.ed.pop().ignore();
+                        ed.pop(stdout)?;
                     }
                 }
                 c if c.is_ascii_control() => {
                     eprint!("\\x{:02x}", c as u32);
                 }
                 c => {
-                    self.ed.push(c).unwrap();
+                    self.ed.push(c, stdout)?;
                 }
             }
-            self.ed.render(&mut stdout)?;
         }
     }
     /// Handle ANSI Escape
-    fn escape(&mut self) -> ReplResult<()> {
+    fn escape<W: Write>(&mut self, w: &mut W) -> ReplResult<()> {
         match self.input.next().ok_or(Error::EndOfInput)?? {
-            '[' => self.csi()?,
+            '[' => self.csi(w)?,
             'O' => todo!("Process alternate character mode"),
-            other => self.ed.extend(['\x1b', other]),
+            other => self.ed.extend(['\x1b', other], w)?,
         }
         Ok(())
     }
     /// Handle ANSI Control Sequence Introducer
-    fn csi(&mut self) -> ReplResult<()> {
+    fn csi<W: Write>(&mut self, w: &mut W) -> ReplResult<()> {
         match self.input.next().ok_or(Error::EndOfInput)?? {
             'A' => {
                 self.hindex = self.hindex.saturating_sub(1);
-                self.restore_history();
+                self.restore_history(w)?
             }
             'B' => {
                 self.hindex = self
                     .hindex
                     .saturating_add(1)
                     .min(self.history.len().saturating_sub(1));
-                self.restore_history();
+                self.restore_history(w)?
             }
-            'C' => self.ed.cursor_back(1).ignore(),
-            'D' => self.ed.cursor_forward(1).ignore(),
+            'C' => self.ed.cursor_forward(1, w)?,
+            'D' => self.ed.cursor_back(1, w)?,
+            'H' => self.ed.home(w)?,
+            'F' => self.ed.end(w)?,
             '3' => {
                 if let '~' = self.input.next().ok_or(Error::EndOfInput)?? {
-                    self.ed.delete().ignore()
+                    self.ed.delete(w).ignore()
                 }
             }
             other => {
-                eprintln!("{other}");
+                eprint!("{}", other.escape_unicode());
             }
         }
         Ok(())
     }
     /// Restores the currently selected history
-    pub fn restore_history(&mut self) {
+    pub fn restore_history<W: Write>(&mut self, w: &mut W) -> ReplResult<()> {
         let Self { history, hindex, ed, .. } = self;
         if !(0..history.len()).contains(hindex) {
-            return;
+            return Ok(());
         };
+        ed.undraw(w)?;
         ed.clear();
+        ed.print_head(w)?;
         ed.extend(
             history
                 .get(*hindex)
                 .expect("history should contain index")
-                .trim_end_matches(|c: char| c != '\n' && c.is_whitespace())
                 .chars(),
-        );
+            w,
+        )
     }
 
     /// Append line to history and clear it
@@ -323,7 +326,10 @@ impl<'a, R: Read> Repline<'a, R> {
         self.hindex = self.history.len();
     }
     /// Append line to history
-    pub fn history_append(&mut self, buf: String) {
+    pub fn history_append(&mut self, mut buf: String) {
+        while buf.ends_with(char::is_whitespace) {
+            buf.pop();
+        }
         if !self.history.contains(&buf) {
             self.history.push_back(buf)
         }
@@ -344,9 +350,24 @@ impl<'a> Repline<'a, std::io::Stdin> {
 }
 
 pub mod editor {
+    use crossterm::{cursor::*, execute, queue, style::*, terminal::*};
     use std::{collections::VecDeque, fmt::Display, io::Write};
 
     use super::error::{Error, ReplResult};
+
+    fn is_newline(c: &char) -> bool {
+        *c == '\n'
+    }
+
+    fn write_chars<'a, W: Write>(
+        c: impl IntoIterator<Item = &'a char>,
+        w: &mut W,
+    ) -> std::io::Result<()> {
+        for c in c {
+            write!(w, "{c}")?;
+        }
+        Ok(())
+    }
 
     #[derive(Debug)]
     pub struct Editor<'a> {
@@ -365,16 +386,17 @@ pub mod editor {
         pub fn iter(&self) -> impl Iterator<Item = &char> {
             self.head.iter()
         }
-        pub fn begin_frame<W: Write>(&self, w: &mut W) -> ReplResult<()> {
+        pub fn undraw<W: Write>(&self, w: &mut W) -> ReplResult<()> {
             let Self { head, .. } = self;
-            match head.iter().filter(|&&c| c == '\n').count() {
+            match head.iter().copied().filter(is_newline).count() {
                 0 => write!(w, "\x1b[0G"),
                 lines => write!(w, "\x1b[{}F", lines),
             }?;
-            write!(w, "\x1b[0J")?;
+            queue!(w, Clear(ClearType::FromCursorDown))?;
+            // write!(w, "\x1b[0J")?;
             Ok(())
         }
-        pub fn render<W: Write>(&self, w: &mut W) -> ReplResult<()> {
+        pub fn redraw<W: Write>(&self, w: &mut W) -> ReplResult<()> {
             let Self { head, tail, color, begin, again } = self;
             write!(w, "{color}{begin}\x1b[0m ")?;
             // draw head
@@ -385,7 +407,7 @@ pub mod editor {
                 }?
             }
             // save cursor
-            write!(w, "\x1b[s")?;
+            execute!(w, SavePosition)?;
             // draw tail
             for c in tail {
                 match c {
@@ -394,7 +416,99 @@ pub mod editor {
                 }?
             }
             // restore cursor
-            w.write_all(b"\x1b[u").map_err(Into::into)
+            execute!(w, RestorePosition)?;
+            Ok(())
+        }
+        pub fn prompt<W: Write>(&self, w: &mut W) -> ReplResult<()> {
+            let Self { head, color, begin, again, .. } = self;
+            queue!(
+                w,
+                MoveToColumn(0),
+                Print(color),
+                Print(if head.is_empty() { begin } else { again }),
+                ResetColor,
+                Print(' '),
+            )?;
+            Ok(())
+        }
+        pub fn print_head<W: Write>(&self, w: &mut W) -> ReplResult<()> {
+            self.prompt(w)?;
+            write_chars(
+                self.head.iter().skip(
+                    self.head
+                        .iter()
+                        .rposition(is_newline)
+                        .unwrap_or(self.head.len())
+                        + 1,
+                ),
+                w,
+            )?;
+            Ok(())
+        }
+        pub fn print_tail<W: Write>(&self, w: &mut W) -> ReplResult<()> {
+            let Self { tail, .. } = self;
+            queue!(w, SavePosition, Clear(ClearType::UntilNewLine))?;
+            write_chars(tail.iter().take_while(|&c| !is_newline(c)), w)?;
+            queue!(w, RestorePosition)?;
+            Ok(())
+        }
+        pub fn push<W: Write>(&mut self, c: char, w: &mut W) -> ReplResult<()> {
+            // Tail optimization: if the tail is empty,
+            //we don't have to undraw and redraw on newline
+            if self.tail.is_empty() {
+                self.head.push_back(c);
+                match c {
+                    '\n' => {
+                        write!(w, "\r\n")?;
+                        self.print_head(w)?;
+                    }
+                    c => {
+                        queue!(w, Print(c))?;
+                    }
+                };
+                return Ok(());
+            }
+
+            if '\n' == c {
+                self.undraw(w)?;
+            }
+            self.head.push_back(c);
+            match c {
+                '\n' => self.redraw(w)?,
+                _ => {
+                    write!(w, "{c}")?;
+                    self.print_tail(w)?;
+                }
+            }
+            Ok(())
+        }
+        pub fn pop<W: Write>(&mut self, w: &mut W) -> ReplResult<Option<char>> {
+            if let Some('\n') = self.head.back() {
+                self.undraw(w)?;
+            }
+            let c = self.head.pop_back();
+            // if the character was a newline, we need to go back a line
+            match c {
+                Some('\n') => self.redraw(w)?,
+                Some(_) => {
+                    // go back a char
+                    queue!(w, MoveLeft(1), Print(' '), MoveLeft(1))?;
+                    self.print_tail(w)?;
+                }
+                None => {}
+            }
+            Ok(c)
+        }
+
+        pub fn extend<T: IntoIterator<Item = char>, W: Write>(
+            &mut self,
+            iter: T,
+            w: &mut W,
+        ) -> ReplResult<()> {
+            for c in iter {
+                self.push(c, w)?;
+            }
+            Ok(())
         }
         pub fn restore(&mut self, s: &str) {
             self.clear();
@@ -404,15 +518,21 @@ pub mod editor {
             self.head.clear();
             self.tail.clear();
         }
-        pub fn push(&mut self, c: char) -> ReplResult<()> {
-            self.head.push_back(c);
-            Ok(())
-        }
-        pub fn pop(&mut self) -> ReplResult<char> {
-            self.head.pop_back().ok_or(Error::EndOfInput)
-        }
-        pub fn delete(&mut self) -> ReplResult<char> {
-            self.tail.pop_front().ok_or(Error::EndOfInput)
+        pub fn delete<W: Write>(&mut self, w: &mut W) -> ReplResult<char> {
+            match self.tail.front() {
+                Some('\n') => {
+                    self.undraw(w)?;
+                    let out = self.tail.pop_front();
+                    self.redraw(w)?;
+                    out
+                }
+                _ => {
+                    let out = self.tail.pop_front();
+                    self.print_tail(w)?;
+                    out
+                }
+            }
+            .ok_or(Error::EndOfInput)
         }
         pub fn len(&self) -> usize {
             self.head.len() + self.tail.len()
@@ -433,26 +553,56 @@ pub mod editor {
             }
         }
         /// Moves the cursor back `steps` steps
-        pub fn cursor_forward(&mut self, steps: usize) -> Option<()> {
-            let Self { head, tail, .. } = self;
+        pub fn cursor_back<W: Write>(&mut self, steps: usize, w: &mut W) -> ReplResult<()> {
             for _ in 0..steps {
-                tail.push_front(head.pop_back()?);
+                if let Some('\n') = self.head.back() {
+                    self.undraw(w)?;
+                }
+                let Some(c) = self.head.pop_back() else {
+                    return Ok(());
+                };
+                self.tail.push_front(c);
+                match c {
+                    '\n' => self.redraw(w)?,
+                    _ => queue!(w, MoveLeft(1))?,
+                }
             }
-            Some(())
+            Ok(())
         }
         /// Moves the cursor forward `steps` steps
-        pub fn cursor_back(&mut self, steps: usize) -> Option<()> {
-            let Self { head, tail, .. } = self;
+        pub fn cursor_forward<W: Write>(&mut self, steps: usize, w: &mut W) -> ReplResult<()> {
             for _ in 0..steps {
-                head.push_back(tail.pop_front()?);
+                if let Some('\n') = self.tail.front() {
+                    self.undraw(w)?
+                }
+                let Some(c) = self.tail.pop_front() else {
+                    return Ok(());
+                };
+                self.head.push_back(c);
+                match c {
+                    '\n' => self.redraw(w)?,
+                    _ => queue!(w, MoveRight(1))?,
+                }
             }
-            Some(())
+            Ok(())
         }
-    }
-
-    impl<'a> Extend<char> for Editor<'a> {
-        fn extend<T: IntoIterator<Item = char>>(&mut self, iter: T) {
-            self.head.extend(iter)
+        /// Goes to the beginning of the current line
+        pub fn home<W: Write>(&mut self, w: &mut W) -> ReplResult<()> {
+            loop {
+                match self.head.back() {
+                    Some('\n') | None => break Ok(()),
+                    Some(_) => self.cursor_back(1, w)?,
+                }
+            }
+        }
+        /// Goes to the end of the current line
+        pub fn end<W: Write>(&mut self, w: &mut W) -> ReplResult<()> {
+            loop {
+                match self.tail.front() {
+                    Some('\n') | None => break Ok(()),
+                    Some(_) => self.cursor_forward(1, w)?,
+                }
+            }
         }
     }
 

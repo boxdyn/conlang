@@ -379,13 +379,7 @@ pub mod cli {
         /// Runs the main REPL loop
         pub fn repl(&mut self) {
             use crate::repline::{error::Error, Repline};
-            let mut rl = Repline::new(
-                // std::fs::File::open("/dev/stdin").unwrap(),
-                self.mode.ansi_color(),
-                self.prompt_begin,
-                self.prompt_again,
-            );
-            // self.prompt_begin();
+            let mut rl = Repline::new(self.mode.ansi_color(), self.prompt_begin, self.prompt_again);
             fn clear_line() {
                 print!("\x1b[G\x1b[J");
             }
@@ -397,16 +391,17 @@ pub mod cli {
                         if buf.is_empty() || buf.ends_with('\n') {
                             return;
                         }
+                        rl.accept();
+                        println!("Cancelled. (Press Ctrl+C again to quit.)");
                         continue;
                     }
                     // Ctrl-D: reset input, and parse it for errors
                     Err(Error::CtrlD(buf)) => {
+                        rl.deny();
                         if let Err(e) = Program::new(&buf).parse() {
-                            println!();
                             clear_line();
                             self.prompt_error(&e);
                         }
-                        rl.deny();
                         continue;
                     }
                     Err(e) => {
@@ -432,7 +427,7 @@ pub mod cli {
                     Some(Ok(_)) => unreachable!(),
                     Some(Err(error)) => {
                         rl.deny();
-                        eprintln!("{error}");
+                        self.prompt_error(&error);
                         continue;
                     }
                 }
