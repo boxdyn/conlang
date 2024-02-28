@@ -326,7 +326,7 @@ const PARENS: (Type, Type) = (Type::LParen, Type::RParen);
 const fn delim<'t, T>(
     f: impl Fn(&mut Parser<'t>) -> PResult<T>,
     delim: (Type, Type),
-        while_parsing: Parsing,
+    while_parsing: Parsing,
 ) -> impl Fn(&mut Parser<'t>) -> PResult<T> {
     move |parser| {
         parser.match_type(delim.0, while_parsing)?;
@@ -337,13 +337,13 @@ const fn delim<'t, T>(
 }
 
 /// Parses constructions of the form `(f sep ~until)*`
-    ///
+///
 /// where `~until` is a negative lookahead assertion
 const fn sep<'t, T>(
     f: impl Fn(&mut Parser<'t>) -> PResult<T>,
     sep: Type,
     until: Type,
-        while_parsing: Parsing,
+    while_parsing: Parsing,
 ) -> impl Fn(&mut Parser<'t>) -> PResult<Vec<T>> {
     move |parser| {
         let mut args = vec![];
@@ -359,13 +359,13 @@ const fn sep<'t, T>(
 }
 
 /// Parses constructions of the form `(f ~until)*`
-    ///
+///
 /// where `~until` is a negative lookahead assertion
 #[allow(dead_code)]
 const fn rep<'t, T>(
     f: impl Fn(&mut Parser<'t>) -> PResult<T>,
     until: Type,
-        while_parsing: Parsing,
+    while_parsing: Parsing,
 ) -> impl Fn(&mut Parser<'t>) -> PResult<Vec<T>> {
     move |parser| {
         let mut out = vec![];
@@ -380,16 +380,16 @@ const fn rep<'t, T>(
 macro item_like() {
     Type::Hash
         | Type::Keyword(
-        Keyword::Pub
-            | Keyword::Type
-            | Keyword::Const
-            | Keyword::Static
-            | Keyword::Mod
-            | Keyword::Fn
-            | Keyword::Struct
-            | Keyword::Enum
-            | Keyword::Impl,
-    )
+            Keyword::Pub
+                | Keyword::Type
+                | Keyword::Const
+                | Keyword::Static
+                | Keyword::Mod
+                | Keyword::Fn
+                | Keyword::Struct
+                | Keyword::Enum
+                | Keyword::Impl,
+        )
 }
 
 /// Top level parsing
@@ -897,6 +897,7 @@ impl<'t> Parser<'t> {
         };
         Ok(Assign { head, op, tail: self.expr_from(Self::exprkind_assign)?.into() }.into())
     }
+    // TODO: use a pratt parser for binary expressions, to simplify this
     binary! {
         exprkind_compare {exprkind_range, compare_op}
         exprkind_range {exprkind_logic, range_op}
