@@ -690,7 +690,7 @@ mod convert {
         impl From for StmtKind {
             Let => StmtKind::Local,
             Item => StmtKind::Item,
-            // NOTE: There are multiple conversions from Expr to StmtKind
+            Expr => StmtKind::Expr,
         }
         impl From for ExprKind {
             Assign => ExprKind::Assign,
