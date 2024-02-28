@@ -221,7 +221,7 @@ pub struct TyTuple {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TyRef {
-    pub count: usize,
+    pub count: u16,
     pub to: Path,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
