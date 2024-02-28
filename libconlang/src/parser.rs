@@ -234,6 +234,7 @@ pub struct Parser<'t> {
     loc: Loc,
 }
 
+/// Basic parser functionality
 impl<'t> Parser<'t> {
     pub fn new(lexer: Lexer<'t>) -> Self {
         Self { loc: Loc::from(&lexer), lexer, next: None }
@@ -306,62 +307,63 @@ impl<'t> Parser<'t> {
     }
 }
 
-/// Generic parse functions
-impl<'t> Parser<'t> {
-    /// Parses constructions of the form `Open F Close`
-    fn delimited<T, F>(
-        &mut self,
-        open: Type,
-        f: F,
-        close: Type,
+// the three matched delimiter pairs
+/// Square brackets: `[` `]`
+const BRACKETS: (Type, Type) = (Type::LBrack, Type::RBrack);
+/// Curly braces: `{` `}`
+const CURLIES: (Type, Type) = (Type::LCurly, Type::RCurly);
+/// Parentheses: `(` `)`
+const PARENS: (Type, Type) = (Type::LParen, Type::RParen);
+
+/// Parses constructions of the form `delim.0 f delim.1` (i.e. `(` `foobar` `)`)
+fn delim<'t, T>(
+    f: impl Fn(&mut Parser<'t>) -> PResult<T>,
+    delim: (Type, Type),
         while_parsing: Parsing,
-    ) -> PResult<T>
-    where
-        F: Fn(&mut Self) -> PResult<T>,
-    {
-        self.match_type(open, while_parsing)?;
-        let out = f(self)?;
-        self.match_type(close, while_parsing)?;
+) -> impl Fn(&mut Parser<'t>) -> PResult<T> {
+    move |parser| {
+        parser.match_type(delim.0, while_parsing)?;
+        let out = f(parser)?;
+        parser.match_type(delim.1, while_parsing)?;
         Ok(out)
     }
-    /// Parses constructions of the form `(F Separator ~Terminator)*`
+}
+
+/// Parses constructions of the form `(f sep ~until)*`
     ///
-    /// where `~Terminator` is a negative lookahead assertion
-    fn separated<T, F>(
-        &mut self,
-        separator: Type,
-        f: F,
-        terminator: Type,
+/// where `~until` is a negative lookahead assertion
+fn sep<'t, T>(
+    f: impl Fn(&mut Parser<'t>) -> PResult<T>,
+    sep: Type,
+    until: Type,
         while_parsing: Parsing,
-    ) -> PResult<Vec<T>>
-    where
-        F: Fn(&mut Self) -> PResult<T>,
-    {
+) -> impl Fn(&mut Parser<'t>) -> PResult<Vec<T>> {
+    move |parser| {
         let mut args = vec![];
-        while terminator != self.peek_type(while_parsing)? {
-            args.push(f(self)?);
-            if separator != self.peek_type(while_parsing)? {
+        while until != parser.peek_type(while_parsing)? {
+            args.push(f(parser)?);
+            if sep != parser.peek_type(while_parsing)? {
                 break;
             }
-            self.consume_peeked();
+            parser.consume_peeked();
         }
         Ok(args)
     }
-    /// Parses constructions of the form `(F ~Terminator)*`
+}
+
+/// Parses constructions of the form `(f ~until)*`
     ///
-    /// where `~Terminator` is a negative lookahead assertion
-    fn repeated<T, F>(
-        &mut self,
-        f: F,
-        terminator: Type,
+/// where `~until` is a negative lookahead assertion
+#[allow(dead_code)]
+fn rep<'t, T>(
+    f: impl Fn(&mut Parser<'t>) -> PResult<T>,
+    until: Type,
         while_parsing: Parsing,
-    ) -> PResult<Vec<T>>
-    where
-        F: Fn(&mut Self) -> PResult<T>,
-    {
+) -> impl Fn(&mut Parser<'t>) -> PResult<Vec<T>> {
+    move |this| {
         let mut out = vec![];
-        while terminator != self.peek_type(while_parsing)? {
-            out.push(f(self)?);
+        while until != this.peek_type(while_parsing)? {
+            out.push(f(this)?)
         }
         Ok(out)
     }
@@ -538,13 +540,10 @@ impl<'t> Parser<'t> {
     }
     pub fn modulekind(&mut self) -> PResult<ModuleKind> {
         const PARSING: Parsing = Parsing::ModuleKind;
+        let inline = delim(Self::file, CURLIES, PARSING);
+
         match self.peek_type(PARSING)? {
-            Type::LCurly => Ok(ModuleKind::Inline(self.delimited(
-                Type::LCurly,
-                Self::file,
-                Type::RCurly,
-                PARSING,
-            )?)),
+            Type::LCurly => Ok(ModuleKind::Inline(inline(self)?)),
             Type::Semi => {
                 self.consume_peeked();
                 Ok(ModuleKind::Outline)
@@ -578,12 +577,11 @@ impl<'t> Parser<'t> {
     }
     pub fn parse_params(&mut self) -> PResult<Vec<Param>> {
         const PARSING: Parsing = Parsing::Function;
-        self.delimited(
-            Type::LParen,
-            |this| this.separated(Type::Comma, Self::parse_param, Type::RParen, PARSING),
-            Type::RParen,
+        delim(
+            sep(Self::parse_param, Type::Comma, PARENS.1, PARSING),
+            PARENS,
             PARSING,
-        )
+        )(self)
     }
     pub fn parse_param(&mut self) -> PResult<Param> {
         Ok(Param {
@@ -614,22 +612,19 @@ impl<'t> Parser<'t> {
     pub fn structkind_tuple(&mut self) -> PResult<StructKind> {
         const PARSING: Parsing = Parsing::StructKind;
 
-        Ok(StructKind::Tuple(self.delimited(
-            Type::LParen,
-            |s| s.separated(Type::Comma, Self::ty, Type::RParen, PARSING),
-            Type::RParen,
+        Ok(StructKind::Tuple(delim(
+            sep(Self::ty, Type::Comma, PARENS.1, PARSING),
+            PARENS,
             PARSING,
-        )?))
+        )(self)?))
     }
     pub fn structkind_struct(&mut self) -> PResult<StructKind> {
         const PARSING: Parsing = Parsing::StructKind;
-
-        Ok(StructKind::Struct(self.delimited(
-            Type::LCurly,
-            |s| s.separated(Type::Comma, Self::struct_member, Type::RCurly, PARSING),
-            Type::RCurly,
+        Ok(StructKind::Struct(delim(
+            sep(Self::struct_member, Type::Comma, CURLIES.1, PARSING),
+            CURLIES,
             PARSING,
-        )?))
+        )(self)?))
     }
     pub fn struct_member(&mut self) -> PResult<StructMember> {
         const PARSING: Parsing = Parsing::StructMember;
@@ -694,12 +689,11 @@ impl<'t> Parser<'t> {
     pub fn tytuple(&mut self) -> PResult<TyTuple> {
         const PARSING: Parsing = Parsing::TyTuple;
         Ok(TyTuple {
-            types: self.delimited(
-                Type::LParen,
-                |s| s.separated(Type::Comma, Self::ty, Type::RParen, PARSING),
-                Type::RParen,
+            types: delim(
+                sep(Self::ty, Type::Comma, PARENS.1, PARSING),
+                PARENS,
                 PARSING,
-            )?,
+            )(self)?,
         })
     }
     /// [TyRef] = (`&`|`&&`)* [Path]
@@ -777,21 +771,12 @@ impl<'t> Parser<'t> {
     ///
     /// See also: [Parser::stmt]
     pub fn stmtkind(&mut self) -> PResult<StmtKind> {
-        match self.peek_type(Parsing::StmtKind)? {
-            Type::Semi => Ok(StmtKind::Empty),
-            Type::Keyword(Keyword::Let) => self.stmtkind_local(),
-            item_like!() => self.stmtkind_item(),
-            _ => self.stmtkind_expr(),
-        }
-    }
-    pub fn stmtkind_local(&mut self) -> PResult<StmtKind> {
-        Ok(StmtKind::Local(self.parse_let()?))
-    }
-    pub fn stmtkind_item(&mut self) -> PResult<StmtKind> {
-        Ok(StmtKind::Item(Box::new(self.item()?)))
-    }
-    pub fn stmtkind_expr(&mut self) -> PResult<StmtKind> {
-        Ok(StmtKind::Expr(self.expr()?.into()))
+        Ok(match self.peek_type(Parsing::StmtKind)? {
+            Type::Semi => StmtKind::Empty,
+            Type::Keyword(Keyword::Let) => self.parse_let()?.into(),
+            item_like!() => self.item()?.into(),
+            _ => self.expr()?.into(),
+        })
     }
 
     pub fn parse_let(&mut self) -> PResult<Let> {
@@ -928,9 +913,7 @@ impl<'t> Parser<'t> {
 
         let mut indices = vec![];
         while Ok(Type::LBrack) == self.peek_type(PARSING) {
-            self.consume_peeked();
-            indices.push(self.tuple()?.into());
-            self.match_type(Type::RBrack, PARSING)?;
+            indices.push(delim(Self::tuple, BRACKETS, PARSING)(self)?.into());
         }
         Ok(Index { head: head.into(), indices }.into())
     }
@@ -988,7 +971,7 @@ impl<'t> Parser<'t> {
                 values: {
                     self.consume_peeked();
                     let mut out = vec![first];
-                    out.extend(self.separated(Type::Comma, Self::expr, Type::RBrack, PARSING)?);
+                    out.extend(sep(Self::expr, Type::Comma, END, PARSING)(self)?);
                     out
                 },
             }
@@ -1093,16 +1076,7 @@ impl<'t> Parser<'t> {
     /// [Block] = `{` [Stmt]* `}`
     pub fn block(&mut self) -> PResult<Block> {
         const PARSING: Parsing = Parsing::Block;
-        const START: Type = Type::LCurly;
-        const END: Type = Type::RCurly;
-        Ok(Block {
-            stmts: self.delimited(
-                START,
-                |this| this.repeated(Self::stmt, END, PARSING),
-                END,
-                PARSING,
-            )?,
-        })
+        Ok(Block { stmts: delim(rep(Self::stmt, CURLIES.1, PARSING), CURLIES, PARSING)(self)? })
     }
 }
 /// ## Control flow subexpressions
