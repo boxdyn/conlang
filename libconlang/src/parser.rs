@@ -323,7 +323,7 @@ const CURLIES: (Type, Type) = (Type::LCurly, Type::RCurly);
 const PARENS: (Type, Type) = (Type::LParen, Type::RParen);
 
 /// Parses constructions of the form `delim.0 f delim.1` (i.e. `(` `foobar` `)`)
-fn delim<'t, T>(
+const fn delim<'t, T>(
     f: impl Fn(&mut Parser<'t>) -> PResult<T>,
     delim: (Type, Type),
         while_parsing: Parsing,
@@ -339,7 +339,7 @@ fn delim<'t, T>(
 /// Parses constructions of the form `(f sep ~until)*`
     ///
 /// where `~until` is a negative lookahead assertion
-fn sep<'t, T>(
+const fn sep<'t, T>(
     f: impl Fn(&mut Parser<'t>) -> PResult<T>,
     sep: Type,
     until: Type,
@@ -362,15 +362,15 @@ fn sep<'t, T>(
     ///
 /// where `~until` is a negative lookahead assertion
 #[allow(dead_code)]
-fn rep<'t, T>(
+const fn rep<'t, T>(
     f: impl Fn(&mut Parser<'t>) -> PResult<T>,
     until: Type,
         while_parsing: Parsing,
 ) -> impl Fn(&mut Parser<'t>) -> PResult<Vec<T>> {
-    move |this| {
+    move |parser| {
         let mut out = vec![];
-        while until != this.peek_type(while_parsing)? {
-            out.push(f(this)?)
+        while until != parser.peek_type(while_parsing)? {
+            out.push(f(parser)?)
         }
         Ok(out)
     }
