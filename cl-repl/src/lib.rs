@@ -225,6 +225,18 @@ pub mod cli {
         fn from(value: Args) -> Self {
             let Args { path, repl, mode } = value;
             match (repl, path) {
+                (true, Some(path)) => {
+                    let prog = std::fs::read_to_string(path).unwrap();
+                    let code = conlang::parser::Parser::new(conlang::lexer::Lexer::new(&prog))
+                        .file()
+                        .unwrap();
+                    let mut env = conlang::interpreter::env::Environment::new();
+                    env.eval(&code).unwrap();
+                    env.call("dump", &[])
+                        .expect("calling dump in the environment shouldn't fail");
+
+                    Self::Repl(Repl { mode, env, ..Default::default() })
+                }
                 (_, Some(path)) => Self::File { mode, path },
                 (true, None) => Self::Repl(Repl { mode, ..Default::default() }),
                 (false, None) => Self::Stdin { mode },
