@@ -15,7 +15,9 @@ pub trait Callable: std::fmt::Debug {
 }
 
 /// [BuiltIn]s are [Callable]s with bespoke definitions
-pub trait BuiltIn: std::fmt::Debug + Callable {}
+pub trait BuiltIn: std::fmt::Debug + Callable {
+    fn description(&self) -> &str;
+}
 
 pub mod temp_type_impl {
     //! Temporary implementations of Conlang values
@@ -164,6 +166,7 @@ pub mod temp_type_impl {
         String => ConValue::String,
         Function => ConValue::Function,
         Vec<ConValue> => ConValue::Tuple,
+        &'static dyn BuiltIn => ConValue::BuiltIn,
     }
     impl From<()> for ConValue {
         fn from(_: ()) -> Self {
@@ -246,27 +249,6 @@ pub mod temp_type_impl {
             _ => Err(Error::TypeError)?
         ]
     }
-    impl Neg for ConValue {
-        type Output = IResult<Self>;
-        fn neg(self) -> Self::Output {
-            Ok(match self {
-                ConValue::Empty => ConValue::Empty,
-                ConValue::Int(v) => ConValue::Int(-v),
-                _ => Err(Error::TypeError)?,
-            })
-        }
-    }
-    impl Not for ConValue {
-        type Output = IResult<Self>;
-        fn not(self) -> Self::Output {
-            Ok(match self {
-                ConValue::Empty => ConValue::Empty,
-                ConValue::Int(v) => ConValue::Int(!v),
-                ConValue::Bool(v) => ConValue::Bool(!v),
-                _ => Err(Error::TypeError)?,
-            })
-        }
-    }
     impl std::fmt::Display for ConValue {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
@@ -301,7 +283,7 @@ pub mod temp_type_impl {
                     write!(f, "fn {}", func.name())
                 }
                 ConValue::BuiltIn(func) => {
-                    write!(f, "internal fn {}", func.name())
+                    write!(f, "{}", func.description())
                 }
             }
         }
@@ -499,48 +481,51 @@ pub mod interpret {
         fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
             let Binary { head, tail } = self;
             let mut head = head.interpret(env)?;
+            // Short-circuiting ops
             for (op, tail) in tail {
-                head = match op {
+                match op {
                     BinaryKind::LogAnd => {
                         if head.truthy()? {
-                            tail.interpret(env)
-                        } else {
-                            return Ok(head); // Short circuiting
+                            head = tail.interpret(env)?;
+                            continue;
                         }
+                        return Ok(head); // Short circuiting
                     }
                     BinaryKind::LogOr => {
                         if !head.truthy()? {
-                            tail.interpret(env)
-                        } else {
-                            return Ok(head); // Short circuiting
+                            head = tail.interpret(env)?;
+                            continue;
                         }
+                        return Ok(head); // Short circuiting
                     }
                     BinaryKind::LogXor => {
-                        // TODO: It should be possible to assemble better error information from
-                        // this
-                        let (lhs, rhs) = (head.truthy()?, tail.interpret(env)?.truthy()?);
-                        Ok(ConValue::Bool(lhs ^ rhs))
+                        head = ConValue::Bool(head.truthy()? ^ tail.interpret(env)?.truthy()?);
+                        continue;
                     }
-                    // TODO: For all overloadable operators, transmute into function call
-                    BinaryKind::Mul => head * tail.interpret(env)?,
-                    BinaryKind::Div => head / tail.interpret(env)?,
-                    BinaryKind::Rem => head % tail.interpret(env)?,
-                    BinaryKind::Add => head + tail.interpret(env)?,
-                    BinaryKind::Sub => head - tail.interpret(env)?,
-                    BinaryKind::Shl => head << tail.interpret(env)?,
-                    BinaryKind::Shr => head >> tail.interpret(env)?,
-                    BinaryKind::BitAnd => head & tail.interpret(env)?,
-                    BinaryKind::BitOr => head | tail.interpret(env)?,
-                    BinaryKind::BitXor => head ^ tail.interpret(env)?,
-                    BinaryKind::RangeExc => head.range_exc(tail.interpret(env)?),
-                    BinaryKind::RangeInc => head.range_inc(tail.interpret(env)?),
-                    BinaryKind::Lt => head.lt(&tail.interpret(env)?),
-                    BinaryKind::LtEq => head.lt_eq(&tail.interpret(env)?),
-                    BinaryKind::Equal => head.eq(&tail.interpret(env)?),
-                    BinaryKind::NotEq => head.neq(&tail.interpret(env)?),
-                    BinaryKind::GtEq => head.gt_eq(&tail.interpret(env)?),
-                    BinaryKind::Gt => head.gt(&tail.interpret(env)?),
+                    _ => {}
+                }
+                let tail = tail.interpret(env)?;
+                head = match op {
+                    BinaryKind::Mul => env.call("mul", &[head, tail]),
+                    BinaryKind::Div => env.call("div", &[head, tail]),
+                    BinaryKind::Rem => env.call("rem", &[head, tail]),
+                    BinaryKind::Add => env.call("add", &[head, tail]),
+                    BinaryKind::Sub => env.call("sub", &[head, tail]),
+                    BinaryKind::Shl => env.call("shl", &[head, tail]),
+                    BinaryKind::Shr => env.call("shr", &[head, tail]),
+                    BinaryKind::BitAnd => env.call("and", &[head, tail]),
+                    BinaryKind::BitOr => env.call("or", &[head, tail]),
+                    BinaryKind::BitXor => env.call("xor", &[head, tail]),
+                    BinaryKind::RangeExc => env.call("range_exc", &[head, tail]),
+                    BinaryKind::RangeInc => env.call("range_inc", &[head, tail]),
+                    BinaryKind::Lt => env.call("lt", &[head, tail]),
+                    BinaryKind::LtEq => env.call("lt_eq", &[head, tail]),
+                    BinaryKind::Equal => env.call("eq", &[head, tail]),
+                    BinaryKind::NotEq => env.call("noteq", &[head, tail]),
+                    BinaryKind::GtEq => env.call("gt_eq", &[head, tail]),
+                    BinaryKind::Gt => env.call("gt", &[head, tail]),
                     BinaryKind::Dot => todo!("search within a type's namespace!"),
+                    _ => Ok(head),
                 }?;
             }
             Ok(head)
@@ -553,9 +538,9 @@ pub mod interpret {
 
             for op in ops.iter().rev() {
                 operand = match op {
-                    UnaryKind::Deref => todo!("Deref operator"),
-                    UnaryKind::Neg => (-operand)?,
-                    UnaryKind::Not => (!operand)?,
+                    UnaryKind::Deref => env.call("deref", &[operand])?,
+                    UnaryKind::Neg => env.call("neg", &[operand])?,
+                    UnaryKind::Not => env.call("not", &[operand])?,
                     UnaryKind::At => {
                         println!("{operand}");
                         operand
@@ -646,7 +631,8 @@ pub mod interpret {
     }
     impl Interpret for AddrOf {
         fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-            todo!("Implement AddrOf in {env}")
+            let Self { count: _, mutable: _, expr } = self;
+            todo!("Create reference\nfrom expr: {expr}\nin env:\n{env}\n")
         }
     }
     impl Interpret for Block {
@@ -809,77 +795,16 @@ pub mod function {
     }
 }
 
-pub mod builtin {
-    //! Implementations of built-in functions
-    mod builtin_imports {
-        pub use crate::interpreter::{
-            env::Environment, error::IResult, temp_type_impl::ConValue, BuiltIn, Callable,
-        };
-    }
-    use super::BuiltIn;
-    /// Builtins to load when a new interpreter is created
-    pub const DEFAULT_BUILTINS: &[&dyn BuiltIn] = &[&print::Print, &dbg::Dbg, &dump::Dump];
-
-    mod print {
-        //! Implements the unstable `print(...)` builtin
-        use super::builtin_imports::*;
-        /// Implements the `print(...)` builtin
-        #[derive(Clone, Debug)]
-        pub struct Print;
-        impl BuiltIn for Print {}
-        #[rustfmt::skip]
-        impl Callable for Print {
-            fn name(&self) -> &'static str { "print" }
-            fn call(&self, _inter: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
-                for arg in args {
-                    print!("{arg}")
-                }
-                println!();
-                Ok(ConValue::Empty)
-            }
-        }
-    }
-    mod dbg {
-        //! Implements the unstable `dbg(...)` builtin
-        use super::builtin_imports::*;
-        #[derive(Clone, Debug)]
-        pub struct Dbg;
-        impl BuiltIn for Dbg {}
-        #[rustfmt::skip]
-        impl Callable for Dbg {
-            fn name(&self) -> &str { "dbg" }
-            fn call(&self, _inter: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
-                println!("{args:?}");
-                Ok(args.into())
-            }
-        }
-    }
-    mod dump {
-        use super::builtin_imports::*;
-        #[derive(Clone, Debug)]
-        pub struct Dump;
-        impl BuiltIn for Dump {}
-        impl Callable for Dump {
-            fn call(&self, env: &mut Environment, _args: &[ConValue]) -> IResult<ConValue> {
-                println!("{}", *env);
-                Ok(ConValue::Empty)
-            }
-
-            fn name(&self) -> &str {
-                "dump"
-            }
-        }
-    }
-}
+pub mod builtin;
 
 pub mod env {
     //! Lexical and non-lexical scoping for variables
     use super::{
-        builtin::DEFAULT_BUILTINS,
+        builtin::{BINARY, MISC, RANGE, UNARY},
         error::{Error, IResult},
         function::Function,
         temp_type_impl::ConValue,
-        Callable, Interpret,
+        BuiltIn, Callable, Interpret,
     };
     use crate::ast::{Function as FnDecl, Identifier};
     use std::{
@@ -899,9 +824,9 @@ pub mod env {
             for (frame, name) in self.frames.iter().rev() {
                 writeln!(f, "--- {name} ---")?;
                 for (var, val) in frame {
-                    write!(f, "- {var}: ")?;
+                    write!(f, "{var}: ")?;
                     match val {
-                        Some(value) => writeln!(f, "{value}"),
+                        Some(value) => writeln!(f, "\t{value}"),
                         None => writeln!(f, "<undefined>"),
                     }?
                 }
@@ -911,13 +836,21 @@ pub mod env {
     }
     impl Default for Environment {
         fn default() -> Self {
-            let mut builtins = HashMap::new();
-            for &builtin in DEFAULT_BUILTINS {
-                builtins.insert(builtin.name().into(), Some(ConValue::BuiltIn(builtin)));
+            Self {
+                frames: vec![
+                    (to_hashmap(RANGE), "range ops"),
+                    (to_hashmap(UNARY), "unary ops"),
+                    (to_hashmap(BINARY), "binary ops"),
+                    (to_hashmap(MISC), "builtins"),
+                    (HashMap::new(), "globals"),
+                ],
             }
-            // FIXME: Temporary until modules are implemented
-            Self { frames: vec![(builtins, "builtins"), (HashMap::new(), "globals")] }
         }
+    }
+    fn to_hashmap(from: &[&'static dyn BuiltIn]) -> HashMap<String, Option<ConValue>> {
+        from.iter()
+            .map(|&v| (v.name().into(), Some(v.into())))
+            .collect()
     }
 
     impl Environment {
@@ -1073,7 +1006,11 @@ pub mod error {
         /// A value was called, but is not callable
         NotCallable(ConValue),
         /// A function was called with the wrong number of arguments
-        ArgNumber { want: usize, got: usize },
+        ArgNumber {
+            want: usize,
+            got: usize,
+        },
+        NullPointer,
     }
 
     impl std::error::Error for Error {}
@@ -1108,6 +1045,9 @@ pub mod error {
                 }
                 Error::ArgNumber { want, got } => {
                     write!(f, "Expected {want} arguments, got {got}")
+                }
+                Error::NullPointer => {
+                    write!(f, "Attempted to dereference a null pointer?")
                 }
             }
         }
