@@ -49,7 +49,7 @@ pub mod ignore {
     /// # Examples
     /// ```rust
     /// #![deny(unused_must_use)]
-    /// # use cl_frontend::repline::ignore::Ignore;
+    /// # use cl_repl::repline::ignore::Ignore;
     /// ().ignore();
     /// Err::<(), &str>("Foo").ignore();
     /// Some("Bar").ignore();
