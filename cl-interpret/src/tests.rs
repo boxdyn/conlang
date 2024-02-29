@@ -1,10 +1,6 @@
 #![allow(unused_imports)]
-use crate::{
-    ast::*,
-    interpreter::{env::Environment, temp_type_impl::ConValue, Interpret},
-    lexer::Lexer,
-    parser::Parser,
-};
+use crate::{env::Environment, temp_type_impl::ConValue, Interpret};
+use conlang::{ast::*, lexer::Lexer, parser::Parser};
 pub use macros::*;
 
 mod macros {
@@ -49,7 +45,7 @@ mod macros {
     //! env_eq!(env.x, 10); // like assert_eq! for Environments
     //! ```
     #![allow(unused_macros)]
-    use crate::interpreter::IResult;
+    use crate::IResult;
 
     use super::*;
 
@@ -212,7 +208,7 @@ mod fn_declarations {
 }
 
 mod operators {
-    use crate::ast::Tuple;
+    use conlang::ast::Tuple;
 
     use super::*;
     #[test]

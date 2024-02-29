@@ -1,5 +1,5 @@
 [package]
-name = "cl-repl"
+name = "cl-interpret"
 repository.workspace = true
 version.workspace = true
 authors.workspace = true
@@ -7,9 +7,5 @@ edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 conlang = { path = "../libconlang" }
-cl-interpret = { path = "../cl-interpret" }
-crossterm = "0.27.0"

@@ -69,18 +69,17 @@ pub mod args {
 }
 
 pub mod program {
-    use std::{fmt::Display, io::Write};
-
+    use cl_interpret::{
+        env::Environment, error::IResult, interpret::Interpret, temp_type_impl::ConValue,
+    };
     use conlang::{
         ast::{self, ast_impl::format::Pretty},
-        interpreter::{
-            env::Environment, error::IResult, interpret::Interpret, temp_type_impl::ConValue,
-        },
         // pretty_printer::{PrettyPrintable, Printer},
         lexer::Lexer,
         parser::{error::PResult, Parser},
         resolver::{error::TyResult, Resolver},
     };
+    use std::{fmt::Display, io::Write};
 
     pub struct Parsable;
 
@@ -190,12 +189,12 @@ pub mod program {
 }
 
 pub mod cli {
-    use conlang::{interpreter::env::Environment, resolver::Resolver, token::Token};
-
     use crate::{
         args::Args,
         program::{Parsable, Parsed, Program},
     };
+    use cl_interpret::env::Environment;
+    use conlang::{resolver::Resolver, token::Token};
     use std::{
         convert::Infallible,
         error::Error,
@@ -230,7 +229,7 @@ pub mod cli {
                     let code = conlang::parser::Parser::new(conlang::lexer::Lexer::new(&prog))
                         .file()
                         .unwrap();
-                    let mut env = conlang::interpreter::env::Environment::new();
+                    let mut env = cl_interpret::env::Environment::new();
                     env.eval(&code).unwrap();
                     env.call("dump", &[])
                         .expect("calling dump in the environment shouldn't fail");
