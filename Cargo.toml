@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "libconlang",
     "cl-repl",
     "cl-interpret",
     "cl-structures",
