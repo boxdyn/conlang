@@ -8,9 +8,9 @@
 pub mod ansi {
     // ANSI color escape sequences
     pub const ANSI_RED: &str = "\x1b[31m";
-    // const ANSI_GREEN: &str = "\x1b[32m"; // the color of type checker mode
+    pub const ANSI_GREEN: &str = "\x1b[32m"; // the color of type checker mode
     pub const ANSI_CYAN: &str = "\x1b[36m";
-    pub const ANSI_BRIGHT_GREEN: &str = "\x1b[92m";
+    // pub const ANSI_BRIGHT_GREEN: &str = "\x1b[92m";
     pub const ANSI_BRIGHT_BLUE: &str = "\x1b[94m";
     pub const ANSI_BRIGHT_MAGENTA: &str = "\x1b[95m";
     // const ANSI_BRIGHT_CYAN: &str = "\x1b[96m";
@@ -21,6 +21,7 @@ pub mod ansi {
 }
 
 pub mod args {
+    use crate::tools::is_terminal;
     use argh::FromArgs;
     use std::{path::PathBuf, str::FromStr};
 
@@ -39,9 +40,9 @@ pub mod args {
         #[argh(option, short = 'm', default = "Default::default()")]
         pub mode: Mode,
 
-        /// whether to start the repl
-        #[argh(switch, short = 'r')]
-        pub no_repl: bool,
+        /// whether to start the repl (`true` or `false`)
+        #[argh(option, short = 'r', default = "is_terminal()")]
+        pub repl: bool,
     }
 
     /// The CLI's operating mode
@@ -187,14 +188,19 @@ pub mod cli {
 
     /// Run the command line interface
     pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
-        let Args { file, include, mode, no_repl } = args;
+        let Args { file, include, mode, repl } = args;
 
         let mut env = Environment::new();
         for path in include {
             load_file(&mut env, path)?;
         }
 
-        if no_repl {
+        if repl {
+            if let Some(file) = file {
+                load_file(&mut env, file)?;
+            }
+            Repl::with_env(mode, env).repl()
+        } else {
             let code = match &file {
                 Some(file) => std::fs::read_to_string(file)?,
                 None => std::io::read_to_string(std::io::stdin())?,
@@ -206,11 +212,6 @@ pub mod cli {
                 Mode::Beautify => beautify(code),
                 Mode::Interpret => interpret(code, &mut env),
             }?;
-        } else {
-            if let Some(file) = file {
-                load_file(&mut env, file)?;
-            }
-            Repl::with_env(mode, env).repl()
         }
         Ok(())
     }
@@ -251,7 +252,10 @@ pub mod cli {
             ret => println!("{ret}"),
         }
         if env.get("main").is_ok() {
-            println!("-> {}", env.call("main", &[])?);
+            match env.call("main", &[])? {
+                ConValue::Empty => {}
+                ret => println!("{ret}"),
+            }
         }
         Ok(())
     }
@@ -304,8 +308,8 @@ pub mod repl {
             println!("{ANSI_CLEAR_LINES}{ANSI_RED}{prompt} {err}{ANSI_RESET}")
         }
         pub fn prompt_succs(&self, value: &impl Display) {
-            let Self { prompt_succs: prompt, .. } = self;
-            println!("{ANSI_BRIGHT_GREEN}{prompt}{ANSI_RESET} {value}")
+            let Self { prompt_succs: _prompt, .. } = self;
+            println!("{ANSI_GREEN}{value}{ANSI_RESET}")
         }
         /// Resets the cursor to the start of the line, clears the terminal,
         /// and sets the output color
@@ -327,6 +331,7 @@ pub mod repl {
         /// Runs the main REPL loop
         pub fn repl(&mut self) {
             use crate::repline::{error::Error, Repline};
+
             let mut rl = Repline::new(self.mode.ansi_color(), self.prompt_begin, self.prompt_again);
             fn clear_line() {
                 print!("\x1b[G\x1b[J");
@@ -437,6 +442,8 @@ pub mod repl {
 
 pub mod tools {
     use cl_token::Token;
+    use std::io::IsTerminal;
+    /// Prints a token in the particular way cl-repl does
     pub fn print_token(t: &Token) {
         println!(
             "{:02}:{:02}: {:#19} │{}│",
@@ -445,6 +452,10 @@ pub mod tools {
             t.ty(),
             t.data(),
         )
+    }
+    /// gets whether stdin AND stdout are a terminal, for pipelining
+    pub fn is_terminal() -> bool {
+        std::io::stdin().is_terminal() && std::io::stdout().is_terminal()
     }
 }
 
