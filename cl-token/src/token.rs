@@ -1,20 +1,5 @@
-//! # Token
-//!
-//! Stores a component of a file as a [Type], some [Data], and a line and column number
-
-pub mod token_data;
-pub mod token_type;
-pub mod preamble {
-    //! Common imports for working with [tokens](super)
-    pub use super::{
-        token_data::Data,
-        token_type::{Keyword, Type},
-        Token,
-    };
-}
-
-use token_data::Data;
-use token_type::Type;
+//! A [Token] contains a single unit of lexical information, and an optional bit of [Data]
+use super::{Data, Type};
 
 /// Contains a single unit of lexical information,
 /// and an optional bit of [Data]

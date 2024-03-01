@@ -1,5 +1,6 @@
 //! This example grabs input from stdin, lexes it, and prints which lexer rules matched
 #![allow(unused_imports)]
+use cl_token::Token;
 use conlang::lexer::Lexer;
 use std::{
     error::Error,
@@ -57,7 +58,7 @@ fn lex_tokens(file: &str, path: Option<&Path>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn print_token(t: conlang::token::Token) {
+fn print_token(t: Token) {
     println!(
         "{:02}:{:02}: {:#19} │{}│",
         t.line(),

@@ -194,7 +194,8 @@ pub mod cli {
         program::{Parsable, Parsed, Program},
     };
     use cl_interpret::env::Environment;
-    use conlang::{resolver::Resolver, token::Token};
+    use cl_token::Token;
+    use conlang::resolver::Resolver;
     use std::{
         convert::Infallible,
         error::Error,

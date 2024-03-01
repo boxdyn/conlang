@@ -12,13 +12,9 @@ use self::error::{
 use crate::{
     ast::*,
     lexer::{error::Error as LexError, Lexer},
-    token::{
-        token_data::Data,
-        token_type::{Keyword, Type},
-        Token,
-    },
 };
 use cl_structures::span::*;
+use cl_token::*;
 
 pub mod error {
     use std::fmt::Display;

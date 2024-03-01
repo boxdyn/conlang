@@ -1,5 +1,5 @@
 //! Converts a text file into tokens
-use crate::token::preamble::*;
+use cl_token::*;
 use cl_structures::span::Loc;
 use std::{
     iter::Peekable,
