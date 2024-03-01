@@ -6,6 +6,7 @@ members = [
     "cl-structures",
     "cl-token",
     "cl-ast",
+    "cl-parser",
 ]
 resolver = "2"
 

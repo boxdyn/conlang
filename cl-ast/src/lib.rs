@@ -1,5 +1,5 @@
 //! # The Abstract Syntax Tree
-//! Contains definitions of AST Nodes, to be derived by a [parser](super::parser).
+//! Contains definitions of Conlang AST Nodes.
 //!
 //! # Notable nodes
 //! - [Item] and [ItemKind]: Top-level constructs

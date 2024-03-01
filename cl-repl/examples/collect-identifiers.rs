@@ -1,8 +1,9 @@
 //! Collects identifiers into a list
 
+use cl_parser::Parser;
 use cl_repl::repline::Repline;
 use cl_structures::span::Loc;
-use conlang::{lexer::Lexer, parser::Parser};
+use conlang::lexer::Lexer;
 use std::{
     collections::HashMap,
     error::Error,

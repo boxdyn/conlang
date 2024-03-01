@@ -1,23 +1,26 @@
-//! Parses [tokens](super::token) into an [AST](super::ast)
+//! Parses [tokens](cl_token::token) into an [AST](cl_ast)
 //!
 //! For the full grammar, see [grammar.ebnf][1]
 //!
 //! [1]: https://github.com/boxdyn/conlang/src/branch/main/grammar.ebnf
+#![feature(decl_macro)]
 
-use self::error::{
+use cl_structures::span::*;
+use cl_token::*;
+
+use crate::error::{
     Error,
     ErrorKind::{self, *},
     PResult, Parsing,
 };
-use crate::lexer::{error::Error as LexError, Lexer};
 use cl_ast::*;
-use cl_structures::span::*;
-use cl_token::*;
+use conlang::lexer::Lexer;
 
 pub mod error {
-    use std::fmt::Display;
-
     use super::*;
+
+    use conlang::lexer::error::{Error as LexError, Reason};
+    use std::fmt::Display;
     pub type PResult<T> = Result<T, Error>;
 
     /// Contains information about [Parser] errors
@@ -49,7 +52,6 @@ pub mod error {
     }
     impl From<LexError> for ErrorKind {
         fn from(value: LexError) -> Self {
-            use crate::lexer::error::Reason;
             match value.reason() {
                 Reason::EndOfFile => Self::EndOfInput,
                 _ => Self::Lexical(value),
@@ -130,9 +132,9 @@ pub mod error {
             let Self { reason, while_parsing, loc } = self;
             match reason {
                 // TODO entries are debug-printed
-                Todo => write!(f, "{loc} {reason} {while_parsing:?}"),
+                ErrorKind::Todo => write!(f, "{loc} {reason} {while_parsing:?}"),
                 // lexical errors print their own higher-resolution loc info
-                Lexical(e) => write!(f, "{e} (while parsing {while_parsing})"),
+                ErrorKind::Lexical(e) => write!(f, "{e} (while parsing {while_parsing})"),
                 _ => write!(f, "{loc} {reason} while parsing {while_parsing}"),
             }
         }
@@ -226,6 +228,8 @@ pub mod error {
     }
 }
 
+
+/// Parses a sequence of [Tokens](Token) into an [AST](cl_ast)
 pub struct Parser<'t> {
     /// Lazy tokenizer
     lexer: Lexer<'t>,

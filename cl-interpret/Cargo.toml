@@ -8,6 +8,10 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-conlang = { path = "../libconlang" }
 cl-ast = { path = "../cl-ast" }
 cl-structures = { path = "../cl-structures" }
+
+
+[dev-dependencies]
+conlang = { path = "../libconlang" }
+cl-parser = { path = "../cl-parser" }

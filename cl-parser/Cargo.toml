@@ -1,5 +1,5 @@
 [package]
-name = "cl-repl"
+name = "cl-parser"
 repository.workspace = true
 version.workspace = true
 authors.workspace = true
@@ -7,15 +7,8 @@ edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-conlang = { path = "../libconlang" }
 cl-ast = { path = "../cl-ast" }
 cl-token = { path = "../cl-token" }
-cl-parser = { path = "../cl-parser" }
-cl-interpret = { path = "../cl-interpret" }
-crossterm = "0.27.0"
-
-[dev-dependencies]
 cl-structures = { path = "../cl-structures" }
+conlang = { path = "../libconlang" }

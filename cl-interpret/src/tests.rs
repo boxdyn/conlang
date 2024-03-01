@@ -1,7 +1,8 @@
 #![allow(unused_imports)]
 use crate::{env::Environment, temp_type_impl::ConValue, Interpret};
 use cl_ast::*;
-use conlang::{lexer::Lexer, parser::Parser};
+use cl_parser::Parser;
+use conlang::lexer::Lexer;
 pub use macros::*;
 
 mod macros {

@@ -14,5 +14,5 @@ repository.workspace = true
 [dependencies]
 unicode-xid = "0.2.4"
 cl-ast = { path = "../cl-ast" }
-cl-structures = { path = "../cl-structures" }
 cl-token = { path = "../cl-token" }
+cl-structures = { path = "../cl-structures" }

@@ -74,10 +74,10 @@ pub mod program {
     };
 
     use cl_ast::{self as ast, ast_impl::format::Pretty};
+    use cl_parser::{error::PResult, Parser};
     use conlang::{
         // pretty_printer::{PrettyPrintable, Printer},
         lexer::Lexer,
-        parser::{error::PResult, Parser},
         resolver::{error::TyResult, Resolver},
     };
     use std::{fmt::Display, io::Write};
@@ -228,7 +228,7 @@ pub mod cli {
             match (repl, path) {
                 (true, Some(path)) => {
                     let prog = std::fs::read_to_string(path).unwrap();
-                    let code = conlang::parser::Parser::new(conlang::lexer::Lexer::new(&prog))
+                    let code = cl_parser::Parser::new(conlang::lexer::Lexer::new(&prog))
                         .file()
                         .unwrap();
                     let mut env = cl_interpret::env::Environment::new();
