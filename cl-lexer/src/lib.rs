@@ -475,7 +475,7 @@ pub mod error {
     pub enum Reason {
         /// Found an opening delimiter of type [char], but not the expected closing delimiter
         UnmatchedDelimiters(char),
-        /// Found a character that doesn't belong to any [Type](crate::token::token_type::Type)
+        /// Found a character that doesn't belong to any [Type](cl_token::token_type::Type)
         UnexpectedChar(char),
         /// Found a character that's not valid in identifiers while looking for an identifier
         NotIdentifier(char),
