@@ -7,7 +7,7 @@ labels:
 - enhancement
 ---
 # Feature Progress
-<!-- Describe the steps for implementing this feature in libconlang -->
+<!-- Describe the steps for implementing this feature -->
 - [ ] <!-- Step 1 of implementing a feature -->
 
 # Feature description
