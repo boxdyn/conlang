@@ -15,6 +15,7 @@
 use cl_structures::span::*;
 
 pub mod ast_impl;
+pub mod format;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Mutability {
