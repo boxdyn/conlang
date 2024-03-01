@@ -6,7 +6,7 @@
 //! one in any situation.
 
 use super::*;
-use conlang::ast::*;
+use cl_ast::*;
 /// A work-in-progress tree walk interpreter for Conlang
 pub trait Interpret {
     /// Interprets this thing in the given [`Environment`].

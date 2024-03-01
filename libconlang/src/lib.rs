@@ -2,8 +2,6 @@
 #![warn(clippy::all)]
 #![feature(decl_macro)]
 
-pub mod ast;
-
 pub mod lexer;
 
 pub mod parser;

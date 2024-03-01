@@ -72,8 +72,9 @@ pub mod program {
     use cl_interpret::{
         env::Environment, error::IResult, interpret::Interpret, temp_type_impl::ConValue,
     };
+
+    use cl_ast::{self as ast, ast_impl::format::Pretty};
     use conlang::{
-        ast::{self, ast_impl::format::Pretty},
         // pretty_printer::{PrettyPrintable, Printer},
         lexer::Lexer,
         parser::{error::PResult, Parser},

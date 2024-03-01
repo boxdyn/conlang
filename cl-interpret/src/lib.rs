@@ -297,7 +297,7 @@ pub mod interpret;
 pub mod function {
     //! Represents a block of code which lives inside the Interpreter
     use super::{Callable, ConValue, Environment, Error, IResult, Interpret};
-    use conlang::ast::{Function as FnDecl, Identifier, Param};
+    use cl_ast::{Function as FnDecl, Identifier, Param};
     /// Represents a block of code which persists inside the Interpreter
     #[derive(Clone, Debug)]
     pub struct Function {
@@ -354,7 +354,7 @@ pub mod env {
         temp_type_impl::ConValue,
         BuiltIn, Callable, Interpret,
     };
-    use conlang::ast::{Function as FnDecl, Identifier};
+    use cl_ast::{Function as FnDecl, Identifier};
     use std::{
         collections::HashMap,
         fmt::Display,

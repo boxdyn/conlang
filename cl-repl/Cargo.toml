@@ -11,6 +11,7 @@ publish.workspace = true
 
 [dependencies]
 conlang = { path = "../libconlang" }
+cl-ast = { path = "../cl-ast" }
 cl-interpret = { path = "../cl-interpret" }
 cl-token = { path = "../cl-token" }
 crossterm = "0.27.0"

@@ -125,7 +125,7 @@ use collectible::Collectible;
 pub mod collectible {
 
     use super::Collector;
-    use conlang::ast::*;
+    use cl_ast::*;
     pub trait Collectible<'code> {
         fn collect(&'code self, c: &mut Collector<'code>);
     }

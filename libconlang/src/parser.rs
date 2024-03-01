@@ -9,10 +9,8 @@ use self::error::{
     ErrorKind::{self, *},
     PResult, Parsing,
 };
-use crate::{
-    ast::*,
-    lexer::{error::Error as LexError, Lexer},
-};
+use crate::lexer::{error::Error as LexError, Lexer};
+use cl_ast::*;
 use cl_structures::span::*;
 use cl_token::*;
 

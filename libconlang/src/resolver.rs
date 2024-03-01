@@ -853,11 +853,6 @@ mod ast1 {
     // }
 }
 
-mod ast {
-    #![allow(unused_imports)]
-    use crate::ast::*;
-}
-
 // heakc yea man, generics
 impl<T: Resolve> Resolve for Option<T> {
     fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<Type> {

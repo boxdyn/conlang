@@ -5,6 +5,7 @@ members = [
     "cl-interpret",
     "cl-structures",
     "cl-token",
+    "cl-ast",
 ]
 resolver = "2"
 

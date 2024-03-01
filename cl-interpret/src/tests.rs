@@ -1,6 +1,7 @@
 #![allow(unused_imports)]
 use crate::{env::Environment, temp_type_impl::ConValue, Interpret};
-use conlang::{ast::*, lexer::Lexer, parser::Parser};
+use cl_ast::*;
+use conlang::{lexer::Lexer, parser::Parser};
 pub use macros::*;
 
 mod macros {
@@ -208,7 +209,7 @@ mod fn_declarations {
 }
 
 mod operators {
-    use conlang::ast::Tuple;
+    use cl_ast::Tuple;
 
     use super::*;
     #[test]

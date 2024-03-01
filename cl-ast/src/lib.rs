@@ -9,6 +9,8 @@
 //!   - [AssignKind], [BinaryKind], and [UnaryKind] operators
 //! - [Ty] and [TyKind]: Type qualifiers
 //! - [Path]: Path expressions
+#![feature(decl_macro)]
+
 use cl_structures::span::*;
 
 pub mod ast_impl;
