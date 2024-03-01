@@ -9,6 +9,6 @@ publish.workspace = true
 
 [dependencies]
 cl-ast = { path = "../cl-ast" }
+cl-lexer = { path = "../cl-lexer" }
 cl-token = { path = "../cl-token" }
 cl-structures = { path = "../cl-structures" }
-conlang = { path = "../libconlang" }

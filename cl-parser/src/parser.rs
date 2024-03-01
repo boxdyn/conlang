@@ -5,7 +5,7 @@ use crate::error::{
     PResult, Parsing,
 };
 use cl_ast::*;
-use conlang::lexer::Lexer;
+use cl_lexer::Lexer;
 
 /// Parses a sequence of [Tokens](Token) into an [AST](cl_ast)
 pub struct Parser<'t> {
@@ -905,11 +905,7 @@ impl<'t> Parser<'t> {
     /// [Block] = `{` [Stmt]* `}`
     pub fn block(&mut self) -> PResult<Block> {
         const PARSING: Parsing = Parsing::Block;
-        Ok(
-            Block {
-                stmts: delim(rep(Self::stmt, CURLIES.1, PARSING), CURLIES, PARSING)(self)?,
-            },
-        )
+        Ok(Block { stmts: delim(rep(Self::stmt, CURLIES.1, PARSING), CURLIES, PARSING)(self)? })
     }
 }
 /// ## Control flow subexpressions

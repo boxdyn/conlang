@@ -1,7 +1,7 @@
 //! This example grabs input from stdin, lexes it, and prints which lexer rules matched
 #![allow(unused_imports)]
+use cl_lexer::Lexer;
 use cl_token::Token;
-use conlang::lexer::Lexer;
 use std::{
     error::Error,
     io::{stdin, IsTerminal, Read},

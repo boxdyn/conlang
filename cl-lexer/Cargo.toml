@@ -1,5 +1,5 @@
 [package]
-name = "cl-interpret"
+name = "cl-lexer"
 repository.workspace = true
 version.workspace = true
 authors.workspace = true
@@ -8,10 +8,6 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-cl-ast = { path = "../cl-ast" }
+cl-token = { path = "../cl-token" }
 cl-structures = { path = "../cl-structures" }
-
-
-[dev-dependencies]
-cl-lexer = { path = "../cl-lexer" }
-cl-parser = { path = "../cl-parser" }
+unicode-xid = "0.2.4"

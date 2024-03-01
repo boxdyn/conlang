@@ -1,11 +1,15 @@
 //! Converts a text file into tokens
-use cl_token::*;
+#![feature(decl_macro)]
 use cl_structures::span::Loc;
+use cl_token::*;
 use std::{
     iter::Peekable,
     str::{Chars, FromStr},
 };
 use unicode_xid::UnicodeXID;
+
+#[cfg(test)]
+mod tests;
 
 pub mod lexer_iter {
     //! Iterator over a [`Lexer`], returning [`LResult<Token>`]s

@@ -1,6 +1,6 @@
 use super::*;
 
-use conlang::lexer::error::{Error as LexError, Reason};
+use cl_lexer::error::{Error as LexError, Reason};
 use std::fmt::Display;
 pub type PResult<T> = Result<T, Error>;
 

@@ -2,7 +2,7 @@
 use crate::{env::Environment, temp_type_impl::ConValue, Interpret};
 use cl_ast::*;
 use cl_parser::Parser;
-use conlang::lexer::Lexer;
+use cl_lexer::Lexer;
 pub use macros::*;
 
 mod macros {
