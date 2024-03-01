@@ -889,7 +889,11 @@ impl<'t> Parser<'t> {
     /// [Assign] = [Path] ([AssignKind] [Assign]) | [Compare](Binary)
     pub fn exprkind_assign(&mut self) -> PResult<ExprKind> {
         let head = self.expr_from(Self::exprkind_compare)?;
-        if !matches!(head.kind, ExprKind::Path(_)) {
+        // TODO: Formalize the concept of a "place expression"
+        if !matches!(
+            head.kind,
+            ExprKind::Path(_) | ExprKind::Call(_) | ExprKind::Member(_) | ExprKind::Index(_)
+        ) {
             return Ok(head.kind);
         }
         let Ok(op) = self.assign_op() else {
