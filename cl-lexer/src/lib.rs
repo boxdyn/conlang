@@ -7,7 +7,7 @@ use std::{
     iter::Peekable,
     str::{Chars, FromStr},
 };
-use unicode_xid::UnicodeXID;
+use unicode_ident::*;
 
 #[cfg(test)]
 mod tests;
@@ -128,7 +128,7 @@ impl<'t> Lexer<'t> {
             '"' => self.consume()?.string(),
             '\'' => self.consume()?.character(),
             '_' => self.identifier(),
-            i if i.is_xid_start() => self.identifier(),
+            i if is_xid_start(i) => self.identifier(),
             e => {
                 let err = Err(Error::unexpected_char(e, self.line(), self.col()));
                 let _ = self.consume();
@@ -339,7 +339,7 @@ impl<'t> Lexer<'t> {
     }
     fn xid_start(&mut self) -> LResult<char> {
         match self.peek()? {
-            xid if xid == '_' || xid.is_xid_start() => {
+            xid if xid == '_' || is_xid_start(xid) => {
                 self.consume()?;
                 Ok(xid)
             }
@@ -348,7 +348,7 @@ impl<'t> Lexer<'t> {
     }
     fn xid_continue(&mut self) -> LResult<char> {
         match self.peek()? {
-            xid if xid.is_xid_continue() => {
+            xid if is_xid_continue(xid) => {
                 self.consume()?;
                 Ok(xid)
             }

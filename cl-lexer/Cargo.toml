@@ -10,4 +10,4 @@ publish.workspace = true
 [dependencies]
 cl-token = { path = "../cl-token" }
 cl-structures = { path = "../cl-structures" }
-unicode-xid = "0.2.4"
+unicode-ident = "1.0.12"
