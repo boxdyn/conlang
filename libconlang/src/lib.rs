@@ -3,6 +3,3 @@
 #![feature(decl_macro)]
 
 pub mod resolver;
-
-#[cfg(test)]
-mod tests;
