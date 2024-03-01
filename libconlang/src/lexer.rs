@@ -1,5 +1,6 @@
 //! Converts a text file into tokens
 use crate::token::preamble::*;
+use cl_structures::span::Loc;
 use std::{
     iter::Peekable,
     str::{Chars, FromStr},
@@ -442,6 +443,12 @@ impl<'t> Lexer<'t> {
             }
         }
         Err(Error::invalid_escape('u', self.line(), self.col()))
+    }
+}
+
+impl<'t> From<&Lexer<'t>> for Loc {
+    fn from(value: &Lexer<'t>) -> Self {
+        Loc(value.line(), value.col())
     }
 }
 

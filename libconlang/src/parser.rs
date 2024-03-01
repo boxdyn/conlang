@@ -11,7 +11,6 @@ use self::error::{
 };
 use crate::{
     ast::*,
-    common::*,
     lexer::{error::Error as LexError, Lexer},
     token::{
         token_data::Data,
@@ -19,6 +18,7 @@ use crate::{
         Token,
     },
 };
+use cl_structures::span::*;
 
 pub mod error {
     use std::fmt::Display;

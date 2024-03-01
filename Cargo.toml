@@ -1,5 +1,5 @@
 [workspace]
-members = ["libconlang", "cl-repl", "cl-interpret"]
+members = ["libconlang", "cl-repl", "cl-interpret", "cl-structures"]
 resolver = "2"
 
 [workspace.package]

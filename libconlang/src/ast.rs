@@ -9,7 +9,7 @@
 //!   - [AssignKind], [BinaryKind], and [UnaryKind] operators
 //! - [Ty] and [TyKind]: Type qualifiers
 //! - [Path]: Path expressions
-use crate::common::*;
+use cl_structures::span::*;
 
 pub mod ast_impl;
 

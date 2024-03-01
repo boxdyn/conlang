@@ -517,7 +517,7 @@ pub mod error {
     //! The [Error] type represents any error thrown by the [Environment](super::Environment)
 
     use super::temp_type_impl::ConValue;
-    use conlang::common::Loc;
+    use cl_structures::span::Loc;
 
     pub type IResult<T> = Result<T, Error>;
 

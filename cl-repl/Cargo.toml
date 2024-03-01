@@ -13,3 +13,6 @@ publish.workspace = true
 conlang = { path = "../libconlang" }
 cl-interpret = { path = "../cl-interpret" }
 crossterm = "0.27.0"
+
+[dev-dependencies]
+cl-structures = { path = "../cl-structures" }
