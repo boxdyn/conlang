@@ -282,7 +282,9 @@ pub mod temp_type_impl {
                     ')'.fmt(f)
                 }
                 ConValue::Function(func) => {
-                    write!(f, "fn {}", func.name())
+                    use cl_ast::format::*;
+                    use std::fmt::Write;
+                    write!(f.pretty(), "{}", func.decl())
                 }
                 ConValue::BuiltIn(func) => {
                     write!(f, "{}", func.description())
@@ -310,6 +312,9 @@ pub mod function {
     impl Function {
         pub fn new(decl: &FnDecl) -> Self {
             Self { decl: decl.clone().into() }
+        }
+        pub fn decl(&self) -> &FnDecl {
+            &self.decl
         }
     }
 
@@ -592,7 +597,11 @@ pub mod error {
                     write!(f, "{value} is not callable.")
                 }
                 Error::ArgNumber { want, got } => {
-                    write!(f, "Expected {want} arguments, got {got}")
+                    write!(
+                        f,
+                        "Expected {want} argument{}, got {got}",
+                        if *want == 1 { "" } else { "s" }
+                    )
                 }
                 Error::NullPointer => {
                     write!(f, "Attempted to dereference a null pointer?")
