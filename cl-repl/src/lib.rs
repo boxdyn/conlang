@@ -5,66 +5,76 @@
 //! - [ ] Raw mode?
 #![warn(clippy::all)]
 
+pub mod ansi {
+    // ANSI color escape sequences
+    pub const ANSI_RED: &str = "\x1b[31m";
+    // const ANSI_GREEN: &str = "\x1b[32m"; // the color of type checker mode
+    pub const ANSI_CYAN: &str = "\x1b[36m";
+    pub const ANSI_BRIGHT_GREEN: &str = "\x1b[92m";
+    pub const ANSI_BRIGHT_BLUE: &str = "\x1b[94m";
+    pub const ANSI_BRIGHT_MAGENTA: &str = "\x1b[95m";
+    // const ANSI_BRIGHT_CYAN: &str = "\x1b[96m";
+    pub const ANSI_RESET: &str = "\x1b[0m";
+    pub const ANSI_OUTPUT: &str = "\x1b[38;5;117m";
+
+    pub const ANSI_CLEAR_LINES: &str = "\x1b[G\x1b[J";
+}
+
 pub mod args {
-    use crate::cli::Mode;
-    use std::{
-        io::{stdin, IsTerminal},
-        ops::Deref,
-        path::{Path, PathBuf},
-    };
+    use argh::FromArgs;
+    use std::{path::PathBuf, str::FromStr};
 
-    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    /// The Conlang prototype debug interface
+    #[derive(Clone, Debug, FromArgs, PartialEq, Eq, PartialOrd, Ord)]
     pub struct Args {
-        pub path: Option<PathBuf>, // defaults None
-        pub repl: bool,            // defaults true if stdin is terminal
-        pub mode: Mode,            // defaults Interpret
-    }
-    const HELP: &str = "[( --repl | --no-repl )] [--mode (tokens | pretty | type | run)] [( -f | --file ) <filename>]";
+        /// the main source file
+        #[argh(positional)]
+        pub file: Option<PathBuf>,
 
-    impl Args {
-        pub fn new() -> Self {
-            Args { path: None, repl: stdin().is_terminal(), mode: Mode::Interpret }
-        }
-        pub fn parse(mut self) -> Option<Self> {
-            let mut args = std::env::args();
-            let name = args.next().unwrap_or_default();
-            let mut unknown = false;
-            while let Some(arg) = args.next() {
-                match arg.deref() {
-                    "--repl" => self.repl = true,
-                    "--no-repl" => self.repl = false,
-                    "-f" | "--file" => self.path = args.next().map(PathBuf::from),
-                    "-m" | "--mode" => {
-                        self.mode = args.next().unwrap_or_default().parse().unwrap_or_default()
-                    }
-                    arg => {
-                        eprintln!("Unknown argument: {arg}");
-                        unknown = true;
-                    }
-                }
+        /// files to include
+        #[argh(option, short = 'I')]
+        pub include: Vec<PathBuf>,
+
+        /// the Repl mode to start in
+        #[argh(option, short = 'm', default = "Default::default()")]
+        pub mode: Mode,
+
+        /// whether to start the repl
+        #[argh(switch, short = 'r')]
+        pub no_repl: bool,
+    }
+
+    /// The CLI's operating mode
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+    pub enum Mode {
+        Tokenize,
+        Beautify,
+        #[default]
+        Interpret,
+    }
+
+    impl Mode {
+        pub fn ansi_color(self) -> &'static str {
+            use super::ansi::*;
+            match self {
+                Mode::Tokenize => ANSI_BRIGHT_BLUE,
+                Mode::Beautify => ANSI_BRIGHT_MAGENTA,
+                // Mode::Resolve => ANSI_GREEN,
+                Mode::Interpret => ANSI_CYAN,
             }
-            if unknown {
-                println!("Usage: {name} {HELP}");
-                None?
-            }
-            Some(self)
-        }
-        /// Returns the path to a file, if one was specified
-        pub fn path(&self) -> Option<&Path> {
-            self.path.as_deref()
-        }
-        /// Returns whether to start a REPL session or not
-        pub fn repl(&self) -> bool {
-            self.repl
-        }
-        /// Returns the repl Mode
-        pub fn mode(&self) -> Mode {
-            self.mode
         }
     }
-    impl Default for Args {
-        fn default() -> Self {
-            Self::new()
+
+    impl FromStr for Mode {
+        type Err = &'static str;
+        fn from_str(s: &str) -> Result<Self, &'static str> {
+            Ok(match s {
+                "i" | "interpret" | "r" | "run" => Mode::Interpret,
+                "b" | "beautify" | "p" | "pretty" => Mode::Beautify,
+                // "r" | "resolve" | "typecheck" | "type" => Mode::Resolve,
+                "t" | "tokenize" | "token" => Mode::Tokenize,
+                _ => Err("Recognized modes are: 'r' \"run\", 'p' \"pretty\", 't' \"token\"")?,
+            })
         }
     }
 }
@@ -77,7 +87,7 @@ pub mod program {
     use cl_ast::{self as ast, ast_impl::format::Pretty};
     use cl_lexer::Lexer;
     use cl_parser::{error::PResult, Parser};
-    use conlang::resolver::{error::TyResult, Resolver};
+    // use conlang::resolver::{error::TyResult, Resolver};
     use std::{fmt::Display, io::Write};
 
     pub struct Parsable;
@@ -134,10 +144,6 @@ pub mod program {
             // println!("{self}")
         }
 
-        pub fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<()> {
-            todo!("Program::resolve(\n{self},\n{resolver:?}\n)")
-        }
-
         pub fn run(&self, env: &mut Environment) -> IResult<ConValue> {
             match &self.data {
                 Parsed::File(v) => v.interpret(env),
@@ -153,18 +159,6 @@ pub mod program {
         //     }
         //     .map(|ty| println!("{ty}"))
         // }
-
-        // /// Runs the [Program] in the specified [Environment]
-        // pub fn run(&self, env: &mut Environment) -> IResult<()> {
-        //     println!(
-        //         "{}",
-        //         match &self.data {
-        //             Parsed::Program(start) => env.eval(start)?,
-        //             Parsed::Expr(expr) => env.eval(expr)?,
-        //         }
-        //     );
-        //     Ok(())
-        // }
     }
 
     impl<'t> Display for Program<'t, Parsed> {
@@ -176,173 +170,102 @@ pub mod program {
             }
         }
     }
-
-    // impl PrettyPrintable for Program<Parsed> {
-    //     fn visit<W: Write>(&self, p: &mut Printer<W>) -> IOResult<()> {
-    //         match &self.data {
-    //             Parsed::Program(value) => value.visit(p),
-    //             Parsed::Expr(value) => value.visit(p),
-    //         }
-    //     }
-    // }
 }
 
 pub mod cli {
+    //! Implement's the command line interface
     use crate::{
-        args::Args,
-        program::{Parsable, Parsed, Program},
+        args::{Args, Mode},
+        program::{Parsable, Program},
+        repl::Repl,
+        tools::print_token,
     };
-    use cl_interpret::env::Environment;
-    use cl_token::Token;
-    use conlang::resolver::Resolver;
-    use std::{
-        convert::Infallible,
-        error::Error,
-        path::{Path, PathBuf},
-        str::FromStr,
-    };
+    use cl_interpret::{env::Environment, temp_type_impl::ConValue};
+    use cl_lexer::Lexer;
+    use cl_parser::Parser;
+    use std::{error::Error, path::Path};
 
-    // ANSI color escape sequences
-    const ANSI_RED: &str = "\x1b[31m";
-    const ANSI_GREEN: &str = "\x1b[32m";
-    const ANSI_CYAN: &str = "\x1b[36m";
-    const ANSI_BRIGHT_BLUE: &str = "\x1b[94m";
-    const ANSI_BRIGHT_MAGENTA: &str = "\x1b[95m";
-    // const ANSI_BRIGHT_CYAN: &str = "\x1b[96m";
-    const ANSI_RESET: &str = "\x1b[0m";
-    const ANSI_OUTPUT: &str = "\x1b[38;5;117m";
+    /// Run the command line interface
+    pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
+        let Args { file, include, mode, no_repl } = args;
 
-    const ANSI_CLEAR_LINES: &str = "\x1b[G\x1b[J";
-
-    #[derive(Clone, Debug)]
-    pub enum CLI {
-        Repl(Repl),
-        File { mode: Mode, path: PathBuf },
-        Stdin { mode: Mode },
-    }
-    impl From<Args> for CLI {
-        fn from(value: Args) -> Self {
-            let Args { path, repl, mode } = value;
-            match (repl, path) {
-                (true, Some(path)) => {
-                    let prog = std::fs::read_to_string(path).unwrap();
-                    let code = cl_parser::Parser::new(cl_lexer::Lexer::new(&prog))
-                        .file()
-                        .unwrap();
-                    let mut env = cl_interpret::env::Environment::new();
-                    env.eval(&code).unwrap();
-                    env.call("dump", &[])
-                        .expect("calling dump in the environment shouldn't fail");
-
-                    Self::Repl(Repl { mode, env, ..Default::default() })
-                }
-                (_, Some(path)) => Self::File { mode, path },
-                (true, None) => Self::Repl(Repl { mode, ..Default::default() }),
-                (false, None) => Self::Stdin { mode },
-            }
+        let mut env = Environment::new();
+        for path in include {
+            load_file(&mut env, path)?;
         }
-    }
-    impl CLI {
-        pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
-            use std::{fs, io};
-            match self {
-                CLI::Repl(repl) => repl.repl(),
-                CLI::File { mode, ref path } => {
-                    // read file
-                    Self::no_repl(*mode, Some(path), &fs::read_to_string(path)?)
-                }
-                CLI::Stdin { mode } => {
-                    Self::no_repl(*mode, None, &io::read_to_string(io::stdin())?)
-                }
-            }
-            Ok(())
-        }
-        fn no_repl(mode: Mode, path: Option<&Path>, code: &str) {
-            let program = Program::new(code);
+
+        if no_repl {
+            let code = match &file {
+                Some(file) => std::fs::read_to_string(file)?,
+                None => std::io::read_to_string(std::io::stdin())?,
+            };
+            let code = Program::new(&code);
+
             match mode {
-                Mode::Tokenize => {
-                    for token in program.lex() {
-                        if let Some(path) = path {
-                            print!("{}:", path.display());
-                        }
-                        match token {
-                            Ok(token) => print_token(&token),
-                            Err(e) => println!("{e}"),
-                        }
-                    }
-                }
-                Mode::Beautify => Self::beautify(program),
-                Mode::Resolve => Self::resolve(program, Default::default()),
-                Mode::Interpret => Self::interpret(program, Environment::new()),
+                Mode::Tokenize => tokenize(code, file),
+                Mode::Beautify => beautify(code),
+                Mode::Interpret => interpret(code, &mut env),
+            }?;
+        } else {
+            if let Some(file) = file {
+                load_file(&mut env, file)?;
             }
+            Repl::with_env(mode, env).repl()
         }
-        fn beautify(program: Program<Parsable>) {
-            match program.parse() {
-                Ok(program) => program.print(),
-                Err(e) => eprintln!("{e}"),
-            };
-        }
-        fn resolve(program: Program<Parsable>, mut resolver: Resolver) {
-            let mut program = match program.parse() {
-                Ok(program) => program,
-                Err(e) => {
-                    eprintln!("{e}");
-                    return;
-                }
-            };
-            if let Err(e) = program.resolve(&mut resolver) {
-                eprintln!("{e}");
-            }
-        }
-        fn interpret(program: Program<Parsable>, mut interpreter: Environment) {
-            let program = match program.parse() {
-                Ok(program) => program,
-                Err(e) => {
-                    eprintln!("{e}");
-                    return;
-                }
-            };
-            if let Err(e) = program.run(&mut interpreter) {
-                eprintln!("{e}");
-                return;
-            }
-            if let Err(e) = interpreter.call("main", &[]) {
-                eprintln!("{e}");
-            }
-        }
+        Ok(())
     }
 
-    /// The CLI's operating mode
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-    pub enum Mode {
-        Tokenize,
-        Beautify,
-        Resolve,
-        #[default]
-        Interpret,
+    fn load_file(
+        env: &mut Environment,
+        path: impl AsRef<Path>,
+    ) -> Result<ConValue, Box<dyn Error>> {
+        let file = std::fs::read_to_string(path)?;
+        let code = Parser::new(Lexer::new(&file)).file()?;
+        env.eval(&code).map_err(Into::into)
     }
-    impl Mode {
-        pub fn ansi_color(self) -> &'static str {
-            match self {
-                Mode::Tokenize => ANSI_BRIGHT_BLUE,
-                Mode::Beautify => ANSI_BRIGHT_MAGENTA,
-                Mode::Resolve => ANSI_GREEN,
-                Mode::Interpret => ANSI_CYAN,
+
+    fn tokenize(
+        code: Program<Parsable>,
+        path: Option<impl AsRef<Path>>,
+    ) -> Result<(), Box<dyn Error>> {
+        for token in code.lex() {
+            if let Some(ref path) = path {
+                print!("{}:", path.as_ref().display());
+            }
+            match token {
+                Ok(token) => print_token(&token),
+                Err(e) => println!("{e}"),
             }
         }
+        Ok(())
     }
-    impl FromStr for Mode {
-        type Err = Infallible;
-        fn from_str(s: &str) -> Result<Self, Infallible> {
-            Ok(match s {
-                "i" | "interpret" | "run" => Mode::Interpret,
-                "b" | "beautify" | "p" | "pretty" => Mode::Beautify,
-                "r" | "resolve" | "typecheck" | "type" => Mode::Resolve,
-                "t" | "tokenize" | "tokens" => Mode::Tokenize,
-                _ => Mode::Interpret,
-            })
+
+    fn beautify(code: Program<Parsable>) -> Result<(), Box<dyn Error>> {
+        code.parse()?.print();
+        Ok(())
+    }
+
+    fn interpret(code: Program<Parsable>, env: &mut Environment) -> Result<(), Box<dyn Error>> {
+        match code.parse()?.run(env)? {
+            ConValue::Empty => {}
+            ret => println!("{ret}"),
         }
+        if env.get("main").is_ok() {
+            println!("-> {}", env.call("main", &[])?);
+        }
+        Ok(())
     }
+}
+
+pub mod repl {
+    use crate::{
+        ansi::*,
+        args::Mode,
+        program::{Parsable, Parsed, Program},
+        tools::print_token,
+    };
+    use cl_interpret::{env::Environment, temp_type_impl::ConValue};
+    use std::fmt::Display;
 
     /// Implements the interactive interpreter
     #[derive(Clone, Debug)]
@@ -350,8 +273,8 @@ pub mod cli {
         prompt_again: &'static str, // " ?>"
         prompt_begin: &'static str, // "cl>"
         prompt_error: &'static str, // "! >"
+        prompt_succs: &'static str, // " ->"
         env: Environment,
-        resolver: Resolver,
         mode: Mode,
     }
 
@@ -361,8 +284,8 @@ pub mod cli {
                 prompt_begin: "cl>",
                 prompt_again: " ?>",
                 prompt_error: "! >",
+                prompt_succs: " =>",
                 env: Default::default(),
-                resolver: Default::default(),
                 mode: Default::default(),
             }
         }
@@ -370,9 +293,19 @@ pub mod cli {
 
     /// Prompt functions
     impl Repl {
-        pub fn prompt_error(&self, err: &impl Error) {
+        pub fn prompt_result<T: Display, E: Display>(&self, res: Result<T, E>) {
+            match &res {
+                Ok(v) => self.prompt_succs(v),
+                Err(e) => self.prompt_error(e),
+            }
+        }
+        pub fn prompt_error(&self, err: &impl Display) {
             let Self { prompt_error: prompt, .. } = self;
-            println!("{ANSI_CLEAR_LINES}{ANSI_RED}{prompt} {err}{ANSI_RESET}",)
+            println!("{ANSI_CLEAR_LINES}{ANSI_RED}{prompt} {err}{ANSI_RESET}")
+        }
+        pub fn prompt_succs(&self, value: &impl Display) {
+            let Self { prompt_succs: prompt, .. } = self;
+            println!("{ANSI_BRIGHT_GREEN}{prompt}{ANSI_RESET} {value}")
         }
         /// Resets the cursor to the start of the line, clears the terminal,
         /// and sets the output color
@@ -386,6 +319,10 @@ pub mod cli {
         /// Constructs a new [Repl] with the provided [Mode]
         pub fn new(mode: Mode) -> Self {
             Self { mode, ..Default::default() }
+        }
+        /// Constructs a new [Repl] with the provided [Mode] and [Environment]
+        pub fn with_env(mode: Mode, env: Environment) -> Self {
+            Self { mode, env, ..Default::default() }
         }
         /// Runs the main REPL loop
         pub fn repl(&mut self) {
@@ -455,23 +392,26 @@ pub mod cli {
             );
         }
         fn command(&mut self, line: &str) -> bool {
-            match line.trim() {
-                "$pretty" => self.mode = Mode::Beautify,
-                "$tokens" => self.mode = Mode::Tokenize,
-                "$type" => self.mode = Mode::Resolve,
-                "$run" => self.mode = Mode::Interpret,
-                "$mode" => println!("{:?} Mode", self.mode),
-                "$help" => self.help(),
-                _ => return false,
+            let Some(line) = line.trim().strip_prefix('$') else {
+                return false;
+            };
+            if let Ok(mode) = line.parse() {
+                self.mode = mode;
+            } else {
+                match line {
+                    "$run" => self.mode = Mode::Interpret,
+                    "mode" => println!("{:?} Mode", self.mode),
+                    "help" => self.help(),
+                    _ => return false,
+                }
             }
             true
         }
         /// Dispatches calls to repl functions based on the program
         fn dispatch(&mut self, code: &mut Program<Parsed>) {
             match self.mode {
-                Mode::Tokenize => (),
+                Mode::Tokenize => {}
                 Mode::Beautify => self.beautify(code),
-                Mode::Resolve => self.typecheck(code),
                 Mode::Interpret => self.interpret(code),
             }
         }
@@ -484,21 +424,20 @@ pub mod cli {
             }
         }
         fn interpret(&mut self, code: &Program<Parsed>) {
-            if let Err(e) = code.run(&mut self.env) {
-                self.prompt_error(&e)
-            }
-        }
-        fn typecheck(&mut self, code: &mut Program<Parsed>) {
-            if let Err(e) = code.resolve(&mut self.resolver) {
-                self.prompt_error(&e)
+            match code.run(&mut self.env) {
+                Ok(ConValue::Empty) => {}
+                res => self.prompt_result(res),
             }
         }
         fn beautify(&mut self, code: &Program<Parsed>) {
             code.print()
         }
     }
+}
 
-    fn print_token(t: &Token) {
+pub mod tools {
+    use cl_token::Token;
+    pub fn print_token(t: &Token) {
         println!(
             "{:02}:{:02}: {:#19} │{}│",
             t.line(),

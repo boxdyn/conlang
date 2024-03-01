@@ -10,13 +10,13 @@ publish.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-conlang = { path = "../libconlang" }
 cl-ast = { path = "../cl-ast" }
 cl-lexer = { path = "../cl-lexer" }
 cl-token = { path = "../cl-token" }
 cl-parser = { path = "../cl-parser" }
 cl-interpret = { path = "../cl-interpret" }
 crossterm = "0.27.0"
+argh = "0.1.12"
 
 [dev-dependencies]
 cl-structures = { path = "../cl-structures" }
