@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "cl-repl",
+    "cl-typeck",
     "cl-interpret",
     "cl-structures",
     "cl-token",
