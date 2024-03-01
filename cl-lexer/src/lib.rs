@@ -1,4 +1,5 @@
 //! Converts a text file into tokens
+#![warn(clippy::all)]
 #![feature(decl_macro)]
 use cl_structures::span::Loc;
 use cl_token::*;

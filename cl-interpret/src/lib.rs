@@ -1,5 +1,5 @@
-//! Walks a Conlang AST, interpreting it as a program
-
+//! Walks a Conlang AST, interpreting it as a program.
+#![warn(clippy::all)]
 #![feature(decl_macro)]
 
 use env::Environment;

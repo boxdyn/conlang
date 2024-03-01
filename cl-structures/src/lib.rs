@@ -1,6 +1,7 @@
 //! # Universally useful structures
 //! - [Span](struct@span::Span): Stores a start and end [Loc](struct@span::Loc)
 //! - [Loc](struct@span::Loc): Stores the index in a stream
+#![warn(clippy::all)]
 
 pub mod span {
     //! - [struct@Span]: Stores the start and end [struct@Loc] of a notable AST node

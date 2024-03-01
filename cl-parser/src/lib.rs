@@ -3,6 +3,7 @@
 //! For the full grammar, see [grammar.ebnf][1]
 //!
 //! [1]: https://github.com/boxdyn/conlang/src/branch/main/grammar.ebnf
+#![warn(clippy::all)]
 #![feature(decl_macro)]
 
 pub use parser::Parser;

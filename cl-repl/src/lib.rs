@@ -3,6 +3,7 @@
 //! # TODO
 //! - [ ] Readline-like line editing
 //! - [ ] Raw mode?
+#![warn(clippy::all)]
 
 pub mod args {
     use crate::cli::Mode;
