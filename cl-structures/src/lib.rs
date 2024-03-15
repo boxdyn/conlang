@@ -4,3 +4,4 @@
 #![warn(clippy::all)]
 pub mod span;
 
+pub mod tree;
