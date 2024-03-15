@@ -14,7 +14,7 @@
 //! assert_eq!(tree.get(root).unwrap(), &"This is the root node")
 //! ```
 
-// #![allow(unused)]
+// TODO: implement an Entry-style API for doing traversal algorithms
 
 pub use self::tree_ref::Ref;
 use std::ops::{Index, IndexMut};
