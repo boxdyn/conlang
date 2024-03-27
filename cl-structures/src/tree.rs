@@ -158,6 +158,9 @@ impl<T> Node<T> {
         std::mem::replace(&mut self.value, value)
     }
 
+    pub fn parent(&self) -> Option<Ref<T>> {
+        self.parent
+    }
     pub fn children(&self) -> &[Ref<T>] {
         &self.children
     }

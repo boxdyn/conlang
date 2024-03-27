@@ -10,7 +10,7 @@ use std::{marker::PhantomData, num::NonZeroUsize};
 pub struct Ref<T: ?Sized>(NonZeroUsize, PhantomData<T>);
 
 impl<T: ?Sized> Ref<T> {
-    /// Constructs a new [TreeRef] with the given index
+    /// Constructs a new [Ref] with the given index
     pub fn new_unchecked(index: usize) -> Self {
         // Safety: index cannot be zero because we use saturating addition on unsigned type.
         Self(
