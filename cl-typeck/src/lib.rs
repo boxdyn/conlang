@@ -3,140 +3,169 @@
 //! As a statically typed language, Conlang requires a robust type checker to enforce correctness.
 
 #![warn(clippy::all)]
-#![allow(unused)]
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use cl_ast::*;
+/*
 
-pub mod intern {
-    //! Trivially-copyable, easily comparable typed indices for type system constructs
+The type checker keeps track of a *global intern pool* for Types and Values
+References to the intern pool are held by ID, and items cannot be freed from the pool EVER.
 
-    /// Creates newtype indices over [`usize`] for use elsewhere in the type checker
-    macro_rules! def_id {($($(#[$meta:meta])* $name:ident),*$(,)?) => {$(
-        $(#[$meta])*
-        #[repr(transparent)]
-        #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-        pub struct $name(usize);
+Items are inserted into their respective pools,
 
-        impl $name {
-            #[doc = concat!("Constructs a [`", stringify!($name), "`] from a [`usize`] without checking bounds.")]
-            /// # Safety
-            /// The provided value should be within the bounds of its associated container
-            pub unsafe fn from_raw_unchecked(value: usize) -> Self {
-                Self(value)
-            }
-            /// Gets the index of the type by-value
-            pub fn value(&self) -> usize {
-                self.0
-            }
-        }
 
-        impl From< $name > for usize {
-            fn from(value: $name) -> Self {
-                value.0
-            }
-        }
-    )*}}
+*/
+
+pub mod key {
+    use cl_structures::intern_pool::*;
 
     // define the index types
-    def_id! {
-        /// Uniquely represents a Type
+    make_intern_key! {
+        /// Uniquely represents a TypeDef in the TypeDef [Pool]
         TypeID,
-        /// Uniquely represents a Value
+        /// Uniquely represents a ValueDef in the ValueDef [Pool]
         ValueID,
+        /// Uniquely represents a Module in the Module [Pool]
+        ModuleID,
     }
 }
 
 pub mod typedef {
-    //! Representations of type definitions
-    // use std::collections::HashMap;
+    //! A TypeDef represents an item in the Type Namespace (a component of a
+    //! [Project](crate::project::Project)).
 
-    use crate::intern::TypeID;
+    use crate::key::{TypeID, ValueID};
     use cl_ast::{Item, Visibility};
 
-    /// The definition of a type
+    /// A TypeDef represents an item in the Type Namespace (a component of a
+    /// [Project](crate::project::Project)).
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct TypeDef {
-        name: String,
-        kind: Option<TypeKind>,
-        definition: Item,
+        pub name: String,
+        /// The expanded form of the definition, with all fields properly typed.
+        /// This is filled in once all types are been enumerated.
+        pub kind: Option<TypeKind>,
+        pub definition: Item,
+        pub associated_values: Vec<ValueID>,
+        // TODO: Generic type parameters
     }
 
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub enum TypeKind {
         /// A primitive type, built-in to the compiler
-        Intrinsic,
+        Intrinsic(Intrinsic),
         /// A user-defined structural product type
         Struct(Vec<(String, Visibility, TypeID)>),
         /// A user-defined union-like enum type
         Enum(Vec<(String, TypeID)>),
-        /// A type alias
+        /// An alias for an already-defined type
         Alias(TypeID),
         /// The unit type
         Empty,
         /// The Self type
         SelfTy,
-        // TODO: other types
+        // TODO: union types, tuples, tuple structs maybe?
+    }
+
+    /// The set of compiler-intrinsic types.
+    /// These primitive types have native implementations of the basic operations.
+    #[allow(non_camel_case_types)]
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub enum Intrinsic {
+        /// A 32-bit two's complement integer
+        i32,
+        /// A 32-bit unsigned integer
+        u32,
+        /// A boolean (`true` or `false`)
+        bool,
     }
 }
 
 pub mod valdef {
-    //! Representations of value definitions
+    //! A [ValueDef] represents an item in the Value Namespace (a component of a
+    //! [Project](crate::project::Project)).
 
-    use crate::intern::{TypeID, ValueID};
-    use cl_ast::Block;
+    use crate::typeref::TypeRef;
+    use cl_ast::{Block, Item};
 
+    /// A [ValueDef] represents an item in the Value Namespace (a component of a
+    /// [Project](crate::project::Project)).
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct ValueDef {
-        name: String,
-        kind: Option<ValueKind>,
+        pub name: String,
+        /// The expanded form of the definition, with all fields properly typed
+        pub kind: Option<ValueKind>,
+        pub definition: Item,
     }
 
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub enum ValueKind {
-        Const(),
-        Static(),
+        Const(TypeRef),
+        Static(TypeRef),
         Fn {
-            args: Vec<TypeID>,
-            rety: TypeID,
+            args: Vec<TypeRef>,
+            rety: TypeRef,
             body: Block,
         },
     }
 }
 
-pub mod typeinfo {
-    //! Stores typeck-time type inference info
+pub mod module {
+    //! A [Module] is a node in the Module Tree (a component of a
+    //! [Project](crate::project::Project))
+    use crate::key::{ModuleID, TypeID, ValueID};
+    use std::collections::HashMap;
 
-    use crate::intern::TypeID;
-
-    /// The Type struct represents all valid types, and can be trivially equality-compared
-    pub struct Type {
-        /// You can only have a pointer chain 65535 pointers long.
-        ref_depth: u16,
-        /// Types can be [Generic](TKind::Generic) or [Concrete](TKind::Concrete)
-        kind: TKind,
-    }
-
-    /// Types can be [Generic](TKind::Generic) or [Concrete](TKind::Concrete)
-    pub enum TKind {
-        /// A Concrete type has an associated [TypeDef](super::typedef::TypeDef)
-        Concrete(TypeID),
-        /// A Generic type is a *locally unique* comparable value,
-        /// valid only until the end of its inference context
-        Generic(usize),
+    /// A [Module] is a node in the Module Tree (a component of a
+    /// [Project](crate::project::Project)).
+    #[derive(Clone, Debug, Default, PartialEq, Eq)]
+    pub struct Module {
+        pub parent: Option<ModuleID>,
+        pub types: HashMap<String, TypeID>,
+        pub values: HashMap<String, ValueID>,
+        pub submodules: HashMap<String, ModuleID>,
     }
 }
 
-pub mod type_context {
-    //! A type context stores a map from names to TypeIDs
+pub mod project {
+    use cl_structures::intern_pool::Pool;
 
-    use std::collections::HashMap;
+    use crate::{
+        key::{ModuleID, TypeID, ValueID},
+        module::Module,
+        typedef::TypeDef,
+        valdef::ValueDef,
+    };
 
-    use crate::intern::TypeID;
+    #[derive(Clone, Debug, Default, PartialEq, Eq)]
+    pub struct Project {
+        pub types: Pool<TypeDef, TypeID>,
+        pub values: Pool<ValueDef, ValueID>,
+        pub modules: Pool<Module, ModuleID>,
+    }
+}
 
-    pub struct TypeCtx {
-        parent: Option<Box<TypeCtx>>,
-        concrete: HashMap<String, TypeID>,
+pub mod typeref {
+    //! Stores type and referencce info
+
+    use crate::key::TypeID;
+
+    /// The Type struct represents all valid types, and can be trivially equality-compared
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct TypeRef {
+        /// You can only have a pointer chain 65535 pointers long.
+        ref_depth: u16,
+        /// Types can be [Generic](TKind::Generic) or [Concrete](TKind::Concrete)
+        kind: RefKind,
+    }
+
+    /// Types can be [Generic](TKind::Generic) or [Concrete](TKind::Concrete)
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub enum RefKind {
+        /// A Concrete type has an associated [TypeDef](super::typedef::TypeDef)
+        Concrete(TypeID),
+        /// A Generic type is a *locally unique* comparable value,
+        /// valid only until the end of its typing context.
+        /// This is usually the surrounding function.
+        Generic(usize),
     }
 }
 

@@ -9,3 +9,4 @@ publish.workspace = true
 
 [dependencies]
 cl-ast = { path = "../cl-ast" }
+cl-structures = { path = "../cl-structures" }
