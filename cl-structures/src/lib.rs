@@ -10,3 +10,5 @@ pub mod span;
 pub mod tree;
 
 pub mod stack;
+
+pub mod intern_pool;
