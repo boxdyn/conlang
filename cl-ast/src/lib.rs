@@ -292,7 +292,7 @@ pub struct Expr {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExprKind {
     /// An [Assign]ment expression: [`Expr`] ([`AssignKind`] [`Expr`])\+
-    Assign(Box<Assign>),
+    Assign(Assign),
     /// A [Binary] expression: [`Expr`] ([`BinaryKind`] [`Expr`])\+
     Binary(Binary),
     /// A [Unary] expression: [`UnaryKind`]\* [`Expr`]
@@ -338,7 +338,7 @@ pub enum ExprKind {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Assign {
-    pub head: Expr,
+    pub head: Box<Expr>,
     pub op: AssignKind,
     pub tail: Box<Expr>,
 }

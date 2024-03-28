@@ -675,7 +675,14 @@ impl<'t> Parser<'t> {
         let Ok(op) = self.assign_op() else {
             return Ok(head.kind);
         };
-        Ok(Assign { head, op, tail: self.expr_from(Self::exprkind_assign)?.into() }.into())
+        Ok(
+            Assign {
+                head: Box::new(head),
+                op,
+                tail: self.expr_from(Self::exprkind_assign)?.into(),
+            }
+            .into(),
+        )
     }
     // TODO: use a pratt parser for binary expressions, to simplify this
     binary! {
