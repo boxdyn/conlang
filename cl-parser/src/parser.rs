@@ -307,7 +307,7 @@ impl<'t> Parser<'t> {
         const PARSING: Parsing = Parsing::Alias;
         self.match_kw(Keyword::Type, PARSING)?;
         let out = Ok(Alias {
-            to: self.ty()?.into(),
+            to: self.identifier()?,
             from: if self.match_type(Type::Eq, PARSING).is_ok() {
                 Some(self.ty()?.into())
             } else {

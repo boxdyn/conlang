@@ -90,7 +90,7 @@ pub enum ItemKind {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Alias {
-    pub to: Box<Ty>,
+    pub to: Identifier,
     pub from: Option<Box<Ty>>,
 }
 
