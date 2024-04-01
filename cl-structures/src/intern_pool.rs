@@ -89,6 +89,13 @@ impl<T, ID: InternKey> Pool<T, ID> {
         self.pool.get_mut(index.get())
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        self.pool.iter()
+    }
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+        self.pool.iter_mut()
+    }
+
     pub fn insert(&mut self, value: T) -> ID {
         let id = self.pool.len();
         self.pool.push(value);

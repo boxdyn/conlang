@@ -20,3 +20,4 @@ argh = "0.1.12"
 
 [dev-dependencies]
 cl-structures = { path = "../cl-structures" }
+cl-typeck = { path = "../cl-typeck" }
