@@ -458,10 +458,64 @@ impl<'t> Parser<'t> {
         })
     }
     pub fn parse_enum(&mut self) -> PResult<Enum> {
+        // Enum        = "enum" Identifier '{' (Variant ',')* Variant? '}' ;
         const PARSING: Parsing = Parsing::Enum;
         self.match_kw(Keyword::Enum, PARSING)?;
-        Err(self.error(Todo, PARSING))
+        Ok(Enum {
+            name: self.identifier()?,
+            kind: match self.peek_type(PARSING)? {
+                Type::LCurly => EnumKind::Variants(delim(
+                    sep(Self::enum_variant, Type::Comma, Type::RCurly, PARSING),
+                    CURLIES,
+                    PARSING,
+                )(self)?),
+                Type::Semi => {
+                    self.consume_peeked();
+                    EnumKind::NoVariants
+                }
+                t => Err(self.error(Unexpected(t), PARSING))?,
+            },
+        })
     }
+
+    pub fn enum_variant(&mut self) -> PResult<Variant> {
+        const PARSING: Parsing = Parsing::Variant;
+        Ok(Variant {
+            name: self.identifier()?,
+            kind: match self.peek_type(PARSING)? {
+                Type::Eq => self.variantkind_clike()?,
+                Type::LCurly => self.variantkind_struct()?,
+                Type::LParen => self.variantkind_tuple()?,
+                _ => VariantKind::Plain,
+            },
+        })
+    }
+    pub fn variantkind_clike(&mut self) -> PResult<VariantKind> {
+        const PARSING: Parsing = Parsing::VariantKind;
+        self.match_type(Type::Eq, PARSING)?;
+        let tok = self.match_type(Type::Integer, PARSING)?;
+        Ok(VariantKind::CLike(match tok.data() {
+            Data::Integer(i) => *i,
+            _ => panic!("Expected token data for {tok:?} while parsing {PARSING}"),
+        }))
+    }
+    pub fn variantkind_struct(&mut self) -> PResult<VariantKind> {
+        const PARSING: Parsing = Parsing::VariantKind;
+        Ok(VariantKind::Struct(delim(
+            sep(Self::struct_member, Type::Comma, Type::RCurly, PARSING),
+            CURLIES,
+            PARSING,
+        )(self)?))
+    }
+    pub fn variantkind_tuple(&mut self) -> PResult<VariantKind> {
+        const PARSING: Parsing = Parsing::VariantKind;
+        Ok(VariantKind::Tuple(delim(
+            sep(Self::ty, Type::Comma, Type::RParen, PARSING),
+            PARENS,
+            PARSING,
+        )(self)?))
+    }
+
     pub fn parse_impl(&mut self) -> PResult<Impl> {
         const PARSING: Parsing = Parsing::Impl;
         self.match_kw(Keyword::Impl, PARSING)?;
