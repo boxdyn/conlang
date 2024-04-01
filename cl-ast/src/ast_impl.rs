@@ -13,6 +13,8 @@ mod display {
             pub open: &'t str,
             pub close: &'t str,
         }
+        /// Delimits with braces decorated with spaces  `" {n"`, ..., `"\n}"`
+        pub const SPACED_BRACES: Delimiters = Delimiters { open: " {\n", close: "\n}" };
         /// Delimits with braces on separate lines `{\n`, ..., `\n}`
         pub const BRACES: Delimiters = Delimiters { open: "{\n", close: "\n}" };
         /// Delimits with parentheses on separate lines `{\n`, ..., `\n}`
@@ -190,9 +192,7 @@ mod display {
             match self {
                 StructKind::Empty => ';'.fmt(f),
                 StructKind::Tuple(v) => delimit(separate(v, ", "), INLINE_PARENS)(f),
-                StructKind::Struct(v) => {
-                    delimit(separate(v, ",\n"), Delimiters { open: " {\n", ..BRACES })(f)
-                }
+                StructKind::Struct(v) => delimit(separate(v, ",\n"), SPACED_BRACES)(f),
             }
         }
     }
@@ -211,8 +211,8 @@ mod display {
     impl Display for EnumKind {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
-                EnumKind::NoVariants => todo!(),
-                EnumKind::Variants(v) => separate(v, ", ")(f),
+                EnumKind::NoVariants => ';'.fmt(f),
+                EnumKind::Variants(v) => delimit(separate(v, ",\n"), SPACED_BRACES)(f),
             }
         }
     }
@@ -226,9 +226,9 @@ mod display {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 VariantKind::Plain => Ok(()),
-                VariantKind::CLike(n) => n.fmt(f),
+                VariantKind::CLike(n) => write!(f, " = {n}"),
                 VariantKind::Tuple(v) => delimit(separate(v, ", "), INLINE_PARENS)(f),
-                VariantKind::Struct(v) => delimit(separate(v, ",\n"), BRACES)(f),
+                VariantKind::Struct(v) => delimit(separate(v, ", "), INLINE_BRACES)(f),
             }
         }
     }
@@ -562,7 +562,6 @@ mod display {
         }
     }
 }
-
 
 mod convert {
     //! Converts between major enums and enum variants
