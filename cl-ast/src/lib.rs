@@ -17,6 +17,7 @@ use cl_structures::span::*;
 pub mod ast_impl;
 pub mod format;
 
+/// Whether a binding ([Static] or [Let]) or reference is mutable or not
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Mutability {
     #[default]
@@ -24,6 +25,7 @@ pub enum Mutability {
     Mut,
 }
 
+/// Whether an [Item] is visible outside of the current [Module]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Visibility {
     #[default]
@@ -31,6 +33,7 @@ pub enum Visibility {
     Public,
 }
 
+/// A list of [Item]s
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct File {
     pub items: Vec<Item>,
@@ -42,12 +45,14 @@ pub struct Attrs {
     pub meta: Vec<Meta>,
 }
 
+/// A metadata decorator
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Meta {
     pub name: Identifier,
     pub kind: MetaKind,
 }
 
+/// Information attached to [Meta]data
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MetaKind {
     Plain,
@@ -56,7 +61,7 @@ pub enum MetaKind {
 }
 
 // Items
-/// Stores an [ItemKind] and associated metadata
+/// Anything that can appear at the top level of a [File]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Item {
     pub extents: Span,
@@ -65,36 +70,37 @@ pub struct Item {
     pub kind: ItemKind,
 }
 
-/// Stores a concrete Item
+/// What kind of [Item] is this?
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ItemKind {
     // TODO: Import declaration ("use") item
     // TODO: Trait declaration ("trait") item?
+    /// A [module](Module)
+    Module(Module),
     /// A [type alias](Alias)
     Alias(Alias),
+    /// An [enumerated type](Enum), with a discriminant and optional data
+    Enum(Enum),
+    /// A [structure](Struct)
+    Struct(Struct),
     /// A [constant](Const)
     Const(Const),
     /// A [static](Static) variable
     Static(Static),
-    /// A [module](Module)
-    Module(Module),
     /// A [function definition](Function)
     Function(Function),
-    /// A [structure](Struct)
-    Struct(Struct),
-    /// An [enumerated type](Enum)
-    Enum(Enum),
     /// An [implementation](Impl)
     Impl(Impl),
 }
 
+/// An alias to another [Ty]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Alias {
     pub to: Identifier,
     pub from: Option<Box<Ty>>,
 }
 
-/// Stores a `const` value
+/// A compile-time constant
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Const {
     pub name: Identifier,
@@ -102,7 +108,7 @@ pub struct Const {
     pub init: Box<Expr>,
 }
 
-/// Stores a `static` variable
+/// A `static` variable
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Static {
     pub mutable: Mutability,
@@ -111,20 +117,21 @@ pub struct Static {
     pub init: Box<Expr>,
 }
 
-/// Stores a collection of [Items](Item)
+/// An ordered collection of [Items](Item)
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Module {
     pub name: Identifier,
     pub kind: ModuleKind,
 }
 
+/// The contents of a [Module], if they're in the same file
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ModuleKind {
     Inline(File),
     Outline,
 }
 
-/// Contains code, and the interface to that code
+/// Code, and the interface to that code
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Function {
     pub name: Identifier,
@@ -133,6 +140,7 @@ pub struct Function {
     pub rety: Option<Box<Ty>>,
 }
 
+/// A single parameter for a [Function]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Param {
     pub mutability: Mutability,
@@ -140,12 +148,14 @@ pub struct Param {
     pub ty: Box<Ty>,
 }
 
+/// A user-defined product type
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Struct {
     pub name: Identifier,
     pub kind: StructKind,
 }
 
+/// Either a [Struct]'s [StructMember]s or tuple [Ty]pes, if present.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StructKind {
     Empty,
@@ -153,6 +163,7 @@ pub enum StructKind {
     Struct(Vec<StructMember>),
 }
 
+/// The [Visibility], [Identifier], and [Ty]pe of a single [Struct] member
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StructMember {
     pub vis: Visibility,
@@ -160,12 +171,14 @@ pub struct StructMember {
     pub ty: Ty,
 }
 
+/// A user-defined sum type
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Enum {
     pub name: Identifier,
     pub kind: EnumKind,
 }
 
+/// An [Enum]'s [Variant]s, if it has a variant block
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EnumKind {
     /// Represents an enum with no variants
@@ -173,12 +186,14 @@ pub enum EnumKind {
     Variants(Vec<Variant>),
 }
 
+/// A single [Enum] variant
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Variant {
     pub name: Identifier,
     pub kind: VariantKind,
 }
 
+/// Whether the [Variant] has a C-like constant value, a tuple, or [StructMember]s
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VariantKind {
     Plain,
@@ -187,6 +202,7 @@ pub enum VariantKind {
     Struct(Vec<StructMember>),
 }
 
+/// Sub-[items](Item) (associated functions, etc.) for a [Ty]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Impl {
     pub target: Ty,
@@ -200,13 +216,14 @@ pub enum ImplKind {
     Trait { impl_trait: Path, for_type: Box<Ty> },
 }
 
-/// # Static Type Information
+/// A type expression
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Ty {
     pub extents: Span,
     pub kind: TyKind,
 }
 
+/// Information about a [Ty]pe expression
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TyKind {
     Never,
@@ -218,29 +235,34 @@ pub enum TyKind {
     Fn(TyFn),
 }
 
+/// A tuple of [Ty]pes
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TyTuple {
     pub types: Vec<Ty>,
 }
 
+/// A [Ty]pe-reference expression as (number of `&`, [Path])
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TyRef {
     pub count: u16,
     pub to: Path,
 }
+
+/// The args and return value for a function pointer [Ty]pe
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TyFn {
     pub args: TyTuple,
     pub rety: Option<Box<Ty>>,
 }
 
-// Path
+/// A path to an [Item] in the [Module] tree
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Path {
     pub absolute: bool,
     pub parts: Vec<PathPart>,
 }
 
+/// A single component of a [Path]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PathPart {
     SuperKw,
@@ -249,10 +271,11 @@ pub enum PathPart {
 }
 
 // TODO: Capture token?
+/// A name
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Identifier(pub String);
 
-/// Stores an abstract statement, and associated metadata
+/// An abstract statement, and associated metadata
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Stmt {
     pub extents: Span,
@@ -260,12 +283,14 @@ pub struct Stmt {
     pub semi: Semi,
 }
 
+/// Whether or not a [Stmt] is followed by a semicolon
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Semi {
     Terminated,
     Unterminated,
 }
 
+/// Whether the [Stmt] is a [Let], [Item], or [Expr] statement
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StmtKind {
     Empty,
@@ -274,6 +299,7 @@ pub enum StmtKind {
     Expr(Box<Expr>),
 }
 
+/// A local variable declaration [Stmt]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Let {
     pub mutable: Mutability,
@@ -282,13 +308,14 @@ pub struct Let {
     pub init: Option<Box<Expr>>,
 }
 
-/// Stores an abstract expression, and associated metadata
+/// An expression, the beating heart of the language
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Expr {
     pub extents: Span,
     pub kind: ExprKind,
 }
 
+/// Any of the different [Expr]essions
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExprKind {
     /// An [Assign]ment expression: [`Expr`] ([`AssignKind`] [`Expr`])\+
@@ -336,6 +363,7 @@ pub enum ExprKind {
     Continue(Continue),
 }
 
+/// An [Assign]ment expression: [`Expr`] ([`AssignKind`] [`Expr`])\+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Assign {
     pub head: Box<Expr>,
@@ -359,12 +387,14 @@ pub enum AssignKind {
     Rem,
 }
 
+/// A [Binary] expression: [`Expr`] ([`BinaryKind`] [`Expr`])\+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Binary {
     pub head: Box<Expr>,
     pub tail: Vec<(BinaryKind, Expr)>,
 }
 
+/// A [Binary] operator
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BinaryKind {
     Lt,
@@ -391,12 +421,14 @@ pub enum BinaryKind {
     Dot,
 }
 
+/// A [Unary] expression: [`UnaryKind`]\* [`Expr`]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Unary {
     pub ops: Vec<UnaryKind>,
     pub tail: Box<Expr>,
 }
 
+/// A [Unary] operator
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UnaryKind {
     Deref,
@@ -408,6 +440,7 @@ pub enum UnaryKind {
     Tilde,
 }
 
+/// A [Member] access expression: [`Expr`] (`.` [`Expr`])+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Member {
     pub head: Box<Expr>,
@@ -419,24 +452,27 @@ pub enum MemberKind {
     Dot,
 }
 
+/// A [Call] expression, with arguments: a(foo, bar)
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Call {
     pub callee: Box<Expr>,
     pub args: Vec<Tuple>,
 }
 
-/// Index operator: Member (`[` Expr `]`)*
+/// A repeated [Index] expression: a[10, 20, 30][40, 50, 60]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Index {
     pub head: Box<Expr>,
     pub indices: Vec<Indices>,
 }
 
+/// A single [Index] expression: a[10, 20, 30]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Indices {
     pub exprs: Vec<Expr>,
 }
 
+/// A [Literal]: 0x42, 1e123, 2.4, "Hello"
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Literal {
     Bool(bool),
@@ -445,17 +481,21 @@ pub enum Literal {
     String(String),
 }
 
+/// An [Array] literal: `[` [`Expr`] (`,` [`Expr`])\* `]`
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Array {
     pub values: Vec<Expr>,
 }
 
+/// An Array literal constructed with [repeat syntax](ArrayRep)
+/// `[` [Expr] `;` [Literal] `]`
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArrayRep {
     pub value: Box<Expr>,
     pub repeat: Box<Expr>,
 }
 
+/// An address-of expression: `&` `mut`? [`Expr`]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddrOf {
     pub count: usize,
@@ -463,21 +503,25 @@ pub struct AddrOf {
     pub expr: Box<Expr>,
 }
 
+/// A [Block] expression: `{` [`Stmt`]\* [`Expr`]? `}`
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Block {
     pub stmts: Vec<Stmt>,
 }
 
+/// A [Grouping](Group) expression `(` [`Expr`] `)`
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Group {
     pub expr: Box<Expr>,
 }
 
+/// A [Tuple] expression: `(` [`Expr`] (`,` [`Expr`])+ `)`
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Tuple {
     pub exprs: Vec<Expr>,
 }
 
+/// A [While] expression: `while` [`Expr`] [`Block`] [`Else`]?
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct While {
     pub cond: Box<Expr>,
@@ -485,6 +529,7 @@ pub struct While {
     pub fail: Else,
 }
 
+/// An [If] expression: `if` [`Expr`] [`Block`] [`Else`]?
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct If {
     pub cond: Box<Expr>,
@@ -492,6 +537,7 @@ pub struct If {
     pub fail: Else,
 }
 
+/// A [For] expression: `for` Pattern `in` [`Expr`] [`Block`] [`Else`]?
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct For {
     pub bind: Identifier, // TODO: Patterns?
@@ -500,20 +546,24 @@ pub struct For {
     pub fail: Else,
 }
 
+/// The (optional) `else` clause of a [While], [If], or [For] expression
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Else {
     pub body: Option<Box<Expr>>,
 }
 
+/// A [Break] expression: `break` [`Expr`]?
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Break {
     pub body: Option<Box<Expr>>,
 }
 
+/// A [Return] expression `return` [`Expr`]?
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Return {
     pub body: Option<Box<Expr>>,
 }
 
+/// A continue expression: `continue`
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Continue;
