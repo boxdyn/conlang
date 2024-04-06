@@ -447,11 +447,6 @@ pub struct Member {
     pub tail: Vec<Expr>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum MemberKind {
-    Dot,
-}
-
 /// A [Call] expression, with arguments: a(foo, bar)
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Call {
