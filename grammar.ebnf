@@ -1,38 +1,38 @@
 (* Conlang Expression Grammar *)
-Start       = File ;
+Start       = File EOI ;
 
 Mutability  = "mut"? ;
 Visibility  = "pub"? ;
 
 
-File        = Item* EOI ;
+File        = Item* ;
 
 
-Attrs       = ('#' '[' (Meta ',') Meta? ']')* ;
+Attrs       = ('#' '[' (Meta ',')* Meta? ']')* ;
 Meta        = Identifier ('=' Literal | '(' (Literal ',')* Literal? ')')? ;
 
 
-Item        = Attrs* Visibility ItemKind ;
+Item        = Attrs Visibility ItemKind ;
 ItemKind    = Const    | Static | Module 
             | Function | Struct | Enum 
             | Alias    | Impl ;
 
 
 (* item *)
-Const       = "const" Identifier ':' Type = Expr ';' ;
+Const       = "const" Identifier ':' Ty '=' Expr ';' ;
 
-Static      = "static" Mutability Identifier ':' Type = Expr ';' ;
+Static      = "static" Mutability Identifier ':' Ty '=' Expr ';' ;
 
 Module      = "mod" Identifier ModuleKind ;
 ModuleKind  = '{' Item* '}' | ';' ;
 
-Function    = "fn" Identifier '(' (Param ',')* Param? ')' ('->' Type)? Block? ;
-Param       = Mutability Identifier ':' Type ;
+Function    = "fn" Identifier '(' (Param ',')* Param? ')' ('->' Ty)? Block? ;
+Param       = Mutability Identifier ':' Ty ;
 
 Struct      = "struct" Identifier (StructTuple | StructBody)?;
 StructBody  = '{' (StructMember ',')* StructMember? '}' ;
 StructTuple = TyTuple ;
-StructMember = Visibility Identifier ':' Type ;
+StructMember = Visibility Identifier ':' Ty ;
 
 Enum        = "enum" Identifier '{' (Variant ',')* Variant? '}' ;
 Variant     = Identifier (VarStruct | VarTuple | VarCLike)? ;
@@ -40,7 +40,7 @@ VarStruct   = '{' (StructMember ',')* StructMember? '}' ;
 VarTuple    = TyTuple ;
 VarCLike    = '=' INTEGER ;
 
-Alias       = "type" Ty ('=' Ty)? ';' ;
+Alias       = "type" Identifier ('=' Ty)? ';' ;
 
 Impl        = "impl" Path '{' Item* '}' ;
 (* TODO: Impl Trait for Target*)
@@ -52,7 +52,7 @@ Never       = '!' ;
 Empty       = '(' ')' ;
 TyTuple     = '(' (Ty ',')* Ty? ')' ;
 TyRef       = ('&' | '&&')* Path ;
-TyFn        = "fn" TyTuple (-> Ty)? ;
+TyFn        = "fn" TyTuple ('->' Ty)? ;
 
 
 (* path *)
@@ -73,25 +73,20 @@ Let         = "let" Mutability Identifier (':' Ty)? ('=' Expr)? ;
 Bool        = "true" | "false" ;
 
 
-(* expr *)
-ExprKind    = Assign  | Compare | Range  | Logic    | Bitwise | Shift
-            | Factor  | Term    | Unary  | Member   | Call    | Index
-            | Path    | Literal | Array  | ArrayRep | AddrOf
-            | Block   | Group    
-            | While   | If      | For    | Break    | Return  | Continue ;
+/* expr */
 
 Expr        = Assign ;
 
 Assign      = Path (AssignKind  Assign ) | Compare ;
 
-Binary      = Compare | Range | Logic  | Bitwise | Shift | Factor | Term ;
+Binary      = Compare | Range | Logic | Bitwise | Shift | Factor | Term ;
 Compare     = Range    (CompareOp Range  )* ;
 Range       = Logic    (RangeOp   Logic  )* ;
 Logic       = Bitwise  (LogicOp   Bitwise)* ;
 Bitwise     = Shift    (BitwiseOp Shift  )* ;
 Shift       = Factor   (ShiftOp   Factor )* ;
 Factor      = Term     (FactorOp  Term   )* ;
-Term        = Unary    (FactorOp  Unary  )* ;
+Term        = Unary    (TermOp    Unary  )* ;
 
 Unary       = (UnaryKind)* Member ;
 
@@ -111,7 +106,7 @@ Literal     = STRING | CHARACTER | FLOAT | INTEGER | Bool ;
 Array       = '[' (Expr ',')* Expr? ']' ;
 ArrayRep    = '[' Expr ';' Expr ']' ;
 
-AddrOf      = ('&' | '&&')* Mutability? Expr ;
+AddrOf      = ('&' | '&&')* Mutability Expr ;
 
 Block       = '{' Stmt* '}';
 
@@ -127,11 +122,8 @@ Break       = "break"  Expr ;
 Return      = "return" Expr ;
 Continue    = "continue" ;
 
-AssignKind  =  '=' | '+=' | '-=' | '*=' | '/=' |
-              '&=' | '|=' | '^=' |'<<=' |'>>=' ;
+AssignKind  =  '=' | '+=' | '-=' | '*=' | '/=' | '&=' | '|=' | '^=' |'<<=' |'>>=' ;
 
-BinaryKind  = CompareOp | RangeOp | LogicOp  | BitwiseOp 
-            | ShiftOp   | TermOp  | FactorOp ;
 CompareOp   =  '<' | '<=' | '==' | '!=' | '>=' | '>' ;
 RangeOp     = '..' | '..=' ;
 LogicOp     = '&&' | '||' | '^^' ;
