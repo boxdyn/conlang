@@ -2,7 +2,7 @@
 #![warn(clippy::all)]
 #![feature(decl_macro)]
 use cl_structures::span::Loc;
-use cl_token::{TokenKind as Kind, *};
+use cl_token::{token_type::Op, TokenKind as Kind, *};
 use std::{
     iter::Peekable,
     str::{Chars, FromStr},
@@ -97,33 +97,33 @@ impl<'t> Lexer<'t> {
     /// Scans through the text, searching for the next [Token]
     pub fn scan(&mut self) -> LResult<Token> {
         match self.skip_whitespace().peek()? {
-            '{' => self.consume()?.produce(Kind::LCurly, ()),
-            '}' => self.consume()?.produce(Kind::RCurly, ()),
-            '[' => self.consume()?.produce(Kind::LBrack, ()),
-            ']' => self.consume()?.produce(Kind::RBrack, ()),
-            '(' => self.consume()?.produce(Kind::LParen, ()),
-            ')' => self.consume()?.produce(Kind::RParen, ()),
+            '{' => self.consume()?.produce_op(Op::LCurly),
+            '}' => self.consume()?.produce_op(Op::RCurly),
+            '[' => self.consume()?.produce_op(Op::LBrack),
+            ']' => self.consume()?.produce_op(Op::RBrack),
+            '(' => self.consume()?.produce_op(Op::LParen),
+            ')' => self.consume()?.produce_op(Op::RParen),
             '&' => self.consume()?.amp(),
-            '@' => self.consume()?.produce(Kind::At, ()),
-            '\\' => self.consume()?.produce(Kind::Backslash, ()),
+            '@' => self.consume()?.produce_op(Op::At),
+            '\\' => self.consume()?.produce_op(Op::Backslash),
             '!' => self.consume()?.bang(),
             '|' => self.consume()?.bar(),
             ':' => self.consume()?.colon(),
-            ',' => self.consume()?.produce(Kind::Comma, ()),
+            ',' => self.consume()?.produce_op(Op::Comma),
             '.' => self.consume()?.dot(),
             '=' => self.consume()?.equal(),
-            '`' => self.consume()?.produce(Kind::Grave, ()),
+            '`' => self.consume()?.produce_op(Op::Grave),
             '>' => self.consume()?.greater(),
             '#' => self.consume()?.hash(),
             '<' => self.consume()?.less(),
             '-' => self.consume()?.minus(),
             '+' => self.consume()?.plus(),
-            '?' => self.consume()?.produce(Kind::Question, ()),
+            '?' => self.consume()?.produce_op(Op::Question),
             '%' => self.consume()?.rem(),
-            ';' => self.consume()?.produce(Kind::Semi, ()),
+            ';' => self.consume()?.produce_op(Op::Semi),
             '/' => self.consume()?.slash(),
             '*' => self.consume()?.star(),
-            '~' => self.consume()?.produce(Kind::Tilde, ()),
+            '~' => self.consume()?.produce_op(Op::Tilde),
             '^' => self.consume()?.xor(),
             '0' => self.consume()?.int_with_base(),
             '1'..='9' => self.digits::<10>(),
@@ -157,11 +157,14 @@ impl<'t> Lexer<'t> {
             .copied()
             .ok_or(Error::end_of_file(self.line(), self.col()))
     }
-    fn produce(&mut self, ty: TokenKind, data: impl Into<TokenData>) -> LResult<Token> {
+    fn produce(&mut self, kind: TokenKind, data: impl Into<TokenData>) -> LResult<Token> {
         let loc = self.start_loc;
         self.start_loc = self.current_loc;
         self.start = self.current;
-        Ok(Token::new(ty, data, loc.0, loc.1))
+        Ok(Token::new(kind, data, loc.0, loc.1))
+    }
+    fn produce_op(&mut self, kind: Op) -> LResult<Token> {
+        self.produce(TokenKind::Op(kind), ())
     }
     fn skip_whitespace(&mut self) -> &mut Self {
         while let Ok(c) = self.peek() {
@@ -192,120 +195,120 @@ impl<'t> Lexer<'t> {
 impl<'t> Lexer<'t> {
     fn amp(&mut self) -> LResult<Token> {
         match self.peek() {
-            Ok('&') => self.consume()?.produce(Kind::AmpAmp, ()),
-            Ok('=') => self.consume()?.produce(Kind::AmpEq, ()),
-            _ => self.produce(Kind::Amp, ()),
+            Ok('&') => self.consume()?.produce_op(Op::AmpAmp),
+            Ok('=') => self.consume()?.produce_op(Op::AmpEq),
+            _ => self.produce_op(Op::Amp),
         }
     }
     fn bang(&mut self) -> LResult<Token> {
         match self.peek() {
-            Ok('!') => self.consume()?.produce(Kind::BangBang, ()),
-            Ok('=') => self.consume()?.produce(Kind::BangEq, ()),
-            _ => self.produce(Kind::Bang, ()),
+            Ok('!') => self.consume()?.produce_op(Op::BangBang),
+            Ok('=') => self.consume()?.produce_op(Op::BangEq),
+            _ => self.produce_op(Op::Bang),
         }
     }
     fn bar(&mut self) -> LResult<Token> {
         match self.peek() {
-            Ok('|') => self.consume()?.produce(Kind::BarBar, ()),
-            Ok('=') => self.consume()?.produce(Kind::BarEq, ()),
-            _ => self.produce(Kind::Bar, ()),
+            Ok('|') => self.consume()?.produce_op(Op::BarBar),
+            Ok('=') => self.consume()?.produce_op(Op::BarEq),
+            _ => self.produce_op(Op::Bar),
         }
     }
     fn colon(&mut self) -> LResult<Token> {
         match self.peek() {
-            Ok(':') => self.consume()?.produce(Kind::ColonColon, ()),
-            _ => self.produce(Kind::Colon, ()),
+            Ok(':') => self.consume()?.produce_op(Op::ColonColon),
+            _ => self.produce_op(Op::Colon),
         }
     }
     fn dot(&mut self) -> LResult<Token> {
         match self.peek() {
             Ok('.') => {
                 if let Ok('=') = self.consume()?.peek() {
-                    self.consume()?.produce(Kind::DotDotEq, ())
+                    self.consume()?.produce_op(Op::DotDotEq)
                 } else {
-                    self.produce(Kind::DotDot, ())
+                    self.produce_op(Op::DotDot)
                 }
             }
-            _ => self.produce(Kind::Dot, ()),
+            _ => self.produce_op(Op::Dot),
         }
     }
     fn equal(&mut self) -> LResult<Token> {
         match self.peek() {
-            Ok('=') => self.consume()?.produce(Kind::EqEq, ()),
-            Ok('>') => self.consume()?.produce(Kind::FatArrow, ()),
-            _ => self.produce(Kind::Eq, ()),
+            Ok('=') => self.consume()?.produce_op(Op::EqEq),
+            Ok('>') => self.consume()?.produce_op(Op::FatArrow),
+            _ => self.produce_op(Op::Eq),
         }
     }
     fn greater(&mut self) -> LResult<Token> {
         match self.peek() {
-            Ok('=') => self.consume()?.produce(Kind::GtEq, ()),
+            Ok('=') => self.consume()?.produce_op(Op::GtEq),
             Ok('>') => {
                 if let Ok('=') = self.consume()?.peek() {
-                    self.consume()?.produce(Kind::GtGtEq, ())
+                    self.consume()?.produce_op(Op::GtGtEq)
                 } else {
-                    self.produce(Kind::GtGt, ())
+                    self.produce_op(Op::GtGt)
                 }
             }
-            _ => self.produce(Kind::Gt, ()),
+            _ => self.produce_op(Op::Gt),
         }
     }
     fn hash(&mut self) -> LResult<Token> {
         match self.peek() {
-            Ok('!') => self.consume()?.produce(Kind::HashBang, ()),
-            _ => self.produce(Kind::Hash, ()),
+            Ok('!') => self.consume()?.produce_op(Op::HashBang),
+            _ => self.produce_op(Op::Hash),
         }
     }
     fn less(&mut self) -> LResult<Token> {
         match self.peek() {
-            Ok('=') => self.consume()?.produce(Kind::LtEq, ()),
+            Ok('=') => self.consume()?.produce_op(Op::LtEq),
             Ok('<') => {
                 if let Ok('=') = self.consume()?.peek() {
-                    self.consume()?.produce(Kind::LtLtEq, ())
+                    self.consume()?.produce_op(Op::LtLtEq)
                 } else {
-                    self.produce(Kind::LtLt, ())
+                    self.produce_op(Op::LtLt)
                 }
             }
-            _ => self.produce(Kind::Lt, ()),
+            _ => self.produce_op(Op::Lt),
         }
     }
     fn minus(&mut self) -> LResult<Token> {
         match self.peek() {
-            Ok('=') => self.consume()?.produce(Kind::MinusEq, ()),
-            Ok('>') => self.consume()?.produce(Kind::Arrow, ()),
-            _ => self.produce(Kind::Minus, ()),
+            Ok('=') => self.consume()?.produce_op(Op::MinusEq),
+            Ok('>') => self.consume()?.produce_op(Op::Arrow),
+            _ => self.produce_op(Op::Minus),
         }
     }
     fn plus(&mut self) -> LResult<Token> {
         match self.peek() {
-            Ok('=') => self.consume()?.produce(Kind::PlusEq, ()),
-            _ => self.produce(Kind::Plus, ()),
+            Ok('=') => self.consume()?.produce_op(Op::PlusEq),
+            _ => self.produce_op(Op::Plus),
         }
     }
     fn rem(&mut self) -> LResult<Token> {
         match self.peek() {
-            Ok('=') => self.consume()?.produce(Kind::RemEq, ()),
-            _ => self.produce(Kind::Rem, ()),
+            Ok('=') => self.consume()?.produce_op(Op::RemEq),
+            _ => self.produce_op(Op::Rem),
         }
     }
     fn slash(&mut self) -> LResult<Token> {
         match self.peek() {
-            Ok('=') => self.consume()?.produce(Kind::SlashEq, ()),
+            Ok('=') => self.consume()?.produce_op(Op::SlashEq),
             Ok('/') => self.consume()?.line_comment(),
             Ok('*') => self.consume()?.block_comment(),
-            _ => self.produce(Kind::Slash, ()),
+            _ => self.produce_op(Op::Slash),
         }
     }
     fn star(&mut self) -> LResult<Token> {
         match self.peek() {
-            Ok('=') => self.consume()?.produce(Kind::StarEq, ()),
-            _ => self.produce(Kind::Star, ()),
+            Ok('=') => self.consume()?.produce_op(Op::StarEq),
+            _ => self.produce_op(Op::Star),
         }
     }
     fn xor(&mut self) -> LResult<Token> {
         match self.peek() {
-            Ok('=') => self.consume()?.produce(Kind::XorEq, ()),
-            Ok('^') => self.consume()?.produce(Kind::XorXor, ()),
-            _ => self.produce(Kind::Xor, ()),
+            Ok('=') => self.consume()?.produce_op(Op::XorEq),
+            Ok('^') => self.consume()?.produce_op(Op::XorXor),
+            _ => self.produce_op(Op::Xor),
         }
     }
 }

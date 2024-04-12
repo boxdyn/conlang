@@ -109,59 +109,64 @@ mod string {
     }
 }
 mod punct {
+    use cl_token::token_type::Op;
+    macro op($op:ident) {
+        TokenKind::Op(Op::$op)
+    }
+
     use super::*;
     test_lexer_output_type! {
-        l_curly   { "{ {"   => [ TokenKind::LCurly, TokenKind::LCurly ] }
-        r_curly   { "} }"   => [ TokenKind::RCurly, TokenKind::RCurly ] }
-        l_brack   { "[ ["   => [ TokenKind::LBrack, TokenKind::LBrack ] }
-        r_brack   { "] ]"   => [ TokenKind::RBrack, TokenKind::RBrack ] }
-        l_paren   { "( ("   => [ TokenKind::LParen, TokenKind::LParen ] }
-        r_paren   { ") )"   => [ TokenKind::RParen, TokenKind::RParen ] }
-        amp       { "& &"   => [ TokenKind::Amp, TokenKind::Amp ] }
-        amp_amp   { "&& &&" => [ TokenKind::AmpAmp, TokenKind::AmpAmp ] }
-        amp_eq    { "&= &=" => [ TokenKind::AmpEq, TokenKind::AmpEq ] }
-        arrow     { "-> ->" => [ TokenKind::Arrow, TokenKind::Arrow] }
-        at        { "@ @"   => [ TokenKind::At, TokenKind::At] }
-        backslash { "\\ \\" => [ TokenKind::Backslash, TokenKind::Backslash] }
-        bang      { "! !"   => [ TokenKind::Bang, TokenKind::Bang] }
-        bangbang  { "!! !!" => [ TokenKind::BangBang, TokenKind::BangBang] }
-        bangeq    { "!= !=" => [ TokenKind::BangEq, TokenKind::BangEq] }
-        bar       { "| |"   => [ TokenKind::Bar, TokenKind::Bar] }
-        barbar    { "|| ||" => [ TokenKind::BarBar, TokenKind::BarBar] }
-        bareq     { "|= |=" => [ TokenKind::BarEq, TokenKind::BarEq] }
-        colon     { ": :"   => [ TokenKind::Colon, TokenKind::Colon] }
-        comma     { ", ,"   => [ TokenKind::Comma, TokenKind::Comma] }
-        dot       { ". ."   => [ TokenKind::Dot, TokenKind::Dot] }
-        dotdot    { ".. .." => [ TokenKind::DotDot, TokenKind::DotDot] }
-        dotdoteq  { "..= ..=" => [ TokenKind::DotDotEq, TokenKind::DotDotEq] }
-        eq        { "= ="   => [ TokenKind::Eq, TokenKind::Eq] }
-        eqeq      { "== ==" => [ TokenKind::EqEq, TokenKind::EqEq] }
-        fatarrow  { "=> =>" => [ TokenKind::FatArrow, TokenKind::FatArrow] }
-        grave     { "` `"   => [ TokenKind::Grave, TokenKind::Grave] }
-        gt        { "> >"   => [ TokenKind::Gt, TokenKind::Gt] }
-        gteq      { ">= >=" => [ TokenKind::GtEq, TokenKind::GtEq] }
-        gtgt      { ">> >>" => [ TokenKind::GtGt, TokenKind::GtGt] }
-        gtgteq    { ">>= >>=" => [ TokenKind::GtGtEq, TokenKind::GtGtEq] }
-        hash      { "# #"   => [ TokenKind::Hash, TokenKind::Hash] }
-        lt        { "< <"   => [ TokenKind::Lt, TokenKind::Lt] }
-        lteq      { "<= <=" => [ TokenKind::LtEq, TokenKind::LtEq] }
-        ltlt      { "<< <<" => [ TokenKind::LtLt, TokenKind::LtLt] }
-        ltlteq    { "<<= <<=" => [ TokenKind::LtLtEq, TokenKind::LtLtEq] }
-        minus     { "- -"   => [ TokenKind::Minus, TokenKind::Minus] }
-        minuseq   { "-= -=" => [ TokenKind::MinusEq, TokenKind::MinusEq] }
-        plus      { "+ +"   => [ TokenKind::Plus, TokenKind::Plus] }
-        pluseq    { "+= +=" => [ TokenKind::PlusEq, TokenKind::PlusEq] }
-        question  { "? ?"   => [ TokenKind::Question, TokenKind::Question] }
-        rem       { "% %"   => [ TokenKind::Rem, TokenKind::Rem] }
-        remeq     { "%= %=" => [ TokenKind::RemEq, TokenKind::RemEq] }
-        semi      { "; ;"   => [ TokenKind::Semi, TokenKind::Semi] }
-        slash     { "/ /"   => [ TokenKind::Slash, TokenKind::Slash] }
-        slasheq   { "/= /=" => [ TokenKind::SlashEq, TokenKind::SlashEq] }
-        star      { "* *"   => [ TokenKind::Star, TokenKind::Star] }
-        stareq    { "*= *=" => [ TokenKind::StarEq, TokenKind::StarEq] }
-        tilde     { "~ ~"   => [ TokenKind::Tilde, TokenKind::Tilde] }
-        xor       { "^ ^"   => [ TokenKind::Xor, TokenKind::Xor] }
-        xoreq     { "^= ^=" => [ TokenKind::XorEq, TokenKind::XorEq] }
-        xorxor    { "^^ ^^" => [ TokenKind::XorXor, TokenKind::XorXor] }
+        l_curly   { "{ {"   => [ op!(LCurly), op!(LCurly) ] }
+        r_curly   { "} }"   => [ op!(RCurly), op!(RCurly) ] }
+        l_brack   { "[ ["   => [ op!(LBrack), op!(LBrack) ] }
+        r_brack   { "] ]"   => [ op!(RBrack), op!(RBrack) ] }
+        l_paren   { "( ("   => [ op!(LParen), op!(LParen) ] }
+        r_paren   { ") )"   => [ op!(RParen), op!(RParen) ] }
+        amp       { "& &"   => [ op!(Amp), op!(Amp) ] }
+        amp_amp   { "&& &&" => [ op!(AmpAmp), op!(AmpAmp) ] }
+        amp_eq    { "&= &=" => [ op!(AmpEq), op!(AmpEq) ] }
+        arrow     { "-> ->" => [ op!(Arrow), op!(Arrow)] }
+        at        { "@ @"   => [ op!(At), op!(At)] }
+        backslash { "\\ \\" => [ op!(Backslash), op!(Backslash)] }
+        bang      { "! !"   => [ op!(Bang), op!(Bang)] }
+        bangbang  { "!! !!" => [ op!(BangBang), op!(BangBang)] }
+        bangeq    { "!= !=" => [ op!(BangEq), op!(BangEq)] }
+        bar       { "| |"   => [ op!(Bar), op!(Bar)] }
+        barbar    { "|| ||" => [ op!(BarBar), op!(BarBar)] }
+        bareq     { "|= |=" => [ op!(BarEq), op!(BarEq)] }
+        colon     { ": :"   => [ op!(Colon), op!(Colon)] }
+        comma     { ", ,"   => [ op!(Comma), op!(Comma)] }
+        dot       { ". ."   => [ op!(Dot), op!(Dot)] }
+        dotdot    { ".. .." => [ op!(DotDot), op!(DotDot)] }
+        dotdoteq  { "..= ..=" => [ op!(DotDotEq), op!(DotDotEq)] }
+        eq        { "= ="   => [ op!(Eq), op!(Eq)] }
+        eqeq      { "== ==" => [ op!(EqEq), op!(EqEq)] }
+        fatarrow  { "=> =>" => [ op!(FatArrow), op!(FatArrow)] }
+        grave     { "` `"   => [ op!(Grave), op!(Grave)] }
+        gt        { "> >"   => [ op!(Gt), op!(Gt)] }
+        gteq      { ">= >=" => [ op!(GtEq), op!(GtEq)] }
+        gtgt      { ">> >>" => [ op!(GtGt), op!(GtGt)] }
+        gtgteq    { ">>= >>=" => [ op!(GtGtEq), op!(GtGtEq)] }
+        hash      { "# #"   => [ op!(Hash), op!(Hash)] }
+        lt        { "< <"   => [ op!(Lt), op!(Lt)] }
+        lteq      { "<= <=" => [ op!(LtEq), op!(LtEq)] }
+        ltlt      { "<< <<" => [ op!(LtLt), op!(LtLt)] }
+        ltlteq    { "<<= <<=" => [ op!(LtLtEq), op!(LtLtEq)] }
+        minus     { "- -"   => [ op!(Minus), op!(Minus)] }
+        minuseq   { "-= -=" => [ op!(MinusEq), op!(MinusEq)] }
+        plus      { "+ +"   => [ op!(Plus), op!(Plus)] }
+        pluseq    { "+= +=" => [ op!(PlusEq), op!(PlusEq)] }
+        question  { "? ?"   => [ op!(Question), op!(Question)] }
+        rem       { "% %"   => [ op!(Rem), op!(Rem)] }
+        remeq     { "%= %=" => [ op!(RemEq), op!(RemEq)] }
+        semi      { "; ;"   => [ op!(Semi), op!(Semi)] }
+        slash     { "/ /"   => [ op!(Slash), op!(Slash)] }
+        slasheq   { "/= /=" => [ op!(SlashEq), op!(SlashEq)] }
+        star      { "* *"   => [ op!(Star), op!(Star)] }
+        stareq    { "*= *=" => [ op!(StarEq), op!(StarEq)] }
+        tilde     { "~ ~"   => [ op!(Tilde), op!(Tilde)] }
+        xor       { "^ ^"   => [ op!(Xor), op!(Xor)] }
+        xoreq     { "^= ^=" => [ op!(XorEq), op!(XorEq)] }
+        xorxor    { "^^ ^^" => [ op!(XorXor), op!(XorXor)] }
     }
 }
