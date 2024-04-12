@@ -51,7 +51,8 @@ Ty          = Never | Empty | Path | TyTuple | TyRef | TyFn ;
 Never       = '!' ;
 Empty       = '(' ')' ;
 TyTuple     = '(' (Ty ',')* Ty? ')' ;
-TyRef       = ('&' | '&&')* Path ;
+TyRef       = Amps* Path ;
+Amps        = '&' | '&&' ;
 TyFn        = "fn" TyTuple ('->' Ty)? ;
 
 
@@ -73,13 +74,13 @@ Let         = "let" Mutability Identifier (':' Ty)? ('=' Expr)? ;
 Bool        = "true" | "false" ;
 
 
-/* expr */
+(* expr *)
 
 Expr        = Assign ;
 
 Assign      = Path (AssignKind  Assign ) | Compare ;
 
-Binary      = Compare | Range | Logic | Bitwise | Shift | Factor | Term ;
+(* Binary      = Compare | Range | Logic | Bitwise | Shift | Factor | Term ; *)
 Compare     = Range    (CompareOp Range  )* ;
 Range       = Logic    (RangeOp   Logic  )* ;
 Logic       = Bitwise  (LogicOp   Bitwise)* ;
@@ -106,13 +107,12 @@ Literal     = STRING | CHARACTER | FLOAT | INTEGER | Bool ;
 Array       = '[' (Expr ',')* Expr? ']' ;
 ArrayRep    = '[' Expr ';' Expr ']' ;
 
-AddrOf      = ('&' | '&&')* Mutability Expr ;
+AddrOf      = Amps Amps* Mutability Expr ;
 
 Block       = '{' Stmt* '}';
 
-Group       = '(' (Empty | Expr | Tuple) ')' ;
+Group       = Empty | '(' (Expr | Tuple) ')' ;
 Tuple       = (Expr ',')* Expr? ;
-Empty       = ;
 
 While       = "while" Expr Block Else ;
 If          = "if"    Expr Block Else ;
