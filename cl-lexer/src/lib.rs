@@ -51,7 +51,8 @@ pub mod lexer_iter {
 ///
 /// # Examples
 /// ```rust
-/// # use conlang::lexer::Lexer;
+/// # use cl_lexer::Lexer;
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Read in your code from somewhere
 /// let some_code = "
 /// fn main () {
@@ -61,16 +62,17 @@ pub mod lexer_iter {
 /// // Create a lexer over your code
 /// let mut lexer = Lexer::new(some_code);
 /// // Scan for a single token
-/// let first_token = lexer.scan().unwrap();
+/// let first_token = lexer.scan()?;
 /// println!("{first_token:?}");
 /// // Loop over all the rest of the tokens
 /// for token in lexer {
-/// #   let token: Result<_,()> = Ok(token.unwrap());
+/// #   let token: Result<_,()> = Ok(token?);
 ///     match token {
 ///         Ok(token) => println!("{token:?}"),
 ///         Err(e) => eprintln!("{e:?}"),
 ///     }
 /// }
+/// # Ok(()) }
 /// ```
 #[derive(Clone, Debug)]
 pub struct Lexer<'t> {
@@ -331,8 +333,8 @@ impl<'t> Lexer<'t> {
         while let Ok(c) = self.xid_continue() {
             out.push(c)
         }
-        if let Ok(keyword) = Keyword::from_str(&out) {
-            self.produce(Type::Keyword(keyword), ())
+        if let Ok(keyword) = Type::from_str(&out) {
+            self.produce(keyword, ())
         } else {
             self.produce(Type::Identifier, Data::Identifier(out.into()))
         }

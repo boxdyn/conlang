@@ -8,9 +8,34 @@ pub enum Type {
     Invalid,
     // Any kind of comment
     Comment,
-    // Any identifier
+    // A non-keyword identifier
     Identifier,
-    Keyword(Keyword),
+    // A keyword
+    Break,
+    Cl,
+    Const,
+    Continue,
+    Else,
+    Enum,
+    False,
+    For,
+    Fn,
+    If,
+    Impl,
+    In,
+    Let,
+    Mod,
+    Mut,
+    Pub,
+    Return,
+    SelfKw,
+    SelfTy,
+    Static,
+    Struct,
+    Super,
+    True,
+    Type,
+    While,
     // Literals
     Integer,
     Float,
@@ -73,47 +98,44 @@ pub enum Type {
     XorXor,     // ^^
 }
 
-/// Represents a reserved word.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Keyword {
-    Break,
-    Cl,
-    Const,
-    Continue,
-    Else,
-    Enum,
-    False,
-    For,
-    Fn,
-    If,
-    Impl,
-    In,
-    Let,
-    Mod,
-    Mut,
-    Pub,
-    Return,
-    SelfKw,
-    SelfTy,
-    Static,
-    Struct,
-    Super,
-    True,
-    Type,
-    While,
-}
-
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Type::Invalid => "invalid".fmt(f),
             Type::Comment => "comment".fmt(f),
             Type::Identifier => "identifier".fmt(f),
-            Type::Keyword(k) => k.fmt(f),
+
+            Type::Break => "break".fmt(f),
+            Type::Cl => "cl".fmt(f),
+            Type::Const => "const".fmt(f),
+            Type::Continue => "continue".fmt(f),
+            Type::Else => "else".fmt(f),
+            Type::Enum => "enum".fmt(f),
+            Type::False => "false".fmt(f),
+            Type::For => "for".fmt(f),
+            Type::Fn => "fn".fmt(f),
+            Type::If => "if".fmt(f),
+            Type::Impl => "impl".fmt(f),
+            Type::In => "in".fmt(f),
+            Type::Let => "let".fmt(f),
+            Type::Mod => "mod".fmt(f),
+            Type::Mut => "mut".fmt(f),
+            Type::Pub => "pub".fmt(f),
+            Type::Return => "return".fmt(f),
+            Type::SelfKw => "self".fmt(f),
+            Type::SelfTy => "Self".fmt(f),
+            Type::Static => "static".fmt(f),
+            Type::Struct => "struct".fmt(f),
+            Type::Super => "super".fmt(f),
+            Type::True => "true".fmt(f),
+            Type::Type => "type".fmt(f),
+            Type::While => "while".fmt(f),
+
             Type::Integer => "integer literal".fmt(f),
             Type::Float => "float literal".fmt(f),
             Type::String => "string literal".fmt(f),
             Type::Character => "char literal".fmt(f),
+
             Type::LCurly => "left curly".fmt(f),
             Type::RCurly => "right curly".fmt(f),
             Type::LBrack => "left brack".fmt(f),
@@ -171,41 +193,10 @@ impl Display for Type {
         }
     }
 }
-
-impl Display for Keyword {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Break => "break".fmt(f),
-            Self::Cl => "cl".fmt(f),
-            Self::Const => "const".fmt(f),
-            Self::Continue => "continue".fmt(f),
-            Self::Else => "else".fmt(f),
-            Self::Enum => "enum".fmt(f),
-            Self::False => "false".fmt(f),
-            Self::For => "for".fmt(f),
-            Self::Fn => "fn".fmt(f),
-            Self::If => "if".fmt(f),
-            Self::Impl => "impl".fmt(f),
-            Self::In => "in".fmt(f),
-            Self::Let => "let".fmt(f),
-            Self::Mod => "mod".fmt(f),
-            Self::Mut => "mut".fmt(f),
-            Self::Pub => "pub".fmt(f),
-            Self::Return => "return".fmt(f),
-            Self::SelfKw => "self".fmt(f),
-            Self::SelfTy => "Self".fmt(f),
-            Self::Static => "static".fmt(f),
-            Self::Struct => "struct".fmt(f),
-            Self::Super => "super".fmt(f),
-            Self::True => "true".fmt(f),
-            Self::Type => "type".fmt(f),
-            Self::While => "while".fmt(f),
-        }
-    }
-}
-impl FromStr for Keyword {
+impl FromStr for Type {
     /// [FromStr] can only fail when an identifier isn't a keyword
     type Err = ();
+    /// Parses a string s to return a Keyword
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
             "break" => Self::Break,

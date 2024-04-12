@@ -84,10 +84,6 @@ impl<'t> Parser<'t> {
             Err(self.error(Expected { want, got }, while_parsing))
         }
     }
-    /// Consumes the next token if it matches the pattern [Keyword]
-    pub fn match_kw(&mut self, pat: Keyword, while_parsing: Parsing) -> PResult<Token> {
-        self.match_type(Type::Keyword(pat), while_parsing)
-    }
 }
 
 // the three matched delimiter pairs
@@ -155,17 +151,15 @@ const fn rep<'t, T>(
 /// Expands to a pattern which matches item-like [Token] [Type]s
 macro item_like() {
     Type::Hash
-        | Type::Keyword(
-            Keyword::Pub
-                | Keyword::Type
-                | Keyword::Const
-                | Keyword::Static
-                | Keyword::Mod
-                | Keyword::Fn
-                | Keyword::Struct
-                | Keyword::Enum
-                | Keyword::Impl,
-        )
+        | Type::Pub
+        | Type::Type
+        | Type::Const
+        | Type::Static
+        | Type::Mod
+        | Type::Fn
+        | Type::Struct
+        | Type::Enum
+        | Type::Impl
 }
 
 /// Top level parsing
@@ -291,21 +285,21 @@ impl<'t> Parser<'t> {
     /// See also: [Parser::item]
     pub fn itemkind(&mut self) -> PResult<ItemKind> {
         Ok(match self.peek_type(Parsing::Item)? {
-            Type::Keyword(Keyword::Type) => self.parse_alias()?.into(),
-            Type::Keyword(Keyword::Const) => self.parse_const()?.into(),
-            Type::Keyword(Keyword::Static) => self.parse_static()?.into(),
-            Type::Keyword(Keyword::Mod) => self.parse_module()?.into(),
-            Type::Keyword(Keyword::Fn) => self.parse_function()?.into(),
-            Type::Keyword(Keyword::Struct) => self.parse_struct()?.into(),
-            Type::Keyword(Keyword::Enum) => self.parse_enum()?.into(),
-            Type::Keyword(Keyword::Impl) => self.parse_impl()?.into(),
+            Type::Type => self.parse_alias()?.into(),
+            Type::Const => self.parse_const()?.into(),
+            Type::Static => self.parse_static()?.into(),
+            Type::Mod => self.parse_module()?.into(),
+            Type::Fn => self.parse_function()?.into(),
+            Type::Struct => self.parse_struct()?.into(),
+            Type::Enum => self.parse_enum()?.into(),
+            Type::Impl => self.parse_impl()?.into(),
             t => Err(self.error(Unexpected(t), Parsing::Item))?,
         })
     }
 
     pub fn parse_alias(&mut self) -> PResult<Alias> {
         const PARSING: Parsing = Parsing::Alias;
-        self.match_kw(Keyword::Type, PARSING)?;
+        self.match_type(Type::Type, PARSING)?;
         let out = Ok(Alias {
             to: self.identifier()?,
             from: if self.match_type(Type::Eq, PARSING).is_ok() {
@@ -320,7 +314,7 @@ impl<'t> Parser<'t> {
 
     pub fn parse_const(&mut self) -> PResult<Const> {
         const PARSING: Parsing = Parsing::Const;
-        self.match_kw(Keyword::Const, PARSING)?;
+        self.match_type(Type::Const, PARSING)?;
         let out = Ok(Const {
             name: self.identifier()?,
             ty: {
@@ -337,7 +331,7 @@ impl<'t> Parser<'t> {
     }
     pub fn parse_static(&mut self) -> PResult<Static> {
         const PARSING: Parsing = Parsing::Static;
-        self.match_kw(Keyword::Static, PARSING)?;
+        self.match_type(Type::Static, PARSING)?;
         let out = Ok(Static {
             mutable: self.mutability()?,
             name: self.identifier()?,
@@ -355,7 +349,7 @@ impl<'t> Parser<'t> {
     }
     pub fn parse_module(&mut self) -> PResult<Module> {
         const PARSING: Parsing = Parsing::Module;
-        self.match_kw(Keyword::Mod, PARSING)?;
+        self.match_type(Type::Mod, PARSING)?;
         Ok(Module { name: self.identifier()?, kind: self.modulekind()? })
     }
     pub fn modulekind(&mut self) -> PResult<ModuleKind> {
@@ -373,7 +367,7 @@ impl<'t> Parser<'t> {
     }
     pub fn parse_function(&mut self) -> PResult<Function> {
         const PARSING: Parsing = Parsing::Function;
-        self.match_kw(Keyword::Fn, PARSING)?;
+        self.match_type(Type::Fn, PARSING)?;
         Ok(Function {
             name: self.identifier()?,
             args: self.parse_params()?,
@@ -415,7 +409,7 @@ impl<'t> Parser<'t> {
     }
     pub fn parse_struct(&mut self) -> PResult<Struct> {
         const PARSING: Parsing = Parsing::Struct;
-        self.match_kw(Keyword::Struct, PARSING)?;
+        self.match_type(Type::Struct, PARSING)?;
         Ok(Struct {
             name: self.identifier()?,
             kind: match self.peek_type(PARSING)? {
@@ -460,7 +454,7 @@ impl<'t> Parser<'t> {
     pub fn parse_enum(&mut self) -> PResult<Enum> {
         // Enum        = "enum" Identifier '{' (Variant ',')* Variant? '}' ;
         const PARSING: Parsing = Parsing::Enum;
-        self.match_kw(Keyword::Enum, PARSING)?;
+        self.match_type(Type::Enum, PARSING)?;
         Ok(Enum {
             name: self.identifier()?,
             kind: match self.peek_type(PARSING)? {
@@ -518,19 +512,19 @@ impl<'t> Parser<'t> {
 
     pub fn parse_impl(&mut self) -> PResult<Impl> {
         const PARSING: Parsing = Parsing::Impl;
-        self.match_kw(Keyword::Impl, PARSING)?;
+        self.match_type(Type::Impl, PARSING)?;
         Err(self.error(Todo, PARSING))
     }
 
     pub fn visibility(&mut self) -> PResult<Visibility> {
-        if let Type::Keyword(Keyword::Pub) = self.peek_type(Parsing::Visibility)? {
+        if let Type::Pub = self.peek_type(Parsing::Visibility)? {
             self.consume_peeked();
             return Ok(Visibility::Public);
         };
         Ok(Visibility::Private)
     }
     pub fn mutability(&mut self) -> PResult<Mutability> {
-        if let Type::Keyword(Keyword::Mut) = self.peek_type(Parsing::Mutability)? {
+        if let Type::Mut = self.peek_type(Parsing::Mutability)? {
             self.consume_peeked();
             return Ok(Mutability::Mut);
         };
@@ -550,13 +544,13 @@ impl<'t> Parser<'t> {
                 self.consume_peeked();
                 TyKind::Never
             }
-            Type::Keyword(Keyword::SelfTy) => {
+            Type::SelfTy => {
                 self.consume_peeked();
                 TyKind::SelfTy
             }
             Type::Amp | Type::AmpAmp => self.tyref()?.into(),
             Type::LParen => self.tytuple()?.into(),
-            Type::Keyword(Keyword::Fn) => self.tyfn()?.into(),
+            Type::Fn => self.tyfn()?.into(),
             path_like!() => self.path()?.into(),
             t => Err(self.error(Unexpected(t), PARSING))?,
         };
@@ -591,7 +585,7 @@ impl<'t> Parser<'t> {
     /// [TyFn] = `fn` [TyTuple] (-> [Ty])?
     pub fn tyfn(&mut self) -> PResult<TyFn> {
         const PARSING: Parsing = Parsing::TyFn;
-        self.match_type(Type::Keyword(Keyword::Fn), PARSING)?;
+        self.match_type(Type::Fn, PARSING)?;
         Ok(TyFn {
             args: self.tytuple()?,
             rety: {
@@ -609,15 +603,11 @@ impl<'t> Parser<'t> {
 
 /// Expands to a pattern which matches literal-like [Type]s
 macro literal_like() {
-    Type::Keyword(Keyword::True | Keyword::False)
-        | Type::String
-        | Type::Character
-        | Type::Integer
-        | Type::Float
+    Type::True | Type::False | Type::String | Type::Character | Type::Integer | Type::Float
 }
 /// Expands to a pattern which matches path-like [token Types](Type)
 macro path_like() {
-    Type::Keyword(Keyword::Super | Keyword::SelfKw) | Type::Identifier | Type::ColonColon
+    Type::Super | Type::SelfKw | Type::Identifier | Type::ColonColon
 }
 /// # Path parsing
 impl<'t> Parser<'t> {
@@ -625,8 +615,8 @@ impl<'t> Parser<'t> {
     pub fn path_part(&mut self) -> PResult<PathPart> {
         const PARSING: Parsing = Parsing::PathPart;
         let out = match self.peek_type(PARSING)? {
-            Type::Keyword(Keyword::Super) => PathPart::SuperKw,
-            Type::Keyword(Keyword::SelfKw) => PathPart::SelfKw,
+            Type::Super => PathPart::SuperKw,
+            Type::SelfKw => PathPart::SelfKw,
             Type::Identifier => PathPart::Ident(self.identifier()?),
             t => return Err(self.error(Unexpected(t), PARSING)),
         };
@@ -651,14 +641,14 @@ impl<'t> Parser<'t> {
     pub fn stmtkind(&mut self) -> PResult<StmtKind> {
         Ok(match self.peek_type(Parsing::StmtKind)? {
             Type::Semi => StmtKind::Empty,
-            Type::Keyword(Keyword::Let) => self.parse_let()?.into(),
+            Type::Let => self.parse_let()?.into(),
             item_like!() => self.item()?.into(),
             _ => self.expr()?.into(),
         })
     }
 
     pub fn parse_let(&mut self) -> PResult<Let> {
-        self.match_kw(Keyword::Let, Parsing::Let)?;
+        self.match_type(Type::Let, Parsing::Let)?;
         Ok(Let {
             mutable: self.mutability()?,
             name: self.identifier()?,
@@ -816,12 +806,12 @@ impl<'t> Parser<'t> {
             Type::LParen => self.exprkind_empty_group_or_tuple(),
             literal_like!() => Ok(self.literal()?.into()),
             path_like!() => Ok(self.path()?.into()),
-            Type::Keyword(Keyword::If) => Ok(self.parse_if()?.into()),
-            Type::Keyword(Keyword::For) => Ok(self.parse_for()?.into()),
-            Type::Keyword(Keyword::While) => Ok(self.parse_while()?.into()),
-            Type::Keyword(Keyword::Break) => Ok(self.parse_break()?.into()),
-            Type::Keyword(Keyword::Return) => Ok(self.parse_return()?.into()),
-            Type::Keyword(Keyword::Continue) => Ok(self.parse_continue()?.into()),
+            Type::If => Ok(self.parse_if()?.into()),
+            Type::For => Ok(self.parse_for()?.into()),
+            Type::While => Ok(self.parse_while()?.into()),
+            Type::Break => Ok(self.parse_break()?.into()),
+            Type::Return => Ok(self.parse_return()?.into()),
+            Type::Continue => Ok(self.parse_continue()?.into()),
             _ => Err(self.error(Nothing, Parsing::Expr)),
         }
     }
@@ -934,8 +924,8 @@ impl<'t> Parser<'t> {
         let tok = self.consume(Parsing::Literal)?;
         // keyword literals true and false
         match tok.ty() {
-            Type::Keyword(Keyword::True) => return Ok(Literal::Bool(true)),
-            Type::Keyword(Keyword::False) => return Ok(Literal::Bool(false)),
+            Type::True => return Ok(Literal::Bool(true)),
+            Type::False => return Ok(Literal::Bool(false)),
             Type::String | Type::Character | Type::Integer | Type::Float => (),
             t => return Err(self.error(Unexpected(t), Parsing::Literal)),
         }
@@ -973,22 +963,22 @@ impl<'t> Parser<'t> {
 impl<'t> Parser<'t> {
     /// [Break] = `break` [Expr]?
     pub fn parse_break(&mut self) -> PResult<Break> {
-        self.match_kw(Keyword::Break, Parsing::Break)?;
+        self.match_type(Type::Break, Parsing::Break)?;
         Ok(Break { body: self.optional_expr()?.map(Into::into) })
     }
     /// [Return] = `return` [Expr]?
     pub fn parse_return(&mut self) -> PResult<Return> {
-        self.match_kw(Keyword::Return, Parsing::Return)?;
+        self.match_type(Type::Return, Parsing::Return)?;
         Ok(Return { body: self.optional_expr()?.map(Into::into) })
     }
     /// [Continue] = `continue`
     pub fn parse_continue(&mut self) -> PResult<Continue> {
-        self.match_kw(Keyword::Continue, Parsing::Continue)?;
+        self.match_type(Type::Continue, Parsing::Continue)?;
         Ok(Continue)
     }
     /// [While] = `while` [Expr] [Block] [Else]?
     pub fn parse_while(&mut self) -> PResult<While> {
-        self.match_kw(Keyword::While, Parsing::While)?;
+        self.match_type(Type::While, Parsing::While)?;
         Ok(While {
             cond: self.expr()?.into(),
             pass: self.block()?.into(),
@@ -998,7 +988,7 @@ impl<'t> Parser<'t> {
     /// [If] = <code>`if` [Expr] [Block] [Else]?</code>
     #[rustfmt::skip] // second line is barely not long enough
     pub fn parse_if(&mut self) -> PResult<If> {
-    self.match_kw(Keyword::If, Parsing::If)?;
+    self.match_type(Type::If, Parsing::If)?;
     Ok(If {
         cond: self.expr()?.into(),
         pass: self.block()?.into(),
@@ -1007,9 +997,9 @@ impl<'t> Parser<'t> {
 }
     /// [For]: `for` Pattern (TODO) `in` [Expr] [Block] [Else]?
     pub fn parse_for(&mut self) -> PResult<For> {
-        self.match_kw(Keyword::For, Parsing::For)?;
+        self.match_type(Type::For, Parsing::For)?;
         let bind = self.identifier()?;
-        self.match_kw(Keyword::In, Parsing::For)?;
+        self.match_type(Type::In, Parsing::For)?;
         Ok(For {
             bind,
             cond: self.expr()?.into(),
@@ -1020,7 +1010,7 @@ impl<'t> Parser<'t> {
     /// [Else]: (`else` [Block])?
     pub fn parse_else(&mut self) -> PResult<Else> {
         match self.peek_type(Parsing::Else) {
-            Ok(Type::Keyword(Keyword::Else)) => {
+            Ok(Type::Else) => {
                 self.consume_peeked();
                 Ok(self.expr()?.into())
             }

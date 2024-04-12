@@ -47,7 +47,7 @@ mod ident {
 mod keyword {
     use super::*;
     macro kw($($k:ident),*) {
-        [ $(Type::Keyword(Keyword::$k),)* ]
+        [ $(Type::$k,)* ]
     }
     test_lexer_output_type! {
         kw_break { "break break" => kw![Break, Break] }

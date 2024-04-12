@@ -1,8 +1,8 @@
 #![allow(unused_imports)]
 use crate::{env::Environment, temp_type_impl::ConValue, Interpret};
 use cl_ast::*;
-use cl_parser::Parser;
 use cl_lexer::Lexer;
+use cl_parser::Parser;
 pub use macros::*;
 
 mod macros {
@@ -187,7 +187,7 @@ mod fn_declarations {
         assert_eval!(env, fn empty_fn() {});
         // TODO: true equality for functions
         assert_eq!(
-            "fn empty_fn",
+            "fn empty_fn () {\n    \n}",
             format!(
                 "{}",
                 env.get("empty_fn")

@@ -10,4 +10,4 @@ pub mod token_type;
 
 pub use token::Token;
 pub use token_data::Data;
-pub use token_type::{Keyword, Type};
+pub use token_type::Type;
