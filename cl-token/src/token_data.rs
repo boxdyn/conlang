@@ -1,9 +1,9 @@
 //! Additional data stored within a [Token](super::Token),
-//! external to its [Type](super::token_type::Type)
+//! external to its [TokenKind](super::token_type::TokenKind)
 /// Additional data stored within a [Token](super::Token),
-/// external to its [Type](super::token_type::Type)
+/// external to its [TokenKind](super::token_type::TokenKind)
 #[derive(Clone, Debug, PartialEq)]
-pub enum Data {
+pub enum TokenData {
     /// [Token](super::Token) contains an [identifier](str)
     Identifier(Box<str>),
     /// [Token](super::Token) contains a [String]
@@ -27,19 +27,19 @@ from! {
 }
 /// Implements [From] for an enum
 macro from($($value:ident: $src:ty => $dst:expr),*$(,)?) {
-    $(impl From<$src> for Data {
+    $(impl From<$src> for TokenData {
         fn from($value: $src) -> Self { $dst }
     })*
 }
-impl std::fmt::Display for Data {
+impl std::fmt::Display for TokenData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Data::Identifier(v) => v.fmt(f),
-            Data::String(v) => write!(f, "\"{v}\""),
-            Data::Character(v) => write!(f, "'{v}'"),
-            Data::Integer(v) => v.fmt(f),
-            Data::Float(v) => v.fmt(f),
-            Data::None => "None".fmt(f),
+            TokenData::Identifier(v) => v.fmt(f),
+            TokenData::String(v) => write!(f, "\"{v}\""),
+            TokenData::Character(v) => write!(f, "'{v}'"),
+            TokenData::Integer(v) => v.fmt(f),
+            TokenData::Float(v) => v.fmt(f),
+            TokenData::None => "None".fmt(f),
         }
     }
 }

@@ -21,10 +21,10 @@ pub enum ErrorKind {
     UnmatchedParentheses,
     UnmatchedCurlyBraces,
     UnmatchedSquareBrackets,
-    Unexpected(Type),
+    Unexpected(TokenKind),
     Expected {
-        want: Type,
-        got: Type,
+        want: TokenKind,
+        got: TokenKind,
     },
     /// No rules matched
     Nothing,

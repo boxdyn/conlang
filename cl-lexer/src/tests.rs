@@ -35,7 +35,7 @@ macro td ($($id:expr),*) {
 mod ident {
     use super::*;
     macro ident ($($id:literal),*) {
-        [$(Data::Identifier($id.into())),*]
+        [$(TokenData::Identifier($id.into())),*]
     }
     test_lexer_data_type! {
         underscore { "_ _" => ident!["_", "_"] }
@@ -47,7 +47,7 @@ mod ident {
 mod keyword {
     use super::*;
     macro kw($($k:ident),*) {
-        [ $(Type::$k,)* ]
+        [ $(TokenKind::$k,)* ]
     }
     test_lexer_output_type! {
         kw_break { "break break" => kw![Break, Break] }
@@ -111,57 +111,57 @@ mod string {
 mod punct {
     use super::*;
     test_lexer_output_type! {
-        l_curly   { "{ {"   => [ Type::LCurly, Type::LCurly ] }
-        r_curly   { "} }"   => [ Type::RCurly, Type::RCurly ] }
-        l_brack   { "[ ["   => [ Type::LBrack, Type::LBrack ] }
-        r_brack   { "] ]"   => [ Type::RBrack, Type::RBrack ] }
-        l_paren   { "( ("   => [ Type::LParen, Type::LParen ] }
-        r_paren   { ") )"   => [ Type::RParen, Type::RParen ] }
-        amp       { "& &"   => [ Type::Amp, Type::Amp ] }
-        amp_amp   { "&& &&" => [ Type::AmpAmp, Type::AmpAmp ] }
-        amp_eq    { "&= &=" => [ Type::AmpEq, Type::AmpEq ] }
-        arrow     { "-> ->" => [ Type::Arrow, Type::Arrow] }
-        at        { "@ @"   => [ Type::At, Type::At] }
-        backslash { "\\ \\" => [ Type::Backslash, Type::Backslash] }
-        bang      { "! !"   => [ Type::Bang, Type::Bang] }
-        bangbang  { "!! !!" => [ Type::BangBang, Type::BangBang] }
-        bangeq    { "!= !=" => [ Type::BangEq, Type::BangEq] }
-        bar       { "| |"   => [ Type::Bar, Type::Bar] }
-        barbar    { "|| ||" => [ Type::BarBar, Type::BarBar] }
-        bareq     { "|= |=" => [ Type::BarEq, Type::BarEq] }
-        colon     { ": :"   => [ Type::Colon, Type::Colon] }
-        comma     { ", ,"   => [ Type::Comma, Type::Comma] }
-        dot       { ". ."   => [ Type::Dot, Type::Dot] }
-        dotdot    { ".. .." => [ Type::DotDot, Type::DotDot] }
-        dotdoteq  { "..= ..=" => [ Type::DotDotEq, Type::DotDotEq] }
-        eq        { "= ="   => [ Type::Eq, Type::Eq] }
-        eqeq      { "== ==" => [ Type::EqEq, Type::EqEq] }
-        fatarrow  { "=> =>" => [ Type::FatArrow, Type::FatArrow] }
-        grave     { "` `"   => [ Type::Grave, Type::Grave] }
-        gt        { "> >"   => [ Type::Gt, Type::Gt] }
-        gteq      { ">= >=" => [ Type::GtEq, Type::GtEq] }
-        gtgt      { ">> >>" => [ Type::GtGt, Type::GtGt] }
-        gtgteq    { ">>= >>=" => [ Type::GtGtEq, Type::GtGtEq] }
-        hash      { "# #"   => [ Type::Hash, Type::Hash] }
-        lt        { "< <"   => [ Type::Lt, Type::Lt] }
-        lteq      { "<= <=" => [ Type::LtEq, Type::LtEq] }
-        ltlt      { "<< <<" => [ Type::LtLt, Type::LtLt] }
-        ltlteq    { "<<= <<=" => [ Type::LtLtEq, Type::LtLtEq] }
-        minus     { "- -"   => [ Type::Minus, Type::Minus] }
-        minuseq   { "-= -=" => [ Type::MinusEq, Type::MinusEq] }
-        plus      { "+ +"   => [ Type::Plus, Type::Plus] }
-        pluseq    { "+= +=" => [ Type::PlusEq, Type::PlusEq] }
-        question  { "? ?"   => [ Type::Question, Type::Question] }
-        rem       { "% %"   => [ Type::Rem, Type::Rem] }
-        remeq     { "%= %=" => [ Type::RemEq, Type::RemEq] }
-        semi      { "; ;"   => [ Type::Semi, Type::Semi] }
-        slash     { "/ /"   => [ Type::Slash, Type::Slash] }
-        slasheq   { "/= /=" => [ Type::SlashEq, Type::SlashEq] }
-        star      { "* *"   => [ Type::Star, Type::Star] }
-        stareq    { "*= *=" => [ Type::StarEq, Type::StarEq] }
-        tilde     { "~ ~"   => [ Type::Tilde, Type::Tilde] }
-        xor       { "^ ^"   => [ Type::Xor, Type::Xor] }
-        xoreq     { "^= ^=" => [ Type::XorEq, Type::XorEq] }
-        xorxor    { "^^ ^^" => [ Type::XorXor, Type::XorXor] }
+        l_curly   { "{ {"   => [ TokenKind::LCurly, TokenKind::LCurly ] }
+        r_curly   { "} }"   => [ TokenKind::RCurly, TokenKind::RCurly ] }
+        l_brack   { "[ ["   => [ TokenKind::LBrack, TokenKind::LBrack ] }
+        r_brack   { "] ]"   => [ TokenKind::RBrack, TokenKind::RBrack ] }
+        l_paren   { "( ("   => [ TokenKind::LParen, TokenKind::LParen ] }
+        r_paren   { ") )"   => [ TokenKind::RParen, TokenKind::RParen ] }
+        amp       { "& &"   => [ TokenKind::Amp, TokenKind::Amp ] }
+        amp_amp   { "&& &&" => [ TokenKind::AmpAmp, TokenKind::AmpAmp ] }
+        amp_eq    { "&= &=" => [ TokenKind::AmpEq, TokenKind::AmpEq ] }
+        arrow     { "-> ->" => [ TokenKind::Arrow, TokenKind::Arrow] }
+        at        { "@ @"   => [ TokenKind::At, TokenKind::At] }
+        backslash { "\\ \\" => [ TokenKind::Backslash, TokenKind::Backslash] }
+        bang      { "! !"   => [ TokenKind::Bang, TokenKind::Bang] }
+        bangbang  { "!! !!" => [ TokenKind::BangBang, TokenKind::BangBang] }
+        bangeq    { "!= !=" => [ TokenKind::BangEq, TokenKind::BangEq] }
+        bar       { "| |"   => [ TokenKind::Bar, TokenKind::Bar] }
+        barbar    { "|| ||" => [ TokenKind::BarBar, TokenKind::BarBar] }
+        bareq     { "|= |=" => [ TokenKind::BarEq, TokenKind::BarEq] }
+        colon     { ": :"   => [ TokenKind::Colon, TokenKind::Colon] }
+        comma     { ", ,"   => [ TokenKind::Comma, TokenKind::Comma] }
+        dot       { ". ."   => [ TokenKind::Dot, TokenKind::Dot] }
+        dotdot    { ".. .." => [ TokenKind::DotDot, TokenKind::DotDot] }
+        dotdoteq  { "..= ..=" => [ TokenKind::DotDotEq, TokenKind::DotDotEq] }
+        eq        { "= ="   => [ TokenKind::Eq, TokenKind::Eq] }
+        eqeq      { "== ==" => [ TokenKind::EqEq, TokenKind::EqEq] }
+        fatarrow  { "=> =>" => [ TokenKind::FatArrow, TokenKind::FatArrow] }
+        grave     { "` `"   => [ TokenKind::Grave, TokenKind::Grave] }
+        gt        { "> >"   => [ TokenKind::Gt, TokenKind::Gt] }
+        gteq      { ">= >=" => [ TokenKind::GtEq, TokenKind::GtEq] }
+        gtgt      { ">> >>" => [ TokenKind::GtGt, TokenKind::GtGt] }
+        gtgteq    { ">>= >>=" => [ TokenKind::GtGtEq, TokenKind::GtGtEq] }
+        hash      { "# #"   => [ TokenKind::Hash, TokenKind::Hash] }
+        lt        { "< <"   => [ TokenKind::Lt, TokenKind::Lt] }
+        lteq      { "<= <=" => [ TokenKind::LtEq, TokenKind::LtEq] }
+        ltlt      { "<< <<" => [ TokenKind::LtLt, TokenKind::LtLt] }
+        ltlteq    { "<<= <<=" => [ TokenKind::LtLtEq, TokenKind::LtLtEq] }
+        minus     { "- -"   => [ TokenKind::Minus, TokenKind::Minus] }
+        minuseq   { "-= -=" => [ TokenKind::MinusEq, TokenKind::MinusEq] }
+        plus      { "+ +"   => [ TokenKind::Plus, TokenKind::Plus] }
+        pluseq    { "+= +=" => [ TokenKind::PlusEq, TokenKind::PlusEq] }
+        question  { "? ?"   => [ TokenKind::Question, TokenKind::Question] }
+        rem       { "% %"   => [ TokenKind::Rem, TokenKind::Rem] }
+        remeq     { "%= %=" => [ TokenKind::RemEq, TokenKind::RemEq] }
+        semi      { "; ;"   => [ TokenKind::Semi, TokenKind::Semi] }
+        slash     { "/ /"   => [ TokenKind::Slash, TokenKind::Slash] }
+        slasheq   { "/= /=" => [ TokenKind::SlashEq, TokenKind::SlashEq] }
+        star      { "* *"   => [ TokenKind::Star, TokenKind::Star] }
+        stareq    { "*= *=" => [ TokenKind::StarEq, TokenKind::StarEq] }
+        tilde     { "~ ~"   => [ TokenKind::Tilde, TokenKind::Tilde] }
+        xor       { "^ ^"   => [ TokenKind::Xor, TokenKind::Xor] }
+        xoreq     { "^= ^=" => [ TokenKind::XorEq, TokenKind::XorEq] }
+        xorxor    { "^^ ^^" => [ TokenKind::XorXor, TokenKind::XorXor] }
     }
 }

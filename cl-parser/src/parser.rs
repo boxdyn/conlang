@@ -39,8 +39,8 @@ impl<'t> Parser<'t> {
                 .scan()
                 .map_err(|e| self.error(e.into(), while_parsing))?
             {
-                t if t.ty() == Type::Invalid => continue,
-                t if t.ty() == Type::Comment => continue,
+                t if t.ty() == TokenKind::Invalid => continue,
+                t if t.ty() == TokenKind::Comment => continue,
                 t => break Ok(t),
             }
         }
@@ -63,8 +63,8 @@ impl<'t> Parser<'t> {
         self.loc = Loc::from(&self.lexer);
         self.next.take()
     }
-    /// Looks ahead at the next [Token]'s [Type]
-    pub fn peek_type(&mut self, while_parsing: Parsing) -> PResult<Type> {
+    /// Looks ahead at the next [Token]'s [TokenKind]
+    pub fn peek_kind(&mut self, while_parsing: Parsing) -> PResult<TokenKind> {
         self.peek(while_parsing).map(|t| t.ty())
     }
     /// Consumes one [Token]
@@ -75,9 +75,9 @@ impl<'t> Parser<'t> {
             None => self.consume_from_lexer(while_parsing),
         }
     }
-    /// Consumes the next [Token] if it matches the pattern [Type]
-    pub fn match_type(&mut self, want: Type, while_parsing: Parsing) -> PResult<Token> {
-        let got = self.peek_type(while_parsing)?;
+    /// Consumes the next [Token] if it matches the pattern [TokenKind]
+    pub fn match_type(&mut self, want: TokenKind, while_parsing: Parsing) -> PResult<Token> {
+        let got = self.peek_kind(while_parsing)?;
         if got == want {
             Ok(self.consume_peeked().expect("should not fail after peek"))
         } else {
@@ -88,16 +88,16 @@ impl<'t> Parser<'t> {
 
 // the three matched delimiter pairs
 /// Square brackets: `[` `]`
-const BRACKETS: (Type, Type) = (Type::LBrack, Type::RBrack);
+const BRACKETS: (TokenKind, TokenKind) = (TokenKind::LBrack, TokenKind::RBrack);
 /// Curly braces: `{` `}`
-const CURLIES: (Type, Type) = (Type::LCurly, Type::RCurly);
+const CURLIES: (TokenKind, TokenKind) = (TokenKind::LCurly, TokenKind::RCurly);
 /// Parentheses: `(` `)`
-const PARENS: (Type, Type) = (Type::LParen, Type::RParen);
+const PARENS: (TokenKind, TokenKind) = (TokenKind::LParen, TokenKind::RParen);
 
 /// Parses constructions of the form `delim.0 f delim.1` (i.e. `(` `foobar` `)`)
 const fn delim<'t, T>(
     f: impl Fn(&mut Parser<'t>) -> PResult<T>,
-    delim: (Type, Type),
+    delim: (TokenKind, TokenKind),
     while_parsing: Parsing,
 ) -> impl Fn(&mut Parser<'t>) -> PResult<T> {
     move |parser| {
@@ -113,15 +113,15 @@ const fn delim<'t, T>(
 /// where `~until` is a negative lookahead assertion
 const fn sep<'t, T>(
     f: impl Fn(&mut Parser<'t>) -> PResult<T>,
-    sep: Type,
-    until: Type,
+    sep: TokenKind,
+    until: TokenKind,
     while_parsing: Parsing,
 ) -> impl Fn(&mut Parser<'t>) -> PResult<Vec<T>> {
     move |parser| {
         let mut args = vec![];
-        while until != parser.peek_type(while_parsing)? {
+        while until != parser.peek_kind(while_parsing)? {
             args.push(f(parser)?);
-            if sep != parser.peek_type(while_parsing)? {
+            if sep != parser.peek_kind(while_parsing)? {
                 break;
             }
             parser.consume_peeked();
@@ -136,30 +136,30 @@ const fn sep<'t, T>(
 #[allow(dead_code)]
 const fn rep<'t, T>(
     f: impl Fn(&mut Parser<'t>) -> PResult<T>,
-    until: Type,
+    until: TokenKind,
     while_parsing: Parsing,
 ) -> impl Fn(&mut Parser<'t>) -> PResult<Vec<T>> {
     move |parser| {
         let mut out = vec![];
-        while until != parser.peek_type(while_parsing)? {
+        while until != parser.peek_kind(while_parsing)? {
             out.push(f(parser)?)
         }
         Ok(out)
     }
 }
 
-/// Expands to a pattern which matches item-like [Token] [Type]s
+/// Expands to a pattern which matches item-like [Token] [TokenKind]s
 macro item_like() {
-    Type::Hash
-        | Type::Pub
-        | Type::Type
-        | Type::Const
-        | Type::Static
-        | Type::Mod
-        | Type::Fn
-        | Type::Struct
-        | Type::Enum
-        | Type::Impl
+    TokenKind::Hash
+        | TokenKind::Pub
+        | TokenKind::Type
+        | TokenKind::Const
+        | TokenKind::Static
+        | TokenKind::Mod
+        | TokenKind::Fn
+        | TokenKind::Struct
+        | TokenKind::Enum
+        | TokenKind::Impl
 }
 
 /// Top level parsing
@@ -167,8 +167,8 @@ impl<'t> Parser<'t> {
     /// Parses a [File]
     pub fn file(&mut self) -> PResult<File> {
         let mut items = vec![];
-        while match self.peek_type(Parsing::File) {
-            Ok(Type::RCurly) | Err(Error { reason: EndOfInput, .. }) => false,
+        while match self.peek_kind(Parsing::File) {
+            Ok(TokenKind::RCurly) | Err(Error { reason: EndOfInput, .. }) => false,
             Ok(_) => true,
             Err(e) => Err(e)?,
         } {
@@ -203,13 +203,13 @@ impl<'t> Parser<'t> {
     /// See also: [Parser::path_part], [Parser::identifier]
     pub fn path(&mut self) -> PResult<Path> {
         const PARSING: Parsing = Parsing::PathExpr;
-        let absolute = matches!(self.peek_type(PARSING)?, Type::ColonColon);
+        let absolute = matches!(self.peek_kind(PARSING)?, TokenKind::ColonColon);
         if absolute {
             self.consume_peeked();
         }
 
         let mut parts = vec![self.path_part()?];
-        while let Ok(Type::ColonColon) = self.peek_type(PARSING) {
+        while let Ok(TokenKind::ColonColon) = self.peek_kind(PARSING) {
             self.consume_peeked();
             parts.push(self.path_part()?);
         }
@@ -224,8 +224,8 @@ impl<'t> Parser<'t> {
         let start = self.loc();
         Ok(Stmt {
             kind: self.stmtkind()?,
-            semi: match self.peek_type(PARSING) {
-                Ok(Type::Semi) => {
+            semi: match self.peek_kind(PARSING) {
+                Ok(TokenKind::Semi) => {
                     self.consume_peeked();
                     Semi::Terminated
                 }
@@ -247,11 +247,11 @@ impl<'t> Parser<'t> {
 impl<'t> Parser<'t> {
     /// Parses an [attribute set](Attrs)
     pub fn attributes(&mut self) -> PResult<Attrs> {
-        if self.match_type(Type::Hash, Parsing::Attrs).is_err() {
+        if self.match_type(TokenKind::Hash, Parsing::Attrs).is_err() {
             return Ok(Attrs { meta: vec![] });
         }
         let meta = delim(
-            sep(Self::meta, Type::Comma, BRACKETS.1, Parsing::Attrs),
+            sep(Self::meta, TokenKind::Comma, BRACKETS.1, Parsing::Attrs),
             BRACKETS,
             Parsing::Attrs,
         );
@@ -263,16 +263,16 @@ impl<'t> Parser<'t> {
     pub fn meta_kind(&mut self) -> PResult<MetaKind> {
         const PARSING: Parsing = Parsing::Meta;
         let lit_tuple = delim(
-            sep(Self::literal, Type::Comma, PARENS.1, PARSING),
+            sep(Self::literal, TokenKind::Comma, PARENS.1, PARSING),
             PARENS,
             PARSING,
         );
-        Ok(match self.peek_type(PARSING) {
-            Ok(Type::Eq) => {
+        Ok(match self.peek_kind(PARSING) {
+            Ok(TokenKind::Eq) => {
                 self.consume_peeked();
                 MetaKind::Equals(self.literal()?)
             }
-            Ok(Type::LParen) => MetaKind::Func(lit_tuple(self)?),
+            Ok(TokenKind::LParen) => MetaKind::Func(lit_tuple(self)?),
             _ => MetaKind::Plain,
         })
     }
@@ -284,104 +284,104 @@ impl<'t> Parser<'t> {
     ///
     /// See also: [Parser::item]
     pub fn itemkind(&mut self) -> PResult<ItemKind> {
-        Ok(match self.peek_type(Parsing::Item)? {
-            Type::Type => self.parse_alias()?.into(),
-            Type::Const => self.parse_const()?.into(),
-            Type::Static => self.parse_static()?.into(),
-            Type::Mod => self.parse_module()?.into(),
-            Type::Fn => self.parse_function()?.into(),
-            Type::Struct => self.parse_struct()?.into(),
-            Type::Enum => self.parse_enum()?.into(),
-            Type::Impl => self.parse_impl()?.into(),
+        Ok(match self.peek_kind(Parsing::Item)? {
+            TokenKind::Type => self.parse_alias()?.into(),
+            TokenKind::Const => self.parse_const()?.into(),
+            TokenKind::Static => self.parse_static()?.into(),
+            TokenKind::Mod => self.parse_module()?.into(),
+            TokenKind::Fn => self.parse_function()?.into(),
+            TokenKind::Struct => self.parse_struct()?.into(),
+            TokenKind::Enum => self.parse_enum()?.into(),
+            TokenKind::Impl => self.parse_impl()?.into(),
             t => Err(self.error(Unexpected(t), Parsing::Item))?,
         })
     }
 
     pub fn parse_alias(&mut self) -> PResult<Alias> {
         const PARSING: Parsing = Parsing::Alias;
-        self.match_type(Type::Type, PARSING)?;
+        self.match_type(TokenKind::Type, PARSING)?;
         let out = Ok(Alias {
             to: self.identifier()?,
-            from: if self.match_type(Type::Eq, PARSING).is_ok() {
+            from: if self.match_type(TokenKind::Eq, PARSING).is_ok() {
                 Some(self.ty()?.into())
             } else {
                 None
             },
         });
-        self.match_type(Type::Semi, PARSING)?;
+        self.match_type(TokenKind::Semi, PARSING)?;
         out
     }
 
     pub fn parse_const(&mut self) -> PResult<Const> {
         const PARSING: Parsing = Parsing::Const;
-        self.match_type(Type::Const, PARSING)?;
+        self.match_type(TokenKind::Const, PARSING)?;
         let out = Ok(Const {
             name: self.identifier()?,
             ty: {
-                self.match_type(Type::Colon, PARSING)?;
+                self.match_type(TokenKind::Colon, PARSING)?;
                 self.ty()?.into()
             },
             init: {
-                self.match_type(Type::Eq, PARSING)?;
+                self.match_type(TokenKind::Eq, PARSING)?;
                 self.expr()?.into()
             },
         });
-        self.match_type(Type::Semi, PARSING)?;
+        self.match_type(TokenKind::Semi, PARSING)?;
         out
     }
     pub fn parse_static(&mut self) -> PResult<Static> {
         const PARSING: Parsing = Parsing::Static;
-        self.match_type(Type::Static, PARSING)?;
+        self.match_type(TokenKind::Static, PARSING)?;
         let out = Ok(Static {
             mutable: self.mutability()?,
             name: self.identifier()?,
             ty: {
-                self.match_type(Type::Colon, PARSING)?;
+                self.match_type(TokenKind::Colon, PARSING)?;
                 self.ty()?.into()
             },
             init: {
-                self.match_type(Type::Eq, PARSING)?;
+                self.match_type(TokenKind::Eq, PARSING)?;
                 self.expr()?.into()
             },
         });
-        self.match_type(Type::Semi, PARSING)?;
+        self.match_type(TokenKind::Semi, PARSING)?;
         out
     }
     pub fn parse_module(&mut self) -> PResult<Module> {
         const PARSING: Parsing = Parsing::Module;
-        self.match_type(Type::Mod, PARSING)?;
+        self.match_type(TokenKind::Mod, PARSING)?;
         Ok(Module { name: self.identifier()?, kind: self.modulekind()? })
     }
     pub fn modulekind(&mut self) -> PResult<ModuleKind> {
         const PARSING: Parsing = Parsing::ModuleKind;
         let inline = delim(Self::file, CURLIES, PARSING);
 
-        match self.peek_type(PARSING)? {
-            Type::LCurly => Ok(ModuleKind::Inline(inline(self)?)),
-            Type::Semi => {
+        match self.peek_kind(PARSING)? {
+            TokenKind::LCurly => Ok(ModuleKind::Inline(inline(self)?)),
+            TokenKind::Semi => {
                 self.consume_peeked();
                 Ok(ModuleKind::Outline)
             }
-            got => Err(self.error(Expected { want: Type::Semi, got }, PARSING)),
+            got => Err(self.error(Expected { want: TokenKind::Semi, got }, PARSING)),
         }
     }
     pub fn parse_function(&mut self) -> PResult<Function> {
         const PARSING: Parsing = Parsing::Function;
-        self.match_type(Type::Fn, PARSING)?;
+        self.match_type(TokenKind::Fn, PARSING)?;
         Ok(Function {
             name: self.identifier()?,
             args: self.parse_params()?,
-            rety: match self.peek_type(PARSING)? {
-                Type::LCurly | Type::Semi => None,
-                Type::Arrow => {
+            rety: match self.peek_kind(PARSING)? {
+                TokenKind::LCurly | TokenKind::Semi => None,
+                TokenKind::Arrow => {
                     self.consume_peeked();
                     Some(self.ty()?.into())
                 }
-                got => Err(self.error(Expected { want: Type::Arrow, got }, PARSING))?,
+                got => Err(self.error(Expected { want: TokenKind::Arrow, got }, PARSING))?,
             },
-            body: match self.peek_type(PARSING)? {
-                Type::LCurly => Some(self.block()?),
-                Type::Semi => {
+            body: match self.peek_kind(PARSING)? {
+                TokenKind::LCurly => Some(self.block()?),
+                TokenKind::Semi => {
                     self.consume_peeked();
                     None
                 }
@@ -392,7 +392,7 @@ impl<'t> Parser<'t> {
     pub fn parse_params(&mut self) -> PResult<Vec<Param>> {
         const PARSING: Parsing = Parsing::Function;
         delim(
-            sep(Self::parse_param, Type::Comma, PARENS.1, PARSING),
+            sep(Self::parse_param, TokenKind::Comma, PARENS.1, PARSING),
             PARENS,
             PARSING,
         )(self)
@@ -402,24 +402,24 @@ impl<'t> Parser<'t> {
             mutability: self.mutability()?,
             name: self.identifier()?,
             ty: {
-                self.match_type(Type::Colon, Parsing::Param)?;
+                self.match_type(TokenKind::Colon, Parsing::Param)?;
                 self.ty()?.into()
             },
         })
     }
     pub fn parse_struct(&mut self) -> PResult<Struct> {
         const PARSING: Parsing = Parsing::Struct;
-        self.match_type(Type::Struct, PARSING)?;
+        self.match_type(TokenKind::Struct, PARSING)?;
         Ok(Struct {
             name: self.identifier()?,
-            kind: match self.peek_type(PARSING)? {
-                Type::LParen => self.structkind_tuple()?,
-                Type::LCurly => self.structkind_struct()?,
-                Type::Semi => {
+            kind: match self.peek_kind(PARSING)? {
+                TokenKind::LParen => self.structkind_tuple()?,
+                TokenKind::LCurly => self.structkind_struct()?,
+                TokenKind::Semi => {
                     self.consume_peeked();
                     StructKind::Empty
                 }
-                got => Err(self.error(Expected { want: Type::Semi, got }, PARSING))?,
+                got => Err(self.error(Expected { want: TokenKind::Semi, got }, PARSING))?,
             },
         })
     }
@@ -427,7 +427,7 @@ impl<'t> Parser<'t> {
         const PARSING: Parsing = Parsing::StructKind;
 
         Ok(StructKind::Tuple(delim(
-            sep(Self::ty, Type::Comma, PARENS.1, PARSING),
+            sep(Self::ty, TokenKind::Comma, PARENS.1, PARSING),
             PARENS,
             PARSING,
         )(self)?))
@@ -435,7 +435,7 @@ impl<'t> Parser<'t> {
     pub fn structkind_struct(&mut self) -> PResult<StructKind> {
         const PARSING: Parsing = Parsing::StructKind;
         Ok(StructKind::Struct(delim(
-            sep(Self::struct_member, Type::Comma, CURLIES.1, PARSING),
+            sep(Self::struct_member, TokenKind::Comma, CURLIES.1, PARSING),
             CURLIES,
             PARSING,
         )(self)?))
@@ -446,7 +446,7 @@ impl<'t> Parser<'t> {
             vis: self.visibility()?,
             name: self.identifier()?,
             ty: {
-                self.match_type(Type::Colon, PARSING)?;
+                self.match_type(TokenKind::Colon, PARSING)?;
                 self.ty()?
             },
         })
@@ -454,16 +454,21 @@ impl<'t> Parser<'t> {
     pub fn parse_enum(&mut self) -> PResult<Enum> {
         // Enum        = "enum" Identifier '{' (Variant ',')* Variant? '}' ;
         const PARSING: Parsing = Parsing::Enum;
-        self.match_type(Type::Enum, PARSING)?;
+        self.match_type(TokenKind::Enum, PARSING)?;
         Ok(Enum {
             name: self.identifier()?,
-            kind: match self.peek_type(PARSING)? {
-                Type::LCurly => EnumKind::Variants(delim(
-                    sep(Self::enum_variant, Type::Comma, Type::RCurly, PARSING),
+            kind: match self.peek_kind(PARSING)? {
+                TokenKind::LCurly => EnumKind::Variants(delim(
+                    sep(
+                        Self::enum_variant,
+                        TokenKind::Comma,
+                        TokenKind::RCurly,
+                        PARSING,
+                    ),
                     CURLIES,
                     PARSING,
                 )(self)?),
-                Type::Semi => {
+                TokenKind::Semi => {
                     self.consume_peeked();
                     EnumKind::NoVariants
                 }
@@ -476,27 +481,32 @@ impl<'t> Parser<'t> {
         const PARSING: Parsing = Parsing::Variant;
         Ok(Variant {
             name: self.identifier()?,
-            kind: match self.peek_type(PARSING)? {
-                Type::Eq => self.variantkind_clike()?,
-                Type::LCurly => self.variantkind_struct()?,
-                Type::LParen => self.variantkind_tuple()?,
+            kind: match self.peek_kind(PARSING)? {
+                TokenKind::Eq => self.variantkind_clike()?,
+                TokenKind::LCurly => self.variantkind_struct()?,
+                TokenKind::LParen => self.variantkind_tuple()?,
                 _ => VariantKind::Plain,
             },
         })
     }
     pub fn variantkind_clike(&mut self) -> PResult<VariantKind> {
         const PARSING: Parsing = Parsing::VariantKind;
-        self.match_type(Type::Eq, PARSING)?;
-        let tok = self.match_type(Type::Integer, PARSING)?;
+        self.match_type(TokenKind::Eq, PARSING)?;
+        let tok = self.match_type(TokenKind::Integer, PARSING)?;
         Ok(VariantKind::CLike(match tok.data() {
-            Data::Integer(i) => *i,
+            TokenData::Integer(i) => *i,
             _ => panic!("Expected token data for {tok:?} while parsing {PARSING}"),
         }))
     }
     pub fn variantkind_struct(&mut self) -> PResult<VariantKind> {
         const PARSING: Parsing = Parsing::VariantKind;
         Ok(VariantKind::Struct(delim(
-            sep(Self::struct_member, Type::Comma, Type::RCurly, PARSING),
+            sep(
+                Self::struct_member,
+                TokenKind::Comma,
+                TokenKind::RCurly,
+                PARSING,
+            ),
             CURLIES,
             PARSING,
         )(self)?))
@@ -504,7 +514,7 @@ impl<'t> Parser<'t> {
     pub fn variantkind_tuple(&mut self) -> PResult<VariantKind> {
         const PARSING: Parsing = Parsing::VariantKind;
         Ok(VariantKind::Tuple(delim(
-            sep(Self::ty, Type::Comma, Type::RParen, PARSING),
+            sep(Self::ty, TokenKind::Comma, TokenKind::RParen, PARSING),
             PARENS,
             PARSING,
         )(self)?))
@@ -512,19 +522,19 @@ impl<'t> Parser<'t> {
 
     pub fn parse_impl(&mut self) -> PResult<Impl> {
         const PARSING: Parsing = Parsing::Impl;
-        self.match_type(Type::Impl, PARSING)?;
+        self.match_type(TokenKind::Impl, PARSING)?;
         Err(self.error(Todo, PARSING))
     }
 
     pub fn visibility(&mut self) -> PResult<Visibility> {
-        if let Type::Pub = self.peek_type(Parsing::Visibility)? {
+        if let TokenKind::Pub = self.peek_kind(Parsing::Visibility)? {
             self.consume_peeked();
             return Ok(Visibility::Public);
         };
         Ok(Visibility::Private)
     }
     pub fn mutability(&mut self) -> PResult<Mutability> {
-        if let Type::Mut = self.peek_type(Parsing::Mutability)? {
+        if let TokenKind::Mut = self.peek_kind(Parsing::Mutability)? {
             self.consume_peeked();
             return Ok(Mutability::Mut);
         };
@@ -539,18 +549,18 @@ impl<'t> Parser<'t> {
     /// See also: [Parser::ty]
     pub fn tykind(&mut self) -> PResult<TyKind> {
         const PARSING: Parsing = Parsing::TyKind;
-        let out = match self.peek_type(PARSING)? {
-            Type::Bang => {
+        let out = match self.peek_kind(PARSING)? {
+            TokenKind::Bang => {
                 self.consume_peeked();
                 TyKind::Never
             }
-            Type::SelfTy => {
+            TokenKind::SelfTy => {
                 self.consume_peeked();
                 TyKind::SelfTy
             }
-            Type::Amp | Type::AmpAmp => self.tyref()?.into(),
-            Type::LParen => self.tytuple()?.into(),
-            Type::Fn => self.tyfn()?.into(),
+            TokenKind::Amp | TokenKind::AmpAmp => self.tyref()?.into(),
+            TokenKind::LParen => self.tytuple()?.into(),
+            TokenKind::Fn => self.tyfn()?.into(),
             path_like!() => self.path()?.into(),
             t => Err(self.error(Unexpected(t), PARSING))?,
         };
@@ -562,7 +572,7 @@ impl<'t> Parser<'t> {
         const PARSING: Parsing = Parsing::TyTuple;
         Ok(TyTuple {
             types: delim(
-                sep(Self::ty, Type::Comma, PARENS.1, PARSING),
+                sep(Self::ty, TokenKind::Comma, PARENS.1, PARSING),
                 PARENS,
                 PARSING,
             )(self)?,
@@ -573,9 +583,9 @@ impl<'t> Parser<'t> {
         const PARSING: Parsing = Parsing::TyRef;
         let mut count = 0;
         loop {
-            match self.peek_type(PARSING)? {
-                Type::Amp => count += 1,
-                Type::AmpAmp => count += 2,
+            match self.peek_kind(PARSING)? {
+                TokenKind::Amp => count += 1,
+                TokenKind::AmpAmp => count += 2,
                 _ => break,
             }
             self.consume_peeked();
@@ -585,12 +595,12 @@ impl<'t> Parser<'t> {
     /// [TyFn] = `fn` [TyTuple] (-> [Ty])?
     pub fn tyfn(&mut self) -> PResult<TyFn> {
         const PARSING: Parsing = Parsing::TyFn;
-        self.match_type(Type::Fn, PARSING)?;
+        self.match_type(TokenKind::Fn, PARSING)?;
         Ok(TyFn {
             args: self.tytuple()?,
             rety: {
-                match self.peek_type(PARSING)? {
-                    Type::Arrow => {
+                match self.peek_kind(PARSING)? {
+                    TokenKind::Arrow => {
                         self.consume_peeked();
                         Some(self.ty()?.into())
                     }
@@ -601,33 +611,33 @@ impl<'t> Parser<'t> {
     }
 }
 
-/// Expands to a pattern which matches literal-like [Type]s
+/// Expands to a pattern which matches literal-like [TokenKind]s
 macro literal_like() {
-    Type::True | Type::False | Type::String | Type::Character | Type::Integer | Type::Float
+    TokenKind::True | TokenKind::False | TokenKind::String | TokenKind::Character | TokenKind::Integer | TokenKind::Float
 }
 /// Expands to a pattern which matches path-like [token Types](Type)
 macro path_like() {
-    Type::Super | Type::SelfKw | Type::Identifier | Type::ColonColon
+    TokenKind::Super | TokenKind::SelfKw | TokenKind::Identifier | TokenKind::ColonColon
 }
 /// # Path parsing
 impl<'t> Parser<'t> {
     /// [PathPart] = `super` | `self` | [Identifier]
     pub fn path_part(&mut self) -> PResult<PathPart> {
         const PARSING: Parsing = Parsing::PathPart;
-        let out = match self.peek_type(PARSING)? {
-            Type::Super => PathPart::SuperKw,
-            Type::SelfKw => PathPart::SelfKw,
-            Type::Identifier => PathPart::Ident(self.identifier()?),
+        let out = match self.peek_kind(PARSING)? {
+            TokenKind::Super => PathPart::SuperKw,
+            TokenKind::SelfKw => PathPart::SelfKw,
+            TokenKind::Identifier => PathPart::Ident(self.identifier()?),
             t => return Err(self.error(Unexpected(t), PARSING)),
         };
         self.consume_peeked();
         Ok(out)
     }
-    /// [Identifier] = [`Identifier`](Type::Identifier)
+    /// [Identifier] = [`Identifier`](TokenKind::Identifier)
     pub fn identifier(&mut self) -> PResult<Identifier> {
-        let tok = self.match_type(Type::Identifier, Parsing::Identifier)?;
+        let tok = self.match_type(TokenKind::Identifier, Parsing::Identifier)?;
         match tok.data() {
-            Data::Identifier(ident) => Ok(ident.into()),
+            TokenData::Identifier(ident) => Ok(ident.into()),
             _ => panic!("Expected token data for {tok:?}"),
         }
     }
@@ -639,26 +649,26 @@ impl<'t> Parser<'t> {
     ///
     /// See also: [Parser::stmt]
     pub fn stmtkind(&mut self) -> PResult<StmtKind> {
-        Ok(match self.peek_type(Parsing::StmtKind)? {
-            Type::Semi => StmtKind::Empty,
-            Type::Let => self.parse_let()?.into(),
+        Ok(match self.peek_kind(Parsing::StmtKind)? {
+            TokenKind::Semi => StmtKind::Empty,
+            TokenKind::Let => self.parse_let()?.into(),
             item_like!() => self.item()?.into(),
             _ => self.expr()?.into(),
         })
     }
 
     pub fn parse_let(&mut self) -> PResult<Let> {
-        self.match_type(Type::Let, Parsing::Let)?;
+        self.match_type(TokenKind::Let, Parsing::Let)?;
         Ok(Let {
             mutable: self.mutability()?,
             name: self.identifier()?,
-            ty: if Ok(Type::Colon) == self.peek_type(Parsing::Let) {
+            ty: if Ok(TokenKind::Colon) == self.peek_kind(Parsing::Let) {
                 self.consume_peeked();
                 Some(self.ty()?.into())
             } else {
                 None
             },
-            init: if Ok(Type::Eq) == self.peek_type(Parsing::Let) {
+            init: if Ok(TokenKind::Eq) == self.peek_kind(Parsing::Let) {
                 self.consume_peeked();
                 Some(self.expr()?.into())
             } else {
@@ -772,10 +782,10 @@ impl<'t> Parser<'t> {
         const PARSING: Parsing = Parsing::Call;
         let callee = self.expr_from(Self::exprkind_index)?;
         let mut args = vec![];
-        while Ok(Type::LParen) == self.peek_type(PARSING) {
+        while Ok(TokenKind::LParen) == self.peek_kind(PARSING) {
             self.consume_peeked();
             args.push(self.tuple()?);
-            self.match_type(Type::RParen, PARSING)?;
+            self.match_type(TokenKind::RParen, PARSING)?;
         }
         if args.is_empty() {
             Ok(callee.kind)
@@ -787,31 +797,31 @@ impl<'t> Parser<'t> {
     pub fn exprkind_index(&mut self) -> PResult<ExprKind> {
         const PARSING: Parsing = Parsing::Index;
         let head = self.expr_from(Self::exprkind_primary)?;
-        if Ok(Type::LBrack) != self.peek_type(PARSING) {
+        if Ok(TokenKind::LBrack) != self.peek_kind(PARSING) {
             return Ok(head.kind);
         }
 
         let mut indices = vec![];
-        while Ok(Type::LBrack) == self.peek_type(PARSING) {
+        while Ok(TokenKind::LBrack) == self.peek_kind(PARSING) {
             indices.push(delim(Self::tuple, BRACKETS, PARSING)(self)?.into());
         }
         Ok(Index { head: head.into(), indices }.into())
     }
     /// Delegates to the set of highest-priority rules based on unambiguous pattern matching
     pub fn exprkind_primary(&mut self) -> PResult<ExprKind> {
-        match self.peek_type(Parsing::Expr)? {
-            Type::Amp | Type::AmpAmp => self.exprkind_addrof(),
-            Type::LCurly => self.exprkind_block(),
-            Type::LBrack => self.exprkind_array(),
-            Type::LParen => self.exprkind_empty_group_or_tuple(),
+        match self.peek_kind(Parsing::Expr)? {
+            TokenKind::Amp | TokenKind::AmpAmp => self.exprkind_addrof(),
+            TokenKind::LCurly => self.exprkind_block(),
+            TokenKind::LBrack => self.exprkind_array(),
+            TokenKind::LParen => self.exprkind_empty_group_or_tuple(),
             literal_like!() => Ok(self.literal()?.into()),
             path_like!() => Ok(self.path()?.into()),
-            Type::If => Ok(self.parse_if()?.into()),
-            Type::For => Ok(self.parse_for()?.into()),
-            Type::While => Ok(self.parse_while()?.into()),
-            Type::Break => Ok(self.parse_break()?.into()),
-            Type::Return => Ok(self.parse_return()?.into()),
-            Type::Continue => Ok(self.parse_continue()?.into()),
+            TokenKind::If => Ok(self.parse_if()?.into()),
+            TokenKind::For => Ok(self.parse_for()?.into()),
+            TokenKind::While => Ok(self.parse_while()?.into()),
+            TokenKind::Break => Ok(self.parse_break()?.into()),
+            TokenKind::Return => Ok(self.parse_return()?.into()),
+            TokenKind::Continue => Ok(self.parse_continue()?.into()),
             _ => Err(self.error(Nothing, Parsing::Expr)),
         }
     }
@@ -821,10 +831,10 @@ impl<'t> Parser<'t> {
     /// so they can't be independent subexpressions
     pub fn exprkind_array(&mut self) -> PResult<ExprKind> {
         const PARSING: Parsing = Parsing::Array;
-        const START: Type = Type::LBrack;
-        const END: Type = Type::RBrack;
+        const START: TokenKind = TokenKind::LBrack;
+        const END: TokenKind = TokenKind::RBrack;
         self.match_type(START, PARSING)?;
-        match self.peek_type(PARSING)? {
+        match self.peek_kind(PARSING)? {
             END => {
                 self.consume_peeked();
                 Ok(Array { values: vec![] }.into())
@@ -835,10 +845,10 @@ impl<'t> Parser<'t> {
     /// [ArrayRep] = `[` [Expr] `;` [Expr] `]`
     pub fn exprkind_array_rep(&mut self) -> PResult<ExprKind> {
         const PARSING: Parsing = Parsing::Array;
-        const END: Type = Type::RBrack;
+        const END: TokenKind = TokenKind::RBrack;
         let first = self.expr()?;
-        let out: ExprKind = match self.peek_type(PARSING)? {
-            Type::Semi => ArrayRep {
+        let out: ExprKind = match self.peek_kind(PARSING)? {
+            TokenKind::Semi => ArrayRep {
                 value: first.into(),
                 repeat: {
                     self.consume_peeked();
@@ -846,12 +856,12 @@ impl<'t> Parser<'t> {
                 },
             }
             .into(),
-            Type::RBrack => Array { values: vec![first] }.into(),
-            Type::Comma => Array {
+            TokenKind::RBrack => Array { values: vec![first] }.into(),
+            TokenKind::Comma => Array {
                 values: {
                     self.consume_peeked();
                     let mut out = vec![first];
-                    out.extend(sep(Self::expr, Type::Comma, END, PARSING)(self)?);
+                    out.extend(sep(Self::expr, TokenKind::Comma, END, PARSING)(self)?);
                     out
                 },
             }
@@ -867,9 +877,9 @@ impl<'t> Parser<'t> {
         const PARSING: Parsing = Parsing::AddrOf;
         let mut count = 0;
         loop {
-            match self.peek_type(PARSING)? {
-                Type::Amp => count += 1,
-                Type::AmpAmp => count += 2,
+            match self.peek_kind(PARSING)? {
+                TokenKind::Amp => count += 1,
+                TokenKind::AmpAmp => count += 2,
                 _ => break,
             }
             self.consume_peeked();
@@ -884,13 +894,13 @@ impl<'t> Parser<'t> {
     ///
     /// [ExprKind::Empty] and [Group] are special cases of [Tuple]
     pub fn exprkind_empty_group_or_tuple(&mut self) -> PResult<ExprKind> {
-        self.match_type(Type::LParen, Parsing::Group)?;
-        let out = match self.peek_type(Parsing::Group)? {
-            Type::RParen => Ok(ExprKind::Empty),
+        self.match_type(TokenKind::LParen, Parsing::Group)?;
+        let out = match self.peek_kind(Parsing::Group)? {
+            TokenKind::RParen => Ok(ExprKind::Empty),
             _ => self.exprkind_group(),
         };
-        match self.peek_type(Parsing::Group) {
-            Ok(Type::RParen) => self.consume_peeked(),
+        match self.peek_kind(Parsing::Group) {
+            Ok(TokenKind::RParen) => self.consume_peeked(),
             _ => Err(self.error(UnmatchedParentheses, Parsing::Group))?,
         };
         out
@@ -898,14 +908,14 @@ impl<'t> Parser<'t> {
     /// [Group] = `(`([Empty](ExprKind::Empty)|[Expr]|[Tuple])`)`
     pub fn exprkind_group(&mut self) -> PResult<ExprKind> {
         let first = self.expr()?;
-        match self.peek_type(Parsing::Group)? {
-            Type::Comma => {
+        match self.peek_kind(Parsing::Group)? {
+            TokenKind::Comma => {
                 let mut exprs = vec![first];
                 self.consume_peeked();
-                while Type::RParen != self.peek_type(Parsing::Tuple)? {
+                while TokenKind::RParen != self.peek_kind(Parsing::Tuple)? {
                     exprs.push(self.expr()?);
-                    match self.peek_type(Parsing::Tuple)? {
-                        Type::Comma => self.consume_peeked(),
+                    match self.peek_kind(Parsing::Tuple)? {
+                        TokenKind::Comma => self.consume_peeked(),
                         _ => break,
                     };
                 }
@@ -918,22 +928,22 @@ impl<'t> Parser<'t> {
 
 /// ## Subexpressions
 impl<'t> Parser<'t> {
-    /// [Literal] = [String](Type::String) | [Character](Type::Character)
-    /// | [Float](Type::Float) (TODO) | [Integer](Type::Integer) | `true` | `false`
+    /// [Literal] = [String](TokenKind::String) | [Character](TokenKind::Character)
+    /// | [Float](TokenKind::Float) (TODO) | [Integer](TokenKind::Integer) | `true` | `false`
     pub fn literal(&mut self) -> PResult<Literal> {
         let tok = self.consume(Parsing::Literal)?;
         // keyword literals true and false
         match tok.ty() {
-            Type::True => return Ok(Literal::Bool(true)),
-            Type::False => return Ok(Literal::Bool(false)),
-            Type::String | Type::Character | Type::Integer | Type::Float => (),
+            TokenKind::True => return Ok(Literal::Bool(true)),
+            TokenKind::False => return Ok(Literal::Bool(false)),
+            TokenKind::String | TokenKind::Character | TokenKind::Integer | TokenKind::Float => (),
             t => return Err(self.error(Unexpected(t), Parsing::Literal)),
         }
         Ok(match tok.data() {
-            Data::String(v) => Literal::from(v.as_str()),
-            Data::Character(v) => Literal::from(*v),
-            Data::Integer(v) => Literal::from(*v),
-            Data::Float(v) => todo!("Literal::Float({v})"),
+            TokenData::String(v) => Literal::from(v.as_str()),
+            TokenData::Character(v) => Literal::from(*v),
+            TokenData::Integer(v) => Literal::from(*v),
+            TokenData::Float(v) => todo!("Literal::Float({v})"),
             _ => panic!("Expected token data for {tok:?}"),
         })
     }
@@ -946,8 +956,8 @@ impl<'t> Parser<'t> {
             Err(e) => return Err(e),
         } {
             exprs.push(expr);
-            match self.peek_type(Parsing::Tuple)? {
-                Type::Comma => self.consume_peeked(),
+            match self.peek_kind(Parsing::Tuple)? {
+                TokenKind::Comma => self.consume_peeked(),
                 _ => break,
             };
         }
@@ -963,22 +973,22 @@ impl<'t> Parser<'t> {
 impl<'t> Parser<'t> {
     /// [Break] = `break` [Expr]?
     pub fn parse_break(&mut self) -> PResult<Break> {
-        self.match_type(Type::Break, Parsing::Break)?;
+        self.match_type(TokenKind::Break, Parsing::Break)?;
         Ok(Break { body: self.optional_expr()?.map(Into::into) })
     }
     /// [Return] = `return` [Expr]?
     pub fn parse_return(&mut self) -> PResult<Return> {
-        self.match_type(Type::Return, Parsing::Return)?;
+        self.match_type(TokenKind::Return, Parsing::Return)?;
         Ok(Return { body: self.optional_expr()?.map(Into::into) })
     }
     /// [Continue] = `continue`
     pub fn parse_continue(&mut self) -> PResult<Continue> {
-        self.match_type(Type::Continue, Parsing::Continue)?;
+        self.match_type(TokenKind::Continue, Parsing::Continue)?;
         Ok(Continue)
     }
     /// [While] = `while` [Expr] [Block] [Else]?
     pub fn parse_while(&mut self) -> PResult<While> {
-        self.match_type(Type::While, Parsing::While)?;
+        self.match_type(TokenKind::While, Parsing::While)?;
         Ok(While {
             cond: self.expr()?.into(),
             pass: self.block()?.into(),
@@ -988,7 +998,7 @@ impl<'t> Parser<'t> {
     /// [If] = <code>`if` [Expr] [Block] [Else]?</code>
     #[rustfmt::skip] // second line is barely not long enough
     pub fn parse_if(&mut self) -> PResult<If> {
-    self.match_type(Type::If, Parsing::If)?;
+    self.match_type(TokenKind::If, Parsing::If)?;
     Ok(If {
         cond: self.expr()?.into(),
         pass: self.block()?.into(),
@@ -997,9 +1007,9 @@ impl<'t> Parser<'t> {
 }
     /// [For]: `for` Pattern (TODO) `in` [Expr] [Block] [Else]?
     pub fn parse_for(&mut self) -> PResult<For> {
-        self.match_type(Type::For, Parsing::For)?;
+        self.match_type(TokenKind::For, Parsing::For)?;
         let bind = self.identifier()?;
-        self.match_type(Type::In, Parsing::For)?;
+        self.match_type(TokenKind::In, Parsing::For)?;
         Ok(For {
             bind,
             cond: self.expr()?.into(),
@@ -1009,8 +1019,8 @@ impl<'t> Parser<'t> {
     }
     /// [Else]: (`else` [Block])?
     pub fn parse_else(&mut self) -> PResult<Else> {
-        match self.peek_type(Parsing::Else) {
-            Ok(Type::Else) => {
+        match self.peek_kind(Parsing::Else) {
+            Ok(TokenKind::Else) => {
                 self.consume_peeked();
                 Ok(self.expr()?.into())
             }
@@ -1023,8 +1033,8 @@ impl<'t> Parser<'t> {
 macro operator($($name:ident ($returns:ident) {$($t:ident => $p:ident),*$(,)?};)*) {$(
 pub fn $name (&mut self) -> PResult<$returns> {
     const PARSING: Parsing = Parsing::$returns;
-    let out = Ok(match self.peek_type(PARSING) {
-        $(Ok(Type::$t) => $returns::$p,)*
+    let out = Ok(match self.peek_kind(PARSING) {
+        $(Ok(TokenKind::$t) => $returns::$p,)*
         Err(e) => Err(e)?,
         Ok(t) => Err(self.error(Unexpected(t), PARSING))?,
     });
@@ -1095,7 +1105,7 @@ impl<'t> Parser<'t> {
     pub fn member_op(&mut self) -> PResult<()> {
         const PARSING: Parsing = Parsing::Member;
         match self.peek(PARSING)?.ty() {
-            Type::Dot => {}
+            TokenKind::Dot => {}
             t => Err(self.error(Unexpected(t), PARSING))?,
         }
         self.consume_peeked();
