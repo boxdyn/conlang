@@ -5,10 +5,10 @@ use super::{TokenData, TokenKind};
 /// and an optional bit of [TokenData]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Token {
-    ty: TokenKind,
-    data: TokenData,
-    line: u32,
-    col: u32,
+    pub ty: TokenKind,
+    pub data: TokenData,
+    pub line: u32,
+    pub col: u32,
 }
 impl Token {
     /// Creates a new [Token] out of a [TokenKind], [TokenData], line, and column.
