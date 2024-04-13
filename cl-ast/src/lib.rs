@@ -324,10 +324,6 @@ pub enum ExprKind {
     Binary(Binary),
     /// A [Unary] expression: [`UnaryKind`]\* [`Expr`]
     Unary(Unary),
-    /// A [Member] access expression: [`Expr`] (`.` [`Expr`])+
-    Member(Member),
-    /// A [Call] expression, with arguments: a(foo, bar)
-    Call(Call),
     /// An Array [Index] expression: a[10, 20, 30]
     Index(Index),
     /// A [path expression](Path): `::`? [PathPart] (`::` [PathPart])*
@@ -366,9 +362,8 @@ pub enum ExprKind {
 /// An [Assign]ment expression: [`Expr`] ([`AssignKind`] [`Expr`])\+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Assign {
-    pub head: Box<Expr>,
-    pub op: AssignKind,
-    pub tail: Box<Expr>,
+    pub kind: AssignKind,
+    pub parts: Box<(ExprKind, ExprKind)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -390,8 +385,8 @@ pub enum AssignKind {
 /// A [Binary] expression: [`Expr`] ([`BinaryKind`] [`Expr`])\+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Binary {
-    pub head: Box<Expr>,
-    pub tail: Vec<(BinaryKind, Expr)>,
+    pub kind: BinaryKind,
+    pub parts: Box<(ExprKind, ExprKind)>,
 }
 
 /// A [Binary] operator
@@ -419,17 +414,18 @@ pub enum BinaryKind {
     Div,
     Rem,
     Dot,
+    Call,
 }
 
 /// A [Unary] expression: [`UnaryKind`]\* [`Expr`]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Unary {
-    pub ops: Vec<UnaryKind>,
-    pub tail: Box<Expr>,
+    pub kind: UnaryKind,
+    pub tail: Box<ExprKind>,
 }
 
 /// A [Unary] operator
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnaryKind {
     Deref,
     Neg,
@@ -439,32 +435,11 @@ pub enum UnaryKind {
     /// Unused
     Tilde,
 }
-
-/// A [Member] access expression: [`Expr`] (`.` [`Expr`])+
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Member {
-    pub head: Box<Expr>,
-    pub tail: Vec<Expr>,
-}
-
-/// A [Call] expression, with arguments: a(foo, bar)
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Call {
-    pub callee: Box<Expr>,
-    pub args: Vec<Tuple>,
-}
-
 /// A repeated [Index] expression: a[10, 20, 30][40, 50, 60]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Index {
-    pub head: Box<Expr>,
-    pub indices: Vec<Indices>,
-}
-
-/// A single [Index] expression: a[10, 20, 30]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Indices {
-    pub exprs: Vec<Expr>,
+    pub head: Box<ExprKind>,
+    pub indices: Vec<Expr>,
 }
 
 /// A [Literal]: 0x42, 1e123, 2.4, "Hello"
@@ -486,8 +461,8 @@ pub struct Array {
 /// `[` [Expr] `;` [Literal] `]`
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArrayRep {
-    pub value: Box<Expr>,
-    pub repeat: Box<Expr>,
+    pub value: Box<ExprKind>,
+    pub repeat: Box<ExprKind>,
 }
 
 /// An address-of expression: `&` `mut`? [`Expr`]
@@ -495,7 +470,7 @@ pub struct ArrayRep {
 pub struct AddrOf {
     pub count: usize,
     pub mutable: Mutability,
-    pub expr: Box<Expr>,
+    pub expr: Box<ExprKind>,
 }
 
 /// A [Block] expression: `{` [`Stmt`]\* [`Expr`]? `}`
@@ -507,7 +482,7 @@ pub struct Block {
 /// A [Grouping](Group) expression `(` [`Expr`] `)`
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Group {
-    pub expr: Box<Expr>,
+    pub expr: Box<ExprKind>,
 }
 
 /// A [Tuple] expression: `(` [`Expr`] (`,` [`Expr`])+ `)`

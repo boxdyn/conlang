@@ -10,4 +10,4 @@ pub mod token_type;
 
 pub use token::Token;
 pub use token_data::TokenData;
-pub use token_type::TokenKind;
+pub use token_type::{Punct, TokenKind};

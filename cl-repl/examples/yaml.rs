@@ -363,8 +363,6 @@ pub mod yamlify {
                 ExprKind::Assign(k) => k.yaml(y),
                 ExprKind::Binary(k) => k.yaml(y),
                 ExprKind::Unary(k) => k.yaml(y),
-                ExprKind::Member(k) => k.yaml(y),
-                ExprKind::Call(k) => k.yaml(y),
                 ExprKind::Index(k) => k.yaml(y),
                 ExprKind::Path(k) => k.yaml(y),
                 ExprKind::Literal(k) => k.yaml(y),
@@ -386,18 +384,25 @@ pub mod yamlify {
     }
     impl Yamlify for Assign {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { head, op: _, tail } = self;
-            y.key("Assign").pair("head", head).pair("tail", tail);
+            let Self { kind, parts } = self;
+            y.key("Assign")
+                .pair("kind", kind)
+                .pair("head", &parts.0)
+                .pair("tail", &parts.1);
+        }
+    }
+    impl Yamlify for AssignKind {
+        fn yaml(&self, y: &mut Yamler) {
+            y.value(self);
         }
     }
     impl Yamlify for Binary {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { head, tail } = self;
-            let mut y = y.key("Binary");
-            y.pair("head", head);
-            for (op, expr) in tail {
-                y.key("tail").pair("op", op).pair("expr", expr);
-            }
+            let Self { kind, parts } = self;
+            y.key("Binary")
+                .pair("kind", kind)
+                .pair("head", &parts.0)
+                .pair("tail", &parts.1);
         }
     }
     impl Yamlify for BinaryKind {
@@ -407,29 +412,13 @@ pub mod yamlify {
     }
     impl Yamlify for Unary {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { ops, tail } = self;
-            let mut y = y.key("Unary");
-            for op in ops {
-                y.pair("op", op);
-            }
-            y.pair("tail", tail);
+            let Self { kind, tail } = self;
+            y.key("Unary").pair("kind", kind).pair("tail", tail);
         }
     }
     impl Yamlify for UnaryKind {
         fn yaml(&self, y: &mut Yamler) {
             y.value(self);
-        }
-    }
-    impl Yamlify for Member {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { head, tail } = self;
-            y.key("Member").pair("head", head).pair("tail", tail);
-        }
-    }
-    impl Yamlify for Call {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { callee, args } = self;
-            y.key("Call").pair("callee", callee).pair("args", args);
         }
     }
     impl Yamlify for Tuple {
@@ -442,12 +431,6 @@ pub mod yamlify {
         fn yaml(&self, y: &mut Yamler) {
             let Self { head, indices } = self;
             y.key("Index").pair("head", head).list(indices);
-        }
-    }
-    impl Yamlify for Indices {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { exprs } = self;
-            y.key("Indices").list(exprs);
         }
     }
     impl Yamlify for Array {
@@ -466,8 +449,11 @@ pub mod yamlify {
     }
     impl Yamlify for AddrOf {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { count: _, mutable, expr } = self;
-            y.key("Addr").yaml(mutable).pair("expr", expr);
+            let Self { count, mutable, expr } = self;
+            y.key("AddrOf")
+                .yaml(mutable)
+                .pair("count", count)
+                .pair("expr", expr);
         }
     }
     impl Yamlify for Group {

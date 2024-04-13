@@ -35,7 +35,7 @@ macro td ($($id:expr),*) {
 mod ident {
     use super::*;
     macro ident ($($id:literal),*) {
-        [$(TokenData::Identifier($id.into())),*]
+        [$(TokenData::String($id.into())),*]
     }
     test_lexer_data_type! {
         underscore { "_ _" => ident!["_", "_"] }
@@ -109,9 +109,8 @@ mod string {
     }
 }
 mod punct {
-    use cl_token::token_type::Op;
     macro op($op:ident) {
-        TokenKind::Op(Op::$op)
+        TokenKind::Punct(Punct::$op)
     }
 
     use super::*;

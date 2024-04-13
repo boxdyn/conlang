@@ -4,11 +4,13 @@ use std::{fmt::Display, str::FromStr};
 /// Stores a [Token's](super::Token) lexical information
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TokenKind {
-    // Invalid syntax
+    /// Invalid sequence
     Invalid,
-    // Any kind of comment
+    /// Any kind of comment
     Comment,
-    // A non-keyword identifier
+    /// Any tokenizable literal (See [TokenData](super::TokenData))
+    Literal,
+    /// A non-keyword identifier
     Identifier,
     // A keyword
     Break,
@@ -36,18 +38,13 @@ pub enum TokenKind {
     True,
     Type,
     While,
-    // Literals
-    Integer,
-    Float,
-    String,
-    Character,
-    // Delimiters and punctuation
-    Op(Op),
+    /// Delimiter or punctuation
+    Punct(Punct),
 }
 
 /// An operator character (delimiter, punctuation)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Op {
+pub enum Punct {
     LCurly,     // {
     RCurly,     // }
     LBrack,     // [
@@ -109,6 +106,7 @@ impl Display for TokenKind {
         match self {
             TokenKind::Invalid => "invalid".fmt(f),
             TokenKind::Comment => "comment".fmt(f),
+            TokenKind::Literal => "literal".fmt(f),
             TokenKind::Identifier => "identifier".fmt(f),
 
             TokenKind::Break => "break".fmt(f),
@@ -137,12 +135,7 @@ impl Display for TokenKind {
             TokenKind::Type => "type".fmt(f),
             TokenKind::While => "while".fmt(f),
 
-            TokenKind::Integer => "integer literal".fmt(f),
-            TokenKind::Float => "float literal".fmt(f),
-            TokenKind::String => "string literal".fmt(f),
-            TokenKind::Character => "char literal".fmt(f),
-
-            TokenKind::Op(op) => op.fmt(f),
+            TokenKind::Punct(op) => op.fmt(f),
         }
     }
 }
@@ -182,63 +175,63 @@ impl FromStr for TokenKind {
     }
 }
 
-impl Display for Op {
+impl Display for Punct {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Op::LCurly => "left curly".fmt(f),
-            Op::RCurly => "right curly".fmt(f),
-            Op::LBrack => "left brack".fmt(f),
-            Op::RBrack => "right brack".fmt(f),
-            Op::LParen => "left paren".fmt(f),
-            Op::RParen => "right paren".fmt(f),
-            Op::Amp => "and".fmt(f),
-            Op::AmpAmp => "and-and".fmt(f),
-            Op::AmpEq => "and-assign".fmt(f),
-            Op::Arrow => "arrow".fmt(f),
-            Op::At => "at".fmt(f),
-            Op::Backslash => "backslash".fmt(f),
-            Op::Bang => "bang".fmt(f),
-            Op::BangBang => "not-not".fmt(f),
-            Op::BangEq => "not equal to".fmt(f),
-            Op::Bar => "or".fmt(f),
-            Op::BarBar => "or-or".fmt(f),
-            Op::BarEq => "or-assign".fmt(f),
-            Op::Colon => "colon".fmt(f),
-            Op::ColonColon => "path separator".fmt(f),
-            Op::Comma => "comma".fmt(f),
-            Op::Dot => "dot".fmt(f),
-            Op::DotDot => "exclusive range".fmt(f),
-            Op::DotDotEq => "inclusive range".fmt(f),
-            Op::Eq => "assign".fmt(f),
-            Op::EqEq => "equal to".fmt(f),
-            Op::FatArrow => "fat arrow".fmt(f),
-            Op::Grave => "grave".fmt(f),
-            Op::Gt => "greater than".fmt(f),
-            Op::GtEq => "greater than or equal to".fmt(f),
-            Op::GtGt => "shift right".fmt(f),
-            Op::GtGtEq => "shift right-assign".fmt(f),
-            Op::Hash => "hash".fmt(f),
-            Op::HashBang => "shebang".fmt(f),
-            Op::Lt => "less than".fmt(f),
-            Op::LtEq => "less than or equal to".fmt(f),
-            Op::LtLt => "shift left".fmt(f),
-            Op::LtLtEq => "shift left-assign".fmt(f),
-            Op::Minus => "sub".fmt(f),
-            Op::MinusEq => "sub-assign".fmt(f),
-            Op::Plus => "add".fmt(f),
-            Op::PlusEq => "add-assign".fmt(f),
-            Op::Question => "huh?".fmt(f),
-            Op::Rem => "rem".fmt(f),
-            Op::RemEq => "rem-assign".fmt(f),
-            Op::Semi => "ignore".fmt(f),
-            Op::Slash => "div".fmt(f),
-            Op::SlashEq => "div-assign".fmt(f),
-            Op::Star => "star".fmt(f),
-            Op::StarEq => "star-assign".fmt(f),
-            Op::Tilde => "tilde".fmt(f),
-            Op::Xor => "xor".fmt(f),
-            Op::XorEq => "xor-assign".fmt(f),
-            Op::XorXor => "cat-ears".fmt(f),
+            Punct::LCurly => "{".fmt(f),
+            Punct::RCurly => "}".fmt(f),
+            Punct::LBrack => "[".fmt(f),
+            Punct::RBrack => "]".fmt(f),
+            Punct::LParen => "(".fmt(f),
+            Punct::RParen => ")".fmt(f),
+            Punct::Amp => "&".fmt(f),
+            Punct::AmpAmp => "&&".fmt(f),
+            Punct::AmpEq => "&=".fmt(f),
+            Punct::Arrow => "->".fmt(f),
+            Punct::At => "@".fmt(f),
+            Punct::Backslash => "\\".fmt(f),
+            Punct::Bang => "!".fmt(f),
+            Punct::BangBang => "!!".fmt(f),
+            Punct::BangEq => "!=".fmt(f),
+            Punct::Bar => "|".fmt(f),
+            Punct::BarBar => "||".fmt(f),
+            Punct::BarEq => "|=".fmt(f),
+            Punct::Colon => ":".fmt(f),
+            Punct::ColonColon => "::".fmt(f),
+            Punct::Comma => ",".fmt(f),
+            Punct::Dot => ".".fmt(f),
+            Punct::DotDot => "..".fmt(f),
+            Punct::DotDotEq => "..=".fmt(f),
+            Punct::Eq => "=".fmt(f),
+            Punct::EqEq => "==".fmt(f),
+            Punct::FatArrow => "=>".fmt(f),
+            Punct::Grave => "`".fmt(f),
+            Punct::Gt => ">".fmt(f),
+            Punct::GtEq => ">=".fmt(f),
+            Punct::GtGt => ">>".fmt(f),
+            Punct::GtGtEq => ">>=".fmt(f),
+            Punct::Hash => "#".fmt(f),
+            Punct::HashBang => "#!".fmt(f),
+            Punct::Lt => "<".fmt(f),
+            Punct::LtEq => "<=".fmt(f),
+            Punct::LtLt => "<<".fmt(f),
+            Punct::LtLtEq => "<<=".fmt(f),
+            Punct::Minus => "-".fmt(f),
+            Punct::MinusEq => "-=".fmt(f),
+            Punct::Plus => "+".fmt(f),
+            Punct::PlusEq => "+=".fmt(f),
+            Punct::Question => "?".fmt(f),
+            Punct::Rem => "%".fmt(f),
+            Punct::RemEq => "%=".fmt(f),
+            Punct::Semi => ";".fmt(f),
+            Punct::Slash => "/".fmt(f),
+            Punct::SlashEq => "/=".fmt(f),
+            Punct::Star => "*".fmt(f),
+            Punct::StarEq => "*=".fmt(f),
+            Punct::Tilde => "~".fmt(f),
+            Punct::Xor => "^".fmt(f),
+            Punct::XorEq => "^=".fmt(f),
+            Punct::XorXor => "^^".fmt(f),
         }
     }
 }

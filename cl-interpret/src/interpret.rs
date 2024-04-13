@@ -5,6 +5,8 @@
 //! meaningless to get a pointer to one, and would be undefined behavior to dereference a pointer to
 //! one in any situation.
 
+use std::borrow::Borrow;
+
 use super::*;
 use cl_ast::*;
 /// A work-in-progress tree walk interpreter for Conlang
@@ -107,14 +109,18 @@ impl Interpret for Let {
     }
 }
 impl Interpret for Expr {
+    #[inline]
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self { extents: _, kind } = self;
-        match kind {
+        kind.interpret(env)
+    }
+}
+impl Interpret for ExprKind {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        match self {
             ExprKind::Assign(v) => v.interpret(env),
             ExprKind::Binary(v) => v.interpret(env),
             ExprKind::Unary(v) => v.interpret(env),
-            ExprKind::Member(v) => v.interpret(env),
-            ExprKind::Call(v) => v.interpret(env),
             ExprKind::Index(v) => v.interpret(env),
             ExprKind::Path(v) => v.interpret(env),
             ExprKind::Literal(v) => v.interpret(env),
@@ -136,9 +142,10 @@ impl Interpret for Expr {
 }
 impl Interpret for Assign {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Assign { head, op, tail } = self;
+        let Assign { kind: op, parts } = self;
+        let (head, tail) = parts.borrow();
         // Resolve the head pattern
-        let head = match &head.kind {
+        let head = match &head {
             ExprKind::Path(Path { parts, .. }) if parts.len() == 1 => {
                 match parts.last().expect("parts should not be empty") {
                     PathPart::SuperKw => Err(Error::NotAssignable)?,
@@ -146,8 +153,6 @@ impl Interpret for Assign {
                     PathPart::Ident(Identifier(s)) => s,
                 }
             }
-            ExprKind::Member(_) => todo!("Member access assignment"),
-            ExprKind::Call(_) => todo!("Assignment to the result of a function call?"),
             ExprKind::Index(_) => todo!("Assignment to an index operation"),
             ExprKind::Path(_) => todo!("Path expression resolution (IMPORTANT)"),
             ExprKind::Empty | ExprKind::Group(_) | ExprKind::Tuple(_) => {
@@ -193,106 +198,87 @@ impl Interpret for Assign {
 }
 impl Interpret for Binary {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Binary { head, tail } = self;
-        let mut head = head.interpret(env)?;
+        let Binary { kind, parts } = self;
+        let (head, tail) = parts.borrow();
+
+        let head = head.interpret(env)?;
+
         // Short-circuiting ops
-        for (op, tail) in tail {
-            match op {
-                BinaryKind::LogAnd => {
-                    if head.truthy()? {
-                        head = tail.interpret(env)?;
-                        continue;
-                    }
-                    return Ok(head); // Short circuiting
-                }
-                BinaryKind::LogOr => {
-                    if !head.truthy()? {
-                        head = tail.interpret(env)?;
-                        continue;
-                    }
-                    return Ok(head); // Short circuiting
-                }
-                BinaryKind::LogXor => {
-                    head = ConValue::Bool(head.truthy()? ^ tail.interpret(env)?.truthy()?);
-                    continue;
-                }
-                _ => {}
+        match kind {
+            BinaryKind::LogAnd => {
+                return if head.truthy()? {
+                    tail.interpret(env)
+                } else {
+                    Ok(head)
+                }; // Short circuiting
             }
-            let tail = tail.interpret(env)?;
-            head = match op {
-                BinaryKind::Mul => env.call("mul", &[head, tail]),
-                BinaryKind::Div => env.call("div", &[head, tail]),
-                BinaryKind::Rem => env.call("rem", &[head, tail]),
-                BinaryKind::Add => env.call("add", &[head, tail]),
-                BinaryKind::Sub => env.call("sub", &[head, tail]),
-                BinaryKind::Shl => env.call("shl", &[head, tail]),
-                BinaryKind::Shr => env.call("shr", &[head, tail]),
-                BinaryKind::BitAnd => env.call("and", &[head, tail]),
-                BinaryKind::BitOr => env.call("or", &[head, tail]),
-                BinaryKind::BitXor => env.call("xor", &[head, tail]),
-                BinaryKind::RangeExc => env.call("range_exc", &[head, tail]),
-                BinaryKind::RangeInc => env.call("range_inc", &[head, tail]),
-                BinaryKind::Lt => env.call("lt", &[head, tail]),
-                BinaryKind::LtEq => env.call("lt_eq", &[head, tail]),
-                BinaryKind::Equal => env.call("eq", &[head, tail]),
-                BinaryKind::NotEq => env.call("neq", &[head, tail]),
-                BinaryKind::GtEq => env.call("gt_eq", &[head, tail]),
-                BinaryKind::Gt => env.call("gt", &[head, tail]),
-                BinaryKind::Dot => todo!("search within a type's namespace!"),
-                _ => Ok(head),
-            }?;
+            BinaryKind::LogOr => {
+                return if !head.truthy()? {
+                    tail.interpret(env)
+                } else {
+                    Ok(head)
+                }; // Short circuiting
+            }
+            BinaryKind::LogXor => {
+                return Ok(ConValue::Bool(
+                    head.truthy()? ^ tail.interpret(env)?.truthy()?,
+                ));
+            }
+            _ => {}
         }
-        Ok(head)
+        let tail = tail.interpret(env)?;
+        match kind {
+            BinaryKind::Mul => env.call("mul", &[head, tail]),
+            BinaryKind::Div => env.call("div", &[head, tail]),
+            BinaryKind::Rem => env.call("rem", &[head, tail]),
+            BinaryKind::Add => env.call("add", &[head, tail]),
+            BinaryKind::Sub => env.call("sub", &[head, tail]),
+            BinaryKind::Shl => env.call("shl", &[head, tail]),
+            BinaryKind::Shr => env.call("shr", &[head, tail]),
+            BinaryKind::BitAnd => env.call("and", &[head, tail]),
+            BinaryKind::BitOr => env.call("or", &[head, tail]),
+            BinaryKind::BitXor => env.call("xor", &[head, tail]),
+            BinaryKind::RangeExc => env.call("range_exc", &[head, tail]),
+            BinaryKind::RangeInc => env.call("range_inc", &[head, tail]),
+            BinaryKind::Lt => env.call("lt", &[head, tail]),
+            BinaryKind::LtEq => env.call("lt_eq", &[head, tail]),
+            BinaryKind::Equal => env.call("eq", &[head, tail]),
+            BinaryKind::NotEq => env.call("neq", &[head, tail]),
+            BinaryKind::GtEq => env.call("gt_eq", &[head, tail]),
+            BinaryKind::Gt => env.call("gt", &[head, tail]),
+            BinaryKind::Dot => todo!("search within a type's namespace!"),
+            BinaryKind::Call => match tail {
+                ConValue::Empty => head.call(env, &[]),
+                ConValue::Tuple(args) => head.call(env, &args),
+                _ => Err(Error::TypeError),
+            },
+            _ => Ok(head),
+        }
     }
 }
+
 impl Interpret for Unary {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Unary { tail, ops } = self;
-        let mut operand = tail.interpret(env)?;
-
-        for op in ops.iter().rev() {
-            operand = match op {
-                UnaryKind::Deref => env.call("deref", &[operand])?,
-                UnaryKind::Neg => env.call("neg", &[operand])?,
-                UnaryKind::Not => env.call("not", &[operand])?,
-                UnaryKind::At => {
-                    println!("{operand}");
-                    operand
-                }
-                UnaryKind::Tilde => unimplemented!("Tilde operator"),
-            };
+        let Unary { kind, tail } = self;
+        let operand = tail.interpret(env)?;
+        match kind {
+            UnaryKind::Deref => env.call("deref", &[operand]),
+            UnaryKind::Neg => env.call("neg", &[operand]),
+            UnaryKind::Not => env.call("not", &[operand]),
+            UnaryKind::At => {
+                println!("{operand}");
+                Ok(operand)
+            }
+            UnaryKind::Tilde => unimplemented!("Tilde operator"),
         }
-        Ok(operand)
-    }
-}
-impl Interpret for Member {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        todo!("Interpret member accesses in {env}")
-    }
-}
-impl Interpret for Call {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { callee, args } = self;
-        // evaluate the callee
-        let mut callee = callee.interpret(env)?;
-        for args in args {
-            let ConValue::Tuple(args) = args.interpret(env)? else {
-                Err(Error::TypeError)?
-            };
-            callee = callee.call(env, &args)?;
-        }
-        Ok(callee)
     }
 }
 impl Interpret for Index {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self { head, indices } = self;
         let mut head = head.interpret(env)?;
-        for indices in indices {
-            let Indices { exprs } = indices;
-            for index in exprs {
-                head = head.index(&index.interpret(env)?)?;
-            }
+        for index in indices {
+            head = head.index(&index.interpret(env)?)?;
         }
         Ok(head)
     }

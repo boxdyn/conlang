@@ -4,8 +4,6 @@
 /// external to its [TokenKind](super::token_type::TokenKind)
 #[derive(Clone, Debug, PartialEq)]
 pub enum TokenData {
-    /// [Token](super::Token) contains an [identifier](str)
-    Identifier(Box<str>),
     /// [Token](super::Token) contains a [String]
     String(String),
     /// [Token](super::Token) contains a [character](char)
@@ -18,7 +16,6 @@ pub enum TokenData {
     None,
 }
 from! {
-    value: &str => Self::Identifier(value.into()),
     value: String => Self::String(value),
     value: u128 => Self::Integer(value),
     value: f64 => Self::Float(value),
@@ -34,7 +31,6 @@ macro from($($value:ident: $src:ty => $dst:expr),*$(,)?) {
 impl std::fmt::Display for TokenData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TokenData::Identifier(v) => v.fmt(f),
             TokenData::String(v) => write!(f, "\"{v}\""),
             TokenData::Character(v) => write!(f, "'{v}'"),
             TokenData::Integer(v) => v.fmt(f),

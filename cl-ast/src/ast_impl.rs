@@ -5,7 +5,10 @@ mod display {
     //! Implements [Display] for [AST](super::super) Types
     use super::*;
     pub use delimiters::*;
-    use std::fmt::{Display, Write};
+    use std::{
+        borrow::Borrow,
+        fmt::{Display, Write},
+    };
     mod delimiters {
         #![allow(dead_code)]
         #[derive(Clone, Copy, Debug)]
@@ -307,13 +310,16 @@ mod display {
 
     impl Display for Expr {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match &self.kind {
+            self.kind.fmt(f)
+        }
+    }
+    impl Display for ExprKind {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
                 ExprKind::Assign(v) => v.fmt(f),
                 ExprKind::Binary(v) => v.fmt(f),
                 ExprKind::Unary(v) => v.fmt(f),
                 ExprKind::Index(v) => v.fmt(f),
-                ExprKind::Call(v) => v.fmt(f),
-                ExprKind::Member(v) => v.fmt(f),
                 ExprKind::Path(v) => v.fmt(f),
                 ExprKind::Literal(v) => v.fmt(f),
                 ExprKind::Array(v) => v.fmt(f),
@@ -334,8 +340,8 @@ mod display {
     }
     impl Display for Assign {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { head, op, tail } = self;
-            write!(f, "{head} {op} {tail}")
+            let Self { kind, parts } = self;
+            write!(f, "{} {kind} {}", parts.0, parts.1)
         }
     }
     impl Display for AssignKind {
@@ -358,12 +364,13 @@ mod display {
     }
     impl Display for Binary {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { head, tail } = self;
-            write!(f, "{head}")?;
-            for (kind, expr) in tail {
-                write!(f, " {kind} {expr}")?;
+            let Self { kind, parts } = self;
+            let (head, tail) = parts.borrow();
+            match kind {
+                BinaryKind::Dot => write!(f, "{head}{kind}{tail}"),
+                BinaryKind::Call => write!(f, "{head}{tail}"),
+                _ => write!(f, "{head} {kind} {tail}"),
             }
-            Ok(())
         }
     }
     impl Display for BinaryKind {
@@ -391,17 +398,15 @@ mod display {
                 BinaryKind::Div => "/",
                 BinaryKind::Rem => "%",
                 BinaryKind::Dot => ".",
+                BinaryKind::Call => "()",
             }
             .fmt(f)
         }
     }
     impl Display for Unary {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { ops: kinds, tail } = self;
-            for kind in kinds {
-                kind.fmt(f)?
-            }
-            tail.fmt(f)
+            let Self { kind, tail } = self;
+            write!(f, "{kind}{tail}")
         }
     }
     impl Display for UnaryKind {
@@ -416,27 +421,9 @@ mod display {
             .fmt(f)
         }
     }
-    impl Display for Call {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { callee, args } = self;
-            callee.fmt(f)?;
-            for args in args {
-                args.fmt(f)?;
-            }
-            Ok(())
-        }
-    }
     impl Display for Tuple {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             delimit(separate(&self.exprs, ", "), INLINE_PARENS)(f)
-        }
-    }
-    impl Display for Member {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { head: parent, tail: children } = self;
-            write!(f, "{parent}.")?;
-            separate(children, ".")(f)?;
-            Ok(())
         }
     }
     impl Display for Index {
@@ -447,11 +434,6 @@ mod display {
                 indices.fmt(f)?;
             }
             Ok(())
-        }
-    }
-    impl Display for Indices {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            delimit(separate(&self.exprs, ", "), INLINE_SQUARE)(f)
         }
     }
     impl Display for Path {
@@ -624,8 +606,6 @@ mod convert {
             Assign => ExprKind::Assign,
             Binary => ExprKind::Binary,
             Unary => ExprKind::Unary,
-            Call => ExprKind::Call,
-            Member => ExprKind::Member,
             Index => ExprKind::Index,
             Path => ExprKind::Path,
             Literal => ExprKind::Literal,
@@ -646,18 +626,7 @@ mod convert {
             bool => Literal::Bool,
             char => Literal::Char,
             u128 => Literal::Int,
-            &str => Literal::String,
-        }
-    }
-
-    impl From<Tuple> for Indices {
-        fn from(value: Tuple) -> Self {
-            Self { exprs: value.exprs }
-        }
-    }
-    impl From<Indices> for Tuple {
-        fn from(value: Indices) -> Self {
-            Self { exprs: value.exprs }
+            String => Literal::String,
         }
     }
 
