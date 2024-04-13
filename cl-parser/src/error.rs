@@ -130,7 +130,7 @@ impl Display for ErrorKind {
             ErrorKind::UnmatchedSquareBrackets => write!(f, "Unmatched square brackets"),
             ErrorKind::Unexpected(t) => write!(f, "Encountered unexpected token `{t}`"),
             ErrorKind::Expected { want: e, got: g } => {
-                write!(f, "Expected {e}, but got {g}")
+                write!(f, "Expected `{e}`, got `{g}`")
             }
             ErrorKind::Nothing => write!(f, "Nothing found"),
             ErrorKind::Todo => write!(f, "TODO:"),
