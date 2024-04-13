@@ -141,7 +141,7 @@ impl Interpret for Assign {
         let head = match &head.kind {
             ExprKind::Path(Path { parts, .. }) if parts.len() == 1 => {
                 match parts.last().expect("parts should not be empty") {
-                    PathPart::SuperKw => Err(Error::NotAssignable(head.extents.head))?,
+                    PathPart::SuperKw => Err(Error::NotAssignable)?,
                     PathPart::SelfKw => todo!("Assignment to `self`"),
                     PathPart::Ident(Identifier(s)) => s,
                 }
@@ -153,7 +153,7 @@ impl Interpret for Assign {
             ExprKind::Empty | ExprKind::Group(_) | ExprKind::Tuple(_) => {
                 todo!("Pattern Destructuring?")
             }
-            _ => Err(Error::NotAssignable(head.extents.head))?,
+            _ => Err(Error::NotAssignable)?,
         };
         // Get the initializer and the tail
         let init = tail.interpret(env)?;

@@ -522,7 +522,6 @@ pub mod error {
     //! The [Error] type represents any error thrown by the [Environment](super::Environment)
 
     use super::temp_type_impl::ConValue;
-    use cl_structures::span::Loc;
 
     pub type IResult<T> = Result<T, Error>;
 
@@ -546,12 +545,12 @@ pub mod error {
         TypeError,
         /// In clause of For loop didn't yield a Range
         NotIterable,
-        /// A value at this [location](struct@Loc) can't be indexed
-        NotIndexable(Loc),
+        /// A value could not be indexed
+        NotIndexable,
         /// An array index went out of bounds
         OobIndex(usize, usize),
-        /// An expression at this [location](struct@Loc)ation is not assignable
-        NotAssignable(Loc),
+        /// An expression is not assignable
+        NotAssignable,
         /// A name was not defined in scope before being used
         NotDefined(String),
         /// A name was defined but not initialized
@@ -578,14 +577,14 @@ pub mod error {
                 Error::ScopeExit => "Exited the last scope. This is a logic bug.".fmt(f),
                 Error::TypeError => "Incompatible types".fmt(f),
                 Error::NotIterable => "`in` clause of `for` loop did not yield an iterable".fmt(f),
-                Error::NotIndexable(location) => {
-                    write!(f, "{location} expression cannot be indexed")
+                Error::NotIndexable => {
+                    write!(f, "expression cannot be indexed")
                 }
                 Error::OobIndex(idx, len) => {
                     write!(f, "Index out of bounds: index was {idx}. but len is {len}")
                 }
-                Error::NotAssignable(location) => {
-                    write!(f, "{location} expression is not assignable")
+                Error::NotAssignable => {
+                    write!(f, "expression is not assignable")
                 }
                 Error::NotDefined(value) => {
                     write!(f, "{value} not bound. Did you mean `let {value};`?")
