@@ -9,6 +9,7 @@ use cl_lexer::Lexer;
 use cl_token::token_type::Op;
 
 /// Parses a sequence of [Tokens](Token) into an [AST](cl_ast)
+#[derive(Debug)]
 pub struct Parser<'t> {
     /// Lazy tokenizer
     lexer: Lexer<'t>,
@@ -35,14 +36,13 @@ impl<'t> Parser<'t> {
     /// Internal impl of peek and consume
     fn consume_from_lexer(&mut self, while_parsing: Parsing) -> PResult<Token> {
         loop {
-            match self
+            let tok = self
                 .lexer
                 .scan()
-                .map_err(|e| self.error(e.into(), while_parsing))?
-            {
-                t if t.ty() == TokenKind::Invalid => continue,
-                t if t.ty() == TokenKind::Comment => continue,
-                t => break Ok(t),
+                .map_err(|e| self.error(e.into(), while_parsing))?;
+            match tok.ty {
+                TokenKind::Comment | TokenKind::Invalid => continue,
+                _ => break Ok(tok),
             }
         }
     }
@@ -55,6 +55,10 @@ impl<'t> Parser<'t> {
         }
         self.next.as_ref().ok_or_else(|| unreachable!())
     }
+    /// Looks ahead at the next [Token]'s [TokenKind]
+    pub fn peek_kind(&mut self, while_parsing: Parsing) -> PResult<TokenKind> {
+        self.peek(while_parsing).map(|t| t.ty)
+    }
     /// Consumes a previously peeked [Token], returning it.
     /// Returns [None] when there is no peeked token.
     ///
@@ -64,14 +68,9 @@ impl<'t> Parser<'t> {
         self.loc = Loc::from(&self.lexer);
         self.next.take()
     }
-    /// Looks ahead at the next [Token]'s [TokenKind]
-    pub fn peek_kind(&mut self, while_parsing: Parsing) -> PResult<TokenKind> {
-        self.peek(while_parsing).map(|t| t.ty())
-    }
     /// Consumes one [Token]
     pub fn consume(&mut self, while_parsing: Parsing) -> PResult<Token> {
-        self.loc = Loc::from(&self.lexer);
-        match self.next.take() {
+        match self.consume_peeked() {
             Some(token) => Ok(token),
             None => self.consume_from_lexer(while_parsing),
         }
