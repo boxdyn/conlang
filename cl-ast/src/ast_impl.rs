@@ -236,8 +236,20 @@ mod display {
         }
     }
     impl Display for Impl {
-        fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            todo!("impl Display for Impl")
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let Self { target, body } = self;
+            write!(f, "impl {target} ")?;
+            delimit(|f| body.fmt(f), BRACES)(f)
+        }
+    }
+    impl Display for ImplKind {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                ImplKind::Type(t) => t.fmt(f),
+                ImplKind::Trait { impl_trait, for_type } => {
+                    write!(f, "{impl_trait} for {for_type}")
+                }
+            }
         }
     }
 
@@ -549,6 +561,15 @@ mod convert {
     impl<T: AsRef<str>> From<T> for Identifier {
         fn from(value: T) -> Self {
             Identifier(value.as_ref().into())
+        }
+    }
+    impl<T: AsRef<str>> From<T> for PathPart {
+        fn from(value: T) -> Self {
+            match value.as_ref() {
+                "Self" => PathPart::SelfKw,
+                "super" => PathPart::SuperKw,
+                ident => PathPart::Ident(ident.into()),
+            }
         }
     }
 

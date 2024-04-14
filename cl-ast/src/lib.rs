@@ -205,14 +205,14 @@ pub enum VariantKind {
 /// Sub-[items](Item) (associated functions, etc.) for a [Ty]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Impl {
-    pub target: Ty,
-    pub body: Vec<Item>,
+    pub target: ImplKind,
+    pub body: File,
 }
 
 // TODO: `impl` Trait for <Target> { }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ImplKind {
-    Type(Box<Ty>),
+    Type(Ty),
     Trait { impl_trait: Path, for_type: Box<Ty> },
 }
 

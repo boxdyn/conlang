@@ -312,6 +312,16 @@ pub mod yamlify {
             y.key("Impl").pair("target", target).pair("body", body);
         }
     }
+    impl Yamlify for ImplKind {
+        fn yaml(&self, y: &mut Yamler) {
+            match self {
+                ImplKind::Type(t) => y.value(t),
+                ImplKind::Trait { impl_trait, for_type } => {
+                    y.pair("trait", impl_trait).pair("for_type", for_type)
+                }
+            };
+        }
+    }
     impl Yamlify for Block {
         fn yaml(&self, y: &mut Yamler) {
             let Self { stmts } = self;
