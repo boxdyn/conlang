@@ -80,7 +80,7 @@ impl<'t> Parser<'t> {
         if got == want {
             Ok(self.consume_peeked().expect("should not fail after peek"))
         } else {
-            Err(self.error(Expected { want, got }, while_parsing))
+            Err(self.error(ExpectedToken { want, got }, while_parsing))
         }
     }
     #[inline]
@@ -263,9 +263,11 @@ impl<'t> Parser<'t> {
         );
         Ok(Attrs { meta: meta(self)? })
     }
+    /// Parses a single [attribute](Meta)
     pub fn meta(&mut self) -> PResult<Meta> {
         Ok(Meta { name: self.identifier()?, kind: self.meta_kind()? })
     }
+    /// Parses data associated with a [Meta] attribute
     pub fn meta_kind(&mut self) -> PResult<MetaKind> {
         const PARSING: Parsing = Parsing::Meta;
         let lit_tuple = delim(
@@ -303,9 +305,11 @@ impl<'t> Parser<'t> {
         })
     }
 
+    /// Parses a [`type` alias](Alias)
     pub fn parse_alias(&mut self) -> PResult<Alias> {
         const PARSING: Parsing = Parsing::Alias;
         self.match_type(TokenKind::Type, PARSING)?;
+
         let out = Ok(Alias {
             to: self.identifier()?,
             from: if self.match_op(Punct::Eq, PARSING).is_ok() {
@@ -318,9 +322,11 @@ impl<'t> Parser<'t> {
         out
     }
 
+    /// Parses a [compile-time constant](Const)
     pub fn parse_const(&mut self) -> PResult<Const> {
         const PARSING: Parsing = Parsing::Const;
         self.match_type(TokenKind::Const, PARSING)?;
+
         let out = Ok(Const {
             name: self.identifier()?,
             ty: {
@@ -335,9 +341,12 @@ impl<'t> Parser<'t> {
         self.match_op(Punct::Semi, PARSING)?;
         out
     }
+
+    /// Parses a [`static` item](Static)
     pub fn parse_static(&mut self) -> PResult<Static> {
         const PARSING: Parsing = Parsing::Static;
         self.match_type(TokenKind::Static, PARSING)?;
+
         let out = Ok(Static {
             mutable: self.mutability()?,
             name: self.identifier()?,
@@ -353,11 +362,16 @@ impl<'t> Parser<'t> {
         self.match_op(Punct::Semi, PARSING)?;
         out
     }
+
+    /// Parses a [Module]
     pub fn parse_module(&mut self) -> PResult<Module> {
         const PARSING: Parsing = Parsing::Module;
         self.match_type(TokenKind::Mod, PARSING)?;
+
         Ok(Module { name: self.identifier()?, kind: self.modulekind()? })
     }
+
+    /// Parses the item list associated with a [Module], if present
     pub fn modulekind(&mut self) -> PResult<ModuleKind> {
         const PARSING: Parsing = Parsing::ModuleKind;
         let inline = delim(Self::file, CURLIES, PARSING);
@@ -369,14 +383,17 @@ impl<'t> Parser<'t> {
                 Ok(ModuleKind::Outline)
             }
             got => Err(self.error(
-                Expected { want: TokenKind::Punct(Punct::Semi), got },
+                ExpectedToken { want: TokenKind::Punct(Punct::Semi), got },
                 PARSING,
             )),
         }
     }
+
+    /// Parses a [Function] definition
     pub fn parse_function(&mut self) -> PResult<Function> {
         const PARSING: Parsing = Parsing::Function;
         self.match_type(TokenKind::Fn, PARSING)?;
+
         Ok(Function {
             name: self.identifier()?,
             args: self.parse_params()?,
@@ -387,7 +404,7 @@ impl<'t> Parser<'t> {
                     Some(self.ty()?.into())
                 }
                 got => Err(self.error(
-                    Expected { want: TokenKind::Punct(Punct::Arrow), got },
+                    ExpectedToken { want: TokenKind::Punct(Punct::Arrow), got },
                     PARSING,
                 ))?,
             },
@@ -401,6 +418,8 @@ impl<'t> Parser<'t> {
             },
         })
     }
+
+    /// Parses the [parameters](Param) associated with a Function
     pub fn parse_params(&mut self) -> PResult<Vec<Param>> {
         const PARSING: Parsing = Parsing::Function;
         delim(
@@ -409,6 +428,8 @@ impl<'t> Parser<'t> {
             PARSING,
         )(self)
     }
+
+    /// Parses a single function [parameter](Param)
     pub fn parse_param(&mut self) -> PResult<Param> {
         Ok(Param {
             mutability: self.mutability()?,
@@ -419,9 +440,12 @@ impl<'t> Parser<'t> {
             },
         })
     }
+
+    /// Parses a [`struct` definition](Struct)
     pub fn parse_struct(&mut self) -> PResult<Struct> {
         const PARSING: Parsing = Parsing::Struct;
         self.match_type(TokenKind::Struct, PARSING)?;
+
         Ok(Struct {
             name: self.identifier()?,
             kind: match self.peek_kind(PARSING)? {
@@ -432,12 +456,14 @@ impl<'t> Parser<'t> {
                     StructKind::Empty
                 }
                 got => Err(self.error(
-                    Expected { want: TokenKind::Punct(Punct::Semi), got },
+                    ExpectedToken { want: TokenKind::Punct(Punct::Semi), got },
                     PARSING,
                 ))?,
             },
         })
     }
+
+    /// Parses a [tuple-`struct`](StructKind::Tuple)'s members
     pub fn structkind_tuple(&mut self) -> PResult<StructKind> {
         const PARSING: Parsing = Parsing::StructKind;
 
@@ -447,14 +473,19 @@ impl<'t> Parser<'t> {
             PARSING,
         )(self)?))
     }
+
+    /// Parses a [`struct`](StructKind::Struct)s members
     pub fn structkind_struct(&mut self) -> PResult<StructKind> {
         const PARSING: Parsing = Parsing::StructKind;
+
         Ok(StructKind::Struct(delim(
             sep(Self::struct_member, Punct::Comma, CURLIES.1, PARSING),
             CURLIES,
             PARSING,
         )(self)?))
     }
+
+    /// Parses a single [StructMember]
     pub fn struct_member(&mut self) -> PResult<StructMember> {
         const PARSING: Parsing = Parsing::StructMember;
         Ok(StructMember {
@@ -466,10 +497,13 @@ impl<'t> Parser<'t> {
             },
         })
     }
+
+    /// Parses an [`enum`](Enum) definition
     pub fn parse_enum(&mut self) -> PResult<Enum> {
-        // Enum        = "enum" Identifier '{' (Variant ',')* Variant? '}' ;
         const PARSING: Parsing = Parsing::Enum;
+
         self.match_type(TokenKind::Enum, PARSING)?;
+
         Ok(Enum {
             name: self.identifier()?,
             kind: match self.peek_kind(PARSING)? {
@@ -487,8 +521,10 @@ impl<'t> Parser<'t> {
         })
     }
 
+    /// Parses an [`enum`](Enum) [Variant]
     pub fn enum_variant(&mut self) -> PResult<Variant> {
         const PARSING: Parsing = Parsing::Variant;
+
         Ok(Variant {
             name: self.identifier()?,
             kind: match self.peek_kind(PARSING)? {
@@ -499,15 +535,21 @@ impl<'t> Parser<'t> {
             },
         })
     }
+
+    /// Parses a [C-like](VariantKind::CLike) [`enum`](Enum) [Variant]
     pub fn variantkind_clike(&mut self) -> PResult<VariantKind> {
         const PARSING: Parsing = Parsing::VariantKind;
+
         self.match_op(Punct::Eq, PARSING)?;
         let tok = self.match_type(TokenKind::Literal, PARSING)?;
+
         Ok(VariantKind::CLike(match tok.data() {
             TokenData::Integer(i) => *i,
             _ => panic!("Expected token data for {tok:?} while parsing {PARSING}"),
         }))
     }
+
+    /// Parses a [struct-like](VariantKind::Struct) [`enum`](Enum) [Variant]
     pub fn variantkind_struct(&mut self) -> PResult<VariantKind> {
         const PARSING: Parsing = Parsing::VariantKind;
         Ok(VariantKind::Struct(delim(
@@ -516,6 +558,8 @@ impl<'t> Parser<'t> {
             PARSING,
         )(self)?))
     }
+
+    /// Parses a [tuple-like](VariantKind::Tuple) [`enum`](Enum) [Variant]
     pub fn variantkind_tuple(&mut self) -> PResult<VariantKind> {
         const PARSING: Parsing = Parsing::VariantKind;
         Ok(VariantKind::Tuple(delim(
@@ -527,6 +571,7 @@ impl<'t> Parser<'t> {
 
     pub fn parse_impl(&mut self) -> PResult<Impl> {
         const PARSING: Parsing = Parsing::Impl;
+
         self.match_type(TokenKind::Impl, PARSING)?;
         Err(self.error(Todo, PARSING))
     }

@@ -22,9 +22,12 @@ pub enum ErrorKind {
     UnmatchedCurlyBraces,
     UnmatchedSquareBrackets,
     Unexpected(TokenKind),
-    Expected {
+    ExpectedToken {
         want: TokenKind,
         got: TokenKind,
+    },
+    ExpectedParsing {
+        want: Parsing,
     },
     /// No rules matched
     Nothing,
@@ -67,6 +70,7 @@ pub enum Parsing {
     Variant,
     VariantKind,
     Impl,
+    ImplKind,
 
     Ty,
     TyKind,
@@ -129,8 +133,11 @@ impl Display for ErrorKind {
             ErrorKind::UnmatchedCurlyBraces => write!(f, "Unmatched curly braces"),
             ErrorKind::UnmatchedSquareBrackets => write!(f, "Unmatched square brackets"),
             ErrorKind::Unexpected(t) => write!(f, "Encountered unexpected token `{t}`"),
-            ErrorKind::Expected { want: e, got: g } => {
+            ErrorKind::ExpectedToken { want: e, got: g } => {
                 write!(f, "Expected `{e}`, got `{g}`")
+            }
+            ErrorKind::ExpectedParsing { want } => {
+                write!(f, "Expected {want}")
             }
             ErrorKind::Nothing => write!(f, "Nothing found"),
             ErrorKind::Todo => write!(f, "TODO:"),
@@ -164,6 +171,7 @@ impl Display for Parsing {
             Parsing::Variant => "an enum variant",
             Parsing::VariantKind => "an enum variant",
             Parsing::Impl => "an impl block",
+            Parsing::ImplKind => "the target of an impl block",
 
             Parsing::Ty => "a type",
             Parsing::TyKind => "a type",
