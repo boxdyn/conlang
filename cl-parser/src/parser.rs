@@ -573,7 +573,29 @@ impl<'t> Parser<'t> {
         const PARSING: Parsing = Parsing::Impl;
 
         self.match_type(TokenKind::Impl, PARSING)?;
-        Err(self.error(Todo, PARSING))
+
+        Ok(Impl {
+            target: self.parse_impl_kind()?,
+            body: delim(Self::file, CURLIES, PARSING)(self)?,
+        })
+    }
+
+    pub fn parse_impl_kind(&mut self) -> PResult<ImplKind> {
+        const PARSING: Parsing = Parsing::ImplKind;
+
+        let target = self.ty()?;
+
+        if self.match_type(TokenKind::For, PARSING).is_err() {
+            Ok(ImplKind::Type(target))
+        } else if let TyKind::Path(impl_trait) = target.kind {
+            Ok(ImplKind::Trait { impl_trait, for_type: self.ty()?.into() })
+        } else {
+            Err(Error {
+                reason: ExpectedParsing { want: { Parsing::PathExpr } },
+                while_parsing: PARSING,
+                loc: target.extents.head,
+            })?
+        }
     }
 
     pub fn visibility(&mut self) -> PResult<Visibility> {
