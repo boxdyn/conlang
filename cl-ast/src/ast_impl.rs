@@ -430,10 +430,7 @@ mod display {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { head, indices } = self;
             write!(f, "{head}")?;
-            for indices in indices {
-                indices.fmt(f)?;
-            }
-            Ok(())
+            delimit(separate(indices, ", "), INLINE_SQUARE)(f)
         }
     }
     impl Display for Path {
