@@ -57,6 +57,8 @@ use std::ops::{Index, IndexMut};
 
 pub use make_intern_key;
 
+use self::iter::InternKeyIter;
+
 /// An index into a [Pool]. For full type-safety,
 /// there should be a unique [InternKey] for each [Pool]
 pub trait InternKey: std::fmt::Debug {
@@ -95,6 +97,10 @@ impl<T, ID: InternKey> Pool<T, ID> {
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.pool.iter_mut()
     }
+    pub fn key_iter(&self) -> iter::InternKeyIter<ID> {
+        // Safety: Pool currently has pool.len() entries, and data cannot be removed
+        unsafe { InternKeyIter::new(0..self.pool.len()) }
+    }
 
     pub fn insert(&mut self, value: T) -> ID {
         let id = self.pool.len();
@@ -128,4 +134,52 @@ impl<T, ID: InternKey> IndexMut<ID> for Pool<T, ID> {
             Some(value) => value,
         }
     }
+}
+
+mod iter {
+    use std::{marker::PhantomData, ops::Range};
+
+    use super::InternKey;
+
+    /// Iterates over the keys of a [Pool](super::Pool) independently of the pool itself.
+    ///
+    /// This is guaranteed to never overrun the length of the pool,
+    /// but is *NOT* guaranteed to iterate over all elements of the pool
+    /// if the pool is extended during iteration.
+    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+    pub struct InternKeyIter<ID: InternKey> {
+        range: Range<usize>,
+        _id: PhantomData<ID>,
+    }
+
+    impl<ID: InternKey> InternKeyIter<ID> {
+        /// Creates a new [InternKeyIter] producing the given [InternKey]
+        ///
+        /// # Safety:
+        /// - Range must not exceed bounds of the associated [Pool](super::Pool)
+        /// - Items must not be removed from the pool
+        /// - Items must be contiguous within the pool
+        pub(super) unsafe fn new(range: Range<usize>) -> Self {
+            Self { range, _id: Default::default() }
+        }
+    }
+
+    impl<ID: InternKey> Iterator for InternKeyIter<ID> {
+        type Item = ID;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            // Safety: InternKeyIter can only be created by InternKeyIter::new()
+            Some(unsafe { ID::from_raw_unchecked(self.range.next()?) })
+        }
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            self.range.size_hint()
+        }
+    }
+    impl<ID: InternKey> DoubleEndedIterator for InternKeyIter<ID> {
+        fn next_back(&mut self) -> Option<Self::Item> {
+            // Safety: see above
+            Some(unsafe { ID::from_raw_unchecked(self.range.next_back()?) })
+        }
+    }
+    impl<ID: InternKey> ExactSizeIterator for InternKeyIter<ID> {}
 }
