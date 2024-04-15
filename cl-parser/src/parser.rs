@@ -186,8 +186,8 @@ impl<'t> Parser<'t> {
     pub fn item(&mut self) -> PResult<Item> {
         let start = self.loc();
         Ok(Item {
-            vis: self.visibility()?,
             attrs: self.attributes()?,
+            vis: self.visibility()?,
             kind: self.itemkind()?,
             extents: Span(start, self.loc()),
         })
