@@ -255,7 +255,12 @@ mod display {
 
     impl Display for Ty {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match &self.kind {
+            self.kind.fmt(f)
+        }
+    }
+    impl Display for TyKind {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
                 TyKind::Never => "!".fmt(f),
                 TyKind::Empty => "()".fmt(f),
                 TyKind::SelfTy => "Self".fmt(f),
