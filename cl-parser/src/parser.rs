@@ -631,7 +631,13 @@ impl<'t> Parser<'t> {
                 TyKind::SelfTy
             }
             TokenKind::Punct(Punct::Amp) | TokenKind::Punct(Punct::AmpAmp) => self.tyref()?.into(),
-            TokenKind::Punct(Punct::LParen) => self.tytuple()?.into(),
+            TokenKind::Punct(Punct::LParen) => {
+                let out = self.tytuple()?;
+                match out.types.is_empty() {
+                    true => TyKind::Empty,
+                    false => TyKind::Tuple(out),
+                }
+            }
             TokenKind::Fn => self.tyfn()?.into(),
             path_like!() => self.path()?.into(),
             t => Err(self.error(Unexpected(t), PARSING))?,
@@ -644,7 +650,7 @@ impl<'t> Parser<'t> {
         const PARSING: Parsing = Parsing::TyTuple;
         Ok(TyTuple {
             types: delim(
-                sep(Self::ty, Punct::Comma, PARENS.1, PARSING),
+                sep(Self::tykind, Punct::Comma, PARENS.1, PARSING),
                 PARENS,
                 PARSING,
             )(self)?,
@@ -668,18 +674,25 @@ impl<'t> Parser<'t> {
     pub fn tyfn(&mut self) -> PResult<TyFn> {
         const PARSING: Parsing = Parsing::TyFn;
         self.match_type(TokenKind::Fn, PARSING)?;
+
         Ok(TyFn {
-            args: self.tytuple()?,
-            rety: {
-                match self.peek_kind(PARSING)? {
-                    TokenKind::Punct(Punct::Arrow) => {
-                        self.consume_peeked();
-                        Some(self.ty()?.into())
-                    }
-                    _ => None,
+            args: Box::new(match self.tyfn_args()? {
+                t if t.is_empty() => TyKind::Empty,
+                types => TyKind::Tuple(TyTuple { types }),
+            }),
+            rety: match self.peek_kind(PARSING) {
+                Ok(TokenKind::Punct(Punct::Arrow)) => {
+                    self.consume_peeked();
+                    Some(self.ty()?.into())
                 }
+                _ => None,
             },
         })
+    }
+
+    pub fn tyfn_args(&mut self) -> PResult<Vec<TyKind>> {
+        const P: Parsing = Parsing::TyFn;
+        delim(sep(Self::tykind, Punct::Comma, PARENS.1, P), PARENS, P)(self)
     }
 }
 

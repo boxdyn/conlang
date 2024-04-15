@@ -238,7 +238,7 @@ pub enum TyKind {
 /// A tuple of [Ty]pes
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TyTuple {
-    pub types: Vec<Ty>,
+    pub types: Vec<TyKind>,
 }
 
 /// A [Ty]pe-reference expression as (number of `&`, [Path])
@@ -251,7 +251,7 @@ pub struct TyRef {
 /// The args and return value for a function pointer [Ty]pe
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TyFn {
-    pub args: TyTuple,
+    pub args: Box<TyKind>,
     pub rety: Option<Box<Ty>>,
 }
 
