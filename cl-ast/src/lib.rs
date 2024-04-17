@@ -232,6 +232,7 @@ pub enum TyKind {
     Tuple(TyTuple),
     Ref(TyRef),
     Fn(TyFn),
+    // TODO: slice, array types
 }
 
 /// A tuple of [Ty]pes
