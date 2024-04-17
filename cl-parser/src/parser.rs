@@ -565,11 +565,15 @@ impl<'t> Parser<'t> {
     /// Parses a [tuple-like](VariantKind::Tuple) [`enum`](Enum) [Variant]
     pub fn variantkind_tuple(&mut self) -> PResult<VariantKind> {
         const PARSING: Parsing = Parsing::VariantKind;
-        Ok(VariantKind::Tuple(delim(
-            sep(Self::ty, Punct::Comma, Punct::RParen, PARSING),
-            PARENS,
-            PARSING,
-        )(self)?))
+        let tup = self.ty()?;
+        if !matches!(tup.kind, TyKind::Tuple(_) | TyKind::Empty) {
+            Err(self.error(
+                ErrorKind::ExpectedParsing { want: Parsing::TyTuple },
+                PARSING,
+            ))?
+        }
+
+        Ok(VariantKind::Tuple(tup))
     }
 
     pub fn parse_impl(&mut self) -> PResult<Impl> {

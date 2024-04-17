@@ -251,7 +251,7 @@ mod display {
             match self {
                 VariantKind::Plain => Ok(()),
                 VariantKind::CLike(n) => write!(f, " = {n}"),
-                VariantKind::Tuple(v) => delimit(separate(v, ", "), INLINE_PARENS)(f),
+                VariantKind::Tuple(v) => v.fmt(f),
                 VariantKind::Struct(v) => delimit(separate(v, ", "), INLINE_BRACES)(f),
             }
         }

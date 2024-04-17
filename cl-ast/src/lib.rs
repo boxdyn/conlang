@@ -197,7 +197,7 @@ pub struct Variant {
 pub enum VariantKind {
     Plain,
     CLike(u128),
-    Tuple(Vec<Ty>),
+    Tuple(Ty),
     Struct(Vec<StructMember>),
 }
 
