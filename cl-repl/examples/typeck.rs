@@ -1,37 +1,37 @@
 use cl_lexer::Lexer;
 use cl_parser::Parser;
 use cl_repl::repline::{error::Error as RlError, Repline};
-use cl_typeck::{name_collector::NameCollector, project::Project};
+use cl_typeck::{
+    definition::Def, name_collector::NameCollectable, project::Project, type_resolver::resolve,
+};
 use std::error::Error;
+
+const STDLIB_PATH: &str = "stdlib/lib.cl";
+const STDLIB: &str = include_str!("../../stdlib/lib.cl");
+
+const C_MAIN: &str = "\x1b[30m";
+const C_RESV: &str = "\x1b[35m";
+const C_CODE: &str = "\x1b[36m";
+
+/// A home for immutable intermediate ASTs
+///
+/// TODO: remove this.
+static mut TREES: TreeManager = TreeManager::new();
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut prj = Project::default();
-    let mut tcol = NameCollector::new(&mut prj);
 
-    println!(
-        "--- {} v{} 💪🦈 ---",
-        env!("CARGO_BIN_NAME"),
-        env!("CARGO_PKG_VERSION"),
-    );
+    let mut parser = Parser::new(Lexer::new(STDLIB));
+    let code = match parser.file() {
+        Ok(code) => code,
+        Err(e) => {
+            eprintln!("{STDLIB_PATH}:{e}");
+            Err(e)?
+        }
+    };
+    unsafe { TREES.push(code) }.collect_in_root(&mut prj)?;
 
-    read_and(
-        "\x1b[33m",
-        "cl>",
-        "? >",
-        |line| -> Result<_, Box<dyn Error>> {
-            if line.trim_start().is_empty() {
-                query(&tcol)?;
-                return Ok(Response::Deny);
-            }
-            let mut parser = Parser::new(Lexer::new(line));
-            let code = match parser.file() {
-                Ok(code) => code,
-                Err(e) => Err(e)?,
-            };
-            tcol.file(&code)?;
-            Ok(Response::Accept)
-        },
-    )
+    main_menu(&mut prj)
 }
 
 pub enum Response {
@@ -43,10 +43,9 @@ pub enum Response {
 fn read_and(
     color: &str,
     begin: &str,
-    again: &str,
     mut f: impl FnMut(&str) -> Result<Response, Box<dyn Error>>,
 ) -> Result<(), Box<dyn Error>> {
-    let mut rl = Repline::new(color, begin, again);
+    let mut rl = Repline::new(color, begin, "? >");
     loop {
         let line = match rl.read() {
             Err(RlError::CtrlC(_)) => break,
@@ -68,42 +67,117 @@ fn read_and(
     Ok(())
 }
 
-fn query(prj: &Project) -> Result<(), Box<dyn Error>> {
-    use cl_typeck::{
-        definition::{Def, DefKind},
-        type_kind::TypeKind,
-    };
-    read_and("\x1b[35m", "qy>", "? >", |line| {
-        if line.trim_start().is_empty() {
+fn main_menu(prj: &mut Project) -> Result<(), Box<dyn Error>> {
+    banner();
+    read_and(C_MAIN, "mu>", |line| {
+        match line.trim() {
+            "c" | "code" => enter_code(prj),
+            "clear" => clear(),
+            "e" | "exit" => return Ok(Response::Break),
+            "l" | "list" => list_types(prj),
+            "q" | "query" => query_type_expression(prj),
+            "r" | "resolve" => resolve_all(prj),
+            "h" | "help" => {
+                println!(
+                    "Valid commands are:
+    code    (c): Enter code to type-check
+    list    (l): List all known types
+    query   (q): Query the type system
+    resolve (r): Perform type resolution
+    help    (h): Print this list
+    exit    (e): Exit the program"
+                );
+                return Ok(Response::Deny);
+            }
+            _ => Err(r#"Invalid command. Type "help" to see the list of valid commands."#)?,
+        }
+        .map(|_| Response::Accept)
+    })
+}
+
+fn enter_code(prj: &mut Project) -> Result<(), Box<dyn Error>> {
+    read_and(C_CODE, "cl>", |line| {
+        if line.trim().is_empty() {
             return Ok(Response::Break);
         }
-        match line {
-            "$all\n" => println!("{prj:#?}"),
-            _ => {
-                // parse it as a path, and convert the path into a borrowed path
-                let path = Parser::new(Lexer::new(line)).path()?;
+        let code = Parser::new(Lexer::new(line)).file()?;
 
-                let Some((type_id, path)) = prj.get_type((&path).into(), prj.module_root) else {
-                    return Ok(Response::Deny);
-                };
-                let Def { name, vis, meta: _, kind, source: _, module } = &prj[type_id];
-                match (kind, prj.get_value(path, type_id)) {
-                    (_, Some((val, path))) => {
-                        println!("value {}; {path}\n{:#?}", usize::from(val), prj[val])
-                    }
-                    (DefKind::Type(TypeKind::Module), None) => println!(
-                        "{vis}mod \"{name}\" (#{}); {path}\n{:#?}",
-                        usize::from(type_id),
-                        module
-                    ),
-                    (_, None) => println!(
-                        "type {name}(#{}); {path}\n{:#?}",
-                        usize::from(type_id),
-                        prj.pool[type_id]
-                    ),
-                };
-            }
-        }
+        // Safety: this is totally unsafe
+        unsafe { TREES.push(code) }.collect_in_root(prj)?;
+
         Ok(Response::Accept)
     })
+}
+
+fn query_type_expression(prj: &mut Project) -> Result<(), Box<dyn Error>> {
+    read_and(C_RESV, "ty>", |line| {
+        if line.trim().is_empty() {
+            return Ok(Response::Break);
+        }
+        // parse it as a path, and convert the path into a borrowed path
+        let ty = Parser::new(Lexer::new(line)).ty()?.kind;
+        let id = prj.evaluate(&ty, prj.root)?;
+        pretty_def(&prj[id], id);
+        Ok(Response::Accept)
+    })
+}
+
+fn resolve_all(prj: &mut Project) -> Result<(), Box<dyn Error>> {
+    for id in prj.pool.key_iter() {
+        resolve(prj, id)?;
+    }
+    println!("Types resolved successfully!");
+    Ok(())
+}
+
+fn list_types(prj: &mut Project) -> Result<(), Box<dyn Error>> {
+    println!("     name\x1b[30G  type");
+    for (idx, Def { name, vis, kind, .. }) in prj.pool.iter().enumerate() {
+        print!("{idx:3}: {vis}");
+        if name.is_empty() {
+            print!("\x1b[30m_\x1b[0m")
+        }
+        println!("{name}\x1b[30G| {kind}");
+    }
+    Ok(())
+}
+
+fn pretty_def(def: &Def, id: impl Into<usize>) {
+    let id = id.into();
+    let Def { vis, name, kind, module, meta, source: _ } = def;
+    for meta in *meta {
+        println!("#[{meta}]")
+    }
+    println!("{vis}{name} [id: {id}] = {kind}");
+    println!("Module:\n\x1b[97m{module}\x1b[0m");
+}
+
+fn clear() -> Result<(), Box<dyn Error>> {
+    println!("\x1b[H\x1b[2J");
+    banner();
+    Ok(())
+}
+
+fn banner() {
+    println!(
+        "--- {} v{} 💪🦈 ---",
+        env!("CARGO_BIN_NAME"),
+        env!("CARGO_PKG_VERSION"),
+    );
+}
+
+/// Keeps leaked references to past ASTs, for posterity:tm:
+struct TreeManager {
+    trees: Vec<&'static cl_ast::File>,
+}
+
+impl TreeManager {
+    const fn new() -> Self {
+        Self { trees: vec![] }
+    }
+    fn push(&mut self, tree: cl_ast::File) -> &'static cl_ast::File {
+        let ptr = Box::leak(Box::new(tree));
+        self.trees.push(ptr);
+        ptr
+    }
 }

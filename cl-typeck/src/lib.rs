@@ -6,11 +6,21 @@
 
 /*
 
-The type checker keeps track of a *global intern pool* for Types and Values
-References to the intern pool are held by ID, and items cannot be freed from the pool EVER.
+The type checker keeps track of a *global intern pool* for Definitions
+References to the intern pool are held by DefID, and items cannot be freed from the pool EVER.
 
-Items are inserted into their respective pools,
+Definitions are classified into two namespaces:
 
+Type Namespace:
+    - Modules
+    - Structs
+    - Enums
+    - Type aliases
+
+Value Namespace:
+    - Functions
+    - Constants
+    - Static variables
 
 */
 
@@ -24,127 +34,116 @@ pub mod key {
         /// [1]: crate::definition::Def
         DefID,
     }
+
+    impl std::fmt::Display for DefID {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            self.0.fmt(f)
+        }
+    }
 }
 
 pub mod definition {
-    use crate::{key::DefID, module::Module, type_kind::TypeKind, value_kind::ValueKind};
-    use cl_ast::{format::FmtPretty, Item, Meta, Visibility};
-    use std::fmt::Write;
+    use crate::{key::DefID, module::Module};
+    use cl_ast::{Item, Meta, Visibility};
+    use std::{fmt::Debug, str::FromStr};
 
-    #[derive(Clone, PartialEq, Eq)]
-    pub struct Def {
-        pub name: String,
+    mod display;
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct Def<'a> {
+        pub name: &'a str,
         pub vis: Visibility,
-        pub meta: Vec<Meta>,
-        pub kind: DefKind,
-        pub source: Option<Item>,
-        pub module: Module,
+        pub meta: &'a [Meta],
+        pub kind: DefKind<'a>,
+        pub source: Option<&'a Item>,
+        pub module: Module<'a>,
     }
 
-    impl Default for Def {
+    mod builder_functions {
+        use super::*;
+
+        impl<'a> Def<'a> {
+            pub fn set_name(&mut self, name: &'a str) -> &mut Self {
+                self.name = name;
+                self
+            }
+            pub fn set_vis(&mut self, vis: Visibility) -> &mut Self {
+                self.vis = vis;
+                self
+            }
+            pub fn set_meta(&mut self, meta: &'a [Meta]) -> &mut Self {
+                self.meta = meta;
+                self
+            }
+            pub fn set_kind(&mut self, kind: DefKind<'a>) -> &mut Self {
+                self.kind = kind;
+                self
+            }
+            pub fn set_source(&mut self, source: &'a Item) -> &mut Self {
+                self.source = Some(source);
+                self
+            }
+            pub fn set_module(&mut self, module: Module<'a>) -> &mut Self {
+                self.module = module;
+                self
+            }
+        }
+    }
+
+    impl Default for Def<'_> {
         fn default() -> Self {
             Self {
                 name: Default::default(),
-                vis: Default::default(),
+                vis: Visibility::Public,
                 meta: Default::default(),
-                kind: DefKind::Type(TypeKind::Module),
+                kind: Default::default(),
                 source: Default::default(),
                 module: Default::default(),
             }
         }
     }
 
-    impl Def {
-        pub fn new_module(
-            name: String,
-            vis: Visibility,
-            meta: Vec<Meta>,
-            parent: Option<DefID>,
-        ) -> Self {
-            Self {
-                name,
-                vis,
-                meta,
-                kind: DefKind::Type(TypeKind::Module),
-                source: None,
-                module: Module { parent, ..Default::default() },
-            }
-        }
-    }
-
-    impl std::fmt::Debug for Def {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { name, vis, meta, kind, source, module } = self;
-            f.debug_struct("Def")
-                .field("name", &name)
-                .field("vis", &vis)
-                .field_with("meta", |f| write!(f, "{meta:?}"))
-                .field("kind", &kind)
-                .field_with("source", |f| match source {
-                    Some(item) => write!(f.pretty(), "{{\n{item}\n}}"),
-                    None => todo!(),
-                })
-                .field("module", &module)
-                .finish()
-        }
-    }
-
-    #[derive(Clone, Debug, PartialEq, Eq)]
-    pub enum DefKind {
-        /// A type, such as a ``
-        Type(TypeKind),
+    #[derive(Clone, Default, Debug, PartialEq, Eq)]
+    pub enum DefKind<'a> {
+        /// An unevaluated definition
+        #[default]
+        Undecided,
+        /// An impl block
+        Impl(DefID),
+        /// A type, such as a `type`, `struct`, or `enum`
+        Type(TypeKind<'a>),
         /// A value, such as a `const`, `static`, or `fn`
         Value(ValueKind),
     }
 
-    impl DefKind {
-        pub fn is_type(&self) -> bool {
-            matches!(self, Self::Type(_))
-        }
-        pub fn ty(&self) -> Option<&TypeKind> {
-            match self {
-                DefKind::Type(t) => Some(t),
-                _ => None,
-            }
-        }
-        pub fn is_value(&self) -> bool {
-            matches!(self, Self::Value(_))
-        }
-        pub fn value(&self) -> Option<&ValueKind> {
-            match self {
-                DefKind::Value(v) => Some(v),
-                _ => None,
-            }
-        }
-    }
-}
-
-pub mod type_kind {
-    //! A [TypeKind] represents an item in the Type Namespace
-    //! (a component of a [Project](crate::project::Project)).
-
-    use cl_ast::Visibility;
-    use std::{fmt::Debug, str::FromStr};
-
-    use crate::key::DefID;
-
-    /// The kind of a type
+    /// A [ValueKind] represents an item in the Value Namespace
+    /// (a component of a [Project](crate::project::Project)).
     #[derive(Clone, Debug, PartialEq, Eq)]
-    pub enum TypeKind {
-        /// A type which has not yet been resolved
-        Undecided,
+    pub enum ValueKind {
+        Const(DefID),
+        Static(DefID),
+        Fn(DefID),
+    }
+    /// A [TypeKind] represents an item in the Type Namespace
+    /// (a component of a [Project](crate::project::Project)).
+    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+    pub enum TypeKind<'a> {
         /// An alias for an already-defined type
         Alias(Option<DefID>),
         /// A primitive type, built-in to the compiler
         Intrinsic(Intrinsic),
         /// A user-defined abstract data type
-        Adt(Adt),
+        Adt(Adt<'a>),
         /// A reference to an already-defined type: &T
-        Ref(DefID),
+        Ref(u16, DefID),
         /// A contiguous view of dynamically sized memory
         Slice(DefID),
-        /// A function pointer which accepts multiple inputs and produces an output
-        FnPtr { args: Vec<DefID>, rety: DefID },
+        /// A contiguous view of statically sized memory
+        Array(DefID, usize),
+        /// A tuple of existing types
+        Tuple(Vec<DefID>),
+        /// A function which accepts multiple inputs and produces an output
+        FnSig { args: DefID, rety: DefID },
         /// The unit type
         Empty,
         /// The never type
@@ -156,16 +155,17 @@ pub mod type_kind {
     }
 
     /// A user-defined Abstract Data Type
-    #[derive(Clone, Debug, PartialEq, Eq)]
-    pub enum Adt {
+    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+    pub enum Adt<'a> {
         /// A union-like enum type
-        Enum(Vec<(String, DefID)>),
-        CLikeEnum(Vec<(String, u128)>),
+        Enum(Vec<(&'a str, Option<DefID>)>),
+        /// A C-like enum
+        CLikeEnum(Vec<(&'a str, u128)>),
         /// An enum with no fields, which can never be constructed
         FieldlessEnum,
 
         /// A structural product type with named members
-        Struct(Vec<(String, Visibility, DefID)>),
+        Struct(Vec<(&'a str, Visibility, DefID)>),
         /// A structural product type with unnamed members
         TupleStruct(Vec<(Visibility, DefID)>),
         /// A structural product type of neither named nor unnamed members
@@ -173,13 +173,13 @@ pub mod type_kind {
 
         /// A choose your own undefined behavior type
         /// TODO: should unions be a language feature?
-        Union(Vec<(String, DefID)>),
+        Union(Vec<(&'a str, DefID)>),
     }
 
     /// The set of compiler-intrinsic types.
     /// These primitive types have native implementations of the basic operations.
     #[allow(non_camel_case_types)]
-    #[derive(Clone, Debug, PartialEq, Eq)]
+    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
     pub enum Intrinsic {
         /// An 8-bit signed integer: `#[intrinsic = "i8"]`
         I8,
@@ -203,6 +203,8 @@ pub mod type_kind {
         // U128,
         /// A boolean (`true` or `false`): `#[intrinsic = "bool"]`
         Bool,
+        /// The unicode codepoint type: #[intrinsic = "char"]
+        Char,
     }
 
     impl FromStr for Intrinsic {
@@ -219,62 +221,62 @@ pub mod type_kind {
                 "u32" => Intrinsic::U32,
                 "u64" => Intrinsic::U64,
                 "bool" => Intrinsic::Bool,
+                "char" => Intrinsic::Char,
                 _ => Err(())?,
             })
         }
-    }
-
-    #[derive(Clone, Debug, PartialEq, Eq)]
-    pub enum Float {
-        F32 = 0x20,
-        F64,
-    }
-}
-
-pub mod value_kind {
-    //! A [ValueKind] represents an item in the Value Namespace
-    //! (a component of a [Project](crate::project::Project)).
-
-    use crate::typeref::TypeRef;
-    use cl_ast::Block;
-
-    #[derive(Clone, Debug, PartialEq, Eq)]
-    pub enum ValueKind {
-        Undecided,
-        Const(TypeRef),
-        Static(TypeRef),
-        Fn {
-            // TODO: Store the variable bindings here!
-            args: Vec<TypeRef>,
-            rety: TypeRef,
-            body: Block,
-        },
     }
 }
 
 pub mod module {
     //! A [Module] is a node in the Module Tree (a component of a
     //! [Project](crate::project::Project))
+    use cl_structures::intern_pool::InternKey;
+
     use crate::key::DefID;
     use std::collections::HashMap;
 
     /// A [Module] is a node in the Module Tree (a component of a
     /// [Project](crate::project::Project)).
     #[derive(Clone, Debug, Default, PartialEq, Eq)]
-    pub struct Module {
+    pub struct Module<'a> {
         pub parent: Option<DefID>,
-        pub types: HashMap<String, DefID>,
-        pub values: HashMap<String, DefID>,
+        pub types: HashMap<&'a str, DefID>,
+        pub values: HashMap<&'a str, DefID>,
+        pub imports: HashMap<&'a str, DefID>,
     }
 
-    impl Module {
+    impl Module<'_> {
         pub fn new(parent: DefID) -> Self {
             Self { parent: Some(parent), ..Default::default() }
+        }
+        pub fn with_optional_parent(parent: Option<DefID>) -> Self {
+            Self { parent, ..Default::default() }
+        }
+    }
+
+    impl std::fmt::Display for Module<'_> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let Self { parent, types, values, imports } = self;
+            if let Some(parent) = parent {
+                writeln!(f, "Parent: {}", parent.get())?;
+            }
+            for (name, table) in [("Types", types), ("Values", values), ("Imports", imports)] {
+                if table.is_empty() {
+                    continue;
+                }
+                writeln!(f, "{name}:")?;
+                for (name, id) in table.iter() {
+                    writeln!(f, "    {name} => {id}")?;
+                }
+            }
+            Ok(())
         }
     }
 }
 
 pub mod path {
+
     use cl_ast::{Path as AstPath, PathPart};
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -311,6 +313,7 @@ pub mod path {
             Self::new(value)
         }
     }
+
     impl std::fmt::Display for Path<'_> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             const SEPARATOR: &str = "::";
@@ -328,46 +331,77 @@ pub mod path {
 
 pub mod project {
     use crate::{
-        definition::{Def, DefKind},
+        definition::{Def, DefKind, TypeKind},
         key::DefID,
+        module,
         path::Path,
-        type_kind::TypeKind,
     };
-    use cl_ast::{Identifier, PathPart, Visibility};
+    use cl_ast::{Identifier, PathPart, TyFn, TyKind, TyRef, TyTuple, Visibility};
     use cl_structures::intern_pool::Pool;
-    use std::ops::{Index, IndexMut};
+    use std::{
+        collections::HashMap,
+        ops::{Index, IndexMut},
+    };
 
-    #[derive(Clone, Debug, PartialEq, Eq)]
-    pub struct Project {
-        pub pool: Pool<Def, DefID>,
-        pub module_root: DefID,
+    use self::evaluate::EvaluableTypeExpression;
+
+    #[derive(Clone, Debug)]
+    pub struct Project<'a> {
+        pub pool: Pool<Def<'a>, DefID>,
+        /// Stores anonymous tuples, function pointer types, etc.\
+        pub anon_types: HashMap<TypeKind<'a>, DefID>,
+        pub impls_pending: Vec<(&'a cl_ast::Impl, DefID)>,
+        pub root: DefID,
     }
 
-    impl Project {
+    impl Project<'_> {
         pub fn new() -> Self {
             Self::default()
         }
     }
-    impl Default for Project {
+
+    impl Default for Project<'_> {
         fn default() -> Self {
             let mut pool = Pool::default();
-            let module_root = pool.insert(Def::default());
-            // Insert the Never(!) type
-            let never = pool.insert(Def {
-                name: String::from("!"),
-                vis: Visibility::Public,
-                kind: DefKind::Type(TypeKind::Never),
+            let root = pool.insert(Def {
+                name: "🌳 root 🌳",
+                kind: DefKind::Type(TypeKind::Module),
                 ..Default::default()
             });
-            pool[module_root]
-                .module
-                .types
-                .insert(String::from("!"), never);
-            Self { pool, module_root }
+
+            // Insert the Never(!) type
+            let never = pool.insert(Def {
+                name: "!",
+                vis: Visibility::Public,
+                kind: DefKind::Type(TypeKind::Never),
+                module: module::Module::new(root),
+                ..Default::default()
+            });
+            let empty = pool.insert(Def {
+                name: "()",
+                vis: Visibility::Public,
+                kind: DefKind::Type(TypeKind::Empty),
+                module: module::Module::new(root),
+                ..Default::default()
+            });
+            let selfty = pool.insert(Def {
+                name: "Self",
+                vis: Visibility::Public,
+                kind: DefKind::Type(TypeKind::SelfTy),
+                module: module::Module::new(root),
+                ..Default::default()
+            });
+
+            let mut anon_types = HashMap::new();
+            anon_types.insert(TypeKind::Empty, empty);
+            anon_types.insert(TypeKind::Never, never);
+            anon_types.insert(TypeKind::SelfTy, selfty);
+
+            Self { pool, root, anon_types, impls_pending: Default::default() }
         }
     }
 
-    impl Project {
+    impl<'a> Project<'a> {
         pub fn parent_of(&self, module: DefID) -> Option<DefID> {
             self[module].module.parent
         }
@@ -379,8 +413,7 @@ pub mod project {
         }
         /// Resolves a path within a module tree, finding the innermost module.
         /// Returns the remaining path parts.
-        pub fn get_type<'a>(&self, path: Path<'a>, within: DefID) -> Option<(DefID, Path<'a>)> {
-            // TODO: Cache module lookups
+        pub fn get_type<'p>(&self, path: Path<'p>, within: DefID) -> Option<(DefID, Path<'p>)> {
             if path.absolute {
                 self.get_type(path.relative(), self.root_of(within))
             } else if let Some(front) = path.front() {
@@ -388,7 +421,7 @@ pub mod project {
                 match front {
                     PathPart::SelfKw => self.get_type(path.pop_front()?, within),
                     PathPart::SuperKw => self.get_type(path.pop_front()?, module.parent?),
-                    PathPart::Ident(Identifier(name)) => match module.types.get(name) {
+                    PathPart::Ident(Identifier(name)) => match module.types.get(name.as_str()) {
                         Some(&submodule) => self.get_type(path.pop_front()?, submodule),
                         None => Some((within, path)),
                     },
@@ -398,10 +431,10 @@ pub mod project {
             }
         }
 
-        pub fn get_value<'a>(&self, path: Path<'a>, within: DefID) -> Option<(DefID, Path<'a>)> {
+        pub fn get_value<'p>(&self, path: Path<'p>, within: DefID) -> Option<(DefID, Path<'p>)> {
             match path.front()? {
                 PathPart::Ident(Identifier(name)) => Some((
-                    self[within].module.values.get(name).copied()?,
+                    self[within].module.values.get(name.as_str()).copied()?,
                     path.pop_front()?,
                 )),
                 _ => None,
@@ -409,369 +442,756 @@ pub mod project {
         }
 
         #[rustfmt::skip]
-        pub fn insert_type(&mut self, name: String, value: Def, parent: DefID) -> Option<DefID> {
+        pub fn insert_type(&mut self, name: &'a str, value: Def<'a>, parent: DefID) -> Option<DefID> {
             let id = self.pool.insert(value);
             self[parent].module.types.insert(name, id)
         }
         #[rustfmt::skip]
-        pub fn insert_value(&mut self, name: String, value: Def, parent: DefID) -> Option<DefID> {
+        pub fn insert_value(&mut self, name: &'a str, value: Def<'a>, parent: DefID) -> Option<DefID> {
             let id = self.pool.insert(value);
             self[parent].module.values.insert(name, id)
         }
+
+        /// Inserts the type returned by the provided closure iff the TypeKind doesn't already exist
+        ///
+        /// Assumes `kind` uniquely identifies the type!
+        pub fn insert_anonymous_type(
+            &mut self,
+            kind: TypeKind<'a>,
+            def: impl FnOnce() -> Def<'a>,
+        ) -> DefID {
+            *(self
+                .anon_types
+                .entry(kind)
+                .or_insert_with(|| self.pool.insert(def())))
+        }
+
+        pub fn evaluate<T>(&mut self, expr: &T, parent: DefID) -> Result<T::Out, String>
+        where T: EvaluableTypeExpression {
+            expr.evaluate(self, parent)
+        }
     }
 
-    /// Implements [Index] and [IndexMut] for [Project]: `self.table[ID] -> Definition`
-    macro_rules! impl_index {
-        ($(self.$table:ident[$idx:ty] -> $out:ty),*$(,)?) => {$(
-            impl Index<$idx> for Project {
-                type Output = $out;
-                fn index(&self, index: $idx) -> &Self::Output {
-                    &self.$table[index]
-                }
-            }
-            impl IndexMut<$idx> for Project {
-                fn index_mut(&mut self, index: $idx) -> &mut Self::Output {
-                    &mut self.$table[index]
-                }
-            }
-        )*};
+    impl<'a> Index<DefID> for Project<'a> {
+        type Output = Def<'a>;
+        fn index(&self, index: DefID) -> &Self::Output {
+            &self.pool[index]
+        }
     }
-    impl_index! {
-        self.pool[DefID] -> Def,
-        // self.types[TypeID] -> TypeDef,
-        // self.values[ValueID] -> ValueDef,
+    impl IndexMut<DefID> for Project<'_> {
+        fn index_mut(&mut self, index: DefID) -> &mut Self::Output {
+            &mut self.pool[index]
+        }
+    }
+
+    pub mod evaluate {
+        //! An [EvaluableTypeExpression] is a component of a type expression tree
+        //! or an intermediate result of expression evaluation.
+
+        use super::*;
+        use cl_ast::Ty;
+
+        /// Things that can be evaluated as a type expression
+        pub trait EvaluableTypeExpression {
+            /// The result of type expression evaluation
+            type Out;
+            fn evaluate(&self, prj: &mut Project, parent: DefID) -> Result<Self::Out, String>;
+        }
+
+        impl EvaluableTypeExpression for Ty {
+            type Out = DefID;
+            fn evaluate(&self, prj: &mut Project, id: DefID) -> Result<DefID, String> {
+                self.kind.evaluate(prj, id)
+            }
+        }
+
+        impl EvaluableTypeExpression for TyKind {
+            type Out = DefID;
+            fn evaluate(&self, prj: &mut Project, parent: DefID) -> Result<DefID, String> {
+                let id = match self {
+                    // TODO: reduce duplication here
+                    TyKind::Never => prj.anon_types[&TypeKind::Never],
+                    TyKind::Empty => prj.anon_types[&TypeKind::Empty],
+                    TyKind::SelfTy => prj.anon_types[&TypeKind::SelfTy],
+                    // TyKind::Path must be looked up explicitly
+                    TyKind::Path(path) => {
+                        let (id, path) = prj
+                            .get_type(path.into(), parent)
+                            .ok_or("Failed to get type")?;
+                        if path.is_empty() {
+                            id
+                        } else {
+                            let (id, path) =
+                                prj.get_value(path, id).ok_or("Failed to get value")?;
+                            path.is_empty()
+                                .then_some(id)
+                                .ok_or("Path not fully resolved")?
+                        }
+                    }
+                    TyKind::Tuple(tup) => tup.evaluate(prj, parent)?,
+                    TyKind::Ref(tyref) => tyref.evaluate(prj, parent)?,
+                    TyKind::Fn(tyfn) => tyfn.evaluate(prj, parent)?,
+                };
+                // println!("{self} => {id:?}");
+
+                Ok(id)
+            }
+        }
+
+        impl EvaluableTypeExpression for str {
+            type Out = DefID;
+
+            fn evaluate(&self, prj: &mut Project, parent: DefID) -> Result<Self::Out, String> {
+                prj[parent]
+                    .module
+                    .types
+                    .get(self)
+                    .copied()
+                    .ok_or_else(|| format!("{self} is not a member of {}", prj[parent].name))
+            }
+        }
+
+        impl EvaluableTypeExpression for TyTuple {
+            type Out = DefID;
+            fn evaluate(&self, prj: &mut Project, parent: DefID) -> Result<DefID, String> {
+                let types = self.types.evaluate(prj, parent)?;
+                let root = prj.root;
+                let id = prj.insert_anonymous_type(TypeKind::Tuple(types.clone()), move || Def {
+                    kind: DefKind::Type(TypeKind::Tuple(types)),
+                    module: module::Module::new(root),
+                    ..Default::default()
+                });
+
+                Ok(id)
+            }
+        }
+        impl EvaluableTypeExpression for TyRef {
+            type Out = DefID;
+            fn evaluate(&self, prj: &mut Project, parent: DefID) -> Result<DefID, String> {
+                let TyRef { count, mutable: _, to } = self;
+                let to = to.evaluate(prj, parent)?;
+
+                let root = prj.root;
+                let id = prj.insert_anonymous_type(TypeKind::Ref(*count, to), move || Def {
+                    kind: DefKind::Type(TypeKind::Ref(*count, to)),
+                    module: module::Module::new(root),
+                    ..Default::default()
+                });
+                Ok(id)
+            }
+        }
+        impl EvaluableTypeExpression for TyFn {
+            type Out = DefID;
+            fn evaluate(&self, prj: &mut Project, parent: DefID) -> Result<DefID, String> {
+                let TyFn { args, rety } = self;
+
+                let args = args.evaluate(prj, parent)?;
+                let rety = match rety {
+                    Some(rety) => rety.evaluate(prj, parent)?,
+                    _ => TyKind::Empty.evaluate(prj, parent)?,
+                };
+
+                let root = prj.root;
+                let id = prj.insert_anonymous_type(TypeKind::FnSig { args, rety }, || Def {
+                    kind: DefKind::Type(TypeKind::FnSig { args, rety }),
+                    module: module::Module::new(root),
+                    ..Default::default()
+                });
+                Ok(id)
+            }
+        }
+
+        impl EvaluableTypeExpression for cl_ast::Path {
+            type Out = DefID;
+
+            fn evaluate(&self, prj: &mut Project, parent: DefID) -> Result<Self::Out, String> {
+                Path::from(self).evaluate(prj, parent)
+            }
+        }
+        impl<'a> EvaluableTypeExpression for Path<'a> {
+            type Out = DefID;
+
+            fn evaluate(&self, prj: &mut Project, parent: DefID) -> Result<Self::Out, String> {
+                let (id, path) = prj.get_type(*self, parent).ok_or("Failed to get type")?;
+
+                if path.is_empty() {
+                    Ok(id)
+                } else {
+                    let (id, path) = prj.get_value(path, id).ok_or("Failed to get value")?;
+                    path.is_empty()
+                        .then_some(id)
+                        .ok_or(String::from("Path not fully resolved"))
+                }
+            }
+        }
+        impl<T: EvaluableTypeExpression> EvaluableTypeExpression for [T] {
+            type Out = Vec<T::Out>;
+
+            fn evaluate(&self, prj: &mut Project, parent: DefID) -> Result<Self::Out, String> {
+                let mut types = vec![];
+                for value in self {
+                    types.push(value.evaluate(prj, parent)?)
+                }
+
+                Ok(types)
+            }
+        }
+        impl<T: EvaluableTypeExpression> EvaluableTypeExpression for Option<T> {
+            type Out = Option<T::Out>;
+
+            fn evaluate(&self, prj: &mut Project, parent: DefID) -> Result<Self::Out, String> {
+                Ok(match self {
+                    Some(v) => Some(v.evaluate(prj, parent)?),
+                    None => None,
+                })
+            }
+        }
+        impl<T: EvaluableTypeExpression> EvaluableTypeExpression for Box<T> {
+            type Out = T::Out;
+
+            fn evaluate(&self, prj: &mut Project, parent: DefID) -> Result<Self::Out, String> {
+                self.as_ref().evaluate(prj, parent)
+            }
+        }
     }
 }
 
 pub mod name_collector {
     //! Performs step 1 of type checking: Collecting all the names of things into [Module] units
-
     use crate::{
         definition::{Def, DefKind},
-        key,
-        project::Project,
-        type_kind::{Adt, TypeKind},
-        value_kind::ValueKind,
+        key::DefID,
+        module::Module as Mod,
+        project::Project as Prj,
     };
     use cl_ast::*;
-    use std::ops::{Deref, DerefMut};
 
-    /// Collects types for future use
-    #[derive(Debug, PartialEq, Eq)]
-    pub struct NameCollector<'prj> {
-        /// A stack of the current modules
-        pub mod_stack: Vec<key::DefID>,
-        /// The [Project], the type checker and resolver's central data store
-        pub project: &'prj mut Project,
-    }
+    pub trait NameCollectable<'a> {
+        /// Collects the identifiers within this node,
+        /// returning a new [DefID] if any were allocated,
+        /// else returning the parent [DefID]
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str>;
 
-    impl<'prj> NameCollector<'prj> {
-        pub fn new(project: &'prj mut Project) -> Self {
-            // create a root module
-            Self { mod_stack: vec![project.module_root], project }
-        }
-
-        /// Gets the currently traversed parent module
-        pub fn parent(&self) -> Option<key::DefID> {
-            self.mod_stack.last().copied()
+        fn collect_in_root(&'a self, c: &mut Prj<'a>) -> Result<DefID, &'static str> {
+            self.collect(c, c.root)
         }
     }
 
-    impl Deref for NameCollector<'_> {
-        type Target = Project;
-        fn deref(&self) -> &Self::Target {
-            self.project
-        }
-    }
-    impl DerefMut for NameCollector<'_> {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            self.project
-        }
-    }
-
-    impl NameCollector<'_> {
-        pub fn file(&mut self, f: &File) -> Result<(), &'static str> {
-            let parent = self.parent().ok_or("No parent to add item to")?;
-
-            for item in &f.items {
-                let def = match &item.kind {
-                    // modules
-                    // types
-                    ItemKind::Module(_) => {
-                        self.module(item)?;
-                        continue;
-                    }
-                    ItemKind::Enum(_) => Some(self.ty_enum(item)?),
-                    ItemKind::Alias(_) => Some(self.ty_alias(item)?),
-                    ItemKind::Struct(_) => Some(self.ty_struct(item)?),
-                    // values processed by the value collector
-                    ItemKind::Const(_) => Some(self.val_const(item)?),
-                    ItemKind::Static(_) => Some(self.val_static(item)?),
-                    ItemKind::Function(_) => Some(self.val_function(item)?),
-                    ItemKind::Impl(_) => None,
-                };
-                let Some(def) = def else { continue };
-                match def.kind {
-                    DefKind::Type(_) => {
-                        if let Some(v) = self.insert_type(def.name.clone(), def, parent) {
-                            panic!("Redefinition of type {} ({v:?})!", self[v].name)
-                        }
-                    }
-                    DefKind::Value(_) => {
-                        if let Some(v) = self.insert_value(def.name.clone(), def, parent) {
-                            panic!("Redefinition of value {} ({v:?})!", self[v].name)
-                        }
-                    }
-                }
+    impl<'a> NameCollectable<'a> for File {
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            for item in &self.items {
+                item.collect(c, parent)?;
             }
-            Ok(())
-        }
-
-        /// Collects a [Module]
-        pub fn module(&mut self, m: &Item) -> Result<(), &'static str> {
-            let Item { kind: ItemKind::Module(Module { name, kind }), vis, attrs, .. } = m else {
-                Err("module called on Item which was not an ItemKind::Module")?
-            };
-            let ModuleKind::Inline(kind) = kind else {
-                Err("Out-of-line modules not yet supported")?
-            };
-            let parent = self.parent().ok_or("No parent to add module to")?;
-
-            let module = self.pool.insert(Def::new_module(
-                name.0.clone(),
-                *vis,
-                attrs.meta.clone(),
-                Some(parent),
-            ));
-
-            self[parent]
-                .module
-                .types
-                .insert(name.0.clone(), module)
-                .is_some()
-                .then(|| panic!("Error: redefinition of module {name}"));
-
-            self.mod_stack.push(module);
-            let out = self.file(kind);
-            self.mod_stack.pop();
-
-            out
+            Ok(parent)
         }
     }
-    /// Type collection
-    impl NameCollector<'_> {
-        /// Collects an [Item] of type [ItemKind::Enum]
-        pub fn ty_enum(&mut self, item: &Item) -> Result<Def, &'static str> {
-            let Item { kind: ItemKind::Enum(Enum { name, kind }), vis, attrs, .. } = item else {
-                Err("Enum called on item which was not ItemKind::Enum")?
-            };
-            let kind = match kind {
-                EnumKind::NoVariants => DefKind::Type(TypeKind::Adt(Adt::FieldlessEnum)),
-                EnumKind::Variants(_) => DefKind::Type(TypeKind::Undecided),
-            };
+    impl<'a> NameCollectable<'a> for Item {
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            let Item { attrs: Attrs { meta }, vis, kind, .. } = self;
+            let id = match kind {
+                ItemKind::Impl(i) => i.collect(c, parent),
+                ItemKind::Module(i) => i.collect(c, parent),
+                ItemKind::Alias(i) => i.collect(c, parent),
+                ItemKind::Enum(i) => i.collect(c, parent),
+                ItemKind::Struct(i) => i.collect(c, parent),
+                ItemKind::Const(i) => i.collect(c, parent),
+                ItemKind::Static(i) => i.collect(c, parent),
+                ItemKind::Function(i) => i.collect(c, parent),
+            }?;
+            c[id].set_meta(meta).set_vis(*vis).set_source(self);
 
-            Ok(Def {
-                name: name.0.clone(),
-                vis: *vis,
-                meta: attrs.meta.clone(),
-                kind,
-                source: Some(item.clone()),
-                module: Default::default(),
-            })
+            Ok(id)
         }
+    }
+    impl<'a> NameCollectable<'a> for Module {
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            let Self { name: Identifier(name), kind } = self;
+            let module =
+                c.pool
+                    .insert(Def { name, module: Mod::new(parent), ..Default::default() });
+            c[parent].module.types.insert(name, module);
 
-        /// Collects an [Item] of type [ItemKind::Alias]
-        pub fn ty_alias(&mut self, item: &Item) -> Result<Def, &'static str> {
-            let Item { kind: ItemKind::Alias(Alias { to: name, from }), vis, attrs, .. } = item
-            else {
-                Err("Alias called on Item which was not ItemKind::Alias")?
+            match kind {
+                ModuleKind::Inline(file) => file.collect(c, module)?,
+                ModuleKind::Outline => todo!("Out of line modules"),
             };
+            Ok(module)
+        }
+    }
+    impl<'a> NameCollectable<'a> for Impl {
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            let Self { target: _, body } = self;
+            let def = Def { module: Mod::new(parent), ..Default::default() };
+            let id = c.pool.insert(def);
 
-            let mut kind = match from {
-                Some(_) => DefKind::Type(TypeKind::Undecided),
-                None => DefKind::Type(TypeKind::Alias(None)),
-            };
+            // items will get reparented after name collection, when target is available
+            body.collect(c, id)?;
 
-            for meta in &attrs.meta {
-                let Meta { name: meta_name, kind: meta_kind } = meta;
-                match (meta_name.0.as_str(), meta_kind) {
-                    ("intrinsic", MetaKind::Equals(Literal::String(intrinsic))) => {
-                        kind = DefKind::Type(TypeKind::Intrinsic(
-                            intrinsic.parse().map_err(|_| "unknown intrinsic type")?,
-                        ));
-                    }
-                    ("intrinsic", MetaKind::Plain) => {
-                        kind = DefKind::Type(TypeKind::Intrinsic(
-                            name.0.parse().map_err(|_| "Unknown intrinsic type")?,
-                        ))
-                    }
-                    _ => {}
-                }
+            Ok(id)
+        }
+    }
+    impl<'a> NameCollectable<'a> for Alias {
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            let Alias { to: Identifier(name), .. } = self;
+
+            let def = Def { name, module: Mod::new(parent), ..Default::default() };
+            let id = c.pool.insert(def);
+
+            c[parent].module.types.insert(name, id);
+            Ok(id)
+        }
+    }
+    impl<'a> NameCollectable<'a> for Enum {
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            let Enum { name: Identifier(name), .. } = self;
+
+            let def = Def { name, module: Mod::new(parent), ..Default::default() };
+            let id = c.pool.insert(def);
+
+            c[parent].module.types.insert(name, id);
+            Ok(id)
+        }
+    }
+    impl<'a> NameCollectable<'a> for Struct {
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            let Struct { name: Identifier(name), .. } = self;
+
+            let def = Def { name, module: Mod::new(parent), ..Default::default() };
+            let id = c.pool.insert(def);
+
+            c[parent].module.types.insert(name, id);
+            Ok(id)
+        }
+    }
+    impl<'a> NameCollectable<'a> for Const {
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            let Self { name: Identifier(name), init, .. } = self;
+
+            let kind = DefKind::Undecided;
+
+            let def = Def { name, kind, module: Mod::new(parent), ..Default::default() };
+            let id = c.pool.insert(def);
+
+            c[parent].module.values.insert(name, id);
+            init.collect(c, id)?;
+
+            Ok(id)
+        }
+    }
+    impl<'a> NameCollectable<'a> for Static {
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            let Self { name: Identifier(name), init, .. } = self;
+
+            let kind = DefKind::Undecided;
+
+            let def = Def { name, kind, module: Mod::new(parent), ..Default::default() };
+            let id = c.pool.insert(def);
+
+            c[parent].module.values.insert(name, id);
+            init.collect(c, id)?;
+
+            Ok(id)
+        }
+    }
+    impl<'a> NameCollectable<'a> for Function {
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            let Self { name: Identifier(name), body, .. } = self;
+
+            let kind = DefKind::Undecided;
+
+            let def = Def { name, kind, module: Mod::new(parent), ..Default::default() };
+            let id = c.pool.insert(def);
+
+            c[parent].module.values.insert(name, id);
+            body.collect(c, id)?;
+
+            Ok(id)
+        }
+    }
+    impl<'a> NameCollectable<'a> for Block {
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            self.stmts.as_slice().collect(c, parent)
+        }
+    }
+    impl<'a> NameCollectable<'a> for Stmt {
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            self.kind.collect(c, parent)
+        }
+    }
+    impl<'a> NameCollectable<'a> for StmtKind {
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            match self {
+                StmtKind::Empty => Ok(parent),
+                StmtKind::Local(Let { init, .. }) => init.collect(c, parent),
+                StmtKind::Item(item) => item.collect(c, parent),
+                StmtKind::Expr(expr) => expr.collect(c, parent),
             }
-
-            Ok(Def {
-                name: name.0.clone(),
-                vis: *vis,
-                meta: attrs.meta.clone(),
-                kind,
-                source: Some(item.clone()),
-                module: Default::default(),
-            })
-        }
-
-        /// Collects an [Item] of type [ItemKind::Struct]
-        pub fn ty_struct(&mut self, item: &Item) -> Result<Def, &'static str> {
-            let Item { kind: ItemKind::Struct(Struct { name, kind }), vis, attrs, .. } = item
-            else {
-                Err("Struct called on item which was not ItemKind::Struct")?
-            };
-            let kind = match kind {
-                StructKind::Empty => DefKind::Type(TypeKind::Adt(Adt::UnitStruct)),
-                StructKind::Tuple(_) => DefKind::Type(TypeKind::Undecided),
-                StructKind::Struct(_) => DefKind::Type(TypeKind::Undecided),
-            };
-
-            Ok(Def {
-                name: name.0.clone(),
-                vis: *vis,
-                meta: attrs.meta.clone(),
-                kind,
-                source: Some(item.clone()),
-                module: Default::default(),
-            })
         }
     }
-    /// Value collection
-    impl NameCollector<'_> {
-        pub fn val_const(&mut self, item: &Item) -> Result<Def, &'static str> {
-            let Item { kind: ItemKind::Const(Const { name, .. }), vis, attrs, .. } = item else {
-                Err("Const called on Item which was not ItemKind::Const")?
-            };
-
-            Ok(Def {
-                name: name.0.clone(),
-                vis: *vis,
-                meta: attrs.meta.clone(),
-                kind: DefKind::Value(ValueKind::Undecided),
-                source: Some(item.clone()),
-                module: Default::default(),
-            })
+    impl<'a> NameCollectable<'a> for Expr {
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            self.kind.collect(c, parent)
         }
-
-        pub fn val_static(&mut self, item: &Item) -> Result<Def, &'static str> {
-            let Item { kind: ItemKind::Static(Static { name, .. }), vis, attrs, .. } = item else {
-                Err("Static called on Item which was not ItemKind::Static")?
-            };
-            Ok(Def {
-                name: name.0.clone(),
-                vis: *vis,
-                meta: attrs.meta.clone(),
-                kind: DefKind::Type(TypeKind::Undecided),
-                source: Some(item.clone()),
-                module: Default::default(),
-            })
+    }
+    impl<'a> NameCollectable<'a> for ExprKind {
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            match self {
+                ExprKind::Assign(Assign { parts, .. }) | ExprKind::Binary(Binary { parts, .. }) => {
+                    parts.0.collect(c, parent)?;
+                    parts.1.collect(c, parent)
+                }
+                ExprKind::Unary(Unary { tail, .. }) => tail.collect(c, parent),
+                ExprKind::Index(Index { head, indices }) => {
+                    indices.collect(c, parent)?;
+                    head.collect(c, parent)
+                }
+                ExprKind::Array(Array { values }) => values.collect(c, parent),
+                ExprKind::ArrayRep(ArrayRep { value, repeat }) => {
+                    value.collect(c, parent)?;
+                    repeat.collect(c, parent)
+                }
+                ExprKind::AddrOf(AddrOf { expr, .. }) => expr.collect(c, parent),
+                ExprKind::Block(block) => block.collect(c, parent),
+                ExprKind::Group(Group { expr }) => expr.collect(c, parent),
+                ExprKind::Tuple(Tuple { exprs }) => exprs.collect(c, parent),
+                ExprKind::While(While { cond, pass, fail })
+                | ExprKind::If(If { cond, pass, fail })
+                | ExprKind::For(For { cond, pass, fail, .. }) => {
+                    cond.collect(c, parent)?;
+                    pass.collect(c, parent)?;
+                    fail.body.collect(c, parent)
+                }
+                ExprKind::Break(Break { body }) | ExprKind::Return(Return { body }) => {
+                    body.collect(c, parent)
+                }
+                _ => Ok(parent),
+            }
         }
-
-        pub fn val_function(&mut self, item: &Item) -> Result<Def, &'static str> {
-            // TODO: treat function bodies like modules with internal items
-            let Item { kind: ItemKind::Function(Function { name, .. }), vis, attrs, .. } = item
-            else {
-                Err("val_function called on Item which was not ItemKind::Function")?
-            };
-            Ok(Def {
-                name: name.0.clone(),
-                vis: *vis,
-                meta: attrs.meta.clone(),
-                kind: DefKind::Value(ValueKind::Undecided),
-                source: Some(item.clone()),
-                module: Default::default(),
-            })
+    }
+    impl<'a, T: NameCollectable<'a>> NameCollectable<'a> for [T] {
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            let mut last = parent;
+            for expr in self {
+                last = expr.collect(c, parent)?;
+            }
+            Ok(last)
+        }
+    }
+    impl<'a, T: NameCollectable<'a>> NameCollectable<'a> for Option<T> {
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            match self {
+                Some(body) => body.collect(c, parent),
+                None => Ok(parent),
+            }
+        }
+    }
+    impl<'a, T: NameCollectable<'a>> NameCollectable<'a> for Box<T> {
+        fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            (**self).collect(c, parent)
         }
     }
 }
 
 pub mod type_resolver {
     //! Performs step 2 of type checking: Evaluating type definitions
-    #![allow(unused)]
-    use std::ops::{Deref, DerefMut};
 
+    use crate::{
+        definition::{Adt, Def, DefKind, TypeKind, ValueKind},
+        key::DefID,
+        module,
+        project::{evaluate::EvaluableTypeExpression, Project as Prj},
+    };
     use cl_ast::*;
 
-    use crate::{definition::Def, key::DefID, project::Project};
+    /// Evaluate a single ID
+    pub fn resolve(prj: &mut Prj, id: DefID) -> Result<(), &'static str> {
+        let (DefKind::Undecided, Some(source)) = (&prj[id].kind, prj[id].source) else {
+            return Ok(());
+        };
+        let kind = match &source.kind {
+            ItemKind::Alias(_) => "type",
+            ItemKind::Module(_) => "mod",
+            ItemKind::Enum(_) => "enum",
+            ItemKind::Struct(_) => "struct",
+            ItemKind::Const(_) => "const",
+            ItemKind::Static(_) => "static",
+            ItemKind::Function(_) => "fn",
+            ItemKind::Impl(_) => "impl",
+        };
+        eprintln!(
+            "Resolver: \x1b[32mEvaluating\x1b[0m \"\x1b[36m{kind} {}\x1b[0m\" (`{id:?}`)",
+            prj[id].name
+        );
 
-    pub struct TypeResolver<'prj> {
-        pub project: &'prj mut Project,
+        prj[id].kind = source.resolve_type(prj, id)?;
+
+        eprintln!("\x1b[33m=> {}\x1b[0m", prj[id].kind);
+
+        Ok(())
     }
 
-    impl Deref for TypeResolver<'_> {
-        type Target = Project;
-        fn deref(&self) -> &Self::Target {
-            self.project
-        }
-    }
-    impl DerefMut for TypeResolver<'_> {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            self.project
-        }
+    /// Resolves a given node
+    pub trait TypeResolvable<'a> {
+        /// The return type upon success
+        type Out;
+        /// Resolves type expressions within this node
+        fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str>;
     }
 
-    impl TypeResolver<'_> {
-        pub fn resolve(&mut self) -> Result<bool, &str> {
-            #![allow(unused)]
-            for typedef in self.pool.iter_mut().filter(|v| v.kind.is_type()) {
-                let Def { name, vis, meta: attr, kind, source: Some(ref definition), module: _ } =
-                    typedef
-                else {
-                    continue;
-                };
-                match &definition.kind {
-                    ItemKind::Alias(Alias { to: _, from: Some(from) }) => match &from.kind {
-                        TyKind::Never => todo!(),
-                        TyKind::Empty => todo!(),
-                        TyKind::SelfTy => todo!(),
-                        TyKind::Path(_) => todo!(),
-                        TyKind::Tuple(_) => todo!(),
-                        TyKind::Ref(_) => todo!(),
-                        TyKind::Fn(_) => todo!(),
-                    },
-                    ItemKind::Alias(_) => {}
-                    ItemKind::Const(_) => todo!(),
-                    ItemKind::Static(_) => todo!(),
-                    ItemKind::Module(_) => todo!(),
-                    ItemKind::Function(_) => {}
-                    ItemKind::Struct(_) => {}
-                    ItemKind::Enum(_) => {}
-                    ItemKind::Impl(_) => {}
+    impl<'a> TypeResolvable<'a> for Item {
+        type Out = DefKind<'a>;
+        fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
+            let Self { attrs: Attrs { meta }, kind, .. } = self;
+            for meta in meta {
+                if let Ok(def) = meta.resolve_type(prj, id) {
+                    return Ok(def);
                 }
             }
-            Ok(true)
+            kind.resolve_type(prj, id)
         }
+    }
 
-        pub fn get_type(&self, kind: &TyKind) -> Option<DefID> {
-            match kind {
-                TyKind::Never => todo!(),
-                TyKind::Empty => todo!(),
-                TyKind::SelfTy => todo!(),
-                TyKind::Path(_) => todo!(),
-                TyKind::Tuple(_) => todo!(),
-                TyKind::Ref(_) => todo!(),
-                TyKind::Fn(_) => todo!(),
+    impl<'a> TypeResolvable<'a> for Meta {
+        type Out = DefKind<'a>;
+
+        #[allow(unused_variables)]
+        fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
+            let Self { name: Identifier(name), kind } = self;
+            match (name.as_str(), kind) {
+                ("intrinsic", MetaKind::Equals(Literal::String(intrinsic))) => Ok(DefKind::Type(
+                    TypeKind::Intrinsic(intrinsic.parse().map_err(|_| "unknown intrinsic type")?),
+                )),
+                (_, MetaKind::Plain) => Ok(DefKind::Type(TypeKind::Intrinsic(
+                    name.parse().map_err(|_| "Unknown intrinsic type")?,
+                ))),
+                _ => Err("Unknown meta attribute"),
             }
-            None
+        }
+    }
+
+    impl<'a> TypeResolvable<'a> for ItemKind {
+        type Out = DefKind<'a>;
+        fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
+            if prj[id].source.map(|s| &s.kind as *const _) != Some(self as *const _) {
+                return Err("id is not self!");
+            }
+            match self {
+                ItemKind::Module(i) => i.resolve_type(prj, id),
+                ItemKind::Impl(i) => i.resolve_type(prj, id),
+                ItemKind::Alias(i) => i.resolve_type(prj, id),
+                ItemKind::Enum(i) => i.resolve_type(prj, id),
+                ItemKind::Struct(i) => i.resolve_type(prj, id),
+                ItemKind::Const(i) => i.resolve_type(prj, id),
+                ItemKind::Static(i) => i.resolve_type(prj, id),
+                ItemKind::Function(i) => i.resolve_type(prj, id),
+            }
+        }
+    }
+
+    impl<'a> TypeResolvable<'a> for Module {
+        type Out = DefKind<'a>;
+        #[allow(unused_variables)]
+        fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
+            Ok(DefKind::Type(TypeKind::Module))
+        }
+    }
+
+    impl<'a> TypeResolvable<'a> for Impl {
+        type Out = DefKind<'a>;
+
+        fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
+            let parent = prj.parent_of(id).unwrap_or(id);
+
+            let target = match &self.target {
+                ImplKind::Type(t) => t.evaluate(prj, parent),
+                ImplKind::Trait { for_type, .. } => for_type.evaluate(prj, parent),
+            }
+            .map_err(|_| "Unresolved type in impl target")?;
+
+            prj[id].module.parent = Some(target);
+
+            Ok(DefKind::Impl(target))
+        }
+    }
+
+    impl<'a> TypeResolvable<'a> for Alias {
+        type Out = DefKind<'a>;
+
+        fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
+            let parent = prj.parent_of(id).unwrap_or(id);
+            let alias = if let Some(ty) = &self.from {
+                Some(
+                    ty.evaluate(prj, parent)
+                        .or_else(|_| ty.evaluate(prj, id))
+                        .map_err(|_| "Unresolved type in alias")?,
+                )
+            } else {
+                None
+            };
+
+            Ok(DefKind::Type(TypeKind::Alias(alias)))
+        }
+    }
+
+    impl<'a> TypeResolvable<'a> for Enum {
+        type Out = DefKind<'a>;
+
+        fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
+            let Self { name: _, kind } = self;
+            let EnumKind::Variants(v) = kind else {
+                return Ok(DefKind::Type(TypeKind::Adt(Adt::FieldlessEnum)));
+            };
+            let mut fields = vec![];
+            for v @ Variant { name: Identifier(name), kind: _ } in v {
+                let id = v.resolve_type(prj, id)?;
+                fields.push((name.as_str(), id))
+            }
+            Ok(DefKind::Type(TypeKind::Adt(Adt::Enum(fields))))
+        }
+    }
+
+    impl<'a> TypeResolvable<'a> for Variant {
+        type Out = Option<DefID>;
+
+        fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
+            let parent = prj.parent_of(id).unwrap_or(id);
+            let Self { name: Identifier(name), kind } = self;
+
+            let adt = match kind {
+                VariantKind::Plain => return Ok(None),
+                VariantKind::CLike(_) => todo!("Resolve variant info for C-like enums"),
+                VariantKind::Tuple(ty) => {
+                    return ty
+                        .evaluate(prj, parent)
+                        .map_err(|_| "Unresolved type in enum tuple variant")
+                        .map(Some)
+                }
+                VariantKind::Struct(members) => Adt::Struct(members.resolve_type(prj, id)?),
+            };
+
+            let def = Def {
+                name,
+                kind: DefKind::Type(TypeKind::Adt(adt)),
+                module: module::Module::new(id),
+                ..Default::default()
+            };
+
+            let new_id = prj.pool.insert(def);
+            // Insert the struct variant type into the enum's namespace
+            prj[id].module.types.insert(name, new_id);
+
+            Ok(Some(new_id))
+        }
+    }
+
+    impl<'a> TypeResolvable<'a> for Struct {
+        type Out = DefKind<'a>;
+        fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
+            let parent = prj.parent_of(id).unwrap_or(id);
+            let Self { name: _, kind } = self;
+            Ok(match kind {
+                StructKind::Empty => DefKind::Type(TypeKind::Empty),
+                StructKind::Tuple(types) => DefKind::Type(TypeKind::Adt(Adt::TupleStruct({
+                    let mut out = vec![];
+                    for ty in types {
+                        out.push((
+                            Visibility::Public,
+                            ty.evaluate(prj, parent)
+                                .map_err(|_| "Unresolved type in tuple-struct member")?,
+                        ));
+                    }
+                    out
+                }))),
+                StructKind::Struct(members) => {
+                    DefKind::Type(TypeKind::Adt(Adt::Struct(members.resolve_type(prj, id)?)))
+                }
+            })
+        }
+    }
+
+    impl<'a> TypeResolvable<'a> for StructMember {
+        type Out = (&'a str, Visibility, DefID);
+
+        fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
+            let parent = prj.parent_of(id).unwrap_or(id);
+            let Self { name: Identifier(name), vis, ty } = self;
+
+            let ty = ty
+                .evaluate(prj, parent)
+                .map_err(|_| "Invalid type while resolving StructMember")?;
+
+            Ok((name, *vis, ty))
+        }
+    }
+
+    impl<'a> TypeResolvable<'a> for Const {
+        type Out = DefKind<'a>;
+
+        fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
+            let Self { ty, .. } = self;
+            let ty = ty
+                .evaluate(prj, id)
+                .map_err(|_| "Invalid type while resolving const")?;
+            Ok(DefKind::Value(ValueKind::Const(ty)))
+        }
+    }
+    impl<'a> TypeResolvable<'a> for Static {
+        type Out = DefKind<'a>;
+
+        fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
+            let parent = prj.parent_of(id).unwrap_or(id);
+            let Self { ty, .. } = self;
+            let ty = ty
+                .evaluate(prj, parent)
+                .map_err(|_| "Invalid type while resolving static")?;
+            Ok(DefKind::Value(ValueKind::Static(ty)))
+        }
+    }
+
+    impl<'a> TypeResolvable<'a> for Function {
+        type Out = DefKind<'a>;
+
+        fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
+            let parent = prj.parent_of(id).unwrap_or(id);
+            let Self { sign, .. } = self;
+            let sign = sign
+                .evaluate(prj, parent)
+                .map_err(|_| "Invalid type in function signature")?;
+            Ok(DefKind::Value(ValueKind::Fn(sign)))
+        }
+    }
+
+    impl<'a, T: TypeResolvable<'a>> TypeResolvable<'a> for [T] {
+        type Out = Vec<T::Out>;
+
+        fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
+            let mut members = vec![];
+            for member in self {
+                members.push(member.resolve_type(prj, id)?);
+            }
+            Ok(members)
+        }
+    }
+    impl<'a, T: TypeResolvable<'a>> TypeResolvable<'a> for Option<T> {
+        type Out = Option<T::Out>;
+
+        fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
+            match self {
+                Some(t) => Some(t.resolve_type(prj, id)).transpose(),
+                None => Ok(None),
+            }
         }
     }
 }
 
 pub mod typeref {
-    //! Stores type and reference info
+    //! Stores type and inference info
 
     use crate::key::DefID;
 
     /// The Type struct represents all valid types, and can be trivially equality-compared
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct TypeRef {
-        /// You can only have a pointer chain 65535 pointers long.
-        ref_depth: u16,
         /// Types can be [Generic](RefKind::Generic) or [Concrete](RefKind::Concrete)
         kind: RefKind,
     }
@@ -853,15 +1273,15 @@ let rules: Hashmap<Operation, Vec<Rule>> {
 */
 
 pub mod rule {
-    use crate::{key::DefID, typeref::TypeRef};
+    use crate::key::DefID;
 
     pub struct Rule {
         /// What is this Rule for?
         pub operation: (),
         /// What inputs does it take?
-        pub inputs: Vec<TypeRef>,
+        pub inputs: Vec<DefID>,
         /// What output does it produce?
-        pub output: TypeRef,
+        pub output: DefID,
         /// Where did this rule come from?
         pub through: Origin,
     }

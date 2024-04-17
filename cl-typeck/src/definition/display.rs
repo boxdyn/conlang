@@ -1,0 +1,162 @@
+//! [Display] implementations for [TypeKind], [Adt], and [Intrinsic]
+
+use super::{Adt, Def, DefKind, Intrinsic, TypeKind, ValueKind};
+use cl_ast::format::FmtPretty;
+use std::{
+    fmt::{self, Display, Write},
+    iter,
+};
+
+fn sep<'f, 's, Item, F>(
+    before: &'s str,
+    after: &'s str,
+    t: F,
+) -> impl FnOnce(&mut fmt::Formatter<'f>) -> fmt::Result + 's
+where
+    Item: FnMut(&mut fmt::Formatter<'f>) -> fmt::Result,
+    F: FnMut() -> Option<Item> + 's,
+{
+    move |f| {
+        f.write_str(before)?;
+        for (idx, mut disp) in iter::from_fn(t).enumerate() {
+            if idx > 0 {
+                f.write_str(", ")?;
+            }
+            disp(f)?;
+        }
+        f.write_str(after)
+    }
+}
+
+impl Display for Def<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self { name, vis, meta, kind, source, module } = self;
+        writeln!(f, "{vis}{name}: ")?;
+        writeln!(f, "kind: {kind}")?;
+        if !meta.is_empty() {
+            writeln!(f, "meta: {meta:?}")?;
+        }
+        if let Some(source) = source {
+            writeln!(f.pretty(), "source: {{\n{source}\n}}")?;
+        }
+        write!(f, "module: {module}")
+    }
+}
+
+impl Display for DefKind<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DefKind::Undecided => write!(f, "undecided"),
+            DefKind::Impl(id) => write!(f, "impl {id}"),
+            DefKind::Type(kind) => write!(f, "{kind}"),
+            DefKind::Value(kind) => write!(f, "{kind}"),
+        }
+    }
+}
+
+impl std::fmt::Display for ValueKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValueKind::Const(id) => write!(f, "const ({id})"),
+            ValueKind::Static(id) => write!(f, "static ({id})"),
+            ValueKind::Fn(id) => write!(f, "fn def ({id})"),
+        }
+    }
+}
+
+impl Display for TypeKind<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TypeKind::Alias(def) => match def {
+                Some(def) => write!(f, "alias to #{def}"),
+                None => f.write_str("type"),
+            },
+            TypeKind::Intrinsic(i) => i.fmt(f),
+            TypeKind::Adt(a) => a.fmt(f),
+            TypeKind::Ref(cnt, def) => {
+                for _ in 0..*cnt {
+                    f.write_str("&")?;
+                }
+                def.fmt(f)
+            }
+            TypeKind::Slice(def) => write!(f, "slice [#{def}]"),
+            TypeKind::Array(def, size) => write!(f, "array [#{def}; {size}]"),
+            TypeKind::Tuple(defs) => {
+                let mut defs = defs.iter();
+                sep("tuple (", ")", || {
+                    let def = defs.next()?;
+                    Some(move |f: &mut fmt::Formatter| write!(f, "#{def}"))
+                })(f)
+            }
+            TypeKind::FnSig { args, rety } => write!(f, "fn (#{args}) -> #{rety}"),
+            TypeKind::Empty => f.write_str("()"),
+            TypeKind::Never => f.write_str("!"),
+            TypeKind::SelfTy => f.write_str("Self"),
+            TypeKind::Module => f.write_str("mod"),
+        }
+    }
+}
+
+impl Display for Adt<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Adt::Enum(variants) => {
+                let mut variants = variants.iter();
+                sep("enum {", "}", || {
+                    let (name, def) = variants.next()?;
+                    Some(move |f: &mut fmt::Formatter| match def {
+                        Some(def) => write!(f, "{name}: #{def}"),
+                        None => write!(f, "{name}"),
+                    })
+                })(f)
+            }
+            Adt::CLikeEnum(variants) => {
+                let mut variants = variants.iter();
+                sep("enum {", "}", || {
+                    let (name, descrim) = variants.next()?;
+                    Some(move |f: &mut fmt::Formatter| write!(f, "{name} = {descrim}"))
+                })(f)
+            }
+            Adt::FieldlessEnum => write!(f, "enum"),
+            Adt::Struct(members) => {
+                let mut members = members.iter();
+                sep("struct {", "}", || {
+                    let (name, vis, def) = members.next()?;
+                    Some(move |f: &mut fmt::Formatter| write!(f, "{vis}{name}: #{def}"))
+                })(f)
+            }
+            Adt::TupleStruct(members) => {
+                let mut members = members.iter();
+                sep("struct (", ")", || {
+                    let (vis, def) = members.next()?;
+                    Some(move |f: &mut fmt::Formatter| write!(f, "{vis}#{def}"))
+                })(f)
+            }
+            Adt::UnitStruct => write!(f, "struct ()"),
+            Adt::Union(variants) => {
+                let mut variants = variants.iter();
+                sep("union {", "}", || {
+                    let (name, def) = variants.next()?;
+                    Some(move |f: &mut fmt::Formatter| write!(f, "{name}: #{def}"))
+                })(f)
+            }
+        }
+    }
+}
+
+impl Display for Intrinsic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Intrinsic::I8 => f.write_str("i8"),
+            Intrinsic::I16 => f.write_str("i16"),
+            Intrinsic::I32 => f.write_str("i32"),
+            Intrinsic::I64 => f.write_str("i64"),
+            Intrinsic::U8 => f.write_str("u8"),
+            Intrinsic::U16 => f.write_str("u16"),
+            Intrinsic::U32 => f.write_str("u32"),
+            Intrinsic::U64 => f.write_str("u64"),
+            Intrinsic::Bool => f.write_str("bool"),
+            Intrinsic::Char => f.write_str("char"),
+        }
+    }
+}
