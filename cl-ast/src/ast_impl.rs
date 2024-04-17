@@ -78,7 +78,7 @@ mod display {
 
     impl Display for File {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            separate(&self.items, "\n")(f)
+            separate(&self.items, "\n\n")(f)
         }
     }
 
