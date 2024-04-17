@@ -461,8 +461,8 @@ pub mod yamlify {
         fn yaml(&self, y: &mut Yamler) {
             let Self { count, mutable, expr } = self;
             y.key("AddrOf")
-                .yaml(mutable)
                 .pair("count", count)
+                .yaml(mutable)
                 .pair("expr", expr);
         }
     }
@@ -588,8 +588,11 @@ pub mod yamlify {
     }
     impl Yamlify for TyRef {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { count, to } = self;
-            y.key("TyRef").pair("count", count).pair("to", to);
+            let Self { count, mutable, to } = self;
+            y.key("TyRef")
+                .pair("count", count)
+                .yaml(mutable)
+                .pair("to", to);
         }
     }
     impl Yamlify for TyFn {

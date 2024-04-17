@@ -671,7 +671,7 @@ impl<'t> Parser<'t> {
             }
             self.consume_peeked();
         }
-        Ok(TyRef { count, to: self.path()? })
+        Ok(TyRef { count, mutable: self.mutability()?, to: self.path()? })
     }
     /// [TyFn] = `fn` [TyTuple] (-> [Ty])?
     pub fn tyfn(&mut self) -> PResult<TyFn> {

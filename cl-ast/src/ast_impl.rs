@@ -299,11 +299,11 @@ mod display {
     }
     impl Display for TyRef {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { count: _, to } = self;
-            for _ in 0..self.count {
+            let &Self { count, mutable, ref to } = self;
+            for _ in 0..count {
                 f.write_char('&')?;
             }
-            write!(f, "{to}")
+            write!(f, "{mutable}{to}")
         }
     }
     impl Display for TyFn {
@@ -632,7 +632,7 @@ mod convert {
         }
         impl From for VariantKind {
             u128 => VariantKind::CLike,
-            Vec<Ty> => VariantKind::Tuple,
+            Ty => VariantKind::Tuple,
             // TODO: enum struct variants
         }
         impl From for TyKind {

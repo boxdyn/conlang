@@ -243,6 +243,7 @@ pub struct TyTuple {
 /// A [Ty]pe-reference expression as (number of `&`, [Path])
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TyRef {
+    pub mutable: Mutability,
     pub count: u16,
     pub to: Path,
 }
