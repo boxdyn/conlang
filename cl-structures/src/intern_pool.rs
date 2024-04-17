@@ -102,6 +102,12 @@ impl<T, ID: InternKey> Pool<T, ID> {
         unsafe { InternKeyIter::new(0..self.pool.len()) }
     }
 
+    /// Constructs an [ID](InternKey) from a [usize], if it's within bounds
+    #[doc(hidden)]
+    pub fn try_key_from(&self, value: usize) -> Option<ID> {
+        (value < self.pool.len()).then(|| unsafe { ID::from_raw_unchecked(value) })
+    }
+
     pub fn insert(&mut self, value: T) -> ID {
         let id = self.pool.len();
         self.pool.push(value);
