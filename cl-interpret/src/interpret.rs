@@ -131,6 +131,7 @@ impl Interpret for ExprKind {
             ExprKind::Empty => Ok(ConValue::Empty),
             ExprKind::Group(v) => v.interpret(env),
             ExprKind::Tuple(v) => v.interpret(env),
+            ExprKind::Loop(v) => v.interpret(env),
             ExprKind::While(v) => v.interpret(env),
             ExprKind::If(v) => v.interpret(env),
             ExprKind::For(v) => v.interpret(env),
@@ -365,17 +366,32 @@ impl Interpret for Tuple {
         )?))
     }
 }
-impl Interpret for While {
+impl Interpret for Loop {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { cond, pass, fail } = self;
-        while cond.interpret(env)?.truthy()? {
-            match pass.interpret(env) {
+        let Self { body } = self;
+        loop {
+            match body.interpret(env) {
                 Err(Error::Break(value)) => return Ok(value),
                 Err(Error::Continue) => continue,
                 e => e?,
             };
         }
-        fail.interpret(env)
+    }
+}
+impl Interpret for While {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let Self { cond, pass, fail } = self;
+        loop {
+            if cond.interpret(env)?.truthy()? {
+                match pass.interpret(env) {
+                    Err(Error::Break(value)) => return Ok(value),
+                    Err(Error::Continue) => continue,
+                    e => e?,
+                };
+            } else {
+                break fail.interpret(env);
+            }
+        }
     }
 }
 impl Interpret for If {
@@ -392,23 +408,24 @@ impl Interpret for For {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self { bind: Identifier(name), cond, pass, fail } = self;
         // TODO: A better iterator model
-        let bounds = match cond.interpret(env)? {
+        let mut bounds = match cond.interpret(env)? {
             ConValue::RangeExc(a, b) => a..=b,
             ConValue::RangeInc(a, b) => a..=b,
             _ => Err(Error::TypeError)?,
         };
-        {
+        loop {
             let mut env = env.frame("loop variable");
-            for loop_var in bounds {
+            if let Some(loop_var) = bounds.next() {
                 env.insert(name, Some(loop_var.into()));
                 match pass.interpret(&mut env) {
                     Err(Error::Break(value)) => return Ok(value),
                     Err(Error::Continue) => continue,
                     result => result?,
                 };
+            } else {
+                break fail.interpret(&mut env);
             }
         }
-        fail.interpret(env)
     }
 }
 impl Interpret for Else {

@@ -383,6 +383,7 @@ pub mod yamlify {
                 ExprKind::Empty => {}
                 ExprKind::Group(k) => k.yaml(y),
                 ExprKind::Tuple(k) => k.yaml(y),
+                ExprKind::Loop(k) => k.yaml(y),
                 ExprKind::While(k) => k.yaml(y),
                 ExprKind::If(k) => k.yaml(y),
                 ExprKind::For(k) => k.yaml(y),
@@ -470,6 +471,12 @@ pub mod yamlify {
         fn yaml(&self, y: &mut Yamler) {
             let Self { expr } = self;
             y.key("Group").yaml(expr);
+        }
+    }
+    impl Yamlify for Loop {
+        fn yaml(&self, y: &mut Yamler) {
+            let Self { body } = self;
+            y.key("Loop").yaml(body);
         }
     }
     impl Yamlify for While {

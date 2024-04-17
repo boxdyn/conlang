@@ -809,6 +809,7 @@ impl<'t> Parser<'t> {
                 self.consume_peeked();
                 Unary { kind, tail: self.exprkind(after)?.into() }.into()
             }
+            TokenKind::Loop => ExprKind::Loop(self.parse_loop()?),
             TokenKind::While => ExprKind::While(self.parse_while()?),
             TokenKind::If => ExprKind::If(self.parse_if()?),
             TokenKind::For => ExprKind::For(self.parse_for()?),
@@ -1010,6 +1011,12 @@ impl<'t> Parser<'t> {
 }
 /// ## Control flow subexpressions
 impl<'t> Parser<'t> {
+    /// [Loop] = `loop` [Block]
+    pub fn parse_loop(&mut self) -> PResult<Loop> {
+        self.match_type(TokenKind::Loop, Parsing::Loop)?;
+        Ok(Loop { body: self.block()? })
+    }
+
     /// [While] = `while` [Expr] [Block] [Else]?
     pub fn parse_while(&mut self) -> PResult<While> {
         self.match_type(TokenKind::While, Parsing::While)?;

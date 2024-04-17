@@ -99,7 +99,7 @@ Index       = Primary ('[' Indices ']')* ;
 Indices     = (Expr ',')* Expr? ;
 
 Primary     = Literal | Path  | Array | ArrayRep | AddrOf 
-            | Block   | Group 
+            | Block   | Group | Loop
             | If      | While | For   | Break    | Return | Continue;
 
 Literal     = STRING | CHARACTER | FLOAT | INTEGER | Bool ;
@@ -114,6 +114,7 @@ Block       = '{' Stmt* '}';
 Group       = Empty | '(' (Expr | Tuple) ')' ;
 Tuple       = (Expr ',')* Expr? ;
 
+Loop        = "loop"  Block ;
 While       = "while" Expr Block Else ;
 If          = "if"    Expr Block Else ;
 For         = "for"   Identifier "in" Expr Block Else ;
