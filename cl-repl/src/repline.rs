@@ -241,6 +241,10 @@ impl<'a, R: Read> Repline<'a, R> {
                     self.ed.push('\n', stdout)?;
                     return Ok(self.ed.to_string());
                 }
+                // Ctrl+Backspace in my terminal
+                '\x17' => {
+                    self.ed.erase_word(stdout)?;
+                }
                 // Escape sequence
                 '\x1b' => self.escape(stdout)?,
                 // backspace
@@ -282,10 +286,7 @@ impl<'a, R: Read> Repline<'a, R> {
                 self.restore_history(w)?
             }
             'B' => {
-                self.hindex = self
-                    .hindex
-                    .saturating_add(1)
-                    .min(self.history.len().saturating_sub(1));
+                self.hindex = self.hindex.saturating_add(1).min(self.history.len());
                 self.restore_history(w)?
             }
             'C' => self.ed.cursor_forward(1, w)?,
@@ -308,19 +309,13 @@ impl<'a, R: Read> Repline<'a, R> {
     /// Restores the currently selected history
     pub fn restore_history<W: Write>(&mut self, w: &mut W) -> ReplResult<()> {
         let Self { history, hindex, ed, .. } = self;
-        if !(0..history.len()).contains(hindex) {
-            return Ok(());
-        };
         ed.undraw(w)?;
         ed.clear();
         ed.print_head(w)?;
-        ed.extend(
-            history
-                .get(*hindex)
-                .expect("history should contain index")
-                .chars(),
-            w,
-        )
+        if let Some(history) = history.get(*hindex) {
+            ed.extend(history.chars(), w)?
+        }
+        Ok(())
     }
 
     /// Append line to history and clear it
@@ -537,6 +532,10 @@ pub mod editor {
                 }
             }
             .ok_or(Error::EndOfInput)
+        }
+        pub fn erase_word<W: Write>(&mut self, w: &mut W) -> ReplResult<()> {
+            while self.pop(w)?.filter(|c| !c.is_whitespace()).is_some() {}
+            Ok(())
         }
         pub fn len(&self) -> usize {
             self.head.len() + self.tail.len()
