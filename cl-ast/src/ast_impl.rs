@@ -166,9 +166,30 @@ mod display {
     }
     impl Display for Function {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { name, args, body, rety } = self;
+            let Self { name, sign: sign @ TyFn { args, rety }, bind, body } = self;
+            let types = match **args {
+                TyKind::Tuple(TyTuple { ref types }) => types.as_slice(),
+                TyKind::Empty => Default::default(),
+                _ => {
+                    write!(f, "Invalid function signature: {sign}")?;
+                    Default::default()
+                }
+            };
+
+            debug_assert_eq!(bind.len(), types.len());
             write!(f, "fn {name} ")?;
-            delimit(separate(args, ", "), INLINE_PARENS)(f)?;
+            delimit(
+                |f| {
+                    for (idx, (arg, ty)) in bind.iter().zip(types.iter()).enumerate() {
+                        if idx != 0 {
+                            f.write_str(", ")?;
+                        }
+                        write!(f, "{arg}: {ty}")?;
+                    }
+                    Ok(())
+                },
+                INLINE_PARENS,
+            )(f)?;
             if let Some(rety) = rety {
                 write!(f, " -> {rety}")?;
             }
@@ -180,8 +201,8 @@ mod display {
     }
     impl Display for Param {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { mutability, name, ty } = self;
-            write!(f, "{mutability}{name}: {ty}")
+            let Self { mutability, name } = self;
+            write!(f, "{mutability}{name}")
         }
     }
     impl Display for Struct {

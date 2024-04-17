@@ -247,12 +247,12 @@ pub mod yamlify {
     }
     impl Yamlify for Function {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { name, args, body, rety } = self;
+            let Self { name, sign, bind, body } = self;
             y.key("Function")
                 .pair("name", name)
-                .pair("args", args)
-                .pair("body", body)
-                .pair("rety", rety);
+                .pair("sign", sign)
+                .pair("bind", bind)
+                .pair("body", body);
         }
     }
     impl Yamlify for Struct {
@@ -533,11 +533,8 @@ pub mod yamlify {
     }
     impl Yamlify for Param {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { mutability, name, ty } = self;
-            y.key("Param")
-                .yaml(mutability)
-                .pair("name", name)
-                .pair("ty", ty);
+            let Self { mutability, name } = self;
+            y.key("Param").yaml(mutability).pair("name", name);
         }
     }
     impl Yamlify for Ty {

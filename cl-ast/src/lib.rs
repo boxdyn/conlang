@@ -135,9 +135,9 @@ pub enum ModuleKind {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Function {
     pub name: Identifier,
-    pub args: Vec<Param>,
+    pub sign: TyFn,
+    pub bind: Vec<Param>,
     pub body: Option<Block>,
-    pub rety: Option<Box<Ty>>,
 }
 
 /// A single parameter for a [Function]
@@ -145,7 +145,6 @@ pub struct Function {
 pub struct Param {
     pub mutability: Mutability,
     pub name: Identifier,
-    pub ty: Box<Ty>,
 }
 
 /// A user-defined product type

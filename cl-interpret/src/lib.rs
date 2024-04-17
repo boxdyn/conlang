@@ -324,7 +324,7 @@ pub mod function {
             name
         }
         fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
-            let FnDecl { name: Identifier(name), args: declargs, body, rety: _ } = &*self.decl;
+            let FnDecl { name: Identifier(name), bind: declargs, body, sign: _ } = &*self.decl;
             // Check arg mapping
             if args.len() != declargs.len() {
                 return Err(Error::ArgNumber { want: declargs.len(), got: args.len() });
@@ -334,7 +334,7 @@ pub mod function {
             };
             // TODO: completely refactor data storage
             let mut frame = env.frame("fn args");
-            for (Param { mutability: _, name: Identifier(name), ty: _ }, value) in
+            for (Param { mutability: _, name: Identifier(name) }, value) in
                 declargs.iter().zip(args)
             {
                 frame.insert(name, Some(value.clone()));

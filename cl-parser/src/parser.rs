@@ -394,20 +394,19 @@ impl<'t> Parser<'t> {
         const PARSING: Parsing = Parsing::Function;
         self.match_type(TokenKind::Fn, PARSING)?;
 
+        let name = self.identifier()?;
+        let (bind, types) = delim(Self::parse_params, PARENS, PARSING)(self)?;
+        let sign = TyFn {
+            args: Box::new(match types.len() {
+                0 => TyKind::Empty,
+                _ => TyKind::Tuple(TyTuple { types }),
+            }),
+            rety: self.parse_rety()?.map(Box::new),
+        };
         Ok(Function {
-            name: self.identifier()?,
-            args: self.parse_params()?,
-            rety: match self.peek_kind(PARSING)? {
-                TokenKind::Punct(Punct::LCurly) | TokenKind::Punct(Punct::Semi) => None,
-                TokenKind::Punct(Punct::Arrow) => {
-                    self.consume_peeked();
-                    Some(self.ty()?.into())
-                }
-                got => Err(self.error(
-                    ExpectedToken { want: TokenKind::Punct(Punct::Arrow), got },
-                    PARSING,
-                ))?,
-            },
+            name,
+            sign,
+            bind,
             body: match self.peek_kind(PARSING)? {
                 TokenKind::Punct(Punct::LCurly) => Some(self.block()?),
                 TokenKind::Punct(Punct::Semi) => {
@@ -420,25 +419,29 @@ impl<'t> Parser<'t> {
     }
 
     /// Parses the [parameters](Param) associated with a Function
-    pub fn parse_params(&mut self) -> PResult<Vec<Param>> {
+    pub fn parse_params(&mut self) -> PResult<(Vec<Param>, Vec<TyKind>)> {
         const PARSING: Parsing = Parsing::Function;
-        delim(
-            sep(Self::parse_param, Punct::Comma, PARENS.1, PARSING),
-            PARENS,
-            PARSING,
-        )(self)
+        let (mut params, mut types) = (vec![], vec![]);
+        while Ok(TokenKind::Punct(Punct::RParen)) != self.peek_kind(PARSING) {
+            let (param, ty) = self.parse_param()?;
+            params.push(param);
+            types.push(ty);
+            if self.match_op(Punct::Comma, PARSING).is_err() {
+                break;
+            }
+        }
+        Ok((params, types))
     }
 
     /// Parses a single function [parameter](Param)
-    pub fn parse_param(&mut self) -> PResult<Param> {
-        Ok(Param {
-            mutability: self.mutability()?,
-            name: self.identifier()?,
-            ty: {
+    pub fn parse_param(&mut self) -> PResult<(Param, TyKind)> {
+        Ok((
+            Param { mutability: self.mutability()?, name: self.identifier()? },
+            {
                 self.match_op(Punct::Colon, Parsing::Param)?;
-                self.ty()?.into()
+                self.tykind()?
             },
-        })
+        ))
     }
 
     /// Parses a [`struct` definition](Struct)
@@ -680,13 +683,14 @@ impl<'t> Parser<'t> {
                 t if t.is_empty() => TyKind::Empty,
                 types => TyKind::Tuple(TyTuple { types }),
             }),
-            rety: match self.peek_kind(PARSING) {
-                Ok(TokenKind::Punct(Punct::Arrow)) => {
-                    self.consume_peeked();
-                    Some(self.ty()?.into())
-                }
-                _ => None,
-            },
+            rety: self.parse_rety()?.map(Into::into),
+        })
+    }
+
+    pub fn parse_rety(&mut self) -> PResult<Option<Ty>> {
+        Ok(match self.match_op(Punct::Arrow, Parsing::TyFn) {
+            Ok(_) => Some(self.ty()?),
+            Err(_) => None,
         })
     }
 
