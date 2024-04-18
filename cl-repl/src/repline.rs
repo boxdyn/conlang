@@ -38,35 +38,6 @@ pub mod error {
     }
 }
 
-pub mod ignore {
-    //! Does nothing, universally.
-    //!
-    //! Introduces the [Ignore] trait, and its singular function, [ignore](Ignore::ignore),
-    //! which does nothing.
-    impl<T> Ignore for T {}
-    /// Does nothing
-    ///
-    /// # Examples
-    /// ```rust
-    /// #![deny(unused_must_use)]
-    /// # use cl_repl::repline::ignore::Ignore;
-    /// ().ignore();
-    /// Err::<(), &str>("Foo").ignore();
-    /// Some("Bar").ignore();
-    /// 42.ignore();
-    ///
-    /// #[must_use]
-    /// fn the_meaning() -> usize {
-    ///     42
-    /// }
-    /// the_meaning().ignore();
-    /// ```
-    pub trait Ignore {
-        /// Does nothing
-        fn ignore(&self) {}
-    }
-}
-
 pub mod chars {
     //! Converts an <code>[Iterator]<Item = [u8]></code> into an
     //! <code>[Iterator]<Item = [char]></code>
@@ -178,7 +149,7 @@ mod out {
     }
 }
 
-use self::{chars::Chars, editor::Editor, error::*, flatten::Flatten, ignore::Ignore, raw::raw};
+use self::{chars::Chars, editor::Editor, error::*, flatten::Flatten, raw::raw};
 use std::{
     collections::VecDeque,
     io::{stdout, Bytes, Read, Result, Write},
@@ -260,7 +231,7 @@ impl<'a, R: Read> Repline<'a, R> {
                 }
                 c if c.is_ascii_control() => {
                     if cfg!(debug_assertions) {
-                        eprint!("\\x{:02x}", c as u32);
+                        self.ed.extend(c.escape_debug(), stdout)?;
                     }
                 }
                 c => {
@@ -274,7 +245,7 @@ impl<'a, R: Read> Repline<'a, R> {
         match self.input.next().ok_or(Error::EndOfInput)?? {
             '[' => self.csi(w)?,
             'O' => todo!("Process alternate character mode"),
-            other => self.ed.extend(['\x1b', other], w)?,
+            other => self.ed.extend(other.escape_debug(), w)?,
         }
         Ok(())
     }
@@ -295,12 +266,12 @@ impl<'a, R: Read> Repline<'a, R> {
             'F' => self.ed.end(w)?,
             '3' => {
                 if let '~' = self.input.next().ok_or(Error::EndOfInput)?? {
-                    self.ed.delete(w).ignore()
+                    let _ = self.ed.delete(w);
                 }
             }
             other => {
                 if cfg!(debug_assertions) {
-                    eprint!("{}", other.escape_unicode());
+                    self.ed.extend(other.escape_debug(), w)?;
                 }
             }
         }
@@ -509,6 +480,7 @@ pub mod editor {
             }
             Ok(())
         }
+
         pub fn restore(&mut self, s: &str) {
             self.clear();
             self.head.extend(s.chars())
