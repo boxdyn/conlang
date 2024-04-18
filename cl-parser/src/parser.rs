@@ -781,13 +781,6 @@ impl<'t> Parser<'t> {
         let start = self.loc();
         Ok(Expr { kind: f(self)?, extents: Span(start, self.loc()) })
     }
-    pub fn optional_expr(&mut self) -> PResult<Option<Expr>> {
-        match self.expr() {
-            Ok(v) => Ok(Some(v)),
-            Err(Error { reason: Nothing, .. }) => Ok(None),
-            Err(e) => Err(e),
-        }
-    }
 
     /// Parses an [ExprKind]
     ///
@@ -816,14 +809,8 @@ impl<'t> Parser<'t> {
             TokenKind::While => ExprKind::While(self.parse_while()?),
             TokenKind::If => ExprKind::If(self.parse_if()?),
             TokenKind::For => ExprKind::For(self.parse_for()?),
-            TokenKind::Break => {
-                self.consume_peeked();
-                Break { body: self.optional_expr()?.map(Into::into) }.into()
-            }
-            TokenKind::Return => {
-                self.consume_peeked();
-                Return { body: self.optional_expr()?.map(Into::into) }.into()
-            }
+            TokenKind::Break => ExprKind::Break(self.parse_break()?),
+            TokenKind::Return => ExprKind::Return(self.parse_return()?),
             TokenKind::Continue => {
                 self.consume_peeked();
                 Continue.into()
@@ -1014,6 +1001,24 @@ impl<'t> Parser<'t> {
 }
 /// ## Control flow subexpressions
 impl<'t> Parser<'t> {
+    /// [Break] = `break` (*unconsumed* `;` | [Expr])
+    pub fn parse_break(&mut self) -> PResult<Break> {
+        self.consume_peeked();
+        Ok(Break { body: self.ret_body(Parsing::Break)? })
+    }
+    /// [Return] = `return` (*unconsumed* `;` | [Expr])
+    pub fn parse_return(&mut self) -> PResult<Return> {
+        self.consume_peeked();
+        Ok(Return { body: self.ret_body(Parsing::Return)? })
+    }
+    /// ret_body = (*unconsumed* `;` | [Expr])
+    fn ret_body(&mut self, while_parsing: Parsing) -> PResult<Option<Box<Expr>>> {
+        Ok(match self.peek_kind(while_parsing)? {
+            TokenKind::Punct(Punct::Semi) => None,
+            _ => Some(self.expr()?.into()),
+        })
+    }
+
     /// [While] = `while` [Expr] [Block] [Else]?
     pub fn parse_while(&mut self) -> PResult<While> {
         self.match_type(TokenKind::While, Parsing::While)?;
