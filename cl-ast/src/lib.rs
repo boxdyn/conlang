@@ -497,7 +497,7 @@ pub struct Tuple {
 /// A [Loop] expression: `loop` [`Block`]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Loop {
-    pub body: Block,
+    pub body: Box<Expr>,
 }
 
 /// A [While] expression: `while` [`Expr`] [`Block`] [`Else`]?

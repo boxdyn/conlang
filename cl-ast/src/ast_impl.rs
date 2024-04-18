@@ -666,6 +666,7 @@ mod convert {
             Block => ExprKind::Block,
             Group => ExprKind::Group,
             Tuple => ExprKind::Tuple,
+            Loop => ExprKind::Loop,
             While => ExprKind::While,
             If => ExprKind::If,
             For => ExprKind::For,
