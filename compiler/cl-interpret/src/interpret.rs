@@ -5,7 +5,7 @@
 //! meaningless to get a pointer to one, and would be undefined behavior to dereference a pointer to
 //! one in any situation.
 
-use std::borrow::Borrow;
+use std::{borrow::Borrow, rc::Rc};
 
 use super::*;
 use cl_ast::*;
@@ -40,18 +40,21 @@ impl Interpret for Item {
     }
 }
 impl Interpret for Alias {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        todo!("Interpret type alias in {env}")
+    fn interpret(&self, _env: &mut Environment) -> IResult<ConValue> {
+        println!("TODO: {self}");
+        Ok(ConValue::Empty)
     }
 }
 impl Interpret for Const {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        todo!("interpret const in {env}")
+    fn interpret(&self, _env: &mut Environment) -> IResult<ConValue> {
+        println!("TODO: {self}");
+        Ok(ConValue::Empty)
     }
 }
 impl Interpret for Static {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        todo!("interpret static in {env}")
+    fn interpret(&self, _env: &mut Environment) -> IResult<ConValue> {
+        println!("TODO: {self}");
+        Ok(ConValue::Empty)
     }
 }
 impl Interpret for Module {
@@ -71,18 +74,22 @@ impl Interpret for Function {
     }
 }
 impl Interpret for Struct {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        todo!("Interpret structs in {env}")
+    fn interpret(&self, _env: &mut Environment) -> IResult<ConValue> {
+        println!("TODO: {self}");
+        Ok(ConValue::Empty)
     }
 }
 impl Interpret for Enum {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        todo!("Interpret enums in {env}")
+    fn interpret(&self, _env: &mut Environment) -> IResult<ConValue> {
+        println!("TODO: {self}");
+        Ok(ConValue::Empty)
     }
 }
 impl Interpret for Impl {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        todo!("Enter a struct's namespace and insert function definitions into it in {env}");
+        println!("TODO: {self}");
+        let Self { target: _, body } = self;
+        body.interpret(env)
     }
 }
 impl Interpret for Stmt {
@@ -229,24 +236,24 @@ impl Interpret for Binary {
         }
         let tail = tail.interpret(env)?;
         match kind {
-            BinaryKind::Mul => env.call("mul", &[head, tail]),
-            BinaryKind::Div => env.call("div", &[head, tail]),
-            BinaryKind::Rem => env.call("rem", &[head, tail]),
-            BinaryKind::Add => env.call("add", &[head, tail]),
-            BinaryKind::Sub => env.call("sub", &[head, tail]),
-            BinaryKind::Shl => env.call("shl", &[head, tail]),
-            BinaryKind::Shr => env.call("shr", &[head, tail]),
-            BinaryKind::BitAnd => env.call("and", &[head, tail]),
-            BinaryKind::BitOr => env.call("or", &[head, tail]),
-            BinaryKind::BitXor => env.call("xor", &[head, tail]),
-            BinaryKind::RangeExc => env.call("range_exc", &[head, tail]),
-            BinaryKind::RangeInc => env.call("range_inc", &[head, tail]),
-            BinaryKind::Lt => env.call("lt", &[head, tail]),
-            BinaryKind::LtEq => env.call("lt_eq", &[head, tail]),
-            BinaryKind::Equal => env.call("eq", &[head, tail]),
-            BinaryKind::NotEq => env.call("neq", &[head, tail]),
-            BinaryKind::GtEq => env.call("gt_eq", &[head, tail]),
-            BinaryKind::Gt => env.call("gt", &[head, tail]),
+            BinaryKind::Lt => head.lt(&tail),
+            BinaryKind::LtEq => head.lt_eq(&tail),
+            BinaryKind::Equal => head.eq(&tail),
+            BinaryKind::NotEq => head.neq(&tail),
+            BinaryKind::GtEq => head.gt_eq(&tail),
+            BinaryKind::Gt => head.gt(&tail),
+            BinaryKind::RangeExc => head.range_exc(tail),
+            BinaryKind::RangeInc => head.range_inc(tail),
+            BinaryKind::BitAnd => head & tail,
+            BinaryKind::BitOr => head | tail,
+            BinaryKind::BitXor => head ^ tail,
+            BinaryKind::Shl => head << tail,
+            BinaryKind::Shr => head >> tail,
+            BinaryKind::Add => head + tail,
+            BinaryKind::Sub => head - tail,
+            BinaryKind::Mul => head * tail,
+            BinaryKind::Div => head / tail,
+            BinaryKind::Rem => head % tail,
             BinaryKind::Dot => todo!("search within a type's namespace!"),
             BinaryKind::Call => match tail {
                 ConValue::Empty => head.call(env, &[]),
@@ -255,6 +262,36 @@ impl Interpret for Binary {
             },
             _ => Ok(head),
         }
+
+        // // Temporarily disabled, to avoid function dispatch overhead while I screw around
+        // // Not like it helped much in the first place!
+        // match kind {
+        //     BinaryKind::Mul => env.call("mul", &[head, tail]),
+        //     BinaryKind::Div => env.call("div", &[head, tail]),
+        //     BinaryKind::Rem => env.call("rem", &[head, tail]),
+        //     BinaryKind::Add => env.call("add", &[head, tail]),
+        //     BinaryKind::Sub => env.call("sub", &[head, tail]),
+        //     BinaryKind::Shl => env.call("shl", &[head, tail]),
+        //     BinaryKind::Shr => env.call("shr", &[head, tail]),
+        //     BinaryKind::BitAnd => env.call("and", &[head, tail]),
+        //     BinaryKind::BitOr => env.call("or", &[head, tail]),
+        //     BinaryKind::BitXor => env.call("xor", &[head, tail]),
+        //     BinaryKind::RangeExc => env.call("range_exc", &[head, tail]),
+        //     BinaryKind::RangeInc => env.call("range_inc", &[head, tail]),
+        //     BinaryKind::Lt => env.call("lt", &[head, tail]),
+        //     BinaryKind::LtEq => env.call("lt_eq", &[head, tail]),
+        //     BinaryKind::Equal => env.call("eq", &[head, tail]),
+        //     BinaryKind::NotEq => env.call("neq", &[head, tail]),
+        //     BinaryKind::GtEq => env.call("gt_eq", &[head, tail]),
+        //     BinaryKind::Gt => env.call("gt", &[head, tail]),
+        //     BinaryKind::Dot => todo!("search within a type's namespace!"),
+        //     BinaryKind::Call => match tail {
+        //         ConValue::Empty => head.call(env, &[]),
+        //         ConValue::Tuple(args) => head.call(env, &args),
+        //         _ => Err(Error::TypeError),
+        //     },
+        //     _ => Ok(head),
+        // }
     }
 }
 
@@ -291,7 +328,7 @@ impl Interpret for Path {
         if parts.len() == 1 {
             match parts.last().expect("parts should not be empty") {
                 PathPart::SuperKw | PathPart::SelfKw => todo!("Path navigation"),
-                PathPart::Ident(Identifier(s)) => env.get(s).cloned(),
+                PathPart::Ident(Identifier(s)) => env.get(s),
             }
         } else {
             todo!("Path navigation!")
@@ -316,7 +353,7 @@ impl Interpret for Array {
         for expr in values {
             out.push(expr.interpret(env)?)
         }
-        Ok(ConValue::Array(out))
+        Ok(ConValue::Array(out.into()))
     }
 }
 impl Interpret for ArrayRep {
@@ -327,14 +364,21 @@ impl Interpret for ArrayRep {
             _ => Err(Error::TypeError)?,
         };
         let value = value.interpret(env)?;
-        Ok(ConValue::Array(vec![value; repeat as usize]))
+        Ok(ConValue::Array(vec![value; repeat as usize].into()))
     }
 }
 impl Interpret for AddrOf {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self { count: _, mutable: _, expr } = self;
-        // this is stupid
-        todo!("Create reference\nfrom expr: {expr}\nin env:\n{env}\n")
+        match expr.as_ref() {
+            ExprKind::Index(_) => todo!("AddrOf array index"),
+            // ExprKind::Path(Path { absolute: false, parts }) => match parts.as_slice() {
+            //     [PathPart::Ident(Identifier(id))] => env.get_ref(id),
+            //     _ => todo!("Path traversal in addrof"),
+            // },
+            ExprKind::Path(_) => todo!("Path traversal in addrof"),
+            _ => Ok(ConValue::Ref(Rc::new(expr.interpret(env)?))),
+        }
     }
 }
 impl Interpret for Block {
@@ -357,13 +401,15 @@ impl Interpret for Group {
 impl Interpret for Tuple {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self { exprs } = self;
-        Ok(ConValue::Tuple(exprs.iter().try_fold(
-            vec![],
-            |mut out, element| {
-                out.push(element.interpret(env)?);
-                Ok(out)
-            },
-        )?))
+        Ok(ConValue::Tuple(
+            exprs
+                .iter()
+                .try_fold(vec![], |mut out, element| {
+                    out.push(element.interpret(env)?);
+                    Ok(out)
+                })?
+                .into(),
+        ))
     }
 }
 impl Interpret for Loop {

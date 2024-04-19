@@ -6,7 +6,10 @@ use super::{
     temp_type_impl::ConValue,
     BuiltIn, Callable,
 };
-use std::io::{stdout, Write};
+use std::{
+    io::{stdout, Write},
+    rc::Rc,
+};
 
 builtins! {
     const MISC;
@@ -65,7 +68,7 @@ builtins! {
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a + b),
-            (ConValue::String(a), ConValue::String(b)) => ConValue::String(a.to_string() + b),
+            (ConValue::String(a), ConValue::String(b)) => (a.to_string() + b).into(),
             _ => Err(Error::TypeError)?
         })
     }
@@ -182,6 +185,12 @@ builtins! {
             ConValue::Int(v) => ConValue::Int(!v),
             ConValue::Bool(v) => ConValue::Bool(!v),
             _ => Err(Error::TypeError)?,
+        })
+    }
+    pub fn deref(tail) -> IResult<ConValue> {
+        Ok(match tail {
+            ConValue::Ref(v) => Rc::as_ref(v).clone(),
+            _ => tail.clone(),
         })
     }
 }

@@ -30,7 +30,7 @@ pub mod temp_type_impl {
         function::Function,
         BuiltIn, Callable, Environment,
     };
-    use std::ops::*;
+    use std::{ops::*, rc::Rc};
 
     type Integer = isize;
 
@@ -50,11 +50,13 @@ pub mod temp_type_impl {
         /// A unicode character
         Char(char),
         /// A string
-        String(String),
+        String(Rc<str>),
+        /// A reference
+        Ref(Rc<ConValue>),
         /// An Array
-        Array(Vec<ConValue>),
+        Array(Rc<[ConValue]>),
         /// A tuple
-        Tuple(Vec<ConValue>),
+        Tuple(Rc<[ConValue]>),
         /// An exclusive range
         RangeExc(Integer, Integer),
         /// An inclusive range
@@ -166,6 +168,7 @@ pub mod temp_type_impl {
         char => ConValue::Char,
         &str => ConValue::String,
         String => ConValue::String,
+        Rc<str> => ConValue::String,
         Function => ConValue::Function,
         Vec<ConValue> => ConValue::Tuple,
         &'static dyn BuiltIn => ConValue::BuiltIn,
@@ -199,7 +202,7 @@ pub mod temp_type_impl {
         Add: add = [
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a + b),
-            (ConValue::String(a), ConValue::String(b)) => ConValue::String(a + &b),
+            (ConValue::String(a), ConValue::String(b)) => (a.to_string() + &b).into(),
             _ => Err(Error::TypeError)?
             ]
         BitAnd: bitand = [
@@ -259,6 +262,7 @@ pub mod temp_type_impl {
                 ConValue::Bool(v) => v.fmt(f),
                 ConValue::Char(v) => v.fmt(f),
                 ConValue::String(v) => v.fmt(f),
+                ConValue::Ref(v) => write!(f, "&{v}"),
                 ConValue::Array(array) => {
                     '['.fmt(f)?;
                     for (idx, element) in array.iter().enumerate() {
@@ -296,13 +300,15 @@ pub mod interpret;
 
 pub mod function {
     //! Represents a block of code which lives inside the Interpreter
+
     use super::{Callable, ConValue, Environment, Error, IResult, Interpret};
     use cl_ast::{Function as FnDecl, Identifier, Param};
+    use std::rc::Rc;
     /// Represents a block of code which persists inside the Interpreter
     #[derive(Clone, Debug)]
     pub struct Function {
         /// Stores the contents of the function declaration
-        decl: Box<FnDecl>,
+        decl: Rc<FnDecl>,
         // /// Stores the enclosing scope of the function
         // env: Box<Environment>,
     }
@@ -322,19 +328,17 @@ pub mod function {
             name
         }
         fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
-            let FnDecl { name: Identifier(name), bind: declargs, body, sign: _ } = &*self.decl;
+            let FnDecl { name: Identifier(name), bind, body, sign: _ } = &*self.decl;
             // Check arg mapping
-            if args.len() != declargs.len() {
-                return Err(Error::ArgNumber { want: declargs.len(), got: args.len() });
+            if args.len() != bind.len() {
+                return Err(Error::ArgNumber { want: bind.len(), got: args.len() });
             }
             let Some(body) = body else {
                 return Err(Error::NotDefined(name.into()));
             };
             // TODO: completely refactor data storage
             let mut frame = env.frame("fn args");
-            for (Param { mutability: _, name: Identifier(name) }, value) in
-                declargs.iter().zip(args)
-            {
+            for (Param { mutability: _, name: Identifier(name) }, value) in bind.iter().zip(args) {
                 frame.insert(name, Some(value.clone()));
             }
             match body.interpret(&mut frame) {
@@ -364,10 +368,12 @@ pub mod env {
         ops::{Deref, DerefMut},
     };
 
+    type StackFrame = HashMap<String, Option<ConValue>>;
+
     /// Implements a nested lexical scope
     #[derive(Clone, Debug)]
     pub struct Environment {
-        frames: Vec<(HashMap<String, Option<ConValue>>, &'static str)>,
+        frames: Vec<(StackFrame, &'static str)>,
     }
 
     impl Display for Environment {
@@ -444,10 +450,10 @@ pub mod env {
         /// Resolves a variable immutably.
         ///
         /// Returns a reference to the variable's contents, if it is defined and initialized.
-        pub fn get(&self, id: &str) -> IResult<&ConValue> {
+        pub fn get(&self, id: &str) -> IResult<ConValue> {
             for (frame, _) in self.frames.iter().rev() {
                 match frame.get(id) {
-                    Some(Some(var)) => return Ok(var),
+                    Some(Some(var)) => return Ok(var.clone()),
                     Some(None) => return Err(Error::NotInitialized(id.into())),
                     _ => (),
                 }
