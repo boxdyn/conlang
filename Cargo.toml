@@ -1,13 +1,13 @@
 [workspace]
 members = [
-    "cl-repl",
-    "cl-typeck",
-    "cl-interpret",
-    "cl-structures",
-    "cl-token",
-    "cl-ast",
-    "cl-parser",
-    "cl-lexer",
+    "compiler/cl-repl",
+    "compiler/cl-typeck",
+    "compiler/cl-interpret",
+    "compiler/cl-structures",
+    "compiler/cl-token",
+    "compiler/cl-ast",
+    "compiler/cl-parser",
+    "compiler/cl-lexer",
     "repline",
 ]
 resolver = "2"

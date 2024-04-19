@@ -13,7 +13,7 @@ use std::error::Error;
 // Path to display in standard library errors
 const STDLIB_DISPLAY_PATH: &str = "stdlib/lib.cl";
 // Statically included standard library
-const STDLIB: &str = include_str!("../../stdlib/lib.cl");
+const STDLIB: &str = include_str!("../../../stdlib/lib.cl");
 
 // Colors
 const C_MAIN: &str = "";
