@@ -61,7 +61,7 @@ pub mod delimiters {
         pub open: &'static str,
         pub close: &'static str,
     }
-    /// Delimits with braces decorated with spaces  `" {n"`, ..., `"\n}"`
+    /// Delimits with braces decorated with spaces  `" {\n"`, ..., `"\n}"`
     pub const SPACED_BRACES: Delimiters = Delimiters { open: " {\n", close: "\n}" };
     /// Delimits with braces on separate lines `{\n`, ..., `\n}`
     pub const BRACES: Delimiters = Delimiters { open: "{\n", close: "\n}" };
