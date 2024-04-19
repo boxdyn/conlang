@@ -6,10 +6,13 @@ use cl_typeck::{
 };
 use std::error::Error;
 
-const STDLIB_PATH: &str = "stdlib/lib.cl";
+// Path to display in standard library errors
+const STDLIB_DISPLAY_PATH: &str = "stdlib/lib.cl";
+// Statically included standard library
 const STDLIB: &str = include_str!("../../stdlib/lib.cl");
 
-const C_MAIN: &str = "\x1b[30m";
+// Colors
+const C_MAIN: &str = "";
 const C_RESV: &str = "\x1b[35m";
 const C_CODE: &str = "\x1b[36m";
 const C_LISTING: &str = "\x1b[38;5;117m";
@@ -26,7 +29,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let code = match parser.file() {
         Ok(code) => code,
         Err(e) => {
-            eprintln!("{STDLIB_PATH}:{e}");
+            eprintln!("{STDLIB_DISPLAY_PATH}:{e}");
             Err(e)?
         }
     };
