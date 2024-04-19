@@ -60,7 +60,6 @@ pub mod args {
             match self {
                 Mode::Tokenize => ANSI_BRIGHT_BLUE,
                 Mode::Beautify => ANSI_BRIGHT_MAGENTA,
-                // Mode::Resolve => ANSI_GREEN,
                 Mode::Interpret => ANSI_CYAN,
             }
         }
@@ -72,7 +71,6 @@ pub mod args {
             Ok(match s {
                 "i" | "interpret" | "r" | "run" => Mode::Interpret,
                 "b" | "beautify" | "p" | "pretty" => Mode::Beautify,
-                // "r" | "resolve" | "typecheck" | "type" => Mode::Resolve,
                 "t" | "tokenize" | "token" => Mode::Tokenize,
                 _ => Err("Recognized modes are: 'r' \"run\", 'p' \"pretty\", 't' \"token\"")?,
             })
@@ -81,14 +79,12 @@ pub mod args {
 }
 
 pub mod program {
+    use cl_ast::ast;
     use cl_interpret::{
         env::Environment, error::IResult, interpret::Interpret, temp_type_impl::ConValue,
     };
-
-    use cl_ast as ast;
     use cl_lexer::Lexer;
     use cl_parser::{error::PResult, Parser};
-    // use conlang::resolver::{error::TyResult, Resolver};
     use std::fmt::Display;
 
     pub struct Parsable;
@@ -96,7 +92,6 @@ pub mod program {
     pub enum Parsed {
         File(ast::File),
         Stmt(ast::Stmt),
-        Expr(ast::Expr),
     }
 
     pub struct Program<'t, Variant> {
@@ -116,9 +111,6 @@ pub mod program {
         pub fn parse(self) -> PResult<Program<'t, Parsed>> {
             self.parse_file().or_else(|_| self.parse_stmt())
         }
-        pub fn parse_expr(&self) -> PResult<Program<'t, Parsed>> {
-            Ok(Program { data: Parsed::Expr(Parser::new(self.lex()).expr()?), text: self.text })
-        }
         pub fn parse_stmt(&self) -> PResult<Program<'t, Parsed>> {
             Ok(Program { data: Parsed::Stmt(Parser::new(self.lex()).stmt()?), text: self.text })
         }
@@ -132,14 +124,12 @@ pub mod program {
             match &self.data {
                 Parsed::File(v) => eprintln!("{v:?}"),
                 Parsed::Stmt(v) => eprintln!("{v:?}"),
-                Parsed::Expr(v) => eprintln!("{v:?}"),
             }
         }
         pub fn print(&self) {
             match &self.data {
                 Parsed::File(v) => println!("{v}"),
                 Parsed::Stmt(v) => println!("{v}"),
-                Parsed::Expr(v) => println!("{v}"),
             };
         }
 
@@ -147,17 +137,8 @@ pub mod program {
             match &self.data {
                 Parsed::File(v) => v.interpret(env),
                 Parsed::Stmt(v) => v.interpret(env),
-                Parsed::Expr(v) => v.interpret(env),
             }
         }
-
-        // pub fn resolve(&mut self, resolver: &mut Resolver) -> TyResult<()> {
-        //     match &mut self.data {
-        //         Parsed::Program(start) => start.resolve(resolver),
-        //         Parsed::Expr(expr) => expr.resolve(resolver),
-        //     }
-        //     .map(|ty| println!("{ty}"))
-        // }
     }
 
     impl<'t> Display for Program<'t, Parsed> {
@@ -165,7 +146,6 @@ pub mod program {
             match &self.data {
                 Parsed::File(v) => write!(f, "{v}"),
                 Parsed::Stmt(v) => write!(f, "{v}"),
-                Parsed::Expr(v) => write!(f, "{v}"),
             }
         }
     }
@@ -391,7 +371,7 @@ pub mod repl {
 
         fn help(&self) {
             println!(
-                "Commands:\n- $tokens\n    Tokenize Mode:\n    Outputs information derived by the Lexer\n- $pretty\n    Beautify Mode:\n    Pretty-prints the input\n- $type\n    Resolve Mode:\n    Attempts variable resolution and type-checking on the input\n- $run\n    Interpret Mode:\n    Interprets the input using Conlang\'s work-in-progress interpreter\n- $mode\n    Prints the current mode\n- $help\n    Prints this help message"
+                "Commands:\n- $tokens\n    Tokenize Mode:\n    Outputs information derived by the Lexer\n- $pretty\n    Beautify Mode:\n    Pretty-prints the input\n- $run\n    Interpret Mode:\n    Interprets the input using Conlang\'s work-in-progress interpreter\n- $mode\n    Prints the current mode\n- $help\n    Prints this help message"
             );
         }
         fn command(&mut self, line: &str) -> bool {
