@@ -33,6 +33,20 @@ pub enum Visibility {
     Public,
 }
 
+// TODO: Capture token?
+/// A name
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Identifier(pub String);
+
+/// A [Literal]: 0x42, 1e123, 2.4, "Hello"
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Literal {
+    Bool(bool),
+    Char(char),
+    Int(u128),
+    String(String),
+}
+
 /// A list of [Item]s
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct File {
@@ -271,24 +285,12 @@ pub enum PathPart {
     Ident(Identifier),
 }
 
-// TODO: Capture token?
-/// A name
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Identifier(pub String);
-
 /// An abstract statement, and associated metadata
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Stmt {
     pub extents: Span,
     pub kind: StmtKind,
     pub semi: Semi,
-}
-
-/// Whether or not a [Stmt] is followed by a semicolon
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Semi {
-    Terminated,
-    Unterminated,
 }
 
 /// Whether the [Stmt] is a [Let], [Item], or [Expr] statement
@@ -298,6 +300,13 @@ pub enum StmtKind {
     Local(Let),
     Item(Box<Item>),
     Expr(Box<Expr>),
+}
+
+/// Whether or not a [Stmt] is followed by a semicolon
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Semi {
+    Terminated,
+    Unterminated,
 }
 
 /// A local variable declaration [Stmt]
@@ -317,8 +326,11 @@ pub struct Expr {
 }
 
 /// Any of the different [Expr]essions
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
 pub enum ExprKind {
+    /// An empty expression: `(` `)`
+    #[default]
+    Empty,
     /// An [Assign]ment expression: [`Expr`] ([`AssignKind`] [`Expr`])\+
     Assign(Assign),
     /// A [Binary] expression: [`Expr`] ([`BinaryKind`] [`Expr`])\+
@@ -340,8 +352,6 @@ pub enum ExprKind {
     AddrOf(AddrOf),
     /// A [Block] expression: `{` [`Stmt`]\* [`Expr`]? `}`
     Block(Block),
-    /// An empty expression: `(` `)`
-    Empty,
     /// A [Grouping](Group) expression `(` [`Expr`] `)`
     Group(Group),
     /// A [Tuple] expression: `(` [`Expr`] (`,` [`Expr`])+ `)`
@@ -443,15 +453,6 @@ pub enum UnaryKind {
 pub struct Index {
     pub head: Box<ExprKind>,
     pub indices: Vec<Expr>,
-}
-
-/// A [Literal]: 0x42, 1e123, 2.4, "Hello"
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Literal {
-    Bool(bool),
-    Char(char),
-    Int(u128),
-    String(String),
 }
 
 /// An [Array] literal: `[` [`Expr`] (`,` [`Expr`])\* `]`
