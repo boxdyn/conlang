@@ -8,6 +8,7 @@ members = [
     "cl-ast",
     "cl-parser",
     "cl-lexer",
+    "repline",
 ]
 resolver = "2"
 

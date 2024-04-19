@@ -4,10 +4,10 @@ use cl_ast::{
 };
 use cl_lexer::Lexer;
 use cl_parser::Parser;
-use cl_repl::repline::{error::Error as RlError, Repline};
 use cl_typeck::{
     definition::Def, name_collector::NameCollectable, project::Project, type_resolver::resolve,
 };
+use repline::{error::Error as RlError, prebaked::*};
 use std::error::Error;
 
 // Path to display in standard library errors
@@ -40,53 +40,21 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     unsafe { TREES.push(code) }.collect_in_root(&mut prj)?;
 
-    main_menu(&mut prj)
-}
-
-pub enum Response {
-    Accept,
-    Deny,
-    Break,
-}
-
-fn read_and(
-    color: &str,
-    begin: &str,
-    mut f: impl FnMut(&str) -> Result<Response, Box<dyn Error>>,
-) -> Result<(), Box<dyn Error>> {
-    let mut rl = Repline::new(color, begin, "? >");
-    loop {
-        let line = match rl.read() {
-            Err(RlError::CtrlC(_)) => break,
-            Err(RlError::CtrlD(line)) => {
-                rl.deny();
-                line
-            }
-            Ok(line) => line,
-            Err(e) => Err(e)?,
-        };
-        print!("\x1b[G\x1b[J");
-        match f(&line) {
-            Ok(Response::Accept) => rl.accept(),
-            Ok(Response::Deny) => rl.deny(),
-            Ok(Response::Break) => break,
-            Err(e) => print!("\x1b[40G\x1bJ\x1b[91m{e}\x1b[0m"),
-        }
-    }
+    main_menu(&mut prj)?;
     Ok(())
 }
 
-fn main_menu(prj: &mut Project) -> Result<(), Box<dyn Error>> {
+fn main_menu(prj: &mut Project) -> Result<(), RlError> {
     banner();
-    read_and(C_MAIN, "mu>", |line| {
+    read_and(C_MAIN, "mu>", "? >", |line| {
         match line.trim() {
-            "c" | "code" => enter_code(prj),
-            "clear" => clear(),
+            "c" | "code" => enter_code(prj)?,
+            "clear" => clear()?,
             "e" | "exit" => return Ok(Response::Break),
             "l" | "list" => list_types(prj),
-            "q" | "query" => query_type_expression(prj),
-            "r" | "resolve" => resolve_all(prj),
-            "d" | "desugar" => live_desugar(),
+            "q" | "query" => query_type_expression(prj)?,
+            "r" | "resolve" => resolve_all(prj)?,
+            "d" | "desugar" => live_desugar()?,
             "h" | "help" => {
                 println!(
                     "Valid commands are:
@@ -102,12 +70,12 @@ fn main_menu(prj: &mut Project) -> Result<(), Box<dyn Error>> {
             }
             _ => Err(r#"Invalid command. Type "help" to see the list of valid commands."#)?,
         }
-        .map(|_| Response::Accept)
+        Ok(Response::Accept)
     })
 }
 
-fn enter_code(prj: &mut Project) -> Result<(), Box<dyn Error>> {
-    read_and(C_CODE, "cl>", |line| {
+fn enter_code(prj: &mut Project) -> Result<(), RlError> {
+    read_and(C_CODE, "cl>", "? >", |line| {
         if line.trim().is_empty() {
             return Ok(Response::Break);
         }
@@ -120,8 +88,8 @@ fn enter_code(prj: &mut Project) -> Result<(), Box<dyn Error>> {
     })
 }
 
-fn live_desugar() -> Result<(), Box<dyn Error>> {
-    read_and(C_RESV, "se>", |line| {
+fn live_desugar() -> Result<(), RlError> {
+    read_and(C_RESV, "se>", "? >", |line| {
         let code = Parser::new(Lexer::new(line)).stmt()?;
         println!("Raw, as parsed:\n{C_LISTING}{code}\x1b[0m");
 
@@ -135,8 +103,8 @@ fn live_desugar() -> Result<(), Box<dyn Error>> {
     })
 }
 
-fn query_type_expression(prj: &mut Project) -> Result<(), Box<dyn Error>> {
-    read_and(C_RESV, "ty>", |line| {
+fn query_type_expression(prj: &mut Project) -> Result<(), RlError> {
+    read_and(C_RESV, "ty>", "? >", |line| {
         if line.trim().is_empty() {
             return Ok(Response::Break);
         }
@@ -156,7 +124,7 @@ fn resolve_all(prj: &mut Project) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn list_types(prj: &mut Project) -> Result<(), Box<dyn Error>> {
+fn list_types(prj: &mut Project) {
     println!("     name\x1b[30G  type");
     for (idx, Def { name, vis, kind, .. }) in prj.pool.iter().enumerate() {
         print!("{idx:3}: {vis}");
@@ -165,7 +133,6 @@ fn list_types(prj: &mut Project) -> Result<(), Box<dyn Error>> {
         }
         println!("{name}\x1b[30G| {kind}");
     }
-    Ok(())
 }
 
 fn pretty_def(def: &Def, id: impl Into<usize>) {

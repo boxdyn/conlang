@@ -15,9 +15,8 @@ cl-lexer = { path = "../cl-lexer" }
 cl-token = { path = "../cl-token" }
 cl-parser = { path = "../cl-parser" }
 cl-interpret = { path = "../cl-interpret" }
-crossterm = "0.27.0"
+repline = { path = "../repline" }
 argh = "0.1.12"
 
 [dev-dependencies]
-cl-structures = { path = "../cl-structures" }
 cl-typeck = { path = "../cl-typeck" }

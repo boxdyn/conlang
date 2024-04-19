@@ -2,7 +2,7 @@
 
 use cl_lexer::Lexer;
 use cl_parser::Parser;
-use cl_repl::repline::{error::Error as RlError, Repline};
+use repline::{error::Error as RlError, Repline};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
