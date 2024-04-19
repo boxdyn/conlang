@@ -60,16 +60,6 @@ fn if_else() -> i32 {
     // block 4
 }
 
-fn while_else() -> i32 {
-    loop {
-        if conditional {
-            body;
-        } else {
-            break { else_body };
-        }
-    }
-}
-
 #[cfg("test")]
 mod test {
     //! Tests for funky behavior
@@ -95,5 +85,23 @@ mod test {
         Tuple (TupleLike),
         StructEmpty {},
         StructLike { member1: UnitLike, member2: TupleLike },
+    }
+
+    fn noop () -> bool {
+        loop if false {
+            
+        } else break loop if false {
+            
+        } else break loop if false {
+            
+        } else break true;
+    }
+
+    fn while_else() -> i32 {
+        while conditional {
+            pass
+        } else {
+            fail
+        }
     }
 }
