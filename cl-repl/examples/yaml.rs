@@ -485,7 +485,7 @@ pub mod yamlify {
             y.key("While")
                 .pair("cond", cond)
                 .pair("pass", pass)
-                .pair("fail", fail);
+                .yaml(fail);
         }
     }
     impl Yamlify for Else {
