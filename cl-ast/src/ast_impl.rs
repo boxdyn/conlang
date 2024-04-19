@@ -3,57 +3,24 @@ use super::*;
 
 mod display {
     //! Implements [Display] for [AST](super::super) Types
+
     use super::*;
-    pub use delimiters::*;
+    use format::{delimiters::*, *};
     use std::{
         borrow::Borrow,
         fmt::{Display, Write},
     };
-    mod delimiters {
-        #![allow(dead_code)]
-        #[derive(Clone, Copy, Debug)]
-        pub struct Delimiters<'t> {
-            pub open: &'t str,
-            pub close: &'t str,
-        }
-        /// Delimits with braces decorated with spaces  `" {n"`, ..., `"\n}"`
-        pub const SPACED_BRACES: Delimiters = Delimiters { open: " {\n", close: "\n}" };
-        /// Delimits with braces on separate lines `{\n`, ..., `\n}`
-        pub const BRACES: Delimiters = Delimiters { open: "{\n", close: "\n}" };
-        /// Delimits with parentheses on separate lines `{\n`, ..., `\n}`
-        pub const PARENS: Delimiters = Delimiters { open: "(\n", close: "\n)" };
-        /// Delimits with square brackets on separate lines `{\n`, ..., `\n}`
-        pub const SQUARE: Delimiters = Delimiters { open: "[\n", close: "\n]" };
-        /// Delimits with braces on the same line `{ `, ..., ` }`
-        pub const INLINE_BRACES: Delimiters = Delimiters { open: "{ ", close: " }" };
-        /// Delimits with parentheses on the same line `( `, ..., ` )`
-        pub const INLINE_PARENS: Delimiters = Delimiters { open: "(", close: ")" };
-        /// Delimits with square brackets on the same line `[ `, ..., ` ]`
-        pub const INLINE_SQUARE: Delimiters = Delimiters { open: "[", close: "]" };
-    }
-    fn delimit<'a>(
-        func: impl Fn(&mut std::fmt::Formatter<'_>) -> std::fmt::Result + 'a,
-        delim: Delimiters<'a>,
-    ) -> impl Fn(&mut std::fmt::Formatter<'_>) -> std::fmt::Result + 'a {
-        move |f| {
-            write!(f, "{}", delim.open)?;
-            func(f)?;
-            write!(f, "{}", delim.close)
-        }
-    }
-    fn separate<'iterable, I>(
-        iterable: &'iterable [I],
-        sep: impl Display + 'iterable,
-    ) -> impl Fn(&mut std::fmt::Formatter<'_>) -> std::fmt::Result + 'iterable
-    where
-        I: Display,
-    {
-        move |f| {
-            for (idx, item) in iterable.iter().enumerate() {
+
+    fn separate<I: Display, W: Write>(
+        iterable: impl IntoIterator<Item = I>,
+        sep: &'static str,
+    ) -> impl FnOnce(W) -> std::fmt::Result {
+        move |mut f| {
+            for (idx, item) in iterable.into_iter().enumerate() {
                 if idx > 0 {
-                    write!(f, "{sep}")?;
+                    f.write_str(sep)?;
                 }
-                item.fmt(f)?;
+                write!(f, "{item}")?;
             }
             Ok(())
         }
@@ -67,11 +34,29 @@ mod display {
             }
         }
     }
+
     impl Display for Visibility {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 Visibility::Private => Ok(()),
                 Visibility::Public => "pub ".fmt(f),
+            }
+        }
+    }
+
+    impl Display for Identifier {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            self.0.fmt(f)
+        }
+    }
+
+    impl Display for Literal {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Literal::Bool(v) => v.fmt(f),
+                Literal::Char(v) => write!(f, "'{v}'"),
+                Literal::Int(v) => v.fmt(f),
+                Literal::String(v) => write!(f, "\"{v}\""),
             }
         }
     }
@@ -89,22 +74,24 @@ mod display {
                 return Ok(());
             }
             "#".fmt(f)?;
-            delimit(separate(meta, ", "), INLINE_SQUARE)(f)?;
+            separate(meta, ", ")(&mut f.delimit(INLINE_SQUARE))?;
             "\n".fmt(f)
         }
     }
+
     impl Display for Meta {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { name, kind } = self;
             write!(f, "{name}{kind}")
         }
     }
+
     impl Display for MetaKind {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 MetaKind::Plain => Ok(()),
                 MetaKind::Equals(v) => write!(f, " = {v}"),
-                MetaKind::Func(args) => delimit(separate(args, ", "), INLINE_PARENS)(f),
+                MetaKind::Func(args) => separate(args, ", ")(f.delimit(INLINE_PARENS)),
             }
         }
     }
@@ -114,7 +101,13 @@ mod display {
             let Self { extents: _, attrs, vis, kind } = self;
             attrs.fmt(f)?;
             vis.fmt(f)?;
-            match kind {
+            kind.fmt(f)
+        }
+    }
+
+    impl Display for ItemKind {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
                 ItemKind::Alias(v) => v.fmt(f),
                 ItemKind::Const(v) => v.fmt(f),
                 ItemKind::Static(v) => v.fmt(f),
@@ -126,6 +119,7 @@ mod display {
             }
         }
     }
+
     impl Display for Alias {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { to, from } = self;
@@ -135,35 +129,40 @@ mod display {
             }
         }
     }
+
     impl Display for Const {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { name, ty, init } = self;
             write!(f, "const {name}: {ty} = {init}")
         }
     }
+
     impl Display for Static {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { mutable, name, ty, init } = self;
             write!(f, "static {mutable}{name}: {ty} = {init}")
         }
     }
+
     impl Display for Module {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { name, kind } = self;
             write!(f, "mod {name}{kind}")
         }
     }
+
     impl Display for ModuleKind {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 ModuleKind::Inline(items) => {
                     ' '.fmt(f)?;
-                    delimit(|f| items.fmt(f), BRACES)(f)
+                    write!(f.delimit(BRACES), "{items}")
                 }
                 ModuleKind::Outline => ';'.fmt(f),
             }
         }
     }
+
     impl Display for Function {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { name, sign: sign @ TyFn { args, rety }, bind, body } = self;
@@ -178,18 +177,15 @@ mod display {
 
             debug_assert_eq!(bind.len(), types.len());
             write!(f, "fn {name} ")?;
-            delimit(
-                |f| {
-                    for (idx, (arg, ty)) in bind.iter().zip(types.iter()).enumerate() {
-                        if idx != 0 {
-                            f.write_str(", ")?;
-                        }
-                        write!(f, "{arg}: {ty}")?;
+            {
+                let mut f = f.delimit(INLINE_PARENS);
+                for (idx, (arg, ty)) in bind.iter().zip(types.iter()).enumerate() {
+                    if idx != 0 {
+                        f.write_str(", ")?;
                     }
-                    Ok(())
-                },
-                INLINE_PARENS,
-            )(f)?;
+                    write!(f, "{arg}: {ty}")?;
+                }
+            }
             if let Some(rety) = rety {
                 write!(f, " -> {rety}")?;
             }
@@ -199,70 +195,80 @@ mod display {
             }
         }
     }
+
     impl Display for Param {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { mutability, name } = self;
             write!(f, "{mutability}{name}")
         }
     }
+
     impl Display for Struct {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { name, kind } = self;
             write!(f, "struct {name}{kind}")
         }
     }
+
     impl Display for StructKind {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 StructKind::Empty => ';'.fmt(f),
-                StructKind::Tuple(v) => delimit(separate(v, ", "), INLINE_PARENS)(f),
-                StructKind::Struct(v) => delimit(separate(v, ",\n"), SPACED_BRACES)(f),
+                StructKind::Tuple(v) => separate(v, ", ")(f.delimit(INLINE_PARENS)),
+                StructKind::Struct(v) => separate(v, ",\n")(f.delimit(SPACED_BRACES)),
             }
         }
     }
+
     impl Display for StructMember {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { vis, name, ty } = self;
             write!(f, "{vis}{name}: {ty}")
         }
     }
+
     impl Display for Enum {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { name, kind } = self;
             write!(f, "enum {name}{kind}")
         }
     }
+
     impl Display for EnumKind {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 EnumKind::NoVariants => ';'.fmt(f),
-                EnumKind::Variants(v) => delimit(separate(v, ",\n"), SPACED_BRACES)(f),
+                EnumKind::Variants(v) => separate(v, ",\n")(f.delimit(SPACED_BRACES)),
             }
         }
     }
+
     impl Display for Variant {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { name, kind } = self;
             write!(f, "{name}{kind}")
         }
     }
+
     impl Display for VariantKind {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 VariantKind::Plain => Ok(()),
                 VariantKind::CLike(n) => write!(f, " = {n}"),
                 VariantKind::Tuple(v) => v.fmt(f),
-                VariantKind::Struct(v) => delimit(separate(v, ", "), INLINE_BRACES)(f),
+                VariantKind::Struct(v) => separate(v, ", ")(f.delimit(INLINE_BRACES)),
             }
         }
     }
+
     impl Display for Impl {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { target, body } = self;
             write!(f, "impl {target} ")?;
-            delimit(|f| body.fmt(f), BRACES)(f)
+            write!(f.delimit(BRACES), "{body}")
         }
     }
+
     impl Display for ImplKind {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
@@ -279,6 +285,7 @@ mod display {
             self.kind.fmt(f)
         }
     }
+
     impl Display for TyKind {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
@@ -292,11 +299,13 @@ mod display {
             }
         }
     }
+
     impl Display for TyTuple {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            delimit(separate(&self.types, ", "), INLINE_PARENS)(f)
+            separate(&self.types, ", ")(f.delimit(INLINE_PARENS))
         }
     }
+
     impl Display for TyRef {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let &Self { count, mutable, ref to } = self;
@@ -306,6 +315,7 @@ mod display {
             write!(f, "{mutable}{to}")
         }
     }
+
     impl Display for TyFn {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { args, rety } = self;
@@ -317,21 +327,53 @@ mod display {
         }
     }
 
+    impl Display for Path {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let Self { absolute, parts } = self;
+            if *absolute {
+                "::".fmt(f)?;
+            }
+            separate(parts, "::")(f)
+        }
+    }
+
+    impl Display for PathPart {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                PathPart::SuperKw => "super".fmt(f),
+                PathPart::SelfKw => "self".fmt(f),
+                PathPart::Ident(id) => id.fmt(f),
+            }
+        }
+    }
+
     impl Display for Stmt {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Stmt { extents: _, kind, semi } = self;
-            match kind {
+            write!(f, "{kind}{semi}")
+        }
+    }
+
+    impl Display for StmtKind {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
                 StmtKind::Empty => Ok(()),
                 StmtKind::Local(v) => v.fmt(f),
                 StmtKind::Item(v) => v.fmt(f),
                 StmtKind::Expr(v) => v.fmt(f),
-            }?;
-            match semi {
+            }
+        }
+    }
+
+    impl Display for Semi {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
                 Semi::Terminated => ';'.fmt(f),
                 Semi::Unterminated => Ok(()),
             }
         }
     }
+
     impl Display for Let {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { mutable, name, ty, init } = self;
@@ -351,9 +393,11 @@ mod display {
             self.kind.fmt(f)
         }
     }
+
     impl Display for ExprKind {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
+                ExprKind::Empty => "()".fmt(f),
                 ExprKind::Assign(v) => v.fmt(f),
                 ExprKind::Binary(v) => v.fmt(f),
                 ExprKind::Unary(v) => v.fmt(f),
@@ -364,7 +408,6 @@ mod display {
                 ExprKind::ArrayRep(v) => v.fmt(f),
                 ExprKind::AddrOf(v) => v.fmt(f),
                 ExprKind::Block(v) => v.fmt(f),
-                ExprKind::Empty => "()".fmt(f),
                 ExprKind::Group(v) => v.fmt(f),
                 ExprKind::Tuple(v) => v.fmt(f),
                 ExprKind::Loop(v) => v.fmt(f),
@@ -377,12 +420,14 @@ mod display {
             }
         }
     }
+
     impl Display for Assign {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { kind, parts } = self;
             write!(f, "{} {kind} {}", parts.0, parts.1)
         }
     }
+
     impl Display for AssignKind {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
@@ -401,6 +446,7 @@ mod display {
             .fmt(f)
         }
     }
+
     impl Display for Binary {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { kind, parts } = self;
@@ -412,6 +458,7 @@ mod display {
             }
         }
     }
+
     impl Display for BinaryKind {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
@@ -442,12 +489,14 @@ mod display {
             .fmt(f)
         }
     }
+
     impl Display for Unary {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { kind, tail } = self;
             write!(f, "{kind}{tail}")
         }
     }
+
     impl Display for UnaryKind {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
@@ -460,62 +509,28 @@ mod display {
             .fmt(f)
         }
     }
-    impl Display for Tuple {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            delimit(separate(&self.exprs, ", "), INLINE_PARENS)(f)
-        }
-    }
+
     impl Display for Index {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { head, indices } = self;
             write!(f, "{head}")?;
-            delimit(separate(indices, ", "), INLINE_SQUARE)(f)
+            separate(indices, ", ")(f.delimit(INLINE_SQUARE))
         }
     }
-    impl Display for Path {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { absolute, parts } = self;
-            if *absolute {
-                "::".fmt(f)?;
-            }
-            separate(parts, "::")(f)
-        }
-    }
-    impl Display for PathPart {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                PathPart::SuperKw => "super".fmt(f),
-                PathPart::SelfKw => "self".fmt(f),
-                PathPart::Ident(id) => id.fmt(f),
-            }
-        }
-    }
-    impl Display for Identifier {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            self.0.fmt(f)
-        }
-    }
-    impl Display for Literal {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                Literal::Bool(v) => v.fmt(f),
-                Literal::Char(v) => write!(f, "'{v}'"),
-                Literal::Int(v) => v.fmt(f),
-                Literal::String(v) => write!(f, "\"{v}\""),
-            }
-        }
-    }
+
     impl Display for Array {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            delimit(separate(&self.values, ", "), INLINE_SQUARE)(f)
+            separate(&self.values, ", ")(f.delimit(INLINE_SQUARE))
         }
     }
+
     impl Display for ArrayRep {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { value, repeat } = self;
             write!(f, "[{value}; {repeat}]")
         }
     }
+
     impl Display for AddrOf {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { count, mutable, expr } = self;
@@ -525,40 +540,53 @@ mod display {
             write!(f, "{mutable}{expr}")
         }
     }
+
     impl Display for Block {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            delimit(separate(&self.stmts, "\n"), BRACES)(f)
+            separate(&self.stmts, "\n")(f.delimit(BRACES))
         }
     }
+
     impl Display for Group {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(f, "({})", self.expr)
         }
     }
+
+    impl Display for Tuple {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            separate(&self.exprs, ", ")(f.delimit(INLINE_PARENS))
+        }
+    }
+
     impl Display for Loop {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { body } = self;
             write!(f, "loop {body}")
         }
     }
+
     impl Display for While {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { cond, pass, fail } = self;
             write!(f, "while {cond} {pass}{fail}")
         }
     }
+
     impl Display for If {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { cond, pass, fail } = self;
             write!(f, "if {cond} {pass}{fail}")
         }
     }
+
     impl Display for For {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { bind, cond, pass, fail } = self;
             write!(f, "for {bind} in {cond} {pass}{fail}")
         }
     }
+
     impl Display for Else {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &self.body {
@@ -567,6 +595,7 @@ mod display {
             }
         }
     }
+
     impl Display for Break {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(f, "break")?;
@@ -576,6 +605,7 @@ mod display {
             }
         }
     }
+
     impl Display for Return {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(f, "return")?;
@@ -583,6 +613,12 @@ mod display {
                 Some(body) => write!(f, " {body}"),
                 _ => Ok(()),
             }
+        }
+    }
+
+    impl Display for Continue {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            "continue".fmt(f)
         }
     }
 }

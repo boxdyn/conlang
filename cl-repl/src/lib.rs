@@ -85,11 +85,11 @@ pub mod program {
         env::Environment, error::IResult, interpret::Interpret, temp_type_impl::ConValue,
     };
 
-    use cl_ast::{self as ast, format::*};
+    use cl_ast as ast;
     use cl_lexer::Lexer;
     use cl_parser::{error::PResult, Parser};
     // use conlang::resolver::{error::TyResult, Resolver};
-    use std::{fmt::Display, io::Write};
+    use std::fmt::Display;
 
     pub struct Parsable;
 
@@ -136,13 +136,11 @@ pub mod program {
             }
         }
         pub fn print(&self) {
-            let mut f = std::io::stdout().pretty();
-            let _ = match &self.data {
-                Parsed::File(v) => writeln!(f, "{v}"),
-                Parsed::Stmt(v) => writeln!(f, "{v}"),
-                Parsed::Expr(v) => writeln!(f, "{v}"),
+            match &self.data {
+                Parsed::File(v) => println!("{v}"),
+                Parsed::Stmt(v) => println!("{v}"),
+                Parsed::Expr(v) => println!("{v}"),
             };
-            // println!("{self}")
         }
 
         pub fn run(&self, env: &mut Environment) -> IResult<ConValue> {

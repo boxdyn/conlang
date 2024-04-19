@@ -1,7 +1,7 @@
 //! [Display] implementations for [TypeKind], [Adt], and [Intrinsic]
 
 use super::{Adt, Def, DefKind, Intrinsic, TypeKind, ValueKind};
-use cl_ast::format::FmtPretty;
+use cl_ast::format::FmtAdapter;
 use std::{
     fmt::{self, Display, Write},
     iter,
@@ -31,13 +31,14 @@ where
 impl Display for Def<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self { name, vis, meta, kind, source, module } = self;
+        if !meta.is_empty() {
+            writeln!(f, "#{meta:?}")?;
+        }
         writeln!(f, "{vis}{name}: ")?;
         writeln!(f, "kind: {kind}")?;
-        if !meta.is_empty() {
-            writeln!(f, "meta: {meta:?}")?;
-        }
         if let Some(source) = source {
-            writeln!(f.pretty(), "source: {{\n{source}\n}}")?;
+            writeln!(f, "source:")?;
+            writeln!(f.indent(), "\n{source}")?;
         }
         write!(f, "module: {module}")
     }

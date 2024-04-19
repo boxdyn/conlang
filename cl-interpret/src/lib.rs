@@ -282,9 +282,7 @@ pub mod temp_type_impl {
                     ')'.fmt(f)
                 }
                 ConValue::Function(func) => {
-                    use cl_ast::format::*;
-                    use std::fmt::Write;
-                    write!(f.pretty(), "{}", func.decl())
+                    write!(f, "{}", func.decl())
                 }
                 ConValue::BuiltIn(func) => {
                     write!(f, "{}", func.description())

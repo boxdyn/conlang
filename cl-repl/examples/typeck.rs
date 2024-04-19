@@ -12,6 +12,7 @@ const STDLIB: &str = include_str!("../../stdlib/lib.cl");
 const C_MAIN: &str = "\x1b[30m";
 const C_RESV: &str = "\x1b[35m";
 const C_CODE: &str = "\x1b[36m";
+const C_LISTING: &str = "\x1b[38;5;117m";
 
 /// A home for immutable intermediate ASTs
 ///
@@ -144,12 +145,15 @@ fn list_types(prj: &mut Project) -> Result<(), Box<dyn Error>> {
 
 fn pretty_def(def: &Def, id: impl Into<usize>) {
     let id = id.into();
-    let Def { vis, name, kind, module, meta, source: _ } = def;
+    let Def { vis, name, kind, module, meta, source } = def;
     for meta in *meta {
         println!("#[{meta}]")
     }
     println!("{vis}{name} [id: {id}] = {kind}");
-    println!("Module:\n\x1b[97m{module}\x1b[0m");
+    if let Some(source) = source {
+        println!("Source:\n{C_LISTING}{source}\x1b[0m");
+    }
+    println!("\x1b[90m{module}\x1b[0m");
 }
 
 fn clear() -> Result<(), Box<dyn Error>> {
