@@ -16,4 +16,6 @@ pub use ast::*;
 
 pub mod ast;
 pub mod ast_impl;
+pub mod ast_visitor;
+pub mod desugar;
 pub mod format;

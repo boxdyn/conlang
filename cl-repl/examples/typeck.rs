@@ -1,3 +1,7 @@
+use cl_ast::{
+    ast_visitor::fold::Fold,
+    desugar::{squash_groups::SquashGroups, while_else::WhileElseDesugar},
+};
 use cl_lexer::Lexer;
 use cl_parser::Parser;
 use cl_repl::repline::{error::Error as RlError, Repline};
@@ -33,6 +37,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             Err(e)?
         }
     };
+
     unsafe { TREES.push(code) }.collect_in_root(&mut prj)?;
 
     main_menu(&mut prj)
@@ -81,6 +86,7 @@ fn main_menu(prj: &mut Project) -> Result<(), Box<dyn Error>> {
             "l" | "list" => list_types(prj),
             "q" | "query" => query_type_expression(prj),
             "r" | "resolve" => resolve_all(prj),
+            "d" | "desugar" => live_desugar(),
             "h" | "help" => {
                 println!(
                     "Valid commands are:
@@ -88,6 +94,7 @@ fn main_menu(prj: &mut Project) -> Result<(), Box<dyn Error>> {
     list    (l): List all known types
     query   (q): Query the type system
     resolve (r): Perform type resolution
+    desugar (d): WIP: Test the experimental desugaring passes
     help    (h): Print this list
     exit    (e): Exit the program"
                 );
@@ -105,9 +112,24 @@ fn enter_code(prj: &mut Project) -> Result<(), Box<dyn Error>> {
             return Ok(Response::Break);
         }
         let code = Parser::new(Lexer::new(line)).file()?;
-
+        let code = WhileElseDesugar.fold_file(code);
         // Safety: this is totally unsafe
         unsafe { TREES.push(code) }.collect_in_root(prj)?;
+
+        Ok(Response::Accept)
+    })
+}
+
+fn live_desugar() -> Result<(), Box<dyn Error>> {
+    read_and(C_RESV, "se>", |line| {
+        let code = Parser::new(Lexer::new(line)).stmt()?;
+        println!("Raw, as parsed:\n{C_LISTING}{code}\x1b[0m");
+
+        let code = SquashGroups.fold_stmt(code);
+        println!("SquashGroups\n{C_LISTING}{code}\x1b[0m");
+
+        let code = WhileElseDesugar.fold_stmt(code);
+        println!("WhileElseDesugar\n{C_LISTING}{code}\x1b[0m");
 
         Ok(Response::Accept)
     })

@@ -112,10 +112,16 @@ pub mod program {
             self.parse_file().or_else(|_| self.parse_stmt())
         }
         pub fn parse_stmt(&self) -> PResult<Program<'t, Parsed>> {
-            Ok(Program { data: Parsed::Stmt(Parser::new(self.lex()).stmt()?), text: self.text })
+            let stmt = Parser::new(self.lex()).stmt()?;
+            // let stmt = WhileElseDesugar.fold_stmt(stmt);
+
+            Ok(Program { data: Parsed::Stmt(stmt), text: self.text })
         }
         pub fn parse_file(&self) -> PResult<Program<'t, Parsed>> {
-            Ok(Program { data: Parsed::File(Parser::new(self.lex()).file()?), text: self.text })
+            let file = Parser::new(self.lex()).file()?;
+            // let file = WhileElseDesugar.fold_file(file);
+
+            Ok(Program { data: Parsed::File(file), text: self.text })
         }
     }
 
