@@ -136,7 +136,6 @@ const fn sep<'t, T>(
 /// Parses constructions of the form `(f ~until)*`
 ///
 /// where `~until` is a negative lookahead assertion
-#[allow(dead_code)]
 const fn rep<'t, T>(
     f: impl Fn(&mut Parser<'t>) -> PResult<T>,
     until: Punct,
@@ -187,7 +186,7 @@ impl<'t> Parser<'t> {
         let start = self.loc();
         Ok(Item {
             attrs: self.attributes()?,
-            vis: self.visibility()?,
+            vis: self.visibility(),
             kind: self.itemkind()?,
             extents: Span(start, self.loc()),
         })
@@ -204,21 +203,20 @@ impl<'t> Parser<'t> {
     /// Parses a [Path]
     ///
     /// See also: [Parser::path_part], [Parser::identifier]
+    ///
+    /// [Path] = `::`? ([PathPart] `::`)* [PathPart]?
     pub fn path(&mut self) -> PResult<Path> {
         const PARSING: Parsing = Parsing::PathExpr;
-        let absolute = matches!(
-            self.peek_kind(PARSING)?,
-            TokenKind::Punct(Punct::ColonColon)
-        );
-        if absolute {
-            self.consume_peeked();
+        let absolute = self.match_op(Punct::ColonColon, PARSING).is_ok();
+        let mut parts = vec![];
+
+        while let Ok(path_part) = self.path_part() {
+            parts.push(path_part);
+            if self.match_op(Punct::ColonColon, PARSING).is_err() {
+                break;
+            }
         }
 
-        let mut parts = vec![self.path_part()?];
-        while let Ok(TokenKind::Punct(Punct::ColonColon)) = self.peek_kind(PARSING) {
-            self.consume_peeked();
-            parts.push(self.path_part()?);
-        }
         Ok(Path { absolute, parts })
     }
 
@@ -226,15 +224,11 @@ impl<'t> Parser<'t> {
     ///
     /// See also: [Parser::stmtkind]
     pub fn stmt(&mut self) -> PResult<Stmt> {
-        const PARSING: Parsing = Parsing::Stmt;
         let start = self.loc();
         Ok(Stmt {
             kind: self.stmtkind()?,
-            semi: match self.peek_kind(PARSING) {
-                Ok(TokenKind::Punct(Punct::Semi)) => {
-                    self.consume_peeked();
-                    Semi::Terminated
-                }
+            semi: match self.match_op(Punct::Semi, Parsing::Stmt) {
+                Ok(_) => Semi::Terminated,
                 _ => Semi::Unterminated,
             },
             extents: Span(start, self.loc()),
@@ -260,8 +254,8 @@ impl<'t> Parser<'t> {
             sep(Self::meta, Punct::Comma, BRACKETS.1, Parsing::Attrs),
             BRACKETS,
             Parsing::Attrs,
-        );
-        Ok(Attrs { meta: meta(self)? })
+        )(self)?;
+        Ok(Attrs { meta })
     }
     /// Parses a single [attribute](Meta)
     pub fn meta(&mut self) -> PResult<Meta> {
@@ -308,7 +302,7 @@ impl<'t> Parser<'t> {
     /// Parses a [`type` alias](Alias)
     pub fn parse_alias(&mut self) -> PResult<Alias> {
         const PARSING: Parsing = Parsing::Alias;
-        self.match_type(TokenKind::Type, PARSING)?;
+        self.consume_peeked();
 
         let out = Ok(Alias {
             to: self.identifier()?,
@@ -325,7 +319,7 @@ impl<'t> Parser<'t> {
     /// Parses a [compile-time constant](Const)
     pub fn parse_const(&mut self) -> PResult<Const> {
         const PARSING: Parsing = Parsing::Const;
-        self.match_type(TokenKind::Const, PARSING)?;
+        self.consume_peeked();
 
         let out = Ok(Const {
             name: self.identifier()?,
@@ -345,10 +339,10 @@ impl<'t> Parser<'t> {
     /// Parses a [`static` item](Static)
     pub fn parse_static(&mut self) -> PResult<Static> {
         const PARSING: Parsing = Parsing::Static;
-        self.match_type(TokenKind::Static, PARSING)?;
+        self.consume_peeked();
 
         let out = Ok(Static {
-            mutable: self.mutability()?,
+            mutable: self.mutability(),
             name: self.identifier()?,
             ty: {
                 self.match_op(Punct::Colon, PARSING)?;
@@ -365,8 +359,7 @@ impl<'t> Parser<'t> {
 
     /// Parses a [Module]
     pub fn parse_module(&mut self) -> PResult<Module> {
-        const PARSING: Parsing = Parsing::Module;
-        self.match_type(TokenKind::Mod, PARSING)?;
+        self.consume_peeked();
 
         Ok(Module { name: self.identifier()?, kind: self.modulekind()? })
     }
@@ -392,7 +385,7 @@ impl<'t> Parser<'t> {
     /// Parses a [Function] definition
     pub fn parse_function(&mut self) -> PResult<Function> {
         const PARSING: Parsing = Parsing::Function;
-        self.match_type(TokenKind::Fn, PARSING)?;
+        self.consume_peeked();
 
         let name = self.identifier()?;
         let (bind, types) = delim(Self::parse_params, PARENS, PARSING)(self)?;
@@ -436,7 +429,7 @@ impl<'t> Parser<'t> {
     /// Parses a single function [parameter](Param)
     pub fn parse_param(&mut self) -> PResult<(Param, TyKind)> {
         Ok((
-            Param { mutability: self.mutability()?, name: self.identifier()? },
+            Param { mutability: self.mutability(), name: self.identifier()? },
             {
                 self.match_op(Punct::Colon, Parsing::Param)?;
                 self.tykind()?
@@ -447,7 +440,7 @@ impl<'t> Parser<'t> {
     /// Parses a [`struct` definition](Struct)
     pub fn parse_struct(&mut self) -> PResult<Struct> {
         const PARSING: Parsing = Parsing::Struct;
-        self.match_type(TokenKind::Struct, PARSING)?;
+        self.consume_peeked();
 
         Ok(Struct {
             name: self.identifier()?,
@@ -492,7 +485,7 @@ impl<'t> Parser<'t> {
     pub fn struct_member(&mut self) -> PResult<StructMember> {
         const PARSING: Parsing = Parsing::StructMember;
         Ok(StructMember {
-            vis: self.visibility()?,
+            vis: self.visibility(),
             name: self.identifier()?,
             ty: {
                 self.match_op(Punct::Colon, PARSING)?;
@@ -504,8 +497,7 @@ impl<'t> Parser<'t> {
     /// Parses an [`enum`](Enum) definition
     pub fn parse_enum(&mut self) -> PResult<Enum> {
         const PARSING: Parsing = Parsing::Enum;
-
-        self.match_type(TokenKind::Enum, PARSING)?;
+        self.consume_peeked();
 
         Ok(Enum {
             name: self.identifier()?,
@@ -578,8 +570,7 @@ impl<'t> Parser<'t> {
 
     pub fn parse_impl(&mut self) -> PResult<Impl> {
         const PARSING: Parsing = Parsing::Impl;
-
-        self.match_type(TokenKind::Impl, PARSING)?;
+        self.consume_peeked();
 
         Ok(Impl {
             target: self.parse_impl_kind()?,
@@ -605,19 +596,19 @@ impl<'t> Parser<'t> {
         }
     }
 
-    pub fn visibility(&mut self) -> PResult<Visibility> {
-        if let TokenKind::Pub = self.peek_kind(Parsing::Visibility)? {
-            self.consume_peeked();
-            return Ok(Visibility::Public);
-        };
-        Ok(Visibility::Private)
+    /// [Visibility] = `pub`?
+    pub fn visibility(&mut self) -> Visibility {
+        match self.match_type(TokenKind::Pub, Parsing::Visibility) {
+            Ok(_) => Visibility::Public,
+            Err(_) => Visibility::Private,
+        }
     }
-    pub fn mutability(&mut self) -> PResult<Mutability> {
-        if let TokenKind::Mut = self.peek_kind(Parsing::Mutability)? {
-            self.consume_peeked();
-            return Ok(Mutability::Mut);
-        };
-        Ok(Mutability::Not)
+    /// [Mutability] = `mut`?
+    pub fn mutability(&mut self) -> Mutability {
+        match self.match_type(TokenKind::Mut, Parsing::Mutability) {
+            Ok(_) => Mutability::Mut,
+            Err(_) => Mutability::Not,
+        }
     }
 }
 
@@ -675,7 +666,7 @@ impl<'t> Parser<'t> {
             }
             self.consume_peeked();
         }
-        Ok(TyRef { count, mutable: self.mutability()?, to: self.path()? })
+        Ok(TyRef { count, mutable: self.mutability(), to: self.path()? })
     }
     /// [TyFn] = `fn` [TyTuple] (-> [Ty])?
     pub fn tyfn(&mut self) -> PResult<TyFn> {
@@ -726,6 +717,7 @@ impl<'t> Parser<'t> {
             TokenKind::Identifier => PathPart::Ident(self.identifier()?),
             t => return Err(self.error(Unexpected(t), PARSING)),
         };
+        // Note: this relies on identifier not peeking
         self.consume_peeked();
         Ok(out)
     }
@@ -754,9 +746,9 @@ impl<'t> Parser<'t> {
     }
 
     pub fn parse_let(&mut self) -> PResult<Let> {
-        self.match_type(TokenKind::Let, Parsing::Let)?;
+        self.consume_peeked();
         Ok(Let {
-            mutable: self.mutability()?,
+            mutable: self.mutability(),
             name: self.identifier()?,
             ty: if Ok(TokenKind::Punct(Punct::Colon)) == self.peek_kind(Parsing::Let) {
                 self.consume_peeked();
@@ -787,7 +779,7 @@ impl<'t> Parser<'t> {
     /// See also: [Parser::expr]
     pub fn exprkind(&mut self, power: u8) -> PResult<ExprKind> {
         let parsing = Parsing::ExprKind;
-        //
+        // Prefix expressions
         let mut head = match self.peek_kind(Parsing::Unary)? {
             literal_like!() => self.literal()?.into(),
             path_like!() => self.path()?.into(),
@@ -821,12 +813,13 @@ impl<'t> Parser<'t> {
         fn from_postfix(op: Punct) -> Option<Precedence> {
             Some(match op {
                 Punct::LBrack => Precedence::Index,
-                Punct::LParen => Precedence::Postfix,
+                Punct::LParen => Precedence::Call,
                 _ => None?,
             })
         }
 
         while let Ok(TokenKind::Punct(op)) = self.peek_kind(parsing) {
+            // Postfix expressions
             if let Some((before, ())) = from_postfix(op).and_then(Precedence::postfix) {
                 if before < power {
                     break;
@@ -974,7 +967,7 @@ impl<'t> Parser<'t> {
             };
             self.consume_peeked();
         }
-        Ok(AddrOf { count, mutable: self.mutability()?, expr: self.exprkind(0)?.into() })
+        Ok(AddrOf { count, mutable: self.mutability(), expr: self.exprkind(0)?.into() })
     }
     /// [Literal] = [LITERAL](TokenKind::Literal) | `true` | `false`
     pub fn literal(&mut self) -> PResult<Literal> {
@@ -1021,7 +1014,7 @@ impl<'t> Parser<'t> {
 
     /// [While] = `while` [Expr] [Block] [Else]?
     pub fn parse_while(&mut self) -> PResult<While> {
-        self.match_type(TokenKind::While, Parsing::While)?;
+        self.consume_peeked();
         Ok(While {
             cond: self.expr()?.into(),
             pass: self.block()?.into(),
@@ -1031,7 +1024,7 @@ impl<'t> Parser<'t> {
     /// [If] = <code>`if` [Expr] [Block] [Else]?</code>
     #[rustfmt::skip] // second line is barely not long enough
     pub fn parse_if(&mut self) -> PResult<If> {
-    self.match_type(TokenKind::If, Parsing::If)?;
+    self.consume_peeked();
     Ok(If {
         cond: self.expr()?.into(),
         pass: self.block()?.into(),
@@ -1040,7 +1033,7 @@ impl<'t> Parser<'t> {
 }
     /// [For]: `for` Pattern (TODO) `in` [Expr] [Block] [Else]?
     pub fn parse_for(&mut self) -> PResult<For> {
-        self.match_type(TokenKind::For, Parsing::For)?;
+        self.consume_peeked();
         let bind = self.identifier()?;
         self.match_type(TokenKind::In, Parsing::For)?;
         Ok(For {
@@ -1076,8 +1069,8 @@ pub enum Precedence {
     Factor,
     Term,
     Unary,
-    Postfix,
     Member, // left-associative
+    Call,
 }
 
 impl Precedence {
@@ -1095,13 +1088,13 @@ impl Precedence {
         let level = self.level();
         match self {
             Self::Unary => None,
-            Self::Member | Self::Assign => Some((level + 1, level)),
+            Self::Assign => Some((level + 1, level)),
             _ => Some((level, level + 1)),
         }
     }
     pub fn postfix(self) -> Option<(u8, ())> {
         match self {
-            Self::Index | Self::Postfix => Some((self.level(), ())),
+            Self::Index | Self::Call => Some((self.level(), ())),
             _ => None,
         }
     }
@@ -1116,7 +1109,7 @@ impl From<BinaryKind> for Precedence {
     fn from(value: BinaryKind) -> Self {
         use BinaryKind as Op;
         match value {
-            Op::Call => Precedence::Postfix,
+            Op::Call => Precedence::Call,
             Op::Dot => Precedence::Member,
             Op::Mul | Op::Div | Op::Rem => Precedence::Term,
             Op::Add | Op::Sub => Precedence::Factor,

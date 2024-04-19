@@ -29,8 +29,6 @@ pub enum ErrorKind {
     ExpectedParsing {
         want: Parsing,
     },
-    /// No rules matched
-    Nothing,
     /// Indicates unfinished code
     Todo,
 }
@@ -134,13 +132,8 @@ impl Display for ErrorKind {
             ErrorKind::UnmatchedCurlyBraces => write!(f, "Unmatched curly braces"),
             ErrorKind::UnmatchedSquareBrackets => write!(f, "Unmatched square brackets"),
             ErrorKind::Unexpected(t) => write!(f, "Encountered unexpected token `{t}`"),
-            ErrorKind::ExpectedToken { want: e, got: g } => {
-                write!(f, "Expected `{e}`, got `{g}`")
-            }
-            ErrorKind::ExpectedParsing { want } => {
-                write!(f, "Expected {want}")
-            }
-            ErrorKind::Nothing => write!(f, "Nothing found"),
+            ErrorKind::ExpectedToken { want: e, got: g } => write!(f, "Expected `{e}`, got `{g}`"),
+            ErrorKind::ExpectedParsing { want } => write!(f, "Expected {want}"),
             ErrorKind::Todo => write!(f, "TODO:"),
         }
     }
