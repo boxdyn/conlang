@@ -30,7 +30,7 @@ pub enum ErrorKind {
         want: Parsing,
     },
     /// Indicates unfinished code
-    Todo,
+    Todo(&'static str),
 }
 impl From<LexError> for ErrorKind {
     fn from(value: LexError) -> Self {
@@ -69,6 +69,8 @@ pub enum Parsing {
     VariantKind,
     Impl,
     ImplKind,
+    Use,
+    UseTree,
 
     Ty,
     TyKind,
@@ -116,7 +118,7 @@ impl Display for Error {
         let Self { reason, while_parsing, loc } = self;
         match reason {
             // TODO entries are debug-printed
-            ErrorKind::Todo => write!(f, "{loc} {reason} {while_parsing:?}"),
+            ErrorKind::Todo(_) => write!(f, "{loc} {reason} {while_parsing:?}"),
             // lexical errors print their own higher-resolution loc info
             ErrorKind::Lexical(e) => write!(f, "{e} (while parsing {while_parsing})"),
             _ => write!(f, "{loc} {reason} while parsing {while_parsing}"),
@@ -134,7 +136,7 @@ impl Display for ErrorKind {
             ErrorKind::Unexpected(t) => write!(f, "Encountered unexpected token `{t}`"),
             ErrorKind::ExpectedToken { want: e, got: g } => write!(f, "Expected `{e}`, got `{g}`"),
             ErrorKind::ExpectedParsing { want } => write!(f, "Expected {want}"),
-            ErrorKind::Todo => write!(f, "TODO:"),
+            ErrorKind::Todo(unfinished) => write!(f, "TODO: {unfinished}"),
         }
     }
 }
@@ -166,6 +168,8 @@ impl Display for Parsing {
             Parsing::VariantKind => "an enum variant",
             Parsing::Impl => "an impl block",
             Parsing::ImplKind => "the target of an impl block",
+            Parsing::Use => "a use item",
+            Parsing::UseTree => "a use-tree",
 
             Parsing::Ty => "a type",
             Parsing::TyKind => "a type",

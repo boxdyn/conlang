@@ -207,6 +207,7 @@ pub mod yamlify {
                 ItemKind::Struct(f) => y.yaml(f),
                 ItemKind::Enum(f) => y.yaml(f),
                 ItemKind::Impl(f) => y.yaml(f),
+                ItemKind::Use(f) => y.yaml(f),
             };
         }
     }
@@ -319,6 +320,22 @@ pub mod yamlify {
                 ImplKind::Trait { impl_trait, for_type } => {
                     y.pair("trait", impl_trait).pair("for_type", for_type)
                 }
+            };
+        }
+    }
+    impl Yamlify for Use {
+        fn yaml(&self, y: &mut Yamler) {
+            let Self { tree } = self;
+            y.key("Use").yaml(tree);
+        }
+    }
+    impl Yamlify for UseTree {
+        fn yaml(&self, y: &mut Yamler) {
+            match self {
+                UseTree::Tree(path, tree) => y.pair("path", path).pair("tree", tree),
+                UseTree::Alias(path, name) => y.pair("path", path).pair("name", name),
+                UseTree::Path(path) => y.pair("path", path),
+                UseTree::Glob => y.value("Glob"),
             };
         }
     }

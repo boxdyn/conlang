@@ -697,6 +697,7 @@ pub mod name_collector {
                 ItemKind::Const(i) => i.collect(c, parent),
                 ItemKind::Static(i) => i.collect(c, parent),
                 ItemKind::Function(i) => i.collect(c, parent),
+                ItemKind::Use(i) => i.collect(c, parent),
             }?;
             c[id].set_meta(meta).set_vis(*vis).set_source(self);
 
@@ -808,6 +809,17 @@ pub mod name_collector {
             Ok(id)
         }
     }
+    impl<'a> NameCollectable<'a> for Use {
+        fn collect(&'a self, _c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            let Self { tree } = self;
+            todo!("Use {tree} in {parent}")
+        }
+    }
+    impl<'a> NameCollectable<'a> for UseTree {
+        fn collect(&'a self, _c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+            todo!("Use {self} in {parent}")
+        }
+    }
     impl<'a> NameCollectable<'a> for Block {
         fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
             self.stmts.as_slice().collect(c, parent)
@@ -917,6 +929,7 @@ pub mod type_resolver {
             ItemKind::Static(_) => "static",
             ItemKind::Function(_) => "fn",
             ItemKind::Impl(_) => "impl",
+            ItemKind::Use(_) => "use",
         };
         eprintln!(
             "Resolver: \x1b[32mEvaluating\x1b[0m \"\x1b[36m{kind} {}\x1b[0m\" (`{id:?}`)",
@@ -984,6 +997,7 @@ pub mod type_resolver {
                 ItemKind::Const(i) => i.resolve_type(prj, id),
                 ItemKind::Static(i) => i.resolve_type(prj, id),
                 ItemKind::Function(i) => i.resolve_type(prj, id),
+                ItemKind::Use(i) => i.resolve_type(prj, id),
             }
         }
     }
@@ -1011,6 +1025,14 @@ pub mod type_resolver {
             prj[id].module.parent = Some(target);
 
             Ok(DefKind::Impl(target))
+        }
+    }
+
+    impl<'a> TypeResolvable<'a> for Use {
+        type Out = DefKind<'a>;
+
+        fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
+            todo!("Resolve types for {self} with ID {id} in {prj:?}")
         }
     }
 

@@ -13,6 +13,7 @@ pub enum TokenKind {
     /// A non-keyword identifier
     Identifier,
     // A keyword
+    As,
     Break,
     Cl,
     Const,
@@ -38,6 +39,7 @@ pub enum TokenKind {
     Super,
     True,
     Type,
+    Use,
     While,
     /// Delimiter or punctuation
     Punct(Punct),
@@ -110,6 +112,7 @@ impl Display for TokenKind {
             TokenKind::Literal => "literal".fmt(f),
             TokenKind::Identifier => "identifier".fmt(f),
 
+            TokenKind::As => "as".fmt(f),
             TokenKind::Break => "break".fmt(f),
             TokenKind::Cl => "cl".fmt(f),
             TokenKind::Const => "const".fmt(f),
@@ -135,6 +138,7 @@ impl Display for TokenKind {
             TokenKind::Super => "super".fmt(f),
             TokenKind::True => "true".fmt(f),
             TokenKind::Type => "type".fmt(f),
+            TokenKind::Use => "use".fmt(f),
             TokenKind::While => "while".fmt(f),
 
             TokenKind::Punct(op) => op.fmt(f),
@@ -147,6 +151,7 @@ impl FromStr for TokenKind {
     /// Parses a string s to return a Keyword
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
+            "as" => Self::As,
             "break" => Self::Break,
             "cl" => Self::Cl,
             "const" => Self::Const,
@@ -172,6 +177,7 @@ impl FromStr for TokenKind {
             "super" => Self::Super,
             "true" => Self::True,
             "type" => Self::Type,
+            "use" => Self::Use,
             "while" => Self::While,
             _ => Err(())?,
         })

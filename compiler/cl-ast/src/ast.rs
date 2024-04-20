@@ -99,6 +99,8 @@ pub enum ItemKind {
     Function(Function),
     /// An [implementation](Impl)
     Impl(Impl),
+    /// An [import](Use)
+    Use(Use),
 }
 
 /// An alias to another [Ty]
@@ -221,6 +223,21 @@ pub struct Impl {
 pub enum ImplKind {
     Type(Ty),
     Trait { impl_trait: Path, for_type: Box<Ty> },
+}
+
+/// An import of nonlocal [Item]s
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Use {
+    pub tree: UseTree,
+}
+
+/// A tree of [Item] imports
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum UseTree {
+    Tree(Path, Vec<UseTree>),
+    Alias(Path, Identifier),
+    Path(Path),
+    Glob,
 }
 
 /// A type expression

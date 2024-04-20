@@ -15,7 +15,7 @@ Meta        = Identifier ('=' Literal | '(' (Literal ',')* Literal? ')')? ;
 Item        = Attrs Visibility ItemKind ;
 ItemKind    = Const    | Static | Module 
             | Function | Struct | Enum 
-            | Alias    | Impl ;
+            | Alias    | Impl   | Use ;
 
 
 (* item *)
@@ -45,6 +45,10 @@ Alias       = "type" Identifier ('=' Ty)? ';' ;
 Impl        = "impl" Path '{' Item* '}' ;
 (* TODO: Impl Trait for Target*)
 
+Use         = "use" UseTree ;
+UseTree     = Path '{' (UseTree ',')* UseTree? '}'
+            | Path "as" Identifier
+            | Path | '*' ;
 
 (* type *)
 Ty          = Never | Empty | Path | TyTuple | TyRef | TyFn ;
@@ -57,7 +61,8 @@ TyFn        = "fn" TyTuple ('->' Ty)? ;
 
 
 (* path *)
-Path        = '::'? PathPart ('::' PathPart)* ;
+Path        = PathPart ('::' PathPart)*
+            | '::' (PathPart ('::' PathPart)*)? ;
 PathPart    = "super" | "self" | Identifier ;
 Identifier  = IDENTIFIER ;
 

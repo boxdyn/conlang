@@ -36,6 +36,7 @@ impl Interpret for Item {
             ItemKind::Struct(item) => item.interpret(env),
             ItemKind::Enum(item) => item.interpret(env),
             ItemKind::Impl(item) => item.interpret(env),
+            ItemKind::Use(_) => todo!("namespaces and imports in the interpreter"),
         }
     }
 }

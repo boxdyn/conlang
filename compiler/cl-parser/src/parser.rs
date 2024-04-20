@@ -162,6 +162,7 @@ macro item_like() {
         | TokenKind::Struct
         | TokenKind::Enum
         | TokenKind::Impl
+        | TokenKind::Use
 }
 
 /// Top level parsing
@@ -204,17 +205,24 @@ impl<'t> Parser<'t> {
     ///
     /// See also: [Parser::path_part], [Parser::identifier]
     ///
-    /// [Path] = `::`? ([PathPart] `::`)* [PathPart]?
+    /// [Path] = `::` *RelativePath*? | *RelativePath* \
+    /// *RelativePath* = [PathPart] (`::` [PathPart])*
     pub fn path(&mut self) -> PResult<Path> {
         const PARSING: Parsing = Parsing::PathExpr;
         let absolute = self.match_op(Punct::ColonColon, PARSING).is_ok();
         let mut parts = vec![];
 
-        while let Ok(path_part) = self.path_part() {
-            parts.push(path_part);
-            if self.match_op(Punct::ColonColon, PARSING).is_err() {
-                break;
+        if absolute {
+            match self.path_part() {
+                Ok(part) => parts.push(part),
+                Err(_) => return Ok(Path { absolute, parts }),
             }
+        } else {
+            parts.push(self.path_part()?)
+        };
+
+        while self.match_op(Punct::ColonColon, Parsing::PathExpr).is_ok() {
+            parts.push(self.path_part()?)
         }
 
         Ok(Path { absolute, parts })
@@ -295,6 +303,7 @@ impl<'t> Parser<'t> {
             TokenKind::Struct => self.parse_struct()?.into(),
             TokenKind::Enum => self.parse_enum()?.into(),
             TokenKind::Impl => self.parse_impl()?.into(),
+            TokenKind::Use => self.parse_use()?.into(),
             t => Err(self.error(Unexpected(t), Parsing::Item))?,
         })
     }
@@ -594,6 +603,35 @@ impl<'t> Parser<'t> {
                 loc: target.extents.head,
             })?
         }
+    }
+
+    pub fn parse_use(&mut self) -> PResult<Use> {
+        self.consume_peeked();
+        Ok(Use { tree: self.parse_use_tree()? })
+    }
+
+    pub fn parse_use_tree(&mut self) -> PResult<UseTree> {
+        const PARSING: Parsing = Parsing::UseTree;
+        // glob import
+        if self.match_op(Punct::Star, PARSING).is_ok() {
+            return Ok(UseTree::Glob);
+        }
+        let path = self.path()?;
+        Ok(match self.peek_kind(PARSING) {
+            Ok(TokenKind::As) => {
+                self.consume_peeked();
+                UseTree::Alias(path, self.identifier()?)
+            }
+            Ok(TokenKind::Punct(Punct::LCurly)) => UseTree::Tree(
+                path,
+                delim(
+                    sep(Self::parse_use_tree, Punct::Comma, CURLIES.1, PARSING),
+                    CURLIES,
+                    PARSING,
+                )(self)?,
+            ),
+            _ => UseTree::Path(path),
+        })
     }
 
     /// [Visibility] = `pub`?

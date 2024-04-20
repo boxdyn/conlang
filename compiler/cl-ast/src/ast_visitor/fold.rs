@@ -158,6 +158,13 @@ pub trait Fold {
     fn fold_impl_kind(&mut self, kind: ImplKind) -> ImplKind {
         or_fold_impl_kind(self, kind)
     }
+    fn fold_use(&mut self, u: Use) -> Use {
+        let Use { tree } = u;
+        Use { tree: self.fold_use_tree(tree) }
+    }
+    fn fold_use_tree(&mut self, tree: UseTree) -> UseTree {
+        or_fold_use_tree(self, tree)
+    }
     fn fold_ty(&mut self, t: Ty) -> Ty {
         let Ty { extents, kind } = t;
         Ty { extents: self.fold_span(extents), kind: self.fold_ty_kind(kind) }
@@ -375,6 +382,7 @@ pub fn or_fold_item_kind<F: Fold + ?Sized>(folder: &mut F, kind: ItemKind) -> It
         ItemKind::Static(s) => ItemKind::Static(folder.fold_static(s)),
         ItemKind::Function(f) => ItemKind::Function(folder.fold_function(f)),
         ItemKind::Impl(i) => ItemKind::Impl(folder.fold_impl(i)),
+        ItemKind::Use(u) => ItemKind::Use(folder.fold_use(u)),
     }
 }
 
@@ -438,6 +446,23 @@ pub fn or_fold_impl_kind<F: Fold + ?Sized>(folder: &mut F, kind: ImplKind) -> Im
             impl_trait: folder.fold_path(impl_trait),
             for_type: Box::new(folder.fold_ty(*for_type)),
         },
+    }
+}
+
+#[inline]
+pub fn or_fold_use_tree<F: Fold + ?Sized>(folder: &mut F, tree: UseTree) -> UseTree {
+    match tree {
+        UseTree::Tree(path, tree) => UseTree::Tree(
+            folder.fold_path(path),
+            tree.into_iter()
+                .map(|tree| folder.fold_use_tree(tree))
+                .collect(),
+        ),
+        UseTree::Alias(path, name) => {
+            UseTree::Alias(folder.fold_path(path), folder.fold_identifier(name))
+        }
+        UseTree::Path(path) => UseTree::Path(folder.fold_path(path)),
+        UseTree::Glob => UseTree::Glob,
     }
 }
 

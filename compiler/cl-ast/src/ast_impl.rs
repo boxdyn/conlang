@@ -116,6 +116,7 @@ mod display {
                 ItemKind::Struct(v) => v.fmt(f),
                 ItemKind::Enum(v) => v.fmt(f),
                 ItemKind::Impl(v) => v.fmt(f),
+                ItemKind::Use(v) => v.fmt(f),
             }
         }
     }
@@ -276,6 +277,27 @@ mod display {
                 ImplKind::Trait { impl_trait, for_type } => {
                     write!(f, "{impl_trait} for {for_type}")
                 }
+            }
+        }
+    }
+
+    impl Display for Use {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let Self { tree } = self;
+            write!(f, "use {tree}")
+        }
+    }
+
+    impl Display for UseTree {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                UseTree::Tree(path, tree) => {
+                    write!(f, "{path}")?;
+                    separate(tree, ", ")(f.delimit(INLINE_BRACES))
+                }
+                UseTree::Alias(path, name) => write!(f, "{path} as {name}"),
+                UseTree::Path(path) => write!(f, "{path}"),
+                UseTree::Glob => write!(f, "*"),
             }
         }
     }
@@ -665,6 +687,7 @@ mod convert {
             Struct => ItemKind::Struct,
             Enum => ItemKind::Enum,
             Impl => ItemKind::Impl,
+            Use => ItemKind::Use,
         }
         impl From for StructKind {
             Vec<Ty> => StructKind::Tuple,

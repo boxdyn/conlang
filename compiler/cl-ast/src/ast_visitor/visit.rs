@@ -125,10 +125,17 @@ pub trait Visit<'a>: Sized {
     fn visit_impl(&mut self, i: &'a Impl) {
         let Impl { target, body } = i;
         self.visit_impl_kind(target);
-        self.visit_file(body)
+        self.visit_file(body);
     }
     fn visit_impl_kind(&mut self, target: &'a ImplKind) {
         or_visit_impl_kind(self, target)
+    }
+    fn visit_use(&mut self, u: &'a Use) {
+        let Use { tree } = u;
+        self.visit_use_tree(tree);
+    }
+    fn visit_use_tree(&mut self, tree: &'a UseTree) {
+        or_visit_use_tree(self, tree)
     }
     fn visit_ty(&mut self, t: &'a Ty) {
         let Ty { extents, kind } = t;
@@ -320,6 +327,7 @@ pub fn or_visit_item_kind<'a, V: Visit<'a>>(visitor: &mut V, kind: &'a ItemKind)
         ItemKind::Static(s) => visitor.visit_static(s),
         ItemKind::Function(f) => visitor.visit_function(f),
         ItemKind::Impl(i) => visitor.visit_impl(i),
+        ItemKind::Use(u) => visitor.visit_use(u),
     }
 }
 
@@ -361,6 +369,21 @@ pub fn or_visit_impl_kind<'a, V: Visit<'a>>(visitor: &mut V, target: &'a ImplKin
             visitor.visit_path(impl_trait);
             visitor.visit_ty(for_type)
         }
+    }
+}
+
+pub fn or_visit_use_tree<'a, V: Visit<'a>>(visitor: &mut V, tree: &'a UseTree) {
+    match tree {
+        UseTree::Tree(path, tree) => {
+            visitor.visit_path(path);
+            tree.iter().for_each(|tree| visitor.visit_use_tree(tree));
+        }
+        UseTree::Alias(path, name) => {
+            visitor.visit_path(path);
+            visitor.visit_identifier(name);
+        }
+        UseTree::Path(path) => visitor.visit_path(path),
+        UseTree::Glob => {}
     }
 }
 
