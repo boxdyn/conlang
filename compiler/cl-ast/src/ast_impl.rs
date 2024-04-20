@@ -424,6 +424,7 @@ mod display {
                 ExprKind::Binary(v) => v.fmt(f),
                 ExprKind::Unary(v) => v.fmt(f),
                 ExprKind::Index(v) => v.fmt(f),
+                ExprKind::Structor(v) => v.fmt(f),
                 ExprKind::Path(v) => v.fmt(f),
                 ExprKind::Literal(v) => v.fmt(f),
                 ExprKind::Array(v) => v.fmt(f),
@@ -537,6 +538,25 @@ mod display {
             let Self { head, indices } = self;
             write!(f, "{head}")?;
             separate(indices, ", ")(f.delimit(INLINE_SQUARE))
+        }
+    }
+
+    impl Display for Structor {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let Self { to, init } = self;
+            write!(f, "{to}: ")?;
+            separate(init, ", ")(f.delimit(INLINE_BRACES))
+        }
+    }
+
+    impl Display for Fielder {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let Self { name, init } = self;
+            write!(f, "{name}")?;
+            if let Some(init) = init {
+                write!(f, ": {init}")?;
+            }
+            Ok(())
         }
     }
 

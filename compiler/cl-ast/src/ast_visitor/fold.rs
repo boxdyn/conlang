@@ -269,6 +269,22 @@ pub trait Fold {
             indices: indices.into_iter().map(|e| self.fold_expr(e)).collect(),
         }
     }
+
+    fn fold_structor(&mut self, s: Structor) -> Structor {
+        let Structor { to, init } = s;
+        Structor {
+            to: self.fold_path(to),
+            init: init.into_iter().map(|f| self.fold_fielder(f)).collect(),
+        }
+    }
+
+    fn fold_fielder(&mut self, f: Fielder) -> Fielder {
+        let Fielder { name, init } = f;
+        Fielder {
+            name: self.fold_identifier(name),
+            init: init.map(|e| Box::new(self.fold_expr(*e))),
+        }
+    }
     fn fold_array(&mut self, a: Array) -> Array {
         let Array { values } = a;
         Array { values: values.into_iter().map(|e| self.fold_expr(e)).collect() }
@@ -499,6 +515,7 @@ pub fn or_fold_expr_kind<F: Fold + ?Sized>(folder: &mut F, kind: ExprKind) -> Ex
         ExprKind::Binary(b) => ExprKind::Binary(folder.fold_binary(b)),
         ExprKind::Unary(u) => ExprKind::Unary(folder.fold_unary(u)),
         ExprKind::Index(i) => ExprKind::Index(folder.fold_index(i)),
+        ExprKind::Structor(s) => ExprKind::Structor(folder.fold_structor(s)),
         ExprKind::Path(p) => ExprKind::Path(folder.fold_path(p)),
         ExprKind::Literal(l) => ExprKind::Literal(folder.fold_literal(l)),
         ExprKind::Array(a) => ExprKind::Array(folder.fold_array(a)),

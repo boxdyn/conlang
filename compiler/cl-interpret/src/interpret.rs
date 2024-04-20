@@ -126,17 +126,18 @@ impl Interpret for Expr {
 impl Interpret for ExprKind {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         match self {
+            ExprKind::Empty => Ok(ConValue::Empty),
             ExprKind::Assign(v) => v.interpret(env),
             ExprKind::Binary(v) => v.interpret(env),
             ExprKind::Unary(v) => v.interpret(env),
             ExprKind::Index(v) => v.interpret(env),
+            ExprKind::Structor(v) => v.interpret(env),
             ExprKind::Path(v) => v.interpret(env),
             ExprKind::Literal(v) => v.interpret(env),
             ExprKind::Array(v) => v.interpret(env),
             ExprKind::ArrayRep(v) => v.interpret(env),
             ExprKind::AddrOf(v) => v.interpret(env),
             ExprKind::Block(v) => v.interpret(env),
-            ExprKind::Empty => Ok(ConValue::Empty),
             ExprKind::Group(v) => v.interpret(env),
             ExprKind::Tuple(v) => v.interpret(env),
             ExprKind::Loop(v) => v.interpret(env),
@@ -320,6 +321,11 @@ impl Interpret for Index {
             head = head.index(&index.interpret(env)?)?;
         }
         Ok(head)
+    }
+}
+impl Interpret for Structor {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        todo!("struct construction in {env}")
     }
 }
 impl Interpret for Path {

@@ -350,6 +350,8 @@ pub enum ExprKind {
     Unary(Unary),
     /// An Array [Index] expression: a[10, 20, 30]
     Index(Index),
+    /// A [Struct creation](Structor) expression: [Path] `{` ([Fielder] `,`)* [Fielder]? `}`
+    Structor(Structor),
     /// A [path expression](Path): `::`? [PathPart] (`::` [PathPart])*
     Path(Path),
     /// A [Literal]: 0x42, 1e123, 2.4, "Hello"
@@ -464,6 +466,20 @@ pub enum UnaryKind {
 pub struct Index {
     pub head: Box<ExprKind>,
     pub indices: Vec<Expr>,
+}
+
+/// A [Struct creation](Structor) expression: [Path] `{` ([Fielder] `,`)* [Fielder]? `}`
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Structor {
+    pub to: Path,
+    pub init: Vec<Fielder>,
+}
+
+/// A [Struct field initializer] expression: [Identifier] (`=` [Expr])?
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Fielder {
+    pub name: Identifier,
+    pub init: Option<Box<Expr>>,
 }
 
 /// An [Array] literal: `[` [`Expr`] (`,` [`Expr`])\* `]`

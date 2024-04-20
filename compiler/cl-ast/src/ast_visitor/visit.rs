@@ -228,6 +228,18 @@ pub trait Visit<'a>: Sized {
         self.visit_expr_kind(head);
         indices.iter().for_each(|e| self.visit_expr(e));
     }
+    fn visit_structor(&mut self, s: &'a Structor) {
+        let Structor { to, init } = s;
+        self.visit_path(to);
+        init.iter().for_each(|e| self.visit_fielder(e))
+    }
+    fn visit_fielder(&mut self, f: &'a Fielder) {
+        let Fielder { name, init } = f;
+        self.visit_identifier(name);
+        if let Some(init) = init {
+            self.visit_expr(init);
+        }
+    }
     fn visit_array(&mut self, a: &'a Array) {
         let Array { values } = a;
         values.iter().for_each(|e| self.visit_expr(e))
@@ -415,6 +427,7 @@ pub fn or_visit_expr_kind<'a, V: Visit<'a>>(visitor: &mut V, e: &'a ExprKind) {
         ExprKind::Binary(b) => visitor.visit_binary(b),
         ExprKind::Unary(u) => visitor.visit_unary(u),
         ExprKind::Index(i) => visitor.visit_index(i),
+        ExprKind::Structor(s) => visitor.visit_structor(s),
         ExprKind::Path(p) => visitor.visit_path(p),
         ExprKind::Literal(l) => visitor.visit_literal(l),
         ExprKind::Array(a) => visitor.visit_array(a),

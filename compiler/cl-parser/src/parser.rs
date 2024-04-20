@@ -820,7 +820,7 @@ impl<'t> Parser<'t> {
         // Prefix expressions
         let mut head = match self.peek_kind(Parsing::Unary)? {
             literal_like!() => self.literal()?.into(),
-            path_like!() => self.path()?.into(),
+            path_like!() => self.exprkind_pathlike()?,
             TokenKind::Punct(Punct::Amp | Punct::AmpAmp) => self.addrof()?.into(),
             TokenKind::Punct(Punct::LCurly) => self.block()?.into(),
             TokenKind::Punct(Punct::LBrack) => self.exprkind_arraylike()?,
@@ -910,6 +910,38 @@ impl<'t> Parser<'t> {
             break;
         }
         Ok(head)
+    }
+
+    /// Parses an expression beginning with a [Path] (i.e. [Path] or [Structor])
+    pub fn exprkind_pathlike(&mut self) -> PResult<ExprKind> {
+        let head = self.path()?;
+        Ok(match self.match_op(Punct::Colon, Parsing::PathExpr) {
+            Ok(_) => ExprKind::Structor(self.structor_body(head)?),
+            Err(_) => ExprKind::Path(head),
+        })
+    }
+
+    /// [Structor]Body = `{` ([Fielder] `,`)* [Fielder]? `}`
+    pub fn structor_body(&mut self, to: Path) -> PResult<Structor> {
+        let init = delim(
+            sep(Self::fielder, Punct::Comma, CURLIES.1, Parsing::Structor),
+            CURLIES,
+            Parsing::Structor,
+        )(self)?;
+
+        Ok(Structor { to, init })
+    }
+
+    /// [Fielder] = [Identifier] (`:` [Expr])?
+    pub fn fielder(&mut self) -> PResult<Fielder> {
+        const PARSING: Parsing = Parsing::Fielder;
+        Ok(Fielder {
+            name: self.identifier()?,
+            init: match self.match_op(Punct::Colon, PARSING) {
+                Ok(_) => Some(Box::new(self.expr()?)),
+                Err(_) => None,
+            },
+        })
     }
 
     /// [Array] = '[' ([Expr] ',')* [Expr]? ']'

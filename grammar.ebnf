@@ -103,11 +103,14 @@ Call        = Index  ('(' Tuple? ')')* ;
 Index       = Primary ('[' Indices ']')* ;
 Indices     = (Expr ',')* Expr? ;
 
-Primary     = Literal | Path  | Array | ArrayRep | AddrOf 
-            | Block   | Group | Loop
-            | If      | While | For   | Break    | Return | Continue;
+Primary     = Literal | PathLike | Array | ArrayRep | AddrOf | Block  | Group
+            | Loop    | If       | While | For      | Break  | Return | Continue;
 
 Literal     = STRING | CHARACTER | FLOAT | INTEGER | Bool ;
+
+PathLike    = Path | Structor ;
+Structor    = Path ':' '{' (Fielder ',')* Fielder? '}' ;
+Fielder     = Identifier ('=' Expr)? ;
 
 Array       = '[' (Expr ',')* Expr? ']' ;
 ArrayRep    = '[' Expr ';' Expr ']' ;

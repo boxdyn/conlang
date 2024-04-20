@@ -391,6 +391,7 @@ pub mod yamlify {
                 ExprKind::Binary(k) => k.yaml(y),
                 ExprKind::Unary(k) => k.yaml(y),
                 ExprKind::Index(k) => k.yaml(y),
+                ExprKind::Structor(k) => k.yaml(y),
                 ExprKind::Path(k) => k.yaml(y),
                 ExprKind::Literal(k) => k.yaml(y),
                 ExprKind::Array(k) => k.yaml(y),
@@ -459,6 +460,18 @@ pub mod yamlify {
         fn yaml(&self, y: &mut Yamler) {
             let Self { head, indices } = self;
             y.key("Index").pair("head", head).list(indices);
+        }
+    }
+    impl Yamlify for Structor {
+        fn yaml(&self, y: &mut Yamler) {
+            let Self { to, init } = self;
+            y.key("Structor").pair("to", to).list(init);
+        }
+    }
+    impl Yamlify for Fielder {
+        fn yaml(&self, y: &mut Yamler) {
+            let Self { name: Identifier(name), init } = self;
+            y.key("Fielder").pair("name", name).pair("init", init);
         }
     }
     impl Yamlify for Array {
