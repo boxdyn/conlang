@@ -131,7 +131,7 @@ pub trait Visit<'a>: Sized {
         or_visit_impl_kind(self, target)
     }
     fn visit_use(&mut self, u: &'a Use) {
-        let Use { tree } = u;
+        let Use { absolute: _, tree } = u;
         self.visit_use_tree(tree);
     }
     fn visit_use_tree(&mut self, tree: &'a UseTree) {
@@ -386,15 +386,20 @@ pub fn or_visit_impl_kind<'a, V: Visit<'a>>(visitor: &mut V, target: &'a ImplKin
 
 pub fn or_visit_use_tree<'a, V: Visit<'a>>(visitor: &mut V, tree: &'a UseTree) {
     match tree {
-        UseTree::Tree(path, tree) => {
-            visitor.visit_path(path);
+        UseTree::Tree(tree) => {
             tree.iter().for_each(|tree| visitor.visit_use_tree(tree));
         }
+        UseTree::Path(path, rest) => {
+            visitor.visit_path_part(path);
+            visitor.visit_use_tree(rest)
+        }
         UseTree::Alias(path, name) => {
-            visitor.visit_path(path);
+            visitor.visit_identifier(path);
             visitor.visit_identifier(name);
         }
-        UseTree::Path(path) => visitor.visit_path(path),
+        UseTree::Name(name) => {
+            visitor.visit_identifier(name);
+        }
         UseTree::Glob => {}
     }
 }

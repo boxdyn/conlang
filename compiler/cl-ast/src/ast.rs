@@ -228,15 +228,17 @@ pub enum ImplKind {
 /// An import of nonlocal [Item]s
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Use {
+    pub absolute: bool,
     pub tree: UseTree,
 }
 
 /// A tree of [Item] imports
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum UseTree {
-    Tree(Path, Vec<UseTree>),
-    Alias(Path, Identifier),
-    Path(Path),
+    Tree(Vec<UseTree>),
+    Path(PathPart, Box<UseTree>),
+    Alias(Identifier, Identifier),
+    Name(Identifier),
     Glob,
 }
 

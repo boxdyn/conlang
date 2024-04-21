@@ -325,16 +325,17 @@ pub mod yamlify {
     }
     impl Yamlify for Use {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { tree } = self;
-            y.key("Use").yaml(tree);
+            let Self { absolute, tree } = self;
+            y.key("Use").pair("absolute", absolute).yaml(tree);
         }
     }
     impl Yamlify for UseTree {
         fn yaml(&self, y: &mut Yamler) {
             match self {
-                UseTree::Tree(path, tree) => y.pair("path", path).pair("tree", tree),
-                UseTree::Alias(path, name) => y.pair("path", path).pair("name", name),
-                UseTree::Path(path) => y.pair("path", path),
+                UseTree::Tree(trees) => y.pair("trees", trees),
+                UseTree::Path(path, tree) => y.pair("path", path).pair("tree", tree),
+                UseTree::Alias(from, to) => y.pair("from", from).pair("to", to),
+                UseTree::Name(name) => y.pair("name", name),
                 UseTree::Glob => y.value("Glob"),
             };
         }

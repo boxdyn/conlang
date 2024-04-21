@@ -283,20 +283,22 @@ mod display {
 
     impl Display for Use {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { tree } = self;
-            write!(f, "use {tree}")
+            let Self { absolute, tree } = self;
+            if *absolute {
+                write!(f, "use ::{tree}")
+            } else {
+                write!(f, "use {tree}")
+            }
         }
     }
 
     impl Display for UseTree {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
-                UseTree::Tree(path, tree) => {
-                    write!(f, "{path}")?;
-                    separate(tree, ", ")(f.delimit(INLINE_BRACES))
-                }
+                UseTree::Tree(tree) => separate(tree, ", ")(f.delimit(INLINE_BRACES)),
+                UseTree::Path(path, rest) => write!(f, "{path}::{rest}"),
                 UseTree::Alias(path, name) => write!(f, "{path} as {name}"),
-                UseTree::Path(path) => write!(f, "{path}"),
+                UseTree::Name(name) => write!(f, "{name}"),
                 UseTree::Glob => write!(f, "*"),
             }
         }

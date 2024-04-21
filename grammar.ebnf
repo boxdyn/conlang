@@ -45,10 +45,9 @@ Alias       = "type" Identifier ('=' Ty)? ';' ;
 Impl        = "impl" Path '{' Item* '}' ;
 (* TODO: Impl Trait for Target*)
 
-Use         = "use" UseTree ;
-UseTree     = Path '{' (UseTree ',')* UseTree? '}'
-            | Path "as" Identifier
-            | Path | '*' ;
+Use         = "use" '::'? UseTree ';' ;
+UseTree     = '*' | '{' (UseTree ',')* UseTree? '}'
+            | PathPart ('::' UseTree | "as" Identifier)? ;
 
 (* type *)
 Ty          = Never | Empty | Path | TyTuple | TyRef | TyFn ;

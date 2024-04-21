@@ -607,30 +607,40 @@ impl<'t> Parser<'t> {
 
     pub fn parse_use(&mut self) -> PResult<Use> {
         self.consume_peeked();
-        Ok(Use { tree: self.parse_use_tree()? })
+        let absolute = self.match_op(Punct::ColonColon, Parsing::Use).is_ok();
+        let tree = self.parse_use_tree()?;
+        self.match_op(Punct::Semi, Parsing::Use)?;
+        Ok(Use { tree, absolute })
     }
 
     pub fn parse_use_tree(&mut self) -> PResult<UseTree> {
         const PARSING: Parsing = Parsing::UseTree;
         // glob import
-        if self.match_op(Punct::Star, PARSING).is_ok() {
-            return Ok(UseTree::Glob);
-        }
-        let path = self.path()?;
-        Ok(match self.peek_kind(PARSING) {
-            Ok(TokenKind::As) => {
+        Ok(match self.peek_kind(PARSING)? {
+            TokenKind::Punct(Punct::Star) => {
                 self.consume_peeked();
-                UseTree::Alias(path, self.identifier()?)
+                UseTree::Glob
             }
-            Ok(TokenKind::Punct(Punct::LCurly)) => UseTree::Tree(
-                path,
-                delim(
-                    sep(Self::parse_use_tree, Punct::Comma, CURLIES.1, PARSING),
-                    CURLIES,
-                    PARSING,
-                )(self)?,
-            ),
-            _ => UseTree::Path(path),
+            TokenKind::Punct(Punct::LCurly) => UseTree::Tree(delim(
+                sep(Self::parse_use_tree, Punct::Comma, CURLIES.1, PARSING),
+                CURLIES,
+                PARSING,
+            )(self)?),
+            TokenKind::SelfKw | TokenKind::Super | TokenKind::Identifier => {
+                let name = self.path_part()?;
+                if self.match_op(Punct::ColonColon, PARSING).is_ok() {
+                    UseTree::Path(name, Box::new(self.parse_use_tree()?))
+                } else {
+                    let PathPart::Ident(name) = name else {
+                        Err(self.error(
+                            ErrorKind::ExpectedParsing { want: Parsing::Identifier },
+                            PARSING,
+                        ))?
+                    };
+                    UseTree::Name(name)
+                }
+            }
+            t => Err(self.error(Unexpected(t), Parsing::UseTree))?,
         })
     }
 

@@ -159,8 +159,8 @@ pub trait Fold {
         or_fold_impl_kind(self, kind)
     }
     fn fold_use(&mut self, u: Use) -> Use {
-        let Use { tree } = u;
-        Use { tree: self.fold_use_tree(tree) }
+        let Use { absolute, tree } = u;
+        Use { absolute, tree: self.fold_use_tree(tree) }
     }
     fn fold_use_tree(&mut self, tree: UseTree) -> UseTree {
         or_fold_use_tree(self, tree)
@@ -468,16 +468,19 @@ pub fn or_fold_impl_kind<F: Fold + ?Sized>(folder: &mut F, kind: ImplKind) -> Im
 #[inline]
 pub fn or_fold_use_tree<F: Fold + ?Sized>(folder: &mut F, tree: UseTree) -> UseTree {
     match tree {
-        UseTree::Tree(path, tree) => UseTree::Tree(
-            folder.fold_path(path),
+        UseTree::Tree(tree) => UseTree::Tree(
             tree.into_iter()
                 .map(|tree| folder.fold_use_tree(tree))
                 .collect(),
         ),
+        UseTree::Path(path, rest) => UseTree::Path(
+            folder.fold_path_part(path),
+            Box::new(folder.fold_use_tree(*rest)),
+        ),
         UseTree::Alias(path, name) => {
-            UseTree::Alias(folder.fold_path(path), folder.fold_identifier(name))
+            UseTree::Alias(folder.fold_identifier(path), folder.fold_identifier(name))
         }
-        UseTree::Path(path) => UseTree::Path(folder.fold_path(path)),
+        UseTree::Name(name) => UseTree::Name(folder.fold_identifier(name)),
         UseTree::Glob => UseTree::Glob,
     }
 }
