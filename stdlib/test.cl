@@ -4,7 +4,7 @@ use super::preamble::*;
 
 struct UnitLike;
 
-struct TupleLike(super::i32, super::self::test::char)
+struct TupleLike(super::num::i32, super::self::test::char)
 
 struct StructLike {
     pub member1: UnitLike,
