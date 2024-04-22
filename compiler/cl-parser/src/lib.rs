@@ -14,3 +14,5 @@ use cl_token::*;
 pub mod error;
 
 pub mod parser;
+
+pub mod inliner;

@@ -3,12 +3,12 @@ use cl_ast::{
     desugar::{squash_groups::SquashGroups, while_else::WhileElseDesugar},
 };
 use cl_lexer::Lexer;
-use cl_parser::Parser;
+use cl_parser::{inliner::ModuleInliner, Parser};
 use cl_typeck::{
     definition::Def, name_collector::NameCollectable, project::Project, type_resolver::resolve,
 };
 use repline::{error::Error as RlError, prebaked::*};
-use std::error::Error;
+use std::{error::Error, path};
 
 // Path to display in standard library errors
 const STDLIB_DISPLAY_PATH: &str = "stdlib/lib.cl";
@@ -37,6 +37,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             Err(e)?
         }
     };
+    let code = inline_modules(code, concat!(env!("PWD"), "/stdlib"));
 
     unsafe { TREES.push(code) }.collect_in_root(&mut prj)?;
 
@@ -80,6 +81,7 @@ fn enter_code(prj: &mut Project) -> Result<(), RlError> {
             return Ok(Response::Break);
         }
         let code = Parser::new(Lexer::new(line)).file()?;
+        let code = inline_modules(code, "");
         let code = WhileElseDesugar.fold_file(code);
         // Safety: this is totally unsafe
         unsafe { TREES.push(code) }.collect_in_root(prj)?;
@@ -117,6 +119,7 @@ fn query_type_expression(prj: &mut Project) -> Result<(), RlError> {
 }
 
 fn resolve_all(prj: &mut Project) -> Result<(), Box<dyn Error>> {
+    prj.resolve_imports()?;
     for id in prj.pool.key_iter() {
         resolve(prj, id)?;
     }
@@ -146,6 +149,21 @@ fn pretty_def(def: &Def, id: impl Into<usize>) {
         println!("Source:\n{C_LISTING}{source}\x1b[0m");
     }
     println!("\x1b[90m{module}\x1b[0m");
+}
+
+fn inline_modules(code: cl_ast::File, path: impl AsRef<path::Path>) -> cl_ast::File {
+    match ModuleInliner::new(path).inline(code) {
+        Err((code, io, parse)) => {
+            for (file, error) in io {
+                eprintln!("{}:{error}", file.display());
+            }
+            for (file, error) in parse {
+                eprintln!("{}:{error}", file.display());
+            }
+            code
+        }
+        Ok(code) => code,
+    }
 }
 
 fn clear() -> Result<(), Box<dyn Error>> {
