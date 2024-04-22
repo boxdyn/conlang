@@ -44,14 +44,18 @@ impl From<LexError> for ErrorKind {
 /// Compactly represents the stage of parsing an [Error] originated in
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Parsing {
+    Mutability,
+    Visibility,
+    Identifier,
+    Literal,
+
     File,
 
     Attrs,
     Meta,
+    MetaKind,
 
     Item,
-    Visibility,
-    Mutability,
     ItemKind,
     Alias,
     Const,
@@ -78,6 +82,9 @@ pub enum Parsing {
     TyRef,
     TyFn,
 
+    Path,
+    PathPart,
+
     Stmt,
     StmtKind,
     Let,
@@ -95,10 +102,6 @@ pub enum Parsing {
     Fielder,
     Call,
     Member,
-    PathExpr,
-    PathPart,
-    Identifier,
-    Literal,
     Array,
     ArrayRep,
     AddrOf,
@@ -145,14 +148,17 @@ impl Display for ErrorKind {
 impl Display for Parsing {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Parsing::Visibility => "a visibility qualifier",
+            Parsing::Mutability => "a mutability qualifier",
+            Parsing::Identifier => "an identifier",
+            Parsing::Literal => "a literal",
+
             Parsing::File => "a file",
 
             Parsing::Attrs => "an attribute-set",
             Parsing::Meta => "an attribute",
-
+            Parsing::MetaKind => "an attribute's arguments",
             Parsing::Item => "an item",
-            Parsing::Visibility => "a visibility qualifier",
-            Parsing::Mutability => "a mutability qualifier",
             Parsing::ItemKind => "an item",
             Parsing::Alias => "a type alias",
             Parsing::Const => "a const item",
@@ -179,6 +185,9 @@ impl Display for Parsing {
             Parsing::TyRef => "a reference type",
             Parsing::TyFn => "a function pointer type",
 
+            Parsing::Path => "a path",
+            Parsing::PathPart => "a path component",
+            
             Parsing::Stmt => "a statement",
             Parsing::StmtKind => "a statement",
             Parsing::Let => "a local variable declaration",
@@ -196,10 +205,6 @@ impl Display for Parsing {
             Parsing::Fielder => "a struct field expression",
             Parsing::Call => "a call expression",
             Parsing::Member => "a member access expression",
-            Parsing::PathExpr => "a path",
-            Parsing::PathPart => "a path component",
-            Parsing::Identifier => "an identifier",
-            Parsing::Literal => "a literal",
             Parsing::Array => "an array",
             Parsing::ArrayRep => "an array of form [k;N]",
             Parsing::AddrOf => "a borrow op",

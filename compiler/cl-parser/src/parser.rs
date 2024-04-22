@@ -208,7 +208,7 @@ impl<'t> Parser<'t> {
     /// [Path] = `::` *RelativePath*? | *RelativePath* \
     /// *RelativePath* = [PathPart] (`::` [PathPart])*
     pub fn path(&mut self) -> PResult<Path> {
-        const PARSING: Parsing = Parsing::PathExpr;
+        const PARSING: Parsing = Parsing::Path;
         let absolute = self.match_op(Punct::ColonColon, PARSING).is_ok();
         let mut parts = vec![];
 
@@ -221,7 +221,7 @@ impl<'t> Parser<'t> {
             parts.push(self.path_part()?)
         };
 
-        while self.match_op(Punct::ColonColon, Parsing::PathExpr).is_ok() {
+        while self.match_op(Punct::ColonColon, Parsing::Path).is_ok() {
             parts.push(self.path_part()?)
         }
 
@@ -598,7 +598,7 @@ impl<'t> Parser<'t> {
             Ok(ImplKind::Trait { impl_trait, for_type: self.ty()?.into() })
         } else {
             Err(Error {
-                reason: ExpectedParsing { want: { Parsing::PathExpr } },
+                reason: ExpectedParsing { want: Parsing::Path },
                 while_parsing: PARSING,
                 loc: target.extents.head,
             })?
@@ -925,7 +925,7 @@ impl<'t> Parser<'t> {
     /// Parses an expression beginning with a [Path] (i.e. [Path] or [Structor])
     pub fn exprkind_pathlike(&mut self) -> PResult<ExprKind> {
         let head = self.path()?;
-        Ok(match self.match_op(Punct::Colon, Parsing::PathExpr) {
+        Ok(match self.match_op(Punct::Colon, Parsing::Path) {
             Ok(_) => ExprKind::Structor(self.structor_body(head)?),
             Err(_) => ExprKind::Path(head),
         })
