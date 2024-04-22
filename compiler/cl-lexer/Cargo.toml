@@ -1,6 +1,5 @@
 [package]
 name = "cl-lexer"
-documentation.workspace = true
 repository.workspace = true
 version.workspace = true
 authors.workspace = true
