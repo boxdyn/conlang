@@ -248,12 +248,32 @@ pub mod module {
         pub imports: Vec<DefID>,
     }
 
-    impl Module<'_> {
+    impl<'a> Module<'a> {
         pub fn new(parent: DefID) -> Self {
             Self { parent: Some(parent), ..Default::default() }
         }
         pub fn with_optional_parent(parent: Option<DefID>) -> Self {
             Self { parent, ..Default::default() }
+        }
+
+        pub fn get(&self, name: &'a str) -> (Option<DefID>, Option<DefID>) {
+            (self.get_type(name), self.get_value(name))
+        }
+        pub fn get_type(&self, name: &'a str) -> Option<DefID> {
+            self.types.get(name).copied()
+        }
+        pub fn get_value(&self, name: &'a str) -> Option<DefID> {
+            self.values.get(name).copied()
+        }
+
+        /// Inserts a type with the provided [name](str) and [id](DefID)
+        pub fn insert_type(&mut self, name: &'a str, id: DefID) -> Option<DefID> {
+            self.types.insert(name, id)
+        }
+
+        /// Inserts a value with the provided [name](str) and [id](DefID)
+        pub fn insert_value(&mut self, name: &'a str, id: DefID) -> Option<DefID> {
+            self.values.insert(name, id)
         }
     }
 
@@ -319,6 +339,11 @@ pub mod path {
     impl<'p> From<&'p AstPath> for Path<'p> {
         fn from(value: &'p AstPath) -> Self {
             Self::new(value)
+        }
+    }
+    impl AsRef<[PathPart]> for Path<'_> {
+        fn as_ref(&self) -> &[PathPart] {
+            self.parts
         }
     }
 
@@ -419,6 +444,30 @@ pub mod project {
                 None => module,
             }
         }
+
+        pub fn get<'p>(
+            &self,
+            path: Path<'p>,
+            within: DefID,
+        ) -> Option<(Option<DefID>, Option<DefID>, Path<'p>)> {
+            if path.absolute {
+                return self.get(path.relative(), self.root_of(within));
+            }
+            match path.as_ref() {
+                [] => Some((Some(within), None, path)),
+                [PathPart::Ident(Identifier(name))] => {
+                    let (ty, val) = self[within].module.get(name);
+                    Some((ty, val, path.pop_front()?))
+                }
+                [PathPart::Ident(Identifier(name)), ..] => {
+                    let ty = self[within].module.get_type(name)?;
+                    self.get(path.pop_front()?, ty)
+                }
+                [PathPart::SelfKw, ..] => self.get(path.pop_front()?, within),
+                [PathPart::SuperKw, ..] => self.get(path.pop_front()?, self.parent_of(within)?),
+            }
+        }
+
         /// Resolves a path within a module tree, finding the innermost module.
         /// Returns the remaining path parts.
         pub fn get_type<'p>(&self, path: Path<'p>, within: DefID) -> Option<(DefID, Path<'p>)> {
@@ -447,17 +496,6 @@ pub mod project {
                 )),
                 _ => None,
             }
-        }
-
-        #[rustfmt::skip]
-        pub fn insert_type(&mut self, name: &'a str, value: Def<'a>, parent: DefID) -> Option<DefID> {
-            let id = self.pool.insert(value);
-            self[parent].module.types.insert(name, id)
-        }
-        #[rustfmt::skip]
-        pub fn insert_value(&mut self, name: &'a str, value: Def<'a>, parent: DefID) -> Option<DefID> {
-            let id = self.pool.insert(value);
-            self[parent].module.values.insert(name, id)
         }
 
         /// Inserts the type returned by the provided closure iff the TypeKind doesn't already exist
