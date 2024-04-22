@@ -1,4 +1,4 @@
-//! Handles argument parsing (currently using the [argh] crate)
+//! Handles argument parsing (currently using the [argwerk] crate)
 
 use std::{io::IsTerminal, path::PathBuf, str::FromStr};
 

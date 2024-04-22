@@ -1,6 +1,6 @@
 //! The Conlang REPL, based on [repline]
 //! 
-//! Uses [argh] for argument parsing.
+//! Uses [argwerk] for argument parsing.
 #![warn(clippy::all)]
 
 pub mod ansi;
