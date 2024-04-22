@@ -62,5 +62,3 @@ fn if_else() -> i32 {
     }
     // block 4
 }
-
-let x = 0;
