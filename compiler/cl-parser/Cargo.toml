@@ -1,6 +1,7 @@
 [package]
 name = "cl-parser"
 repository.workspace = true
+documentation.workspace = true
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

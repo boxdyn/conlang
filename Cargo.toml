@@ -14,6 +14,7 @@ resolver = "2"
 
 [workspace.package]
 repository = "https://github.com/boxdyn/conlang"
+documentation = "https://docs.soft.fish"
 version = "0.0.5"
 authors = ["John <j@soft.fish>"]
 edition = "2021"

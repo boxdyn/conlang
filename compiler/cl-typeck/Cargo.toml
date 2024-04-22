@@ -1,6 +1,7 @@
 [package]
 name = "cl-typeck"
 repository.workspace = true
+documentation.workspace = true
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
