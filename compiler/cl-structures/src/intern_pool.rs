@@ -53,6 +53,7 @@ macro_rules! make_intern_key {($($(#[$meta:meta])* $name:ident),*$(,)?) => {$(
         }
     }
 )*}}
+use core::slice::GetManyMutError;
 use std::ops::{Index, IndexMut};
 
 pub use make_intern_key;
@@ -89,6 +90,13 @@ impl<T, ID: InternKey> Pool<T, ID> {
     }
     pub fn get_mut(&mut self, index: ID) -> Option<&mut T> {
         self.pool.get_mut(index.get())
+    }
+
+    pub fn get_many_mut<const N: usize>(
+        &mut self,
+        indices: [ID; N],
+    ) -> Result<[&mut T; N], GetManyMutError<N>> {
+        self.pool.get_many_mut(indices.map(|id| id.get()))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &T> {
