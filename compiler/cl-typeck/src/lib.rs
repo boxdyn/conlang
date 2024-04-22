@@ -1,28 +1,54 @@
 //! # The Conlang Type Checker
 //!
 //! As a statically typed language, Conlang requires a robust type checker to enforce correctness.
+//!
+//! This crate is a major work-in-progress.
+//!
+//! # The [Project](project::Project)™
+//! Contains [item definitions](definition) and type expression information.
+//!
+//! *Every* definition is itself a module, and can contain arbitrarily nested items
+//! as part of the [Module](module::Module) tree.
+//!
+//! The Project keeps track of a *global intern pool* of definitions, which are
+//! trivially comparable by [DefID](key::DefID). Note that, for item definitions,
+//! identical types in different modules DO NOT COMPARE EQUAL under this constraint.
+//! However, so-called "anonymous" types *do not* follow this rule, as their
+//! definitions are constructed dynamically and ensured to be unique.
+// Note: it's a class invariant that named types are not added
+// to the anon-types list. Please keep it that way. ♥  Thanks!
+//!
+//! # Namespaces
+//! Within a Project, [definitions](definition::Def) are classified into two namespaces:
+//!
+//! ## Type Namespace:
+//!     - Modules
+//!     - Structs
+//!     - Enums
+//!     - Type aliases
+//!
+//! ## Value Namespace:
+//!     - Functions
+//!     - Constants
+//!     - Static variables
+//!
+//! There is a *key* distinction between the two namespaces when it comes to
+//! [Path](path::Path) traversal: Only items in the Type Namespace will be considered
+//! as an intermediate path target. This means items in the Value namespace are
+//! entirely *opaque*, and form a one-way barrier. Items outside a Value can be
+//! referred to within the Value, but items inside a Value *cannot* be referred to
+//! outside the Value.
+//!
+//! # Order of operations:
+//! Currently, the process of type resolution goes as follows:
+//!
+//! 1. Traverse the AST, [collecting all Items into item definitions](name_collector)
+//! 2. Eagerly [resolve `use` imports](use_importer)
+//! 3. Traverse all [definitions](definition::Def),
+//! and [resolve the types for every item](type_resolver)
+//! 4. TODO: Construct a typed AST for expressions, and type-check them
 #![feature(debug_closure_helpers)]
 #![warn(clippy::all)]
-
-/*
-
-The type checker keeps track of a *global intern pool* for Definitions
-References to the intern pool are held by DefID, and items cannot be freed from the pool EVER.
-
-Definitions are classified into two namespaces:
-
-Type Namespace:
-    - Modules
-    - Structs
-    - Enums
-    - Type aliases
-
-Value Namespace:
-    - Functions
-    - Constants
-    - Static variables
-
-*/
 
 pub mod key;
 
@@ -41,6 +67,9 @@ pub mod use_importer;
 pub mod type_resolver;
 
 /*
+
+LET THERE BE NOTES:
+
 /// What is an inference rule?
 /// An inference rule is a specification with a set of predicates and a judgement
 
