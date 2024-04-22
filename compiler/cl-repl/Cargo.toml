@@ -16,4 +16,4 @@ cl-token = { path = "../cl-token" }
 cl-parser = { path = "../cl-parser" }
 cl-interpret = { path = "../cl-interpret" }
 repline = { path = "../../repline" }
-argh = "0.1.12"
+argwerk = "0.20.4"

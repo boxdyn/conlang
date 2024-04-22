@@ -1,5 +1,5 @@
-use cl_repl::cli::run;
+use cl_repl::{args, cli::run};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    run(argh::from_env())
+    run(args::Args::args()?)
 }

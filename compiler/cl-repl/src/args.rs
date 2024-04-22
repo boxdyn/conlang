@@ -1,26 +1,40 @@
 //! Handles argument parsing (currently using the [argh] crate)
 
-use argh::FromArgs;
 use std::{io::IsTerminal, path::PathBuf, str::FromStr};
 
-/// The Conlang prototype debug interface
-#[derive(Clone, Debug, FromArgs, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Args {
-    /// the main source file
-    #[argh(positional)]
-    pub file: Option<PathBuf>,
+argwerk::define! {
+    ///
+    ///The Conlang prototype debug interface
+    #[usage = "conlang [<file>] [-I <include...>] [-m <mode>] [-r <repl>]"]
+    #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+    pub struct Args {
+        pub file: Option<PathBuf>,
+        pub include: Vec<PathBuf>,
+        pub mode: Mode,
+        pub repl: bool = is_terminal(),
+    }
 
-    /// files to include
-    #[argh(option, short = 'I')]
-    pub include: Vec<PathBuf>,
-
-    /// the CLI operating mode (`f`mt | `l`ex | `r`un)
-    #[argh(option, short = 'm', default = "Default::default()")]
-    pub mode: Mode,
-
-    /// whether to start the repl (`true` or `false`)
-    #[argh(option, short = 'r', default = "is_terminal()")]
-    pub repl: bool,
+    ///files to include
+    ["-I" | "--include", path] => {
+        include.push(path.into());
+    }
+    ///the CLI operating mode (`f`mt | `l`ex | `r`un)
+    ["-m" | "--mode", flr] => {
+        mode = flr.parse()?;
+    }
+    ///whether to start the repl (`true` or `false`)
+    ["-r" | "--repl", bool] => {
+        repl = bool.parse()?;
+    }
+    ///display usage information
+    ["-h" | "--help"] => {
+        println!("{}", Args::help());
+        if true { std::process::exit(0); }
+    }
+    ///the main source file
+    [#[option] path] if file.is_none() => {
+        file = path.map(Into::into);
+    }
 }
 
 /// gets whether stdin AND stdout are a terminal, for pipelining
