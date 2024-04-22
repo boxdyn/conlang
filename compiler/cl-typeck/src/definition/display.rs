@@ -49,6 +49,7 @@ impl Display for DefKind<'_> {
         match self {
             DefKind::Undecided => write!(f, "undecided"),
             DefKind::Impl(id) => write!(f, "impl {id}"),
+            DefKind::Use(id) => write!(f, "use (inside {id})"),
             DefKind::Type(kind) => write!(f, "{kind}"),
             DefKind::Value(kind) => write!(f, "{kind}"),
         }
