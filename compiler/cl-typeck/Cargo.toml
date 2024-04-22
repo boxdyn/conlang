@@ -10,3 +10,8 @@ publish.workspace = true
 [dependencies]
 cl-ast = { path = "../cl-ast" }
 cl-structures = { path = "../cl-structures" }
+
+[dev-dependencies]
+repline = { path = "../../repline" }
+cl-lexer = { path = "../cl-lexer" }
+cl-parser = { path = "../cl-parser" }
