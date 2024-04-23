@@ -774,3 +774,34 @@ mod convert {
         }
     }
 }
+
+mod path {
+    //! Utils for [Path]
+    use crate::{ast::Path, Identifier, PathPart};
+
+    impl Path {
+        /// Appends a [PathPart] to this [Path]
+        pub fn push(&mut self, part: PathPart) {
+            self.parts.push(part);
+        }
+        /// Removes a [PathPart] from this [Path]
+        pub fn pop(&mut self) -> Option<PathPart> {
+            self.parts.pop()
+        }
+        /// Concatenates `self::other`. If `other` is an absolute [Path],
+        /// this replaces `self` with `other`
+        pub fn concat(&mut self, other: &Self) -> &mut Self {
+            if other.absolute {
+                *self = other.clone();
+            } else {
+                self.parts.extend(other.parts.iter().cloned())
+            }
+            self
+        }
+    }
+    impl PathPart {
+        pub fn from_ident(ident: Identifier) -> Self {
+            Self::Ident(ident)
+        }
+    }
+}

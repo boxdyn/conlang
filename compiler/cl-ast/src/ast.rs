@@ -284,7 +284,7 @@ pub struct TyFn {
 }
 
 /// A path to an [Item] in the [Module] tree
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Path {
     pub absolute: bool,
     pub parts: Vec<PathPart>,
