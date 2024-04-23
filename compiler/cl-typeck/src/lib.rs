@@ -52,6 +52,8 @@
 
 pub mod key;
 
+pub mod def_item;
+
 pub mod definition;
 
 pub mod module;
