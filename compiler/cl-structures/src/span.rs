@@ -8,8 +8,14 @@ pub struct Span {
     pub head: Loc,
     pub tail: Loc,
 }
-pub fn Span(head: Loc, tail: Loc) -> Span {
+pub const fn Span(head: Loc, tail: Loc) -> Span {
     Span { head, tail }
+}
+
+impl Span {
+    pub const fn dummy() -> Self {
+        Span { head: Loc::dummy(), tail: Loc::dummy() }
+    }
 }
 
 /// Stores a read-only (line, column) location in a token stream
@@ -18,14 +24,17 @@ pub struct Loc {
     line: u32,
     col: u32,
 }
-pub fn Loc(line: u32, col: u32) -> Loc {
+pub const fn Loc(line: u32, col: u32) -> Loc {
     Loc { line, col }
 }
 impl Loc {
-    pub fn line(self) -> u32 {
+    pub const fn dummy() -> Self {
+        Loc { line: 0, col: 0 }
+    }
+    pub const fn line(self) -> u32 {
         self.line
     }
-    pub fn col(self) -> u32 {
+    pub const fn col(self) -> u32 {
         self.col
     }
 }
