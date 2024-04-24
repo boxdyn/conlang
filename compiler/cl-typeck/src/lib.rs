@@ -22,15 +22,15 @@
 //! Within a Project, [definitions](definition::Def) are classified into two namespaces:
 //!
 //! ## Type Namespace:
-//!     - Modules
-//!     - Structs
-//!     - Enums
-//!     - Type aliases
+//! - Modules
+//! - Structs
+//! - Enums
+//! - Type aliases
 //!
 //! ## Value Namespace:
-//!     - Functions
-//!     - Constants
-//!     - Static variables
+//! - Functions
+//! - Constants
+//! - Static variables
 //!
 //! There is a *key* distinction between the two namespaces when it comes to
 //! [Path](path::Path) traversal: Only items in the Type Namespace will be considered
