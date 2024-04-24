@@ -7,41 +7,47 @@ use std::{
     sync::{OnceLock, RwLock},
 };
 
+/// Holds a globally accessible [Interner] which uses [GlobalSym] as its [Symbol]
 static GLOBAL_INTERNER: OnceLock<RwLock<Interner<GlobalSym>>> = OnceLock::new();
 
-/// Gets the [GlobalSym] associated with this string, if there is one, or creates a new one
+/// A unique identifier corresponding to a particular interned [String].
 ///
-/// # Blocks
-/// Locks the Global Interner for writing. If it is already locked, 
-/// # May Panic
-/// T
-pub fn get_or_insert(s: &str) -> GlobalSym {
-    GLOBAL_INTERNER
-        .get_or_init(Default::default)
-        .write()
-        .expect("global interner should not have been held by a panicked thread")
-        .get_or_insert(s)
-}
-
-/// Gets the [GlobalSym] associated with this string, if there is one
-pub fn get(s: &str) -> Option<GlobalSym> {
-    GLOBAL_INTERNER.get()?.read().ok()?.get(s)
-}
-
-/// Gets the [String] associated with this [GlobalSym], if there is one
+/// Copies of that string can be obtained with [GlobalSym::get] or [String::try_from].
 ///
-/// Returns none if the global symbol table is poisoned.
-pub fn get_string(sym: GlobalSym) -> Option<String> {
-    sym.try_into().ok()
-}
-
+/// New strings can be interned with [GlobalSym::new] or [GlobalSym::from]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct GlobalSym(NonZeroU32);
 
 impl GlobalSym {
-    /// Gets a [GlobalSym] associated with the given string, if one exists
+    /// Gets the interned [GlobalSym] for the given value, or interns a new one.
+    ///
+    /// # Blocks
+    /// This conversion blocks if the Global Interner lock is held.
+    ///
+    /// # May Panic
+    /// Panics if the Global Interner's lock has been poisoned by a panic in another thread
+    pub fn new(value: &str) -> Self {
+        GLOBAL_INTERNER
+            .get_or_init(Default::default)
+            .write()
+            .expect("global interner should not be poisoned in another thread")
+            .get_or_insert(value)
+    }
+    /// Gets a [GlobalSym] associated with the given string, if one already exists
     pub fn try_from_str(value: &str) -> Option<Self> {
         GLOBAL_INTERNER.get()?.read().ok()?.get(value)
+    }
+
+    /// Gets a copy of the value of the [GlobalSym]
+    // TODO: Make this copy-less
+    pub fn get(self) -> Option<String> {
+        String::try_from(self).ok()
+    }
+
+    /// Looks up the string associated with this [GlobalSym],
+    /// and performs a transformation on it if it exists.
+    pub fn map<T>(&self, f: impl Fn(&str) -> T) -> Option<T> {
+        Some(f(GLOBAL_INTERNER.get()?.read().ok()?.get_str(*self)?))
     }
 }
 
@@ -70,7 +76,7 @@ impl Symbol for GlobalSym {
     }
 }
 
-impl From<&str> for GlobalSym {
+impl<T: AsRef<str>> From<T> for GlobalSym {
     /// Converts to this type from the input type.
     ///
     /// # Blocks
@@ -78,12 +84,8 @@ impl From<&str> for GlobalSym {
     ///
     /// # May Panic
     /// Panics if the Global Interner's lock has been poisoned by a panic in another thread
-    fn from(value: &str) -> Self {
-        GLOBAL_INTERNER
-            .get_or_init(Default::default)
-            .write()
-            .expect("global interner should not be poisoned in another thread")
-            .get_or_insert(value)
+    fn from(value: T) -> Self {
+        Self::new(value.as_ref())
     }
 }
 
