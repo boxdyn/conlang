@@ -2,8 +2,16 @@
 //! - [Span](struct@span::Span): Stores a start and end [Loc](struct@span::Loc)
 //! - [Loc](struct@span::Loc): Stores the index in a stream
 #![warn(clippy::all)]
-#![feature(inline_const, dropck_eyepatch, decl_macro, get_many_mut)]
+#![feature(
+    inline_const,
+    dropck_eyepatch,
+    decl_macro,
+    get_many_mut,
+    hash_raw_entry
+)]
 #![deny(unsafe_op_in_unsafe_fn)]
+
+pub mod arena;
 
 pub mod span;
 
