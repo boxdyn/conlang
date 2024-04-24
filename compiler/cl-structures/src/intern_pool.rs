@@ -40,7 +40,7 @@ macro_rules! make_intern_key {($($(#[$meta:meta])* $name:ident),*$(,)?) => {$(
         /// # Safety
         ///
         /// The provided value should be within the bounds of its associated container
-        unsafe fn from_raw_unchecked(value: usize) -> Self {
+        fn from_raw_unchecked(value: usize) -> Self {
             Self(value)
         }
         fn get(&self) -> usize {
@@ -70,7 +70,7 @@ pub trait InternKey: std::fmt::Debug {
     /// The provided value should be within the bounds of its associated container.
     // ID::from_raw_unchecked here isn't *actually* unsafe, since bounds should always be
     // checked, however, the function has unverifiable preconditions.
-    unsafe fn from_raw_unchecked(value: usize) -> Self;
+    fn from_raw_unchecked(value: usize) -> Self;
     /// Gets the index of the [`InternKey`] by value
     fn get(&self) -> usize;
 }
@@ -107,13 +107,13 @@ impl<T, ID: InternKey> Pool<T, ID> {
     }
     pub fn key_iter(&self) -> iter::InternKeyIter<ID> {
         // Safety: Pool currently has pool.len() entries, and data cannot be removed
-        unsafe { InternKeyIter::new(0..self.pool.len()) }
+        InternKeyIter::new(0..self.pool.len())
     }
 
     /// Constructs an [ID](InternKey) from a [usize], if it's within bounds
     #[doc(hidden)]
     pub fn try_key_from(&self, value: usize) -> Option<ID> {
-        (value < self.pool.len()).then(|| unsafe { ID::from_raw_unchecked(value) })
+        (value < self.pool.len()).then(|| ID::from_raw_unchecked(value))
     }
 
     pub fn insert(&mut self, value: T) -> ID {
@@ -121,7 +121,7 @@ impl<T, ID: InternKey> Pool<T, ID> {
         self.pool.push(value);
 
         // Safety: value was pushed to `self.pool[id]`
-        unsafe { ID::from_raw_unchecked(id) }
+        ID::from_raw_unchecked(id)
     }
 }
 
@@ -173,7 +173,7 @@ mod iter {
         /// - Range must not exceed bounds of the associated [Pool](super::Pool)
         /// - Items must not be removed from the pool
         /// - Items must be contiguous within the pool
-        pub(super) unsafe fn new(range: Range<usize>) -> Self {
+        pub(super) fn new(range: Range<usize>) -> Self {
             Self { range, _id: Default::default() }
         }
     }
@@ -183,7 +183,7 @@ mod iter {
 
         fn next(&mut self) -> Option<Self::Item> {
             // Safety: InternKeyIter can only be created by InternKeyIter::new()
-            Some(unsafe { ID::from_raw_unchecked(self.range.next()?) })
+            Some(ID::from_raw_unchecked(self.range.next()?))
         }
         fn size_hint(&self) -> (usize, Option<usize>) {
             self.range.size_hint()
@@ -192,7 +192,7 @@ mod iter {
     impl<ID: InternKey> DoubleEndedIterator for InternKeyIter<ID> {
         fn next_back(&mut self) -> Option<Self::Item> {
             // Safety: see above
-            Some(unsafe { ID::from_raw_unchecked(self.range.next_back()?) })
+            Some(ID::from_raw_unchecked(self.range.next_back()?))
         }
     }
     impl<ID: InternKey> ExactSizeIterator for InternKeyIter<ID> {}
