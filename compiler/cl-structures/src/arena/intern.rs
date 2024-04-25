@@ -1,6 +1,6 @@
 //! A string interner with deduplication
 
-use super::{symbol::Symbol, StringArena};
+use super::{string_arena::StringArena, symbol::Symbol};
 use hashbrown::hash_table::HashTable;
 use std::hash::{BuildHasher, RandomState};
 
