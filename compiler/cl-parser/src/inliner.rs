@@ -5,8 +5,8 @@ use cl_ast::{ast_visitor::Fold, *};
 use cl_lexer::Lexer;
 use std::path::{Path, PathBuf};
 
-type IoErrs = Vec<(PathBuf, std::io::Error)>;
-type ParseErrs = Vec<(PathBuf, crate::error::Error)>;
+pub type IoErrs = Vec<(PathBuf, std::io::Error)>;
+pub type ParseErrs = Vec<(PathBuf, crate::error::Error)>;
 
 pub struct ModuleInliner {
     path: PathBuf,

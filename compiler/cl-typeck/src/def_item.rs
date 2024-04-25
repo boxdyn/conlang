@@ -4,7 +4,7 @@
 //!
 //! [DefItem]s are collected by the [Definition Sorcerer](sorcerer),
 //! an AST visitor that pairs [DefSource]s with their surrounding
-//! context ([Path], [Span], [Meta], [Visibility])
+//! context ([Path], [struct@Span], [Meta], [Visibility])
 
 use cl_ast::ast::*;
 use cl_structures::span::Span;
