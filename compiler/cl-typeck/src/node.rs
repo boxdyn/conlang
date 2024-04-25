@@ -1,9 +1,9 @@
-//! A [DefItem] contains the [DefSource] and [Item] metadata for any
+//! A [Node] contains the [NodeSource] and [Item] metadata for any
 //! [Def](crate::definition::Def), as well as the [Path] of the
 //! containing [Module].
 //!
-//! [DefItem]s are collected by the [Definition Sorcerer](sorcerer),
-//! an AST visitor that pairs [DefSource]s with their surrounding
+//! [Node]s are collected by the [Node Sorcerer](sorcerer),
+//! an AST visitor that pairs [NodeSource]s with their surrounding
 //! context ([Path], [struct@Span], [Meta], [Visibility])
 
 use cl_ast::ast::*;
@@ -11,16 +11,16 @@ use cl_structures::span::Span;
 use std::fmt;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DefItem<'a> {
+pub struct Node<'a> {
     pub in_path: Path,
     pub span: &'a Span,
     pub meta: &'a [Meta],
     pub vis: Visibility,
-    pub kind: DefSource<'a>,
+    pub kind: NodeSource<'a>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum DefSource<'a> {
+pub enum NodeSource<'a> {
     Module(&'a Module),
     Alias(&'a Alias),
     Enum(&'a Enum),
@@ -34,27 +34,27 @@ pub enum DefSource<'a> {
     Ty(&'a TyKind),
 }
 
-impl<'a> DefSource<'a> {
+impl<'a> NodeSource<'a> {
     pub fn name(&self) -> Option<Sym> {
         match self {
-            DefSource::Module(v) => Some(v.name.0),
-            DefSource::Alias(v) => Some(v.to.0),
-            DefSource::Enum(v) => Some(v.name.0),
-            DefSource::Struct(v) => Some(v.name.0),
-            DefSource::Const(v) => Some(v.name.0),
-            DefSource::Static(v) => Some(v.name.0),
-            DefSource::Function(v) => Some(v.name.0),
-            DefSource::Local(l) => Some(l.name.0),
-            DefSource::Impl(_) | DefSource::Use(_) | DefSource::Ty(_) => None,
+            NodeSource::Module(v) => Some(v.name.0),
+            NodeSource::Alias(v) => Some(v.to.0),
+            NodeSource::Enum(v) => Some(v.name.0),
+            NodeSource::Struct(v) => Some(v.name.0),
+            NodeSource::Const(v) => Some(v.name.0),
+            NodeSource::Static(v) => Some(v.name.0),
+            NodeSource::Function(v) => Some(v.name.0),
+            NodeSource::Local(l) => Some(l.name.0),
+            NodeSource::Impl(_) | NodeSource::Use(_) | NodeSource::Ty(_) => None,
         }
     }
 
-    /// Returns `true` if this [DefSource] defines a named value
+    /// Returns `true` if this [NodeSource] defines a named value
     pub fn is_named_value(&self) -> bool {
         matches!(self, Self::Const(_) | Self::Static(_) | Self::Function(_))
     }
 
-    /// Returns `true` if this [DefSource] defines a named type
+    /// Returns `true` if this [NodeSource] defines a named type
     pub fn is_named_type(&self) -> bool {
         matches!(
             self,
@@ -62,23 +62,23 @@ impl<'a> DefSource<'a> {
         )
     }
 
-    /// Returns `true` if this [DefSource] refers to a [Ty] with no name
+    /// Returns `true` if this [NodeSource] refers to a [Ty] with no name
     pub fn is_anon_type(&self) -> bool {
         matches!(self, Self::Ty(_))
     }
 
-    /// Returns `true` if this [DefSource] refers to an [Impl] block
+    /// Returns `true` if this [NodeSource] refers to an [Impl] block
     pub fn is_impl(&self) -> bool {
         matches!(self, Self::Impl(_))
     }
 
-    /// Returns `true` if this [DefSource] refers to a [Use] import
+    /// Returns `true` if this [NodeSource] refers to a [Use] import
     pub fn is_use_import(&self) -> bool {
         matches!(self, Self::Use(_))
     }
 }
 
-impl fmt::Display for DefSource<'_> {
+impl fmt::Display for NodeSource<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Module(arg0) => arg0.fmt(f),
@@ -97,25 +97,25 @@ impl fmt::Display for DefSource<'_> {
 }
 
 pub mod sorcerer {
-    //! An [AST](cl_ast) analysis pass that collects [DefItem] entries.
+    //! An [AST](cl_ast) analysis pass that collects [Node] entries.
 
-    use super::{DefItem, DefSource};
+    use super::{Node, NodeSource};
     use cl_ast::{ast::*, ast_visitor::visit::*};
     use cl_structures::span::Span;
     use std::mem;
 
-    /// An AST analysis pass that collects [DefItem]s
+    /// An AST analysis pass that collects [Node]s
     #[derive(Clone, Debug)]
-    pub struct DefinitionSorcerer<'a> {
+    pub struct NodeSorcerer<'a> {
         path: Path,
         parts: Parts<'a>,
-        defs: Vec<DefItem<'a>>,
+        defs: Vec<Node<'a>>,
     }
 
     type Parts<'a> = (&'a Span, &'a [Meta], Visibility);
 
-    impl<'a> DefinitionSorcerer<'a> {
-        pub fn into_defs(self) -> Vec<DefItem<'a>> {
+    impl<'a> NodeSorcerer<'a> {
+        pub fn into_defs(self) -> Vec<Node<'a>> {
             self.defs
         }
 
@@ -131,15 +131,15 @@ pub mod sorcerer {
             self.with_parts(span, &[], Visibility::Public, f)
         }
 
-        fn push(&mut self, kind: DefSource<'a>) {
+        fn push(&mut self, kind: NodeSource<'a>) {
             let Self { path, parts, defs } = self;
             let (span, meta, vis) = *parts;
 
-            defs.push(DefItem { in_path: path.clone(), span, meta, vis, kind })
+            defs.push(Node { in_path: path.clone(), span, meta, vis, kind })
         }
     }
 
-    impl Default for DefinitionSorcerer<'_> {
+    impl Default for NodeSorcerer<'_> {
         fn default() -> Self {
             const DPARTS: Parts = (&Span::dummy(), &[], Visibility::Private);
             Self {
@@ -150,7 +150,7 @@ pub mod sorcerer {
         }
     }
 
-    impl<'a> Visit<'a> for DefinitionSorcerer<'a> {
+    impl<'a> Visit<'a> for NodeSorcerer<'a> {
         fn visit_module(&mut self, m: &'a Module) {
             let Module { name, kind } = m;
             self.path.push(PathPart::Ident(name.clone()));
@@ -166,7 +166,7 @@ pub mod sorcerer {
         fn visit_ty(&mut self, t: &'a Ty) {
             let Ty { extents, kind } = t;
             self.with_only_span(extents, |v| {
-                v.push(DefSource::Ty(kind));
+                v.push(NodeSource::Ty(kind));
                 v.visit_ty_kind(kind);
             });
         }
@@ -179,21 +179,21 @@ pub mod sorcerer {
         }
         fn visit_item_kind(&mut self, kind: &'a ItemKind) {
             match kind {
-                ItemKind::Module(i) => self.push(DefSource::Module(i)),
-                ItemKind::Alias(i) => self.push(DefSource::Alias(i)),
-                ItemKind::Enum(i) => self.push(DefSource::Enum(i)),
-                ItemKind::Struct(i) => self.push(DefSource::Struct(i)),
-                ItemKind::Const(i) => self.push(DefSource::Const(i)),
-                ItemKind::Static(i) => self.push(DefSource::Static(i)),
-                ItemKind::Function(i) => self.push(DefSource::Function(i)),
-                ItemKind::Impl(i) => self.push(DefSource::Impl(i)),
-                ItemKind::Use(i) => self.push(DefSource::Use(i)),
+                ItemKind::Module(i) => self.push(NodeSource::Module(i)),
+                ItemKind::Alias(i) => self.push(NodeSource::Alias(i)),
+                ItemKind::Enum(i) => self.push(NodeSource::Enum(i)),
+                ItemKind::Struct(i) => self.push(NodeSource::Struct(i)),
+                ItemKind::Const(i) => self.push(NodeSource::Const(i)),
+                ItemKind::Static(i) => self.push(NodeSource::Static(i)),
+                ItemKind::Function(i) => self.push(NodeSource::Function(i)),
+                ItemKind::Impl(i) => self.push(NodeSource::Impl(i)),
+                ItemKind::Use(i) => self.push(NodeSource::Use(i)),
             }
             or_visit_item_kind(self, kind);
         }
         fn visit_stmt_kind(&mut self, kind: &'a StmtKind) {
             if let StmtKind::Local(l) = kind {
-                self.push(DefSource::Local(l))
+                self.push(NodeSource::Local(l))
             }
             or_visit_stmt_kind(self, kind);
         }
