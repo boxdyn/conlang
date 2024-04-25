@@ -47,7 +47,6 @@
 //! 3. Traverse all [definitions](definition::Def),
 //! and [resolve the types for every item](type_resolver)
 //! 4. TODO: Construct a typed AST for expressions, and type-check them
-#![feature(debug_closure_helpers)]
 #![warn(clippy::all)]
 
 pub mod key;
