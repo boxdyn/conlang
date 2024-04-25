@@ -1,5 +1,5 @@
 //! WIP use-item importer. This performs eager import resolution on the AST
-//! 
+//!
 //! # TODOs:
 //! - [ ] Resolve imports using a graph traversal rather than linear iteration
 //! - [ ] Separate imported items from natively declared items
@@ -7,7 +7,6 @@
 //! - [ ] Report errors in a meaningful way
 //! - [ ] Lazy import resolution using graph-edge traversal during name lookup?
 //!     - It doesn't seem to me like the imports in a given scope *can change*.
-//! 
 
 #![allow(unused)]
 use std::fmt::format;
@@ -74,20 +73,15 @@ impl<'a> Project<'a> {
         Ok(())
     }
 
-    pub fn visit_use_leaf(
-        &mut self,
-        part: &'a Identifier,
-        parent: DefID,
-        c: DefID,
-    ) -> UseResult {
+    pub fn visit_use_leaf(&mut self, part: &'a Identifier, parent: DefID, c: DefID) -> UseResult {
         let Identifier(name) = part;
         self.visit_use_alias(name, name, parent, c)
     }
 
     pub fn visit_use_alias(
         &mut self,
-        from: &'a str,
-        name: &'a str,
+        from: &Sym,
+        name: &Sym,
         parent: DefID,
         c: DefID,
     ) -> UseResult {
@@ -100,12 +94,12 @@ impl<'a> Project<'a> {
         let parent = &mut self[parent].module;
 
         if let Some(tid) = tid {
-            parent.types.insert(name, tid);
+            parent.types.insert(*name, tid);
             imported = true;
         }
 
         if let Some(vid) = vid {
-            parent.values.insert(name, vid);
+            parent.values.insert(*name, vid);
             imported = true;
         }
 

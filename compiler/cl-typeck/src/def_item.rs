@@ -35,16 +35,16 @@ pub enum DefSource<'a> {
 }
 
 impl<'a> DefSource<'a> {
-    pub fn name(&self) -> Option<&'a str> {
+    pub fn name(&self) -> Option<Sym> {
         match self {
-            DefSource::Module(v) => Some(v.name.0.as_str()),
-            DefSource::Alias(v) => Some(v.to.0.as_str()),
-            DefSource::Enum(v) => Some(v.name.0.as_str()),
-            DefSource::Struct(v) => Some(v.name.0.as_str()),
-            DefSource::Const(v) => Some(v.name.0.as_str()),
-            DefSource::Static(v) => Some(v.name.0.as_str()),
-            DefSource::Function(v) => Some(v.name.0.as_str()),
-            DefSource::Local(l) => Some(l.name.0.as_str()),
+            DefSource::Module(v) => Some(v.name.0),
+            DefSource::Alias(v) => Some(v.to.0),
+            DefSource::Enum(v) => Some(v.name.0),
+            DefSource::Struct(v) => Some(v.name.0),
+            DefSource::Const(v) => Some(v.name.0),
+            DefSource::Static(v) => Some(v.name.0),
+            DefSource::Function(v) => Some(v.name.0),
+            DefSource::Local(l) => Some(l.name.0),
             DefSource::Impl(_) | DefSource::Use(_) | DefSource::Ty(_) => None,
         }
     }

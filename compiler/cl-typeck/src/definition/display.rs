@@ -44,7 +44,7 @@ impl Display for Def<'_> {
     }
 }
 
-impl Display for DefKind<'_> {
+impl Display for DefKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DefKind::Undecided => write!(f, "undecided"),
@@ -66,7 +66,7 @@ impl std::fmt::Display for ValueKind {
     }
 }
 
-impl Display for TypeKind<'_> {
+impl Display for TypeKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TypeKind::Alias(def) => match def {
@@ -99,7 +99,7 @@ impl Display for TypeKind<'_> {
     }
 }
 
-impl Display for Adt<'_> {
+impl Display for Adt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Adt::Enum(variants) => {

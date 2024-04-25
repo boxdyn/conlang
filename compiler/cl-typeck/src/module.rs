@@ -1,5 +1,6 @@
 //! A [Module] is a node in the Module Tree (a component of a
 //! [Project](crate::project::Project))
+use cl_ast::Sym;
 use cl_structures::intern_pool::InternKey;
 
 use crate::key::DefID;
@@ -8,14 +9,14 @@ use std::collections::HashMap;
 /// A [Module] is a node in the Module Tree (a component of a
 /// [Project](crate::project::Project)).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Module<'a> {
+pub struct Module {
     pub parent: Option<DefID>,
-    pub types: HashMap<&'a str, DefID>,
-    pub values: HashMap<&'a str, DefID>,
+    pub types: HashMap<Sym, DefID>,
+    pub values: HashMap<Sym, DefID>,
     pub imports: Vec<DefID>,
 }
 
-impl<'a> Module<'a> {
+impl Module {
     pub fn new(parent: DefID) -> Self {
         Self { parent: Some(parent), ..Default::default() }
     }
@@ -23,29 +24,29 @@ impl<'a> Module<'a> {
         Self { parent, ..Default::default() }
     }
 
-    pub fn get(&self, name: &'a str) -> (Option<DefID>, Option<DefID>) {
+    pub fn get(&self, name: Sym) -> (Option<DefID>, Option<DefID>) {
         (self.get_type(name), self.get_value(name))
     }
-    pub fn get_type(&self, name: &'a str) -> Option<DefID> {
-        self.types.get(name).copied()
+    pub fn get_type(&self, name: Sym) -> Option<DefID> {
+        self.types.get(&name).copied()
     }
-    pub fn get_value(&self, name: &'a str) -> Option<DefID> {
-        self.values.get(name).copied()
+    pub fn get_value(&self, name: Sym) -> Option<DefID> {
+        self.values.get(&name).copied()
     }
 
     /// Inserts a type with the provided [name](str) and [id](DefID)
-    pub fn insert_type(&mut self, name: &'a str, id: DefID) -> Option<DefID> {
+    pub fn insert_type(&mut self, name: Sym, id: DefID) -> Option<DefID> {
         self.types.insert(name, id)
     }
 
     /// Inserts a value with the provided [name](str) and [id](DefID)
-    pub fn insert_value(&mut self, name: &'a str, id: DefID) -> Option<DefID> {
+    pub fn insert_value(&mut self, name: Sym, id: DefID) -> Option<DefID> {
         self.values.insert(name, id)
     }
 }
 
-impl std::fmt::Display for Module<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl std::fmt::Display for Module {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let Self { parent, types, values, imports } = self;
         if let Some(parent) = parent {
             writeln!(f, "Parent: {}", parent.get())?;

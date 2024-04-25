@@ -50,8 +50,8 @@ impl<'a> NameCollectable<'a> for Module {
         let Self { name: Identifier(name), kind } = self;
         let module =
             c.pool
-                .insert(Def { name, module: Mod::new(parent), ..Default::default() });
-        c[parent].module.types.insert(name, module);
+                .insert(Def { name: *name, module: Mod::new(parent), ..Default::default() });
+        c[parent].module.types.insert(*name, module);
 
         match kind {
             ModuleKind::Inline(file) => file.collect(c, module)?,
@@ -87,10 +87,10 @@ impl<'a> NameCollectable<'a> for Alias {
     fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
         let Alias { to: Identifier(name), .. } = self;
 
-        let def = Def { name, module: Mod::new(parent), ..Default::default() };
+        let def = Def { name: *name, module: Mod::new(parent), ..Default::default() };
         let id = c.pool.insert(def);
 
-        c[parent].module.types.insert(name, id);
+        c[parent].module.types.insert(*name, id);
         Ok(id)
     }
 }
@@ -98,10 +98,10 @@ impl<'a> NameCollectable<'a> for Enum {
     fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
         let Enum { name: Identifier(name), .. } = self;
 
-        let def = Def { name, module: Mod::new(parent), ..Default::default() };
+        let def = Def { name: *name, module: Mod::new(parent), ..Default::default() };
         let id = c.pool.insert(def);
 
-        c[parent].module.types.insert(name, id);
+        c[parent].module.types.insert(*name, id);
         Ok(id)
     }
 }
@@ -109,10 +109,10 @@ impl<'a> NameCollectable<'a> for Struct {
     fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
         let Struct { name: Identifier(name), .. } = self;
 
-        let def = Def { name, module: Mod::new(parent), ..Default::default() };
+        let def = Def { name: *name, module: Mod::new(parent), ..Default::default() };
         let id = c.pool.insert(def);
 
-        c[parent].module.types.insert(name, id);
+        c[parent].module.types.insert(*name, id);
         Ok(id)
     }
 }
@@ -122,10 +122,10 @@ impl<'a> NameCollectable<'a> for Const {
 
         let kind = DefKind::Undecided;
 
-        let def = Def { name, kind, module: Mod::new(parent), ..Default::default() };
+        let def = Def { name: *name, kind, module: Mod::new(parent), ..Default::default() };
         let id = c.pool.insert(def);
 
-        c[parent].module.values.insert(name, id);
+        c[parent].module.values.insert(*name, id);
         init.collect(c, id)?;
 
         Ok(id)
@@ -137,10 +137,10 @@ impl<'a> NameCollectable<'a> for Static {
 
         let kind = DefKind::Undecided;
 
-        let def = Def { name, kind, module: Mod::new(parent), ..Default::default() };
+        let def = Def { name: *name, kind, module: Mod::new(parent), ..Default::default() };
         let id = c.pool.insert(def);
 
-        c[parent].module.values.insert(name, id);
+        c[parent].module.values.insert(*name, id);
         init.collect(c, id)?;
 
         Ok(id)
@@ -152,10 +152,10 @@ impl<'a> NameCollectable<'a> for Function {
 
         let kind = DefKind::Undecided;
 
-        let def = Def { name, kind, module: Mod::new(parent), ..Default::default() };
+        let def = Def { name: *name, kind, module: Mod::new(parent), ..Default::default() };
         let id = c.pool.insert(def);
 
-        c[parent].module.values.insert(name, id);
+        c[parent].module.values.insert(*name, id);
         body.collect(c, id)?;
 
         Ok(id)

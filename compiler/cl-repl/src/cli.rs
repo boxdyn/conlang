@@ -45,10 +45,7 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn load_file(
-    env: &mut Environment,
-    path: impl AsRef<Path>,
-) -> Result<ConValue, Box<dyn Error>> {
+fn load_file(env: &mut Environment, path: impl AsRef<Path>) -> Result<ConValue, Box<dyn Error>> {
     let file = std::fs::read_to_string(path)?;
     let code = Parser::new(Lexer::new(&file)).file()?;
     Ok(env.eval(&code)?)
@@ -79,8 +76,8 @@ fn run_code(code: &str, env: &mut Environment) -> Result<(), Box<dyn Error>> {
         ConValue::Empty => {}
         ret => println!("{ret}"),
     }
-    if env.get("main").is_ok() {
-        match env.call("main", &[])? {
+    if env.get("main".into()).is_ok() {
+        match env.call("main".into(), &[])? {
             ConValue::Empty => {}
             ret => println!("{ret}"),
         }

@@ -6,6 +6,7 @@ use super::{
     temp_type_impl::ConValue,
     BuiltIn, Callable,
 };
+use cl_ast::Sym;
 use std::{
     io::{stdout, Write},
     rc::Rc,
@@ -68,7 +69,7 @@ builtins! {
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a + b),
-            (ConValue::String(a), ConValue::String(b)) => (a.to_string() + b).into(),
+            (ConValue::String(a), ConValue::String(b)) => (a.to_string() + &b.to_string()).into(),
             _ => Err(Error::TypeError)?
         })
     }
@@ -230,7 +231,7 @@ macro builtins (
                 $(let [$($arg),*] = to_args(args)?;)?
                 $body
             }
-            fn name(&self) -> &str { stringify!($name) }
+            fn name(&self) -> Sym { stringify!($name).into() }
         }
     )*
 }
@@ -242,7 +243,7 @@ macro cmp ($a:expr, $b:expr, $empty:literal, $op:tt) {
         (ConValue::Int(a), ConValue::Int(b)) => Ok(ConValue::Bool(a $op b)),
         (ConValue::Bool(a), ConValue::Bool(b)) => Ok(ConValue::Bool(a $op b)),
         (ConValue::Char(a), ConValue::Char(b)) => Ok(ConValue::Bool(a $op b)),
-        (ConValue::String(a), ConValue::String(b)) => Ok(ConValue::Bool(a $op b)),
+        (ConValue::String(a), ConValue::String(b)) => Ok(ConValue::Bool(a.get() $op b.get())),
         _ => Err(Error::TypeError)
     }
 }

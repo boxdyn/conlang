@@ -1,24 +1,24 @@
 use crate::{key::DefID, module::Module};
-use cl_ast::{Item, Meta, Visibility};
+use cl_ast::{Item, Meta, Sym, Visibility};
 use std::{fmt::Debug, str::FromStr};
 
 mod display;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Def<'a> {
-    pub name: &'a str,
+    pub name: Sym,
     pub vis: Visibility,
     pub meta: &'a [Meta],
-    pub kind: DefKind<'a>,
+    pub kind: DefKind,
     pub source: Option<&'a Item>,
-    pub module: Module<'a>,
+    pub module: Module,
 }
 
 mod builder_functions {
     use super::*;
 
     impl<'a> Def<'a> {
-        pub fn set_name(&mut self, name: &'a str) -> &mut Self {
+        pub fn set_name(&mut self, name: Sym) -> &mut Self {
             self.name = name;
             self
         }
@@ -30,7 +30,7 @@ mod builder_functions {
             self.meta = meta;
             self
         }
-        pub fn set_kind(&mut self, kind: DefKind<'a>) -> &mut Self {
+        pub fn set_kind(&mut self, kind: DefKind) -> &mut Self {
             self.kind = kind;
             self
         }
@@ -38,7 +38,7 @@ mod builder_functions {
             self.source = Some(source);
             self
         }
-        pub fn set_module(&mut self, module: Module<'a>) -> &mut Self {
+        pub fn set_module(&mut self, module: Module) -> &mut Self {
             self.module = module;
             self
         }
@@ -48,7 +48,7 @@ mod builder_functions {
 impl Default for Def<'_> {
     fn default() -> Self {
         Self {
-            name: Default::default(),
+            name: "".into(),
             vis: Visibility::Public,
             meta: Default::default(),
             kind: Default::default(),
@@ -59,7 +59,7 @@ impl Default for Def<'_> {
 }
 
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
-pub enum DefKind<'a> {
+pub enum DefKind {
     /// An unevaluated definition
     #[default]
     Undecided,
@@ -68,7 +68,7 @@ pub enum DefKind<'a> {
     /// A use tree, and its parent
     Use(DefID),
     /// A type, such as a `type`, `struct`, or `enum`
-    Type(TypeKind<'a>),
+    Type(TypeKind),
     /// A value, such as a `const`, `static`, or `fn`
     Value(ValueKind),
 }
@@ -84,13 +84,13 @@ pub enum ValueKind {
 /// A [TypeKind] represents an item in the Type Namespace
 /// (a component of a [Project](crate::project::Project)).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum TypeKind<'a> {
+pub enum TypeKind {
     /// An alias for an already-defined type
     Alias(Option<DefID>),
     /// A primitive type, built-in to the compiler
     Intrinsic(Intrinsic),
     /// A user-defined aromatic data type
-    Adt(Adt<'a>),
+    Adt(Adt),
     /// A reference to an already-defined type: &T
     Ref(u16, DefID),
     /// A contiguous view of dynamically sized memory
@@ -113,16 +113,16 @@ pub enum TypeKind<'a> {
 
 /// A user-defined Aromatic Data Type
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Adt<'a> {
+pub enum Adt {
     /// A union-like enum type
-    Enum(Vec<(&'a str, Option<DefID>)>),
+    Enum(Vec<(Sym, Option<DefID>)>),
     /// A C-like enum
-    CLikeEnum(Vec<(&'a str, u128)>),
+    CLikeEnum(Vec<(Sym, u128)>),
     /// An enum with no fields, which can never be constructed
     FieldlessEnum,
 
     /// A structural product type with named members
-    Struct(Vec<(&'a str, Visibility, DefID)>),
+    Struct(Vec<(Sym, Visibility, DefID)>),
     /// A structural product type with unnamed members
     TupleStruct(Vec<(Visibility, DefID)>),
     /// A structural product type of neither named nor unnamed members
@@ -130,7 +130,7 @@ pub enum Adt<'a> {
 
     /// A choose your own undefined behavior type
     /// TODO: should unions be a language feature?
-    Union(Vec<(&'a str, DefID)>),
+    Union(Vec<(Sym, DefID)>),
 }
 
 /// The set of compiler-intrinsic types.

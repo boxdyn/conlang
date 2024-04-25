@@ -131,9 +131,6 @@ fn list_types(prj: &mut Project) {
     println!("     name\x1b[30G  type");
     for (idx, Def { name, vis, kind, .. }) in prj.pool.iter().enumerate() {
         print!("{idx:3}: {vis}");
-        if name.is_empty() {
-            print!("\x1b[30m_\x1b[0m")
-        }
         println!("{name}\x1b[30G| {kind}");
     }
 }

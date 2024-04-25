@@ -471,7 +471,7 @@ pub mod yamlify {
     }
     impl Yamlify for Fielder {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { name: Identifier(name), init } = self;
+            let Self { name, init } = self;
             y.key("Fielder").pair("name", name).pair("init", init);
         }
     }

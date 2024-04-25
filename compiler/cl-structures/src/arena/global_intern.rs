@@ -1,4 +1,4 @@
-//!  A global intern pool for strings, represented by the [GlobalSym] symbol
+//!  A global intern pool for strings, represented by the [Sym] symbol
 
 use super::{intern::Interner, symbol::Symbol};
 use std::{
@@ -7,19 +7,19 @@ use std::{
     sync::{OnceLock, RwLock},
 };
 
-/// Holds a globally accessible [Interner] which uses [GlobalSym] as its [Symbol]
-static GLOBAL_INTERNER: OnceLock<RwLock<Interner<GlobalSym>>> = OnceLock::new();
+/// Holds a globally accessible [Interner] which uses [Sym] as its [Symbol]
+static GLOBAL_INTERNER: OnceLock<RwLock<Interner<Sym>>> = OnceLock::new();
 
-/// A unique identifier corresponding to a particular interned [String].
+/// A unique identifier corresponding to a particular globally-interned [String].
 ///
-/// Copies of that string can be obtained with [GlobalSym::get] or [String::try_from].
+/// Copies of that string can be obtained with [Sym::get] or [String::try_from].
 ///
-/// New strings can be interned with [GlobalSym::new] or [GlobalSym::from]
+/// New strings can be interned with [Sym::new] or [Sym::from]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct GlobalSym(NonZeroU32);
+pub struct Sym(NonZeroU32);
 
-impl GlobalSym {
-    /// Gets the interned [GlobalSym] for the given value, or interns a new one.
+impl Sym {
+    /// Gets the interned [Sym] for the given value, or interns a new one.
     ///
     /// # Blocks
     /// This conversion blocks if the Global Interner lock is held.
@@ -33,25 +33,25 @@ impl GlobalSym {
             .expect("global interner should not be poisoned in another thread")
             .get_or_insert(value)
     }
-    /// Gets a [GlobalSym] associated with the given string, if one already exists
+    /// Gets a [Sym] associated with the given string, if one already exists
     pub fn try_from_str(value: &str) -> Option<Self> {
         GLOBAL_INTERNER.get()?.read().ok()?.get(value)
     }
 
-    /// Gets a copy of the value of the [GlobalSym]
+    /// Gets a copy of the value of the [Sym]
     // TODO: Make this copy-less
     pub fn get(self) -> Option<String> {
         String::try_from(self).ok()
     }
 
-    /// Looks up the string associated with this [GlobalSym],
+    /// Looks up the string associated with this [Sym],
     /// and performs a transformation on it if it exists.
     pub fn map<T>(&self, f: impl Fn(&str) -> T) -> Option<T> {
         Some(f(GLOBAL_INTERNER.get()?.read().ok()?.get_str(*self)?))
     }
 }
 
-impl Display for GlobalSym {
+impl Display for Sym {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Some(interner) = GLOBAL_INTERNER.get() else {
             return write!(f, "[sym@{} (uninitialized)]", self.0);
@@ -66,7 +66,7 @@ impl Display for GlobalSym {
     }
 }
 
-impl Symbol for GlobalSym {
+impl Symbol for Sym {
     const MAX: usize = u32::MAX as usize - 1;
     fn try_from_usize(value: usize) -> Option<Self> {
         Some(Self(NonZeroU32::try_from_usize(value)?))
@@ -76,7 +76,7 @@ impl Symbol for GlobalSym {
     }
 }
 
-impl<T: AsRef<str>> From<T> for GlobalSym {
+impl<T: AsRef<str>> From<T> for Sym {
     /// Converts to this type from the input type.
     ///
     /// # Blocks
@@ -89,36 +89,37 @@ impl<T: AsRef<str>> From<T> for GlobalSym {
     }
 }
 
-impl TryFrom<GlobalSym> for String {
-    type Error = GlobalSymError;
+impl TryFrom<Sym> for String {
+    type Error = SymError;
 
-    fn try_from(value: GlobalSym) -> Result<Self, Self::Error> {
+    fn try_from(value: Sym) -> Result<Self, Self::Error> {
         let Some(interner) = GLOBAL_INTERNER.get() else {
-            Err(GlobalSymError::Uninitialized)?
+            Err(SymError::Uninitialized)?
         };
         let Ok(interner) = interner.write() else {
-            Err(GlobalSymError::Poisoned)?
+            Err(SymError::Poisoned)?
         };
         match interner.get_str(value) {
-            None => Err(GlobalSymError::Unseen(value)),
+            None => Err(SymError::Unseen(value)),
             Some(string) => Ok(string.into()),
         }
     }
 }
 
+/// Describes an error in [Sym] to [String] lookup
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum GlobalSymError {
+pub enum SymError {
     Uninitialized,
     Poisoned,
-    Unseen(GlobalSym),
+    Unseen(Sym),
 }
-impl std::error::Error for GlobalSymError {}
-impl Display for GlobalSymError {
+impl std::error::Error for SymError {}
+impl Display for SymError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            GlobalSymError::Uninitialized => "String pool was not initialized".fmt(f),
-            GlobalSymError::Poisoned => "String pool was held by panicking thread".fmt(f),
-            GlobalSymError::Unseen(sym) => {
+            SymError::Uninitialized => "String pool was not initialized".fmt(f),
+            SymError::Poisoned => "String pool was held by panicking thread".fmt(f),
+            SymError::Unseen(sym) => {
                 write!(f, "Symbol {sym:?} not present in String pool")
             }
         }

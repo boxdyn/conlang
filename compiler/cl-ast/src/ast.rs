@@ -11,6 +11,8 @@
 //! - [Path]: Path expressions
 use cl_structures::span::*;
 
+pub use cl_structures::arena::global_intern::Sym;
+
 /// Whether a binding ([Static] or [Let]) or reference is mutable or not
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum Mutability {
@@ -30,7 +32,7 @@ pub enum Visibility {
 // TODO: Capture token?
 /// A name
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Identifier(pub String);
+pub struct Identifier(pub Sym);
 
 /// A [Literal]: 0x42, 1e123, 2.4, "Hello"
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

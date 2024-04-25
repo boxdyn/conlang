@@ -112,7 +112,7 @@ impl Interpret for Let {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Let { mutable: _, name: Identifier(name), ty: _, init } = self;
         let init = init.as_ref().map(|i| i.interpret(env)).transpose()?;
-        env.insert(name, init);
+        env.insert(*name, init);
         Ok(ConValue::Empty)
     }
 }
@@ -172,7 +172,7 @@ impl Interpret for Assign {
         };
         // Get the initializer and the tail
         let init = tail.interpret(env)?;
-        let target = env.get_mut(head)?;
+        let target = env.get_mut(*head)?;
 
         if let AssignKind::Plain = op {
             use std::mem::discriminant as variant;
@@ -187,7 +187,7 @@ impl Interpret for Assign {
             return Ok(ConValue::Empty);
         }
         let Some(target) = target else {
-            return Err(Error::NotInitialized(head.into()));
+            return Err(Error::NotInitialized(*head));
         };
 
         match op {
@@ -302,9 +302,9 @@ impl Interpret for Unary {
         let Unary { kind, tail } = self;
         let operand = tail.interpret(env)?;
         match kind {
-            UnaryKind::Deref => env.call("deref", &[operand]),
-            UnaryKind::Neg => env.call("neg", &[operand]),
-            UnaryKind::Not => env.call("not", &[operand]),
+            UnaryKind::Deref => env.call("deref".into(), &[operand]),
+            UnaryKind::Neg => env.call("neg".into(), &[operand]),
+            UnaryKind::Not => env.call("not".into(), &[operand]),
             UnaryKind::At => {
                 println!("{operand}");
                 Ok(operand)
@@ -335,7 +335,7 @@ impl Interpret for Path {
         if parts.len() == 1 {
             match parts.last().expect("parts should not be empty") {
                 PathPart::SuperKw | PathPart::SelfKw => todo!("Path navigation"),
-                PathPart::Ident(Identifier(s)) => env.get(s),
+                PathPart::Ident(Identifier(name)) => env.get(*name),
             }
         } else {
             todo!("Path navigation!")
@@ -469,7 +469,7 @@ impl Interpret for For {
         loop {
             let mut env = env.frame("loop variable");
             if let Some(loop_var) = bounds.next() {
-                env.insert(name, Some(loop_var.into()));
+                env.insert(*name, Some(loop_var.into()));
                 match pass.interpret(&mut env) {
                     Err(Error::Break(value)) => return Ok(value),
                     Err(Error::Continue) => continue,

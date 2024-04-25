@@ -45,7 +45,7 @@ pub trait TypeResolvable<'a> {
 }
 
 impl<'a> TypeResolvable<'a> for Item {
-    type Out = DefKind<'a>;
+    type Out = DefKind;
     fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
         let Self { attrs: Attrs { meta }, kind, .. } = self;
         for meta in meta {
@@ -58,11 +58,12 @@ impl<'a> TypeResolvable<'a> for Item {
 }
 
 impl<'a> TypeResolvable<'a> for Meta {
-    type Out = DefKind<'a>;
+    type Out = DefKind;
 
     #[allow(unused_variables)]
     fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
         let Self { name: Identifier(name), kind } = self;
+        let name = name.get().unwrap_or_default();
         match (name.as_str(), kind) {
             ("intrinsic", MetaKind::Equals(Literal::String(intrinsic))) => Ok(DefKind::Type(
                 TypeKind::Intrinsic(intrinsic.parse().map_err(|_| "unknown intrinsic type")?),
@@ -76,7 +77,7 @@ impl<'a> TypeResolvable<'a> for Meta {
 }
 
 impl<'a> TypeResolvable<'a> for ItemKind {
-    type Out = DefKind<'a>;
+    type Out = DefKind;
     fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
         if prj[id].source.map(|s| &s.kind as *const _) != Some(self as *const _) {
             return Err("id is not self!");
@@ -96,7 +97,7 @@ impl<'a> TypeResolvable<'a> for ItemKind {
 }
 
 impl<'a> TypeResolvable<'a> for Module {
-    type Out = DefKind<'a>;
+    type Out = DefKind;
     #[allow(unused_variables)]
     fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
         Ok(DefKind::Type(TypeKind::Module))
@@ -104,7 +105,7 @@ impl<'a> TypeResolvable<'a> for Module {
 }
 
 impl<'a> TypeResolvable<'a> for Impl {
-    type Out = DefKind<'a>;
+    type Out = DefKind;
 
     fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
         let parent = prj.parent_of(id).unwrap_or(id);
@@ -122,7 +123,7 @@ impl<'a> TypeResolvable<'a> for Impl {
 }
 
 impl<'a> TypeResolvable<'a> for Use {
-    type Out = DefKind<'a>;
+    type Out = DefKind;
 
     fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
         todo!("Resolve types for {self} with ID {id} in {prj:?}")
@@ -130,7 +131,7 @@ impl<'a> TypeResolvable<'a> for Use {
 }
 
 impl<'a> TypeResolvable<'a> for Alias {
-    type Out = DefKind<'a>;
+    type Out = DefKind;
 
     fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
         let parent = prj.parent_of(id).unwrap_or(id);
@@ -149,7 +150,7 @@ impl<'a> TypeResolvable<'a> for Alias {
 }
 
 impl<'a> TypeResolvable<'a> for Enum {
-    type Out = DefKind<'a>;
+    type Out = DefKind;
 
     fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
         let Self { name: _, kind } = self;
@@ -159,7 +160,7 @@ impl<'a> TypeResolvable<'a> for Enum {
         let mut fields = vec![];
         for v @ Variant { name: Identifier(name), kind: _ } in v {
             let id = v.resolve_type(prj, id)?;
-            fields.push((name.as_str(), id))
+            fields.push((*name, id))
         }
         Ok(DefKind::Type(TypeKind::Adt(Adt::Enum(fields))))
     }
@@ -185,7 +186,7 @@ impl<'a> TypeResolvable<'a> for Variant {
         };
 
         let def = Def {
-            name,
+            name: *name,
             kind: DefKind::Type(TypeKind::Adt(adt)),
             module: module::Module::new(id),
             ..Default::default()
@@ -193,14 +194,14 @@ impl<'a> TypeResolvable<'a> for Variant {
 
         let new_id = prj.pool.insert(def);
         // Insert the struct variant type into the enum's namespace
-        prj[id].module.types.insert(name, new_id);
+        prj[id].module.types.insert(*name, new_id);
 
         Ok(Some(new_id))
     }
 }
 
 impl<'a> TypeResolvable<'a> for Struct {
-    type Out = DefKind<'a>;
+    type Out = DefKind;
     fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
         let parent = prj.parent_of(id).unwrap_or(id);
         let Self { name: _, kind } = self;
@@ -225,7 +226,7 @@ impl<'a> TypeResolvable<'a> for Struct {
 }
 
 impl<'a> TypeResolvable<'a> for StructMember {
-    type Out = (&'a str, Visibility, DefID);
+    type Out = (Sym, Visibility, DefID);
 
     fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
         let parent = prj.parent_of(id).unwrap_or(id);
@@ -235,12 +236,12 @@ impl<'a> TypeResolvable<'a> for StructMember {
             .evaluate(prj, parent)
             .map_err(|_| "Invalid type while resolving StructMember")?;
 
-        Ok((name, *vis, ty))
+        Ok((*name, *vis, ty))
     }
 }
 
 impl<'a> TypeResolvable<'a> for Const {
-    type Out = DefKind<'a>;
+    type Out = DefKind;
 
     fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
         let Self { ty, .. } = self;
@@ -251,7 +252,7 @@ impl<'a> TypeResolvable<'a> for Const {
     }
 }
 impl<'a> TypeResolvable<'a> for Static {
-    type Out = DefKind<'a>;
+    type Out = DefKind;
 
     fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
         let parent = prj.parent_of(id).unwrap_or(id);
@@ -264,7 +265,7 @@ impl<'a> TypeResolvable<'a> for Static {
 }
 
 impl<'a> TypeResolvable<'a> for Function {
-    type Out = DefKind<'a>;
+    type Out = DefKind;
 
     fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
         let parent = prj.parent_of(id).unwrap_or(id);

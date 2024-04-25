@@ -127,7 +127,7 @@ mod macros {
     }
 
     pub macro env_ne($env:ident.$var:ident, $expr:expr) {{
-        let evaluated = $env.get(stringify!($var))
+        let evaluated = $env.get(stringify!($var).into())
             .expect(stringify!($var should be defined and initialized));
         if !conv_cmp!(neq, evaluated, $expr) {
             panic!("assertion {} ({evaluated}) != {} failed.", stringify!($var), stringify!($expr))
@@ -135,7 +135,7 @@ mod macros {
     }}
 
     pub macro env_eq($env:ident.$var:ident, $expr:expr) {{
-        let evaluated = $env.get(stringify!($var))
+        let evaluated = $env.get(stringify!($var).into())
             .expect(stringify!($var should be defined and initialized));
         if !conv_cmp!(eq, evaluated, $expr) {
             panic!("assertion {} ({evaluated}) == {} failed.", stringify!($var), stringify!($expr))
@@ -190,7 +190,7 @@ mod fn_declarations {
             "fn empty_fn () {\n    \n}",
             format!(
                 "{}",
-                env.get("empty_fn")
+                env.get("empty_fn".into())
                     .expect(stringify!(empty_fn should be defined and initialized))
             )
         )

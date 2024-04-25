@@ -2,6 +2,7 @@
 #![warn(clippy::all)]
 #![feature(decl_macro)]
 
+use cl_ast::Sym;
 use env::Environment;
 use error::{Error, IResult};
 use interpret::Interpret;
@@ -13,7 +14,7 @@ pub trait Callable: std::fmt::Debug {
     /// The Callable is responsible for checking the argument count and validating types
     fn call(&self, interpreter: &mut Environment, args: &[ConValue]) -> IResult<ConValue>;
     /// Returns the common name of this identifier.
-    fn name(&self) -> &str;
+    fn name(&self) -> Sym;
 }
 
 /// [BuiltIn]s are [Callable]s with bespoke definitions
@@ -25,6 +26,8 @@ pub mod temp_type_impl {
     //! Temporary implementations of Conlang values
     //!
     //! The most permanent fix is a temporary one.
+    use cl_ast::Sym;
+
     use super::{
         error::{Error, IResult},
         function::Function,
@@ -50,7 +53,7 @@ pub mod temp_type_impl {
         /// A unicode character
         Char(char),
         /// A string
-        String(Rc<str>),
+        String(Sym),
         /// A reference
         Ref(Rc<ConValue>),
         /// An Array
@@ -120,11 +123,11 @@ pub mod temp_type_impl {
     }
 
     impl Callable for ConValue {
-        fn name(&self) -> &str {
+        fn name(&self) -> Sym {
             match self {
                 ConValue::Function(func) => func.name(),
                 ConValue::BuiltIn(func) => func.name(),
-                _ => "",
+                _ => "".into(),
             }
         }
         fn call(&self, interpreter: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
@@ -145,7 +148,7 @@ pub mod temp_type_impl {
                 (Self::Int(a), Self::Int(b)) => Ok(Self::Bool(a $op b)),
                 (Self::Bool(a), Self::Bool(b)) => Ok(Self::Bool(a $op b)),
                 (Self::Char(a), Self::Char(b)) => Ok(Self::Bool(a $op b)),
-                (Self::String(a), Self::String(b)) => Ok(Self::Bool(a $op b)),
+                (Self::String(a), Self::String(b)) => Ok(Self::Bool(a.get() $op b.get())),
                 _ => Err(Error::TypeError)
             }
         }
@@ -162,10 +165,16 @@ pub mod temp_type_impl {
             fn from(value: $T) -> Self { $v(value.into()) }
         })*
     }
+    impl From<&Sym> for ConValue {
+        fn from(value: &Sym) -> Self {
+            ConValue::String(*value)
+        }
+    }
     from! {
         Integer => ConValue::Int,
         bool => ConValue::Bool,
         char => ConValue::Char,
+        Sym => ConValue::String,
         &str => ConValue::String,
         String => ConValue::String,
         Rc<str> => ConValue::String,
@@ -202,7 +211,7 @@ pub mod temp_type_impl {
         Add: add = [
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a + b),
-            (ConValue::String(a), ConValue::String(b)) => (a.to_string() + &b).into(),
+            (ConValue::String(a), ConValue::String(b)) => (a.to_string() + &b.to_string()).into(),
             _ => Err(Error::TypeError)?
             ]
         BitAnd: bitand = [
@@ -302,7 +311,7 @@ pub mod function {
     //! Represents a block of code which lives inside the Interpreter
 
     use super::{Callable, ConValue, Environment, Error, IResult, Interpret};
-    use cl_ast::{Function as FnDecl, Identifier, Param};
+    use cl_ast::{Function as FnDecl, Identifier, Param, Sym};
     use std::rc::Rc;
     /// Represents a block of code which persists inside the Interpreter
     #[derive(Clone, Debug)]
@@ -323,8 +332,8 @@ pub mod function {
     }
 
     impl Callable for Function {
-        fn name(&self) -> &str {
-            let FnDecl { name: Identifier(ref name), .. } = *self.decl;
+        fn name(&self) -> Sym {
+            let FnDecl { name: Identifier(name), .. } = *self.decl;
             name
         }
         fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
@@ -334,12 +343,12 @@ pub mod function {
                 return Err(Error::ArgNumber { want: bind.len(), got: args.len() });
             }
             let Some(body) = body else {
-                return Err(Error::NotDefined(name.into()));
+                return Err(Error::NotDefined(*name));
             };
             // TODO: completely refactor data storage
             let mut frame = env.frame("fn args");
             for (Param { mutability: _, name: Identifier(name) }, value) in bind.iter().zip(args) {
-                frame.insert(name, Some(value.clone()));
+                frame.insert(*name, Some(value.clone()));
             }
             match body.interpret(&mut frame) {
                 Err(Error::Return(value)) => Ok(value),
@@ -361,14 +370,14 @@ pub mod env {
         temp_type_impl::ConValue,
         BuiltIn, Callable, Interpret,
     };
-    use cl_ast::{Function as FnDecl, Identifier};
+    use cl_ast::{Function as FnDecl, Identifier, Sym};
     use std::{
         collections::HashMap,
         fmt::Display,
         ops::{Deref, DerefMut},
     };
 
-    type StackFrame = HashMap<String, Option<ConValue>>;
+    type StackFrame = HashMap<Sym, Option<ConValue>>;
 
     /// Implements a nested lexical scope
     #[derive(Clone, Debug)]
@@ -404,10 +413,8 @@ pub mod env {
             }
         }
     }
-    fn to_hashmap(from: &[&'static dyn BuiltIn]) -> HashMap<String, Option<ConValue>> {
-        from.iter()
-            .map(|&v| (v.name().into(), Some(v.into())))
-            .collect()
+    fn to_hashmap(from: &[&'static dyn BuiltIn]) -> HashMap<Sym, Option<ConValue>> {
+        from.iter().map(|&v| (v.name(), Some(v.into()))).collect()
     }
 
     impl Environment {
@@ -425,7 +432,7 @@ pub mod env {
 
         /// Calls a function inside the interpreter's scope,
         /// and returns the result
-        pub fn call(&mut self, name: &str, args: &[ConValue]) -> IResult<ConValue> {
+        pub fn call(&mut self, name: Sym, args: &[ConValue]) -> IResult<ConValue> {
             // FIXME: Clone to satisfy the borrow checker
             let function = self.get(name)?.clone();
             function.call(self, args)
@@ -439,39 +446,39 @@ pub mod env {
         /// Resolves a variable mutably.
         ///
         /// Returns a mutable reference to the variable's record, if it exists.
-        pub fn get_mut(&mut self, id: &str) -> IResult<&mut Option<ConValue>> {
+        pub fn get_mut(&mut self, id: Sym) -> IResult<&mut Option<ConValue>> {
             for (frame, _) in self.frames.iter_mut().rev() {
-                if let Some(var) = frame.get_mut(id) {
+                if let Some(var) = frame.get_mut(&id) {
                     return Ok(var);
                 }
             }
-            Err(Error::NotDefined(id.into()))
+            Err(Error::NotDefined(id))
         }
         /// Resolves a variable immutably.
         ///
         /// Returns a reference to the variable's contents, if it is defined and initialized.
-        pub fn get(&self, id: &str) -> IResult<ConValue> {
+        pub fn get(&self, id: Sym) -> IResult<ConValue> {
             for (frame, _) in self.frames.iter().rev() {
-                match frame.get(id) {
+                match frame.get(&id) {
                     Some(Some(var)) => return Ok(var.clone()),
-                    Some(None) => return Err(Error::NotInitialized(id.into())),
+                    Some(None) => return Err(Error::NotInitialized(id)),
                     _ => (),
                 }
             }
-            Err(Error::NotDefined(id.into()))
+            Err(Error::NotDefined(id))
         }
         /// Inserts a new [ConValue] into this [Environment]
-        pub fn insert(&mut self, id: &str, value: Option<ConValue>) {
+        pub fn insert(&mut self, id: Sym, value: Option<ConValue>) {
             if let Some((frame, _)) = self.frames.last_mut() {
-                frame.insert(id.into(), value);
+                frame.insert(id, value);
             }
         }
         /// A convenience function for registering a [FnDecl] as a [Function]
         pub fn insert_fn(&mut self, decl: &FnDecl) {
             let FnDecl { name: Identifier(name), .. } = decl;
-            let (name, function) = (name.clone(), Some(Function::new(decl).into()));
+            let (name, function) = (name, Some(Function::new(decl).into()));
             if let Some((frame, _)) = self.frames.last_mut() {
-                frame.insert(name, function);
+                frame.insert(*name, function);
             }
         }
     }
@@ -525,6 +532,8 @@ pub mod env {
 pub mod error {
     //! The [Error] type represents any error thrown by the [Environment](super::Environment)
 
+    use cl_ast::Sym;
+
     use super::temp_type_impl::ConValue;
 
     pub type IResult<T> = Result<T, Error>;
@@ -556,9 +565,9 @@ pub mod error {
         /// An expression is not assignable
         NotAssignable,
         /// A name was not defined in scope before being used
-        NotDefined(String),
+        NotDefined(Sym),
         /// A name was defined but not initialized
-        NotInitialized(String),
+        NotInitialized(Sym),
         /// A value was called, but is not callable
         NotCallable(ConValue),
         /// A function was called with the wrong number of arguments

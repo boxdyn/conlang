@@ -18,7 +18,7 @@ use self::evaluate::EvaluableTypeExpression;
 pub struct Project<'a> {
     pub pool: Pool<Def<'a>, DefID>,
     /// Stores anonymous tuples, function pointer types, etc.
-    pub anon_types: HashMap<TypeKind<'a>, DefID>,
+    pub anon_types: HashMap<TypeKind, DefID>,
     pub root: DefID,
 }
 
@@ -32,21 +32,21 @@ impl Default for Project<'_> {
     fn default() -> Self {
         let mut pool = Pool::default();
         let root = pool.insert(Def {
-            name: "🌳 root 🌳",
+            name: "🌳 root 🌳".into(),
             kind: DefKind::Type(TypeKind::Module),
             ..Default::default()
         });
 
         // Insert the Never(!) type
         let never = pool.insert(Def {
-            name: "!",
+            name: "!".into(),
             vis: Visibility::Public,
             kind: DefKind::Type(TypeKind::Never),
             module: module::Module::new(root),
             ..Default::default()
         });
         let empty = pool.insert(Def {
-            name: "()",
+            name: "()".into(),
             vis: Visibility::Public,
             kind: DefKind::Type(TypeKind::Empty),
             module: module::Module::new(root),
@@ -54,7 +54,7 @@ impl Default for Project<'_> {
         });
         // TODO: Self is not a real type!
         let selfty = pool.insert(Def {
-            name: "Self",
+            name: "Self".into(),
             vis: Visibility::Public,
             kind: DefKind::Type(TypeKind::SelfTy),
             module: module::Module::new(root),
@@ -92,11 +92,11 @@ impl<'a> Project<'a> {
         match path.as_ref() {
             [] => Some((Some(within), None, path)),
             [PathPart::Ident(Identifier(name))] => {
-                let (ty, val) = self[within].module.get(name);
+                let (ty, val) = self[within].module.get(*name);
                 Some((ty, val, path.pop_front()?))
             }
             [PathPart::Ident(Identifier(name)), ..] => {
-                let ty = self[within].module.get_type(name)?;
+                let ty = self[within].module.get_type(*name)?;
                 self.get(path.pop_front()?, ty)
             }
             [PathPart::SelfKw, ..] => self.get(path.pop_front()?, within),
@@ -114,7 +114,7 @@ impl<'a> Project<'a> {
             match front {
                 PathPart::SelfKw => self.get_type(path.pop_front()?, within),
                 PathPart::SuperKw => self.get_type(path.pop_front()?, module.parent?),
-                PathPart::Ident(Identifier(name)) => match module.types.get(name.as_str()) {
+                PathPart::Ident(Identifier(name)) => match module.types.get(name) {
                     Some(&submodule) => self.get_type(path.pop_front()?, submodule),
                     None => Some((within, path)),
                 },
@@ -127,7 +127,7 @@ impl<'a> Project<'a> {
     pub fn get_value<'p>(&self, path: Path<'p>, within: DefID) -> Option<(DefID, Path<'p>)> {
         match path.front()? {
             PathPart::Ident(Identifier(name)) => Some((
-                self[within].module.values.get(name.as_str()).copied()?,
+                self[within].module.values.get(name).copied()?,
                 path.pop_front()?,
             )),
             _ => None,
@@ -139,7 +139,7 @@ impl<'a> Project<'a> {
     /// Assumes `kind` uniquely identifies the type!
     pub fn insert_anonymous_type(
         &mut self,
-        kind: TypeKind<'a>,
+        kind: TypeKind,
         def: impl FnOnce() -> Def<'a>,
     ) -> DefID {
         *(self
@@ -171,7 +171,7 @@ pub mod evaluate {
     //! or an intermediate result of expression evaluation.
 
     use super::*;
-    use cl_ast::Ty;
+    use cl_ast::{Sym, Ty};
 
     /// Things that can be evaluated as a type expression
     pub trait EvaluableTypeExpression {
@@ -203,8 +203,7 @@ pub mod evaluate {
                     if path.is_empty() {
                         id
                     } else {
-                        let (id, path) =
-                            prj.get_value(path, id).ok_or("Failed to get value")?;
+                        let (id, path) = prj.get_value(path, id).ok_or("Failed to get value")?;
                         path.is_empty()
                             .then_some(id)
                             .ok_or("Path not fully resolved")?
@@ -220,7 +219,7 @@ pub mod evaluate {
         }
     }
 
-    impl EvaluableTypeExpression for str {
+    impl EvaluableTypeExpression for Sym {
         type Out = DefID;
 
         fn evaluate(&self, prj: &mut Project, parent: DefID) -> Result<Self::Out, String> {
@@ -298,7 +297,7 @@ pub mod evaluate {
                     .parent_of(parent)
                     .ok_or_else(|| "Attempt to get super of root".into()),
                 PathPart::SelfKw => Ok(parent),
-                PathPart::Ident(Identifier(name)) => name.as_str().evaluate(prj, parent),
+                PathPart::Ident(Identifier(name)) => name.evaluate(prj, parent),
             }
         }
     }
