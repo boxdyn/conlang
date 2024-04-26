@@ -35,7 +35,7 @@ macro_rules! make_intern_key {($($(#[$meta:meta])* $name:ident),*$(,)?) => {$(
     #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct $name(usize);
 
-    impl $crate::intern_pool::InternKey for $name {
+    impl $crate::deprecated_intern_pool::InternKey for $name {
         #[doc = concat!("Constructs a [`", stringify!($name), "`] from a [`usize`] without checking bounds.\n")]
         /// # Safety
         ///

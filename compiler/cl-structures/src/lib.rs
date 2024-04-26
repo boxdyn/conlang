@@ -13,4 +13,4 @@ pub mod tree;
 
 pub mod stack;
 
-pub mod intern_pool;
+pub mod deprecated_intern_pool;

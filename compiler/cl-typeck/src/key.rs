@@ -1,4 +1,4 @@
-use cl_structures::intern_pool::*;
+use cl_structures::deprecated_intern_pool::*;
 
 // define the index types
 make_intern_key! {

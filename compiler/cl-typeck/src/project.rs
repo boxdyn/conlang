@@ -6,7 +6,7 @@ use crate::{
     path::Path,
 };
 use cl_ast::{Identifier, PathPart, TyFn, TyKind, TyRef, TyTuple, Visibility};
-use cl_structures::intern_pool::Pool;
+use cl_structures::deprecated_intern_pool::Pool;
 use std::{
     collections::HashMap,
     ops::{Index, IndexMut},
