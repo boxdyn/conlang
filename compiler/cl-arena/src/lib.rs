@@ -2,7 +2,7 @@
 //!
 //! An Arena Allocator is a type of allocator which provides stable locations for allocations within
 //! itself for the entire duration of its lifetime.
-//! 
+//!
 //! [1]: https://raw.githubusercontent.com/rust-lang/rust/master/LICENSE-MIT
 
 #![feature(dropck_eyepatch, new_uninit, strict_provenance)]
@@ -96,18 +96,18 @@ pub mod typed_arena {
 
     impl<T> Default for TypedArena<T> {
         fn default() -> Self {
-            Self {
-                _drops: Default::default(),
-                chunks: Default::default(),
-                head: Cell::new(ptr::null_mut()),
-                tail: Cell::new(ptr::null_mut()),
-            }
+            Self::new()
         }
     }
 
     impl<T> TypedArena<T> {
-        pub fn new() -> Self {
-            Self::default()
+        pub const fn new() -> Self {
+            Self {
+                _drops: PhantomData,
+                chunks: RefCell::new(Vec::new()),
+                head: Cell::new(ptr::null_mut()),
+                tail: Cell::new(ptr::null_mut()),
+            }
         }
 
         #[allow(clippy::mut_from_ref)]
@@ -205,17 +205,17 @@ pub mod dropless_arena {
 
     impl Default for DroplessArena {
         fn default() -> Self {
-            Self {
-                chunks: Default::default(),
-                head: Cell::new(ptr::null_mut()),
-                tail: Cell::new(ptr::null_mut()),
-            }
+            Self::new()
         }
     }
 
     impl DroplessArena {
-        pub fn new() -> Self {
-            Self::default()
+        pub const fn new() -> Self {
+            Self {
+                chunks: RefCell::new(Vec::new()),
+                head: Cell::new(ptr::null_mut()),
+                tail: Cell::new(ptr::null_mut()),
+            }
         }
 
         /// Allocates a `T` in the [DroplessArena], and returns a mutable reference to it.
