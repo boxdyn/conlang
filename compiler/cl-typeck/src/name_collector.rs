@@ -8,24 +8,6 @@ use crate::{
 use cl_ast::{ast_visitor::Visit, *};
 use std::mem;
 
-pub trait NameCollectable<'a> {
-    /// Collects the identifiers within this node,
-    /// returning a new [DefID] if any were allocated,
-    /// else returning the parent [DefID]
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str>;
-
-    fn collect_in_root(&'a self, c: &mut Prj<'a>) -> Result<DefID, &'static str> {
-        self.collect(c, c.root)
-    }
-}
-
-impl<'a> NameCollectable<'a> for File {
-    fn collect(&'a self, prj: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        NameCollector::with_root(prj, parent).visit_file(self);
-        Ok(parent)
-    }
-}
-
 #[derive(Debug)]
 pub struct NameCollector<'prj, 'a> {
     prj: &'prj mut Prj<'a>,
@@ -34,9 +16,11 @@ pub struct NameCollector<'prj, 'a> {
 }
 
 impl<'prj, 'a> NameCollector<'prj, 'a> {
+    /// Constructs a new [NameCollector] out of a [Project](Prj)
     pub fn new(prj: &'prj mut Prj<'a>) -> Self {
         Self { parent: prj.root, prj, retval: None }
     }
+    /// Constructs a new [NameCollector] out of a [Project](Prj) and a parent [DefID]
     pub fn with_root(prj: &'prj mut Prj<'a>, parent: DefID) -> Self {
         Self { prj, parent, retval: None }
     }
@@ -56,7 +40,7 @@ impl<'prj, 'a> NameCollector<'prj, 'a> {
     }
 }
 
-impl<'prj, 'a> ast_visitor::Visit<'a> for NameCollector<'prj, 'a> {
+impl<'prj, 'a> Visit<'a> for NameCollector<'prj, 'a> {
     fn visit_item(&mut self, i: &'a Item) {
         let Item { extents: _, attrs, vis, kind } = i;
         if let Some(def) = self.returns(kind, Self::visit_item_kind) {

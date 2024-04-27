@@ -1,11 +1,11 @@
 use cl_ast::{
-    ast_visitor::fold::Fold,
+    ast_visitor::{Fold, Visit},
     desugar::{squash_groups::SquashGroups, while_else::WhileElseDesugar},
 };
 use cl_lexer::Lexer;
 use cl_parser::{inliner::ModuleInliner, Parser};
 use cl_typeck::{
-    definition::Def, name_collector::NameCollectable, project::Project, type_resolver::resolve,
+    definition::Def, name_collector::NameCollector, project::Project, type_resolver::resolve,
 };
 use repline::{error::Error as RlError, prebaked::*};
 use std::{error::Error, path};
@@ -38,8 +38,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     };
     let code = inline_modules(code, concat!(env!("PWD"), "/stdlib"));
-
-    unsafe { TREES.push(code) }.collect_in_root(&mut prj)?;
+    NameCollector::new(&mut prj).visit_file(unsafe { TREES.push(code) });
 
     main_menu(&mut prj)?;
     Ok(())
@@ -84,7 +83,7 @@ fn enter_code(prj: &mut Project) -> Result<(), RlError> {
         let code = inline_modules(code, "");
         let code = WhileElseDesugar.fold_file(code);
         // Safety: this is totally unsafe
-        unsafe { TREES.push(code) }.collect_in_root(prj)?;
+        NameCollector::new(prj).visit_file(unsafe { TREES.push(code) });
 
         Ok(Response::Accept)
     })
