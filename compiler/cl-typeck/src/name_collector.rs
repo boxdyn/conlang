@@ -5,7 +5,8 @@ use crate::{
     module::Module as Mod,
     project::Project as Prj,
 };
-use cl_ast::*;
+use cl_ast::{ast_visitor::Visit, *};
+use std::mem;
 
 pub trait NameCollectable<'a> {
     /// Collects the identifiers within this node,
@@ -19,227 +20,149 @@ pub trait NameCollectable<'a> {
 }
 
 impl<'a> NameCollectable<'a> for File {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        for item in &self.items {
-            item.collect(c, parent)?;
-        }
+    fn collect(&'a self, prj: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+        NameCollector::with_root(prj, parent).visit_file(self);
         Ok(parent)
     }
 }
-impl<'a> NameCollectable<'a> for Item {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        let Item { attrs: Attrs { meta }, vis, kind, .. } = self;
-        let id = match kind {
-            ItemKind::Impl(i) => i.collect(c, parent),
-            ItemKind::Module(i) => i.collect(c, parent),
-            ItemKind::Alias(i) => i.collect(c, parent),
-            ItemKind::Enum(i) => i.collect(c, parent),
-            ItemKind::Struct(i) => i.collect(c, parent),
-            ItemKind::Const(i) => i.collect(c, parent),
-            ItemKind::Static(i) => i.collect(c, parent),
-            ItemKind::Function(i) => i.collect(c, parent),
-            ItemKind::Use(i) => i.collect(c, parent),
-        }?;
-        c[id].set_meta(meta).set_vis(*vis).set_source(self);
 
-        Ok(id)
+#[derive(Debug)]
+pub struct NameCollector<'prj, 'a> {
+    prj: &'prj mut Prj<'a>,
+    parent: DefID,
+    retval: Option<DefID>,
+}
+
+impl<'prj, 'a> NameCollector<'prj, 'a> {
+    pub fn new(prj: &'prj mut Prj<'a>) -> Self {
+        Self { parent: prj.root, prj, retval: None }
+    }
+    pub fn with_root(prj: &'prj mut Prj<'a>, parent: DefID) -> Self {
+        Self { prj, parent, retval: None }
+    }
+    /// Runs the provided function with the given parent
+    pub fn with_parent<F, N>(&mut self, parent: DefID, node: N, f: F)
+    where F: FnOnce(&mut Self, N) {
+        let parent = mem::replace(&mut self.parent, parent);
+        f(self, node);
+        self.parent = parent;
+    }
+    /// Extracts the return value from the provided function
+    pub fn returns<F, N>(&mut self, node: N, f: F) -> Option<DefID>
+    where F: FnOnce(&mut Self, N) {
+        let out = self.retval.take();
+        f(self, node);
+        mem::replace(&mut self.retval, out)
     }
 }
-impl<'a> NameCollectable<'a> for Module {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        let Self { name: Identifier(name), kind } = self;
-        let module =
-            c.pool
-                .insert(Def { name: *name, module: Mod::new(parent), ..Default::default() });
-        c[parent].module.types.insert(*name, module);
 
-        match kind {
-            ModuleKind::Inline(file) => file.collect(c, module)?,
-            ModuleKind::Outline => todo!("Out of line modules: {name}"),
-        };
-        Ok(module)
+impl<'prj, 'a> ast_visitor::Visit<'a> for NameCollector<'prj, 'a> {
+    fn visit_item(&mut self, i: &'a Item) {
+        let Item { extents: _, attrs, vis, kind } = i;
+        if let Some(def) = self.returns(kind, Self::visit_item_kind) {
+            self.prj[def]
+                .set_meta(&attrs.meta)
+                .set_vis(*vis)
+                .set_source(i);
+        }
     }
-}
-impl<'a> NameCollectable<'a> for Impl {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        let Self { target: _, body } = self;
-        let def = Def { module: Mod::new(parent), ..Default::default() };
-        let id = c.pool.insert(def);
+    fn visit_module(&mut self, m: &'a Module) {
+        let Self { prj, parent, retval: _ } = self;
+        let Module { name: Identifier(name), kind } = m;
+
+        let def = Def { name: *name, module: Mod::new(*parent), ..Default::default() };
+        let id = prj.pool.insert(def);
+        prj[*parent].module.types.insert(*name, id);
+
+        self.with_parent(id, kind, Self::visit_module_kind);
+        self.retval = Some(id);
+    }
+    fn visit_alias(&mut self, a: &'a Alias) {
+        let Self { prj, parent, retval: _ } = self;
+        let Alias { to: Identifier(name), from: _ } = a;
+
+        let def = Def { name: *name, module: Mod::new(*parent), ..Default::default() };
+        let id = prj.pool.insert(def);
+        prj[*parent].module.types.insert(*name, id);
+
+        self.retval = Some(id);
+    }
+    fn visit_enum(&mut self, e: &'a Enum) {
+        let Self { prj, parent, retval: _ } = self;
+        let Enum { name: Identifier(name), kind } = e;
+
+        let def = Def { name: *name, module: Mod::new(*parent), ..Default::default() };
+        let id = prj.pool.insert(def);
+        prj[*parent].module.types.insert(*name, id);
+
+        self.with_parent(id, kind, Self::visit_enum_kind);
+        self.retval = Some(id);
+    }
+    fn visit_struct(&mut self, s: &'a Struct) {
+        let Self { prj, parent, retval: _ } = self;
+        let Struct { name: Identifier(name), kind } = s;
+
+        let def = Def { name: *name, module: Mod::new(*parent), ..Default::default() };
+        let id = prj.pool.insert(def);
+        prj[*parent].module.types.insert(*name, id);
+
+        self.with_parent(id, kind, Self::visit_struct_kind);
+        self.retval = Some(id);
+    }
+    fn visit_const(&mut self, c: &'a Const) {
+        let Self { prj, parent, retval: _ } = self;
+        let Const { name: Identifier(name), ty: _, init } = c;
+
+        let def = Def { name: *name, module: Mod::new(*parent), ..Default::default() };
+        let id = prj.pool.insert(def);
+        prj[*parent].module.values.insert(*name, id);
+
+        self.with_parent(id, &**init, Self::visit_expr);
+        self.retval = Some(id);
+    }
+    fn visit_static(&mut self, s: &'a Static) {
+        let Self { prj, parent, retval: _ } = self;
+        let Static { name: Identifier(name), mutable: _, ty: _, init } = s;
+
+        let def = Def { name: *name, module: Mod::new(*parent), ..Default::default() };
+        let id = prj.pool.insert(def);
+        prj[*parent].module.values.insert(*name, id);
+
+        self.with_parent(id, &**init, Self::visit_expr);
+        self.retval = Some(id);
+    }
+    fn visit_function(&mut self, f: &'a Function) {
+        let Self { prj, parent, retval: _ } = self;
+        let Function { name: Identifier(name), body, .. } = f;
+
+        let def = Def { name: *name, module: Mod::new(*parent), ..Default::default() };
+        let id = prj.pool.insert(def);
+        prj[*parent].module.values.insert(*name, id);
+
+        if let Some(body) = body {
+            self.with_parent(id, body, Self::visit_block);
+        }
+        self.retval = Some(id);
+    }
+    fn visit_impl(&mut self, i: &'a Impl) {
+        let Self { prj, parent, retval: _ } = self;
+        let Impl { target: _, body } = i;
+        let def = Def { module: Mod::new(*parent), ..Default::default() };
+        let id = prj.pool.insert(def);
 
         // items will get reparented after name collection, when target is available
-        body.collect(c, id)?;
+        self.with_parent(id, body, Self::visit_file);
 
-        Ok(id)
+        self.retval = Some(id);
     }
-}
-impl<'a> NameCollectable<'a> for Use {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
+    fn visit_use(&mut self, _u: &'a Use) {
+        let Self { prj, parent, retval } = self;
         let def =
-            Def { module: Mod::new(parent), kind: DefKind::Use(parent), ..Default::default() };
+            Def { module: Mod::new(*parent), kind: DefKind::Use(*parent), ..Default::default() };
 
-        let id = c.pool.insert(def);
-        c[parent].module.imports.push(id);
+        let id = prj.pool.insert(def);
+        prj[*parent].module.imports.push(id);
 
-        Ok(id)
-    }
-}
-impl<'a> NameCollectable<'a> for Alias {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        let Alias { to: Identifier(name), .. } = self;
-
-        let def = Def { name: *name, module: Mod::new(parent), ..Default::default() };
-        let id = c.pool.insert(def);
-
-        c[parent].module.types.insert(*name, id);
-        Ok(id)
-    }
-}
-impl<'a> NameCollectable<'a> for Enum {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        let Enum { name: Identifier(name), .. } = self;
-
-        let def = Def { name: *name, module: Mod::new(parent), ..Default::default() };
-        let id = c.pool.insert(def);
-
-        c[parent].module.types.insert(*name, id);
-        Ok(id)
-    }
-}
-impl<'a> NameCollectable<'a> for Struct {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        let Struct { name: Identifier(name), .. } = self;
-
-        let def = Def { name: *name, module: Mod::new(parent), ..Default::default() };
-        let id = c.pool.insert(def);
-
-        c[parent].module.types.insert(*name, id);
-        Ok(id)
-    }
-}
-impl<'a> NameCollectable<'a> for Const {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        let Self { name: Identifier(name), init, .. } = self;
-
-        let kind = DefKind::Undecided;
-
-        let def = Def { name: *name, kind, module: Mod::new(parent), ..Default::default() };
-        let id = c.pool.insert(def);
-
-        c[parent].module.values.insert(*name, id);
-        init.collect(c, id)?;
-
-        Ok(id)
-    }
-}
-impl<'a> NameCollectable<'a> for Static {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        let Self { name: Identifier(name), init, .. } = self;
-
-        let kind = DefKind::Undecided;
-
-        let def = Def { name: *name, kind, module: Mod::new(parent), ..Default::default() };
-        let id = c.pool.insert(def);
-
-        c[parent].module.values.insert(*name, id);
-        init.collect(c, id)?;
-
-        Ok(id)
-    }
-}
-impl<'a> NameCollectable<'a> for Function {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        let Self { name: Identifier(name), body, .. } = self;
-
-        let kind = DefKind::Undecided;
-
-        let def = Def { name: *name, kind, module: Mod::new(parent), ..Default::default() };
-        let id = c.pool.insert(def);
-
-        c[parent].module.values.insert(*name, id);
-        body.collect(c, id)?;
-
-        Ok(id)
-    }
-}
-impl<'a> NameCollectable<'a> for Block {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        self.stmts.as_slice().collect(c, parent)
-    }
-}
-impl<'a> NameCollectable<'a> for Stmt {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        self.kind.collect(c, parent)
-    }
-}
-impl<'a> NameCollectable<'a> for StmtKind {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        match self {
-            StmtKind::Empty => Ok(parent),
-            StmtKind::Local(Let { init, .. }) => init.collect(c, parent),
-            StmtKind::Item(item) => item.collect(c, parent),
-            StmtKind::Expr(expr) => expr.collect(c, parent),
-        }
-    }
-}
-impl<'a> NameCollectable<'a> for Expr {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        self.kind.collect(c, parent)
-    }
-}
-impl<'a> NameCollectable<'a> for ExprKind {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        match self {
-            ExprKind::Assign(Assign { parts, .. }) | ExprKind::Binary(Binary { parts, .. }) => {
-                parts.0.collect(c, parent)?;
-                parts.1.collect(c, parent)
-            }
-            ExprKind::Unary(Unary { tail, .. }) => tail.collect(c, parent),
-            ExprKind::Index(Index { head, indices }) => {
-                indices.collect(c, parent)?;
-                head.collect(c, parent)
-            }
-            ExprKind::Array(Array { values }) => values.collect(c, parent),
-            ExprKind::ArrayRep(ArrayRep { value, repeat }) => {
-                value.collect(c, parent)?;
-                repeat.collect(c, parent)
-            }
-            ExprKind::AddrOf(AddrOf { expr, .. }) => expr.collect(c, parent),
-            ExprKind::Block(block) => block.collect(c, parent),
-            ExprKind::Group(Group { expr }) => expr.collect(c, parent),
-            ExprKind::Tuple(Tuple { exprs }) => exprs.collect(c, parent),
-            ExprKind::While(While { cond, pass, fail })
-            | ExprKind::If(If { cond, pass, fail })
-            | ExprKind::For(For { cond, pass, fail, .. }) => {
-                cond.collect(c, parent)?;
-                pass.collect(c, parent)?;
-                fail.body.collect(c, parent)
-            }
-            ExprKind::Break(Break { body }) | ExprKind::Return(Return { body }) => {
-                body.collect(c, parent)
-            }
-            _ => Ok(parent),
-        }
-    }
-}
-impl<'a, T: NameCollectable<'a>> NameCollectable<'a> for [T] {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        let mut last = parent;
-        for expr in self {
-            last = expr.collect(c, parent)?;
-        }
-        Ok(last)
-    }
-}
-impl<'a, T: NameCollectable<'a>> NameCollectable<'a> for Option<T> {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        match self {
-            Some(body) => body.collect(c, parent),
-            None => Ok(parent),
-        }
-    }
-}
-impl<'a, T: NameCollectable<'a>> NameCollectable<'a> for Box<T> {
-    fn collect(&'a self, c: &mut Prj<'a>, parent: DefID) -> Result<DefID, &'static str> {
-        (**self).collect(c, parent)
+        *retval = Some(id);
     }
 }
