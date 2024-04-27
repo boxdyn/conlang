@@ -56,7 +56,7 @@ impl<'prj, 'a> Visit<'a> for NameCollector<'prj, 'a> {
 
         let def = Def { name: *name, module: Mod::new(*parent), ..Default::default() };
         let id = prj.pool.insert(def);
-        prj[*parent].module.types.insert(*name, id);
+        prj[*parent].module.insert_type(*name, id);
 
         self.with_parent(id, kind, Self::visit_module_kind);
         self.retval = Some(id);
@@ -67,7 +67,7 @@ impl<'prj, 'a> Visit<'a> for NameCollector<'prj, 'a> {
 
         let def = Def { name: *name, module: Mod::new(*parent), ..Default::default() };
         let id = prj.pool.insert(def);
-        prj[*parent].module.types.insert(*name, id);
+        prj[*parent].module.insert_type(*name, id);
 
         self.retval = Some(id);
     }
@@ -77,7 +77,7 @@ impl<'prj, 'a> Visit<'a> for NameCollector<'prj, 'a> {
 
         let def = Def { name: *name, module: Mod::new(*parent), ..Default::default() };
         let id = prj.pool.insert(def);
-        prj[*parent].module.types.insert(*name, id);
+        prj[*parent].module.insert_type(*name, id);
 
         self.with_parent(id, kind, Self::visit_enum_kind);
         self.retval = Some(id);
@@ -88,7 +88,7 @@ impl<'prj, 'a> Visit<'a> for NameCollector<'prj, 'a> {
 
         let def = Def { name: *name, module: Mod::new(*parent), ..Default::default() };
         let id = prj.pool.insert(def);
-        prj[*parent].module.types.insert(*name, id);
+        prj[*parent].module.insert_type(*name, id);
 
         self.with_parent(id, kind, Self::visit_struct_kind);
         self.retval = Some(id);
@@ -99,7 +99,7 @@ impl<'prj, 'a> Visit<'a> for NameCollector<'prj, 'a> {
 
         let def = Def { name: *name, module: Mod::new(*parent), ..Default::default() };
         let id = prj.pool.insert(def);
-        prj[*parent].module.values.insert(*name, id);
+        prj[*parent].module.insert_value(*name, id);
 
         self.with_parent(id, &**init, Self::visit_expr);
         self.retval = Some(id);
@@ -110,7 +110,7 @@ impl<'prj, 'a> Visit<'a> for NameCollector<'prj, 'a> {
 
         let def = Def { name: *name, module: Mod::new(*parent), ..Default::default() };
         let id = prj.pool.insert(def);
-        prj[*parent].module.values.insert(*name, id);
+        prj[*parent].module.insert_value(*name, id);
 
         self.with_parent(id, &**init, Self::visit_expr);
         self.retval = Some(id);
@@ -121,7 +121,7 @@ impl<'prj, 'a> Visit<'a> for NameCollector<'prj, 'a> {
 
         let def = Def { name: *name, module: Mod::new(*parent), ..Default::default() };
         let id = prj.pool.insert(def);
-        prj[*parent].module.values.insert(*name, id);
+        prj[*parent].module.insert_value(*name, id);
 
         if let Some(body) = body {
             self.with_parent(id, body, Self::visit_block);

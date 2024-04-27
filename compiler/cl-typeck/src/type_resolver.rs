@@ -194,7 +194,7 @@ impl<'a> TypeResolvable<'a> for Variant {
 
         let new_id = prj.pool.insert(def);
         // Insert the struct variant type into the enum's namespace
-        prj[id].module.types.insert(*name, new_id);
+        prj[id].module.insert_type(*name, new_id);
 
         Ok(Some(new_id))
     }
