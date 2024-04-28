@@ -87,22 +87,24 @@ pub mod typed_arena {
 
     /// A [TypedArena] can hold many instances of a single type, and will properly [Drop] them when
     /// it falls out of scope.
-    pub struct TypedArena<T> {
+    pub struct TypedArena<'arena, T> {
+        _lives: PhantomData<&'arena T>,
         _drops: PhantomData<T>,
         chunks: RefCell<Vec<ArenaChunk<T>>>,
         head: Cell<*mut T>,
         tail: Cell<*mut T>,
     }
 
-    impl<T> Default for TypedArena<T> {
+    impl<'arena, T> Default for TypedArena<'arena, T> {
         fn default() -> Self {
             Self::new()
         }
     }
 
-    impl<T> TypedArena<T> {
+    impl<'arena, T> TypedArena<'arena, T> {
         pub const fn new() -> Self {
             Self {
+                _lives: PhantomData,
                 _drops: PhantomData,
                 chunks: RefCell::new(Vec::new()),
                 head: Cell::new(ptr::null_mut()),
@@ -111,7 +113,7 @@ pub mod typed_arena {
         }
 
         #[allow(clippy::mut_from_ref)]
-        pub fn alloc(&self, value: T) -> &mut T {
+        pub fn alloc(&'arena self, value: T) -> &'arena mut T {
             if self.head == self.tail {
                 self.grow(1);
             }
@@ -165,9 +167,9 @@ pub mod typed_arena {
         }
     }
 
-    unsafe impl<T: Send> Send for TypedArena<T> {}
+    unsafe impl<'arena, T: Send> Send for TypedArena<'arena, T> {}
 
-    unsafe impl<#[may_dangle] T> Drop for TypedArena<T> {
+    unsafe impl<'arena, #[may_dangle] T> Drop for TypedArena<'arena, T> {
         fn drop(&mut self) {
             let mut chunks = self.chunks.borrow_mut();
 
@@ -194,24 +196,27 @@ pub mod dropless_arena {
     use core::{
         alloc::Layout,
         cell::{Cell, RefCell},
+        marker::PhantomData,
         mem, ptr, slice,
     };
 
-    pub struct DroplessArena {
+    pub struct DroplessArena<'arena> {
+        _lives: PhantomData<&'arena u8>,
         chunks: RefCell<Vec<ArenaChunk<u8>>>,
         head: Cell<*mut u8>,
         tail: Cell<*mut u8>,
     }
 
-    impl Default for DroplessArena {
+    impl Default for DroplessArena<'_> {
         fn default() -> Self {
             Self::new()
         }
     }
 
-    impl DroplessArena {
+    impl<'arena> DroplessArena<'arena> {
         pub const fn new() -> Self {
             Self {
+                _lives: PhantomData,
                 chunks: RefCell::new(Vec::new()),
                 head: Cell::new(ptr::null_mut()),
                 tail: Cell::new(ptr::null_mut()),
@@ -224,7 +229,7 @@ pub mod dropless_arena {
         /// - Panics if T implements [Drop]
         /// - Panics if T is zero-sized
         #[allow(clippy::mut_from_ref)]
-        pub fn alloc<T>(&self, value: T) -> &mut T {
+        pub fn alloc<T>(&'arena self, value: T) -> &'arena mut T {
             assert!(!mem::needs_drop::<T>());
             assert!(mem::size_of::<T>() != 0);
 
@@ -244,7 +249,7 @@ pub mod dropless_arena {
         /// - Panics if T is zero-sized
         /// - Panics if the slice is empty
         #[allow(clippy::mut_from_ref)]
-        pub fn alloc_slice<T: Copy>(&self, slice: &[T]) -> &mut [T] {
+        pub fn alloc_slice<T: Copy>(&'arena self, slice: &[T]) -> &'arena mut [T] {
             assert!(!mem::needs_drop::<T>());
             assert!(mem::size_of::<T>() != 0);
             assert!(!slice.is_empty());
@@ -261,7 +266,7 @@ pub mod dropless_arena {
         ///
         /// # Panics
         /// Panics if the string is empty.
-        pub fn alloc_str(&self, string: &str) -> &str {
+        pub fn alloc_str(&'arena self, string: &str) -> &'arena str {
             let slice = self.alloc_slice(string.as_bytes());
 
             // Safety: This is a clone of the input string, which was valid
@@ -272,7 +277,7 @@ pub mod dropless_arena {
         ///
         /// # Panics
         /// Panics if the provided [Layout] has size 0
-        pub fn alloc_raw(&self, layout: Layout) -> *mut u8 {
+        pub fn alloc_raw(&'arena self, layout: Layout) -> *mut u8 {
             /// Rounds the given size (or pointer value) *up* to the given alignment
             fn align_up(size: usize, align: usize) -> usize {
                 (size + align - 1) & !(align - 1)
@@ -337,7 +342,7 @@ pub mod dropless_arena {
         }
     }
 
-    unsafe impl Send for DroplessArena {}
+    unsafe impl<'arena> Send for DroplessArena<'arena> {}
 
     #[cfg(test)]
     mod tests;

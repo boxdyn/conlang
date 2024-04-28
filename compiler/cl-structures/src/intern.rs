@@ -115,13 +115,12 @@ pub mod string_interner {
     use cl_arena::dropless_arena::DroplessArena;
     use std::{
         collections::HashSet,
-        ptr::addr_of,
         sync::{OnceLock, RwLock},
     };
 
     /// A string interner hands out [Interned] copies of each unique string given to it.
     pub struct StringInterner<'a> {
-        arena: &'a DroplessArena,
+        arena: DroplessArena<'a>,
         keys: RwLock<HashSet<&'a str>>,
     }
 
@@ -129,12 +128,11 @@ pub mod string_interner {
         /// Gets a reference to a global string interner whose [Interned] strings are `'static`
         pub fn global() -> &'static Self {
             static GLOBAL_INTERNER: OnceLock<StringInterner<'static>> = OnceLock::new();
-            static mut ARENA: DroplessArena = DroplessArena::new();
 
             // SAFETY: The RwLock within the interner's `keys` protects the arena
             // from being modified concurrently.
             GLOBAL_INTERNER.get_or_init(|| StringInterner {
-                arena: unsafe { &*addr_of!(ARENA) },
+                arena: DroplessArena::new(),
                 keys: Default::default(),
             })
         }
@@ -142,7 +140,7 @@ pub mod string_interner {
 
     impl<'a> StringInterner<'a> {
         /// Creates a new [StringInterner] backed by the provided [DroplessArena]
-        pub fn new(arena: &'a DroplessArena) -> Self {
+        pub fn new(arena: DroplessArena<'a>) -> Self {
             Self { arena, keys: RwLock::new(HashSet::new()) }
         }
 
@@ -151,7 +149,7 @@ pub mod string_interner {
         ///
         /// # Blocks
         /// This function blocks when the interner is held by another thread.
-        pub fn get_or_insert(&self, value: &str) -> Interned<'a, str> {
+        pub fn get_or_insert(&'a self, value: &str) -> Interned<'a, str> {
             let Self { arena, keys } = self;
 
             // Safety: Holding this write guard for the entire duration of this
@@ -173,7 +171,7 @@ pub mod string_interner {
         /// Gets a reference to the interned copy of the given value, if it exists
         /// # Blocks
         /// This function blocks when the interner is held by another thread.
-        pub fn get(&self, value: &str) -> Option<Interned<'a, str>> {
+        pub fn get(&'a self, value: &str) -> Option<Interned<'a, str>> {
             let keys = self.keys.read().expect("should not be poisoned");
             keys.get(value).copied().map(Interned::new)
         }
@@ -243,13 +241,13 @@ pub mod typed_interner {
     ///
     /// See the [module-level documentation](self) for more information.
     pub struct TypedInterner<'a, T: Eq + Hash> {
-        arena: &'a TypedArena<T>,
+        arena: TypedArena<'a, T>,
         keys: RwLock<HashSet<&'a T>>,
     }
 
     impl<'a, T: Eq + Hash> TypedInterner<'a, T> {
         /// Creates a new [TypedInterner] backed by the provided [TypedArena]
-        pub fn new(arena: &'a TypedArena<T>) -> Self {
+        pub fn new(arena: TypedArena<'a, T>) -> Self {
             Self { arena, keys: RwLock::new(HashSet::new()) }
         }
 
@@ -257,7 +255,7 @@ pub mod typed_interner {
         ///
         /// # Blocks
         /// This function blocks when the interner is held by another thread.
-        pub fn get_or_insert(&self, value: T) -> Interned<'a, T> {
+        pub fn get_or_insert(&'a self, value: T) -> Interned<'a, T> {
             let Self { arena, keys } = self;
 
             // Safety: Locking the keyset for the entire duration of this function
