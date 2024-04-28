@@ -3,7 +3,7 @@
 //! # Examples
 //!
 //! ```rust
-//! # use cl_structures::intern_pool::*;
+//! # use cl_structures::deprecated_intern_pool::*;
 //! // first, create a new InternKey type (this ensures type safety)
 //! make_intern_key!{
 //!     NumbersKey
