@@ -97,7 +97,7 @@ pub mod interned {
     }
 
     impl<T: AsRef<str>> From<T> for Interned<'static, str> {
-        /// Types which implement [AsRef<str>] will be stored in the global [StringInterner]
+        /// Types which implement [`AsRef<str>`] will be stored in the global [StringInterner]
         fn from(value: T) -> Self {
             from_str(value.as_ref())
         }
