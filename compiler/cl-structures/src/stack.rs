@@ -164,7 +164,9 @@ unsafe impl<#[may_dangle] T, const N: usize> Drop for Stack<T, N> {
     #[inline]
     fn drop(&mut self) {
         // Safety: We have ensured that all elements in the list are
-        unsafe { core::ptr::drop_in_place(self.as_mut_slice()) };
+        if std::mem::needs_drop::<T>() {
+            unsafe { core::ptr::drop_in_place(self.as_mut_slice()) };
+        }
     }
 }
 
@@ -617,7 +619,6 @@ mod tests {
         assert_eq!(std::mem::size_of::<usize>(), std::mem::size_of_val(&v))
     }
     #[test]
-    #[cfg_attr(debug_assertions, ignore = "calls ().drop() usize::MAX times")]
     fn from_usize_max_zst_array() {
         let mut v = Stack::from([(); usize::MAX]);
         assert_eq!(v.len(), usize::MAX);
