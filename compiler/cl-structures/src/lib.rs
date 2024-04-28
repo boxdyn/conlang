@@ -5,8 +5,6 @@
 #![feature(inline_const, dropck_eyepatch, decl_macro, get_many_mut)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
-pub mod arena;
-
 pub mod intern;
 
 pub mod span;
