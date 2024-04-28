@@ -64,8 +64,8 @@ impl Fold for ModuleInliner {
     /// Traverses down the module tree, entering ever nested directories
     fn fold_module(&mut self, m: Module) -> Module {
         let Module { name, kind } = m;
-        let sym = name.0.get().expect("Could not get name!");
-        self.path.push(sym); // cd ./name
+        let sym = name.0;
+        self.path.push(&*sym); // cd ./name
 
         let kind = self.fold_module_kind(kind);
 

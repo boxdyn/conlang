@@ -9,9 +9,9 @@
 //!   - [AssignKind], [BinaryKind], and [UnaryKind] operators
 //! - [Ty] and [TyKind]: Type qualifiers
 //! - [Path]: Path expressions
-use cl_structures::span::*;
+use cl_structures::{intern::interned::Interned, span::*};
 
-pub use cl_structures::arena::global_intern::Sym;
+pub type Sym = Interned<'static, str>;
 
 /// Whether a binding ([Static] or [Let]) or reference is mutable or not
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

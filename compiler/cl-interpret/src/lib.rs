@@ -148,7 +148,7 @@ pub mod temp_type_impl {
                 (Self::Int(a), Self::Int(b)) => Ok(Self::Bool(a $op b)),
                 (Self::Bool(a), Self::Bool(b)) => Ok(Self::Bool(a $op b)),
                 (Self::Char(a), Self::Char(b)) => Ok(Self::Bool(a $op b)),
-                (Self::String(a), Self::String(b)) => Ok(Self::Bool(a.get() $op b.get())),
+                (Self::String(a), Self::String(b)) => Ok(Self::Bool(&**a $op &**b)),
                 _ => Err(Error::TypeError)
             }
         }

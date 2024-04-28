@@ -243,7 +243,7 @@ macro cmp ($a:expr, $b:expr, $empty:literal, $op:tt) {
         (ConValue::Int(a), ConValue::Int(b)) => Ok(ConValue::Bool(a $op b)),
         (ConValue::Bool(a), ConValue::Bool(b)) => Ok(ConValue::Bool(a $op b)),
         (ConValue::Char(a), ConValue::Char(b)) => Ok(ConValue::Bool(a $op b)),
-        (ConValue::String(a), ConValue::String(b)) => Ok(ConValue::Bool(a.get() $op b.get())),
+        (ConValue::String(a), ConValue::String(b)) => Ok(ConValue::Bool(&**a $op &**b)),
         _ => Err(Error::TypeError)
     }
 }

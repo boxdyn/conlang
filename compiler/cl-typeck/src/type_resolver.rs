@@ -63,8 +63,7 @@ impl<'a> TypeResolvable<'a> for Meta {
     #[allow(unused_variables)]
     fn resolve_type(&'a self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
         let Self { name: Identifier(name), kind } = self;
-        let name = name.get().unwrap_or_default();
-        match (name.as_str(), kind) {
+        match (name.as_ref(), kind) {
             ("intrinsic", MetaKind::Equals(Literal::String(intrinsic))) => Ok(DefKind::Type(
                 TypeKind::Intrinsic(intrinsic.parse().map_err(|_| "unknown intrinsic type")?),
             )),
