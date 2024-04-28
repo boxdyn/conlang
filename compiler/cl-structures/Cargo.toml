@@ -9,3 +9,4 @@ publish.workspace = true
 
 [dependencies]
 hashbrown = { version = "0.14.3", default-features = false }
+cl-arena = { path = "../cl-arena" }

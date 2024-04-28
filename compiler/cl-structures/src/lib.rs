@@ -7,6 +7,8 @@
 
 pub mod arena;
 
+pub mod intern;
+
 pub mod span;
 
 pub mod tree;
