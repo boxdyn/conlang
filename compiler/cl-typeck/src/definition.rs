@@ -1,59 +1,58 @@
-use crate::{key::DefID, module::Module};
-use cl_ast::{Item, Meta, Sym, Visibility};
+use crate::{
+    key::DefID,
+    module::Module,
+    node::{Node, NodeSource},
+};
+use cl_ast::{Meta, Sym, Visibility};
 use std::{fmt::Debug, str::FromStr};
 
 mod display;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Def<'a> {
-    pub name: Sym,
-    pub vis: Visibility,
-    pub meta: &'a [Meta],
+    pub node: Node<'a>,
     pub kind: DefKind,
-    pub source: Option<&'a Item>,
     pub module: Module,
+}
+
+impl<'a> Def<'a> {
+    pub fn with_node(node: Node<'a>) -> Self {
+        Self { node, kind: DefKind::Undecided, module: Default::default() }
+    }
+}
+
+impl Def<'_> {
+    pub fn name(&self) -> Option<Sym> {
+        match self.node.kind {
+            Some(source) => source.name(),
+            None => None,
+        }
+    }
 }
 
 mod builder_functions {
     use super::*;
 
     impl<'a> Def<'a> {
-        pub fn set_name(&mut self, name: Sym) -> &mut Self {
-            self.name = name;
-            self
-        }
         pub fn set_vis(&mut self, vis: Visibility) -> &mut Self {
-            self.vis = vis;
+            self.node.vis = vis;
             self
         }
         pub fn set_meta(&mut self, meta: &'a [Meta]) -> &mut Self {
-            self.meta = meta;
+            self.node.meta = meta;
             self
         }
         pub fn set_kind(&mut self, kind: DefKind) -> &mut Self {
             self.kind = kind;
             self
         }
-        pub fn set_source(&mut self, source: &'a Item) -> &mut Self {
-            self.source = Some(source);
+        pub fn set_source(&mut self, source: NodeSource<'a>) -> &mut Self {
+            self.node.kind = Some(source);
             self
         }
         pub fn set_module(&mut self, module: Module) -> &mut Self {
             self.module = module;
             self
-        }
-    }
-}
-
-impl Default for Def<'_> {
-    fn default() -> Self {
-        Self {
-            name: "".into(),
-            vis: Visibility::Public,
-            meta: Default::default(),
-            kind: Default::default(),
-            source: Default::default(),
-            module: Default::default(),
         }
     }
 }
@@ -79,6 +78,7 @@ pub enum DefKind {
 pub enum ValueKind {
     Const(DefID),
     Static(DefID),
+    Local(DefID),
     Fn(DefID),
 }
 /// A [TypeKind] represents an item in the Type Namespace

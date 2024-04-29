@@ -5,7 +5,11 @@ use cl_ast::{
 use cl_lexer::Lexer;
 use cl_parser::{inliner::ModuleInliner, Parser};
 use cl_typeck::{
-    definition::Def, name_collector::NameCollector, project::Project, type_resolver::resolve,
+    definition::Def,
+    name_collector::NameCollector,
+    node::{Node, NodeSource},
+    project::Project,
+    type_resolver::resolve,
 };
 use repline::{error::Error as RlError, prebaked::*};
 use std::{error::Error, path};
@@ -128,19 +132,26 @@ fn resolve_all(prj: &mut Project) -> Result<(), Box<dyn Error>> {
 
 fn list_types(prj: &mut Project) {
     println!("     name\x1b[30G  type");
-    for (idx, Def { name, vis, kind, .. }) in prj.pool.iter().enumerate() {
+    for (idx, Def { kind, node: Node { vis, kind: source, .. }, .. }) in prj.pool.iter().enumerate()
+    {
         print!("{idx:3}: {vis}");
-        println!("{name}\x1b[30G| {kind}");
+        if let Some(Some(name)) = source.as_ref().map(NodeSource::name) {
+            print!("{name}");
+        }
+        println!("\x1b[30G| {kind}")
     }
 }
 
 fn pretty_def(def: &Def, id: impl Into<usize>) {
     let id = id.into();
-    let Def { vis, name, kind, module, meta, source } = def;
+    let Def { module, kind, node: Node { meta, vis, kind: source, .. } } = def;
     for meta in *meta {
         println!("#[{meta}]")
     }
-    println!("{vis}{name} [id: {id}] = {kind}");
+    if let Some(Some(name)) = source.as_ref().map(NodeSource::name) {
+        print!("{vis}{name} ");
+    }
+    println!("[id: {id}] = {kind}");
     if let Some(source) = source {
         println!("Source:\n{C_LISTING}{source}\x1b[0m");
     }

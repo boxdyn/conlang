@@ -16,14 +16,23 @@ pub struct Node<'a> {
     pub span: &'a Span,
     pub meta: &'a [Meta],
     pub vis: Visibility,
-    pub kind: NodeSource<'a>,
+    pub kind: Option<NodeSource<'a>>,
+}
+
+impl<'a> Node<'a> {
+    pub fn new(path: Path, kind: Option<NodeSource<'a>>) -> Self {
+        const DUMMY_SPAN: Span = Span::dummy();
+        Self { in_path: path, span: &DUMMY_SPAN, meta: &[], vis: Visibility::Public, kind }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum NodeSource<'a> {
+    Root,
     Module(&'a Module),
     Alias(&'a Alias),
     Enum(&'a Enum),
+    Variant(&'a Variant),
     Struct(&'a Struct),
     Const(&'a Const),
     Static(&'a Static),
@@ -37,9 +46,11 @@ pub enum NodeSource<'a> {
 impl<'a> NodeSource<'a> {
     pub fn name(&self) -> Option<Sym> {
         match self {
+            NodeSource::Root => None,
             NodeSource::Module(v) => Some(v.name.0),
             NodeSource::Alias(v) => Some(v.to.0),
             NodeSource::Enum(v) => Some(v.name.0),
+            NodeSource::Variant(v) => Some(v.name.0),
             NodeSource::Struct(v) => Some(v.name.0),
             NodeSource::Const(v) => Some(v.name.0),
             NodeSource::Static(v) => Some(v.name.0),
@@ -81,9 +92,11 @@ impl<'a> NodeSource<'a> {
 impl fmt::Display for NodeSource<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Root => "🌳 root 🌳".fmt(f),
             Self::Module(arg0) => arg0.fmt(f),
             Self::Alias(arg0) => arg0.fmt(f),
             Self::Enum(arg0) => arg0.fmt(f),
+            Self::Variant(arg0) => arg0.fmt(f),
             Self::Struct(arg0) => arg0.fmt(f),
             Self::Const(arg0) => arg0.fmt(f),
             Self::Static(arg0) => arg0.fmt(f),
@@ -135,7 +148,7 @@ pub mod sorcerer {
             let Self { path, parts, defs } = self;
             let (span, meta, vis) = *parts;
 
-            defs.push(Node { in_path: path.clone(), span, meta, vis, kind })
+            defs.push(Node { in_path: path.clone(), span, meta, vis, kind: Some(kind) })
         }
     }
 

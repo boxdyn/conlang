@@ -3,9 +3,10 @@ use crate::{
     definition::{Def, DefKind, TypeKind},
     key::DefID,
     module,
+    node::{Node, NodeSource},
     path::Path,
 };
-use cl_ast::{Identifier, PathPart, TyFn, TyKind, TyRef, TyTuple, Visibility};
+use cl_ast::{Identifier, PathPart};
 use cl_structures::deprecated_intern_pool::Pool;
 use std::{
     collections::HashMap,
@@ -30,35 +31,28 @@ impl Project<'_> {
 
 impl Default for Project<'_> {
     fn default() -> Self {
+        const ROOT_PATH: cl_ast::Path = cl_ast::Path { absolute: true, parts: Vec::new() };
+
         let mut pool = Pool::default();
         let root = pool.insert(Def {
-            name: "🌳 root 🌳".into(),
+            module: Default::default(),
             kind: DefKind::Type(TypeKind::Module),
-            ..Default::default()
+            node: Node::new(ROOT_PATH, Some(NodeSource::Root)),
         });
-
-        // Insert the Never(!) type
         let never = pool.insert(Def {
-            name: "!".into(),
-            vis: Visibility::Public,
-            kind: DefKind::Type(TypeKind::Never),
             module: module::Module::new(root),
-            ..Default::default()
+            kind: DefKind::Type(TypeKind::Never),
+            node: Node::new(ROOT_PATH, None),
         });
         let empty = pool.insert(Def {
-            name: "()".into(),
-            vis: Visibility::Public,
+            module: module::Module::new(root),
             kind: DefKind::Type(TypeKind::Empty),
-            module: module::Module::new(root),
-            ..Default::default()
+            node: Node::new(ROOT_PATH, None),
         });
-        // TODO: Self is not a real type!
         let selfty = pool.insert(Def {
-            name: "Self".into(),
-            vis: Visibility::Public,
-            kind: DefKind::Type(TypeKind::SelfTy),
             module: module::Module::new(root),
-            ..Default::default()
+            kind: DefKind::Type(TypeKind::SelfTy),
+            node: Node::new(ROOT_PATH, None),
         });
 
         let mut anon_types = HashMap::new();
@@ -171,7 +165,8 @@ pub mod evaluate {
     //! or an intermediate result of expression evaluation.
 
     use super::*;
-    use cl_ast::{Sym, Ty};
+    use crate::module;
+    use cl_ast::{Sym, Ty, TyFn, TyKind, TyRef, TyTuple};
 
     /// Things that can be evaluated as a type expression
     pub trait EvaluableTypeExpression {
@@ -196,19 +191,7 @@ pub mod evaluate {
                 TyKind::Empty => prj.anon_types[&TypeKind::Empty],
                 TyKind::SelfTy => prj.anon_types[&TypeKind::SelfTy],
                 // TyKind::Path must be looked up explicitly
-                TyKind::Path(path) => {
-                    let (id, path) = prj
-                        .get_type(path.into(), parent)
-                        .ok_or("Failed to get type")?;
-                    if path.is_empty() {
-                        id
-                    } else {
-                        let (id, path) = prj.get_value(path, id).ok_or("Failed to get value")?;
-                        path.is_empty()
-                            .then_some(id)
-                            .ok_or("Path not fully resolved")?
-                    }
-                }
+                TyKind::Path(path) => path.evaluate(prj, parent)?,
                 TyKind::Tuple(tup) => tup.evaluate(prj, parent)?,
                 TyKind::Ref(tyref) => tyref.evaluate(prj, parent)?,
                 TyKind::Fn(tyfn) => tyfn.evaluate(prj, parent)?,
@@ -228,7 +211,7 @@ pub mod evaluate {
                 .types
                 .get(self)
                 .copied()
-                .ok_or_else(|| format!("{self} is not a member of {}", prj[parent].name))
+                .ok_or_else(|| format!("{self} is not a member of {:?}", prj[parent].name()))
         }
     }
 
@@ -238,9 +221,9 @@ pub mod evaluate {
             let types = self.types.evaluate(prj, parent)?;
             let root = prj.root;
             let id = prj.insert_anonymous_type(TypeKind::Tuple(types.clone()), move || Def {
-                kind: DefKind::Type(TypeKind::Tuple(types)),
                 module: module::Module::new(root),
-                ..Default::default()
+                node: Node::new(Default::default(), None),
+                kind: DefKind::Type(TypeKind::Tuple(types)),
             });
 
             Ok(id)
@@ -254,9 +237,9 @@ pub mod evaluate {
 
             let root = prj.root;
             let id = prj.insert_anonymous_type(TypeKind::Ref(*count, to), move || Def {
-                kind: DefKind::Type(TypeKind::Ref(*count, to)),
                 module: module::Module::new(root),
-                ..Default::default()
+                node: Node::new(Default::default(), None),
+                kind: DefKind::Type(TypeKind::Ref(*count, to)),
             });
             Ok(id)
         }
@@ -274,9 +257,9 @@ pub mod evaluate {
 
             let root = prj.root;
             let id = prj.insert_anonymous_type(TypeKind::FnSig { args, rety }, || Def {
-                kind: DefKind::Type(TypeKind::FnSig { args, rety }),
                 module: module::Module::new(root),
-                ..Default::default()
+                node: Node::new(Default::default(), None),
+                kind: DefKind::Type(TypeKind::FnSig { args, rety }),
             });
             Ok(id)
         }
@@ -304,15 +287,14 @@ pub mod evaluate {
     impl<'a> EvaluableTypeExpression for Path<'a> {
         type Out = DefID;
         fn evaluate(&self, prj: &mut Project, parent: DefID) -> Result<Self::Out, String> {
-            let (id, path) = prj.get_type(*self, parent).ok_or("Failed to get type")?;
-
-            if path.is_empty() {
-                Ok(id)
-            } else {
-                let (id, path) = prj.get_value(path, id).ok_or("Failed to get value")?;
-                path.is_empty()
-                    .then_some(id)
-                    .ok_or(String::from("Path not fully resolved"))
+            let (tid, vid, path) = prj.get(*self, parent).ok_or("Failed to traverse path")?;
+            if !path.is_empty() {
+                Err(format!("Could not traverse past boundary: {path}"))?;
+            }
+            match (tid, vid) {
+                (Some(ty), _) => Ok(ty),
+                (None, Some(val)) => Ok(val),
+                (None, None) => Err(format!("No type or value found at path {self}")),
             }
         }
     }

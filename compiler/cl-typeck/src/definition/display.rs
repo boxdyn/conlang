@@ -1,5 +1,7 @@
 //! [Display] implementations for [TypeKind], [Adt], and [Intrinsic]
 
+use crate::node::Node;
+
 use super::{Adt, Def, DefKind, Intrinsic, TypeKind, ValueKind};
 use cl_ast::format::FmtAdapter;
 use std::{
@@ -30,16 +32,20 @@ where
 
 impl Display for Def<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self { name, vis, meta, kind, source, module } = self;
+        let Self { module, node: Node { in_path: _, span: _, meta, vis, kind: source }, kind } =
+            self;
         if !meta.is_empty() {
             writeln!(f, "#{meta:?}")?;
         }
-        writeln!(f, "{vis}{name}: ")?;
-        writeln!(f, "kind: {kind}")?;
         if let Some(source) = source {
-            writeln!(f, "source:")?;
-            writeln!(f.indent(), "\n{source}")?;
+            if let Some(name) = source.name() {
+                writeln!(f, "{vis}{name}:")?;
+            }
+            writeln!(f.indent(), "source:\n{source}")?;
+        } else {
+            writeln!(f, "{vis}: ")?;
         }
+        writeln!(f, "kind: {kind}")?;
         write!(f, "module: {module}")
     }
 }
@@ -61,6 +67,7 @@ impl std::fmt::Display for ValueKind {
         match self {
             ValueKind::Const(id) => write!(f, "const ({id})"),
             ValueKind::Static(id) => write!(f, "static ({id})"),
+            ValueKind::Local(id) => write!(f, "let ({id})"),
             ValueKind::Fn(id) => write!(f, "fn def ({id})"),
         }
     }

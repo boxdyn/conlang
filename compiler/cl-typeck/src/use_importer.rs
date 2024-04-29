@@ -16,6 +16,7 @@ use cl_ast::*;
 use crate::{
     definition::{Def, DefKind},
     key::DefID,
+    node::NodeSource,
     project::Project,
 };
 
@@ -30,13 +31,9 @@ impl<'a> Project<'a> {
     }
 
     pub fn visit_def(&mut self, id: DefID) -> UseResult {
-        let Def { name, vis, meta, kind, source, module } = &self.pool[id];
-        if let (DefKind::Use(parent), Some(source)) = (kind, source) {
-            let Item { kind: ItemKind::Use(u), .. } = source else {
-                Err(format!("Not a use item: {source}"))?
-            };
+        let Def { kind, node, module } = &self.pool[id];
+        if let (DefKind::Use(parent), Some(NodeSource::Use(u))) = (kind, node.kind) {
             println!("Importing use item {u}");
-
             self.visit_use(u, *parent);
         }
         Ok(())
