@@ -1,6 +1,6 @@
 use cl_ast::{
     ast_visitor::{Fold, Visit},
-    desugar::{squash_groups::SquashGroups, while_else::WhileElseDesugar},
+    desugar::*,
 };
 use cl_lexer::Lexer;
 use cl_parser::{inliner::ModuleInliner, Parser};
@@ -103,6 +103,9 @@ fn live_desugar() -> Result<(), RlError> {
 
         let code = WhileElseDesugar.fold_stmt(code);
         println!("WhileElseDesugar\n{C_LISTING}{code}\x1b[0m");
+
+        let code = NormalizePaths::new().fold_stmt(code);
+        println!("NormalizePaths\n{C_LISTING}{code}\x1b[0m");
 
         Ok(Response::Accept)
     })
