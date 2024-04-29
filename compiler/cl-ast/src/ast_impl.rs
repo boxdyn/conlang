@@ -284,11 +284,8 @@ mod display {
     impl Display for Use {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { absolute, tree } = self;
-            if *absolute {
-                write!(f, "use ::{tree}")
-            } else {
-                write!(f, "use {tree}")
-            }
+            f.write_str(if *absolute { "use ::" } else { "use " })?;
+            write!(f, "{tree};")
         }
     }
 
@@ -790,13 +787,13 @@ mod path {
         }
         /// Concatenates `self::other`. If `other` is an absolute [Path],
         /// this replaces `self` with `other`
-        pub fn concat(&mut self, other: &Self) -> &mut Self {
+        pub fn concat(mut self, other: &Self) -> Self {
             if other.absolute {
-                *self = other.clone();
+                other.clone()
             } else {
-                self.parts.extend(other.parts.iter().cloned())
+                self.parts.extend(other.parts.iter().cloned());
+                self
             }
-            self
         }
     }
     impl PathPart {
