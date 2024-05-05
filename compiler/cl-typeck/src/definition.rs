@@ -148,6 +148,8 @@ pub enum Intrinsic {
     I64,
     // /// A 128-bit signed integer: `#[intrinsic = "i32"]`
     // I128,
+    /// A ptr-len signed integer: `#[intrinsic = "isize"]`
+    Isize,
     /// An 8-bit unsigned integer: `#[intrinsic = "u8"]`
     U8,
     /// A 16-bit unsigned integer: `#[intrinsic = "u16"]`
@@ -158,6 +160,8 @@ pub enum Intrinsic {
     U64,
     // /// A 128-bit unsigned integer: `#[intrinsic = "u128"]`
     // U128,
+    /// A ptr-len unsigned integer: `#[intrinsic = "isize"]`
+    Usize,
     /// A boolean (`true` or `false`): `#[intrinsic = "bool"]`
     Bool,
     /// The unicode codepoint type: #[intrinsic = "char"]
@@ -173,10 +177,12 @@ impl FromStr for Intrinsic {
             "i16" => Intrinsic::I16,
             "i32" => Intrinsic::I32,
             "i64" => Intrinsic::I64,
+            "isize" => Intrinsic::Isize,
             "u8" => Intrinsic::U8,
             "u16" => Intrinsic::U16,
             "u32" => Intrinsic::U32,
             "u64" => Intrinsic::U64,
+            "usize" => Intrinsic::Usize,
             "bool" => Intrinsic::Bool,
             "char" => Intrinsic::Char,
             _ => Err(())?,

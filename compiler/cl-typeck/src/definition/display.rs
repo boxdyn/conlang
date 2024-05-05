@@ -160,10 +160,12 @@ impl Display for Intrinsic {
             Intrinsic::I16 => f.write_str("i16"),
             Intrinsic::I32 => f.write_str("i32"),
             Intrinsic::I64 => f.write_str("i64"),
+            Intrinsic::Isize => f.write_str("isize"),
             Intrinsic::U8 => f.write_str("u8"),
             Intrinsic::U16 => f.write_str("u16"),
             Intrinsic::U32 => f.write_str("u32"),
             Intrinsic::U64 => f.write_str("u64"),
+            Intrinsic::Usize => f.write_str("usize"),
             Intrinsic::Bool => f.write_str("bool"),
             Intrinsic::Char => f.write_str("char"),
         }
