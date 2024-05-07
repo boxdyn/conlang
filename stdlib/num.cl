@@ -18,6 +18,9 @@ pub type i32;
 #[intrinsic = "i64"]
 pub type i64;
 
+#[intrinsic = "isize"]
+pub type isize;
+
 #[intrinsic = "u8"]
 pub type u8;
 
@@ -30,12 +33,430 @@ pub type u32;
 #[intrinsic = "u64"]
 pub type u64;
 
-impl bool {
-    const MIN: Self = false;
-    const MAX: Self = {
-        fn ret_true() -> Self {
-            true
+#[intrinsic = "usize"]
+pub type usize;
+
+// Contains implementations for (TODO) overloaded operators on num types
+pub mod ops {
+    use super::*;
+    // Represents an ordering comparison verdict
+    pub enum Ordering {
+        Less,
+        Equal,
+        Greater,
+    }
+
+    impl bool {
+        pub const MIN: Self = false;
+        pub const MAX: Self = true;
+        pub const BIT_WIDTH: ::num::u32 = 1;
+        pub fn default() -> Self {
+            false
         }
-        ret_true()
-    };
+        pub fn and(a: Self, b: Self) -> Self {
+            a & b
+        }
+        pub fn or(a: Self, b: Self) -> Self {
+            a | b
+        }
+        pub fn xor(a: Self, b: Self) -> Self {
+            a ^ b
+        }
+    }
+
+    impl char {
+        pub fn default() -> Self {
+            '\u{1f988}'
+        }
+    }
+
+    impl u8 {
+        pub const MIN: Self = 0;
+        pub const MAX: Self = !0;
+        pub const BIT_WIDTH: ::num::u32 = 1;
+        pub fn default() -> Self {
+            0
+        }
+        pub fn mul(a: Self, b: Self) -> Self {
+            a * b
+        }
+        pub fn div(a: Self, b: Self) -> Self {
+            a / b
+        }
+        pub fn rem(a: Self, b: Self) -> Self {
+            a % b
+        }
+        pub fn add(a: Self, b: Self) -> Self {
+            a + b
+        }
+        pub fn sub(a: Self, b: Self) -> Self {
+            a - b
+        }
+        pub fn shl(a: Self, b: ::num::u32) -> Self {
+            a << b
+        }
+        pub fn shr(a: Self, b: ::num::u32) -> Self {
+            a >> b
+        }
+        pub fn and(a: Self, b: Self) -> Self {
+            a & b
+        }
+        pub fn or(a: Self, b: Self) -> Self {
+            a | b
+        }
+        pub fn xor(a: Self, b: Self) -> Self {
+            a ^ b
+        }
+    }
+
+    impl u16 {
+        pub const MIN: Self = 0;
+        pub const MAX: Self = !0;
+        pub const BIT_WIDTH: ::num::u32 = 2;
+        pub fn default() -> Self {
+            0
+        }
+        pub fn mul(a: Self, b: Self) -> Self {
+            a * b
+        }
+        pub fn div(a: Self, b: Self) -> Self {
+            a / b
+        }
+        pub fn rem(a: Self, b: Self) -> Self {
+            a % b
+        }
+        pub fn add(a: Self, b: Self) -> Self {
+            a + b
+        }
+        pub fn sub(a: Self, b: Self) -> Self {
+            a - b
+        }
+        pub fn shl(a: Self, b: ::num::u32) -> Self {
+            a << b
+        }
+        pub fn shr(a: Self, b: ::num::u32) -> Self {
+            a >> b
+        }
+        pub fn and(a: Self, b: Self) -> Self {
+            a & b
+        }
+        pub fn or(a: Self, b: Self) -> Self {
+            a | b
+        }
+        pub fn xor(a: Self, b: Self) -> Self {
+            a ^ b
+        }
+    }
+
+    impl u32 {
+        pub const MIN: Self = 0;
+        pub const MAX: Self = !0;
+        pub const BIT_WIDTH: ::num::u32 = 4;
+        pub fn default() -> Self {
+            0
+        }
+        pub fn mul(a: Self, b: Self) -> Self {
+            a * b
+        }
+        pub fn div(a: Self, b: Self) -> Self {
+            a / b
+        }
+        pub fn rem(a: Self, b: Self) -> Self {
+            a % b
+        }
+        pub fn add(a: Self, b: Self) -> Self {
+            a + b
+        }
+        pub fn sub(a: Self, b: Self) -> Self {
+            a - b
+        }
+        pub fn shl(a: Self, b: ::num::u32) -> Self {
+            a << b
+        }
+        pub fn shr(a: Self, b: ::num::u32) -> Self {
+            a >> b
+        }
+        pub fn and(a: Self, b: Self) -> Self {
+            a & b
+        }
+        pub fn or(a: Self, b: Self) -> Self {
+            a | b
+        }
+        pub fn xor(a: Self, b: Self) -> Self {
+            a ^ b
+        }
+    }
+
+    impl u64 {
+        pub const MIN: Self = 0;
+        pub const MAX: Self = !0;
+        pub const BIT_WIDTH: ::num::u32 = 8;
+        pub fn default() -> Self {
+            0
+        }
+        pub fn mul(a: Self, b: Self) -> Self {
+            a * b
+        }
+        pub fn div(a: Self, b: Self) -> Self {
+            a / b
+        }
+        pub fn rem(a: Self, b: Self) -> Self {
+            a % b
+        }
+        pub fn add(a: Self, b: Self) -> Self {
+            a + b
+        }
+        pub fn sub(a: Self, b: Self) -> Self {
+            a - b
+        }
+        pub fn shl(a: Self, b: ::num::u32) -> Self {
+            a << b
+        }
+        pub fn shr(a: Self, b: ::num::u32) -> Self {
+            a >> b
+        }
+        pub fn and(a: Self, b: Self) -> Self {
+            a & b
+        }
+        pub fn or(a: Self, b: Self) -> Self {
+            a | b
+        }
+        pub fn xor(a: Self, b: Self) -> Self {
+            a ^ b
+        }
+    }
+
+    impl usize {
+        pub const MIN: Self = __march_ptr_width_unsigned_min();
+        pub const MAX: Self = __march_ptr_width_unsigned_max();
+        pub const BIT_WIDTH: ::num::u32 = __march_ptr_width_bits();
+        pub fn default() -> Self {
+            0
+        }
+        pub fn mul(a: Self, b: Self) -> Self {
+            a * b
+        }
+        pub fn div(a: Self, b: Self) -> Self {
+            a / b
+        }
+        pub fn rem(a: Self, b: Self) -> Self {
+            a % b
+        }
+        pub fn add(a: Self, b: Self) -> Self {
+            a + b
+        }
+        pub fn sub(a: Self, b: Self) -> Self {
+            a - b
+        }
+        pub fn shl(a: Self, b: ::num::u32) -> Self {
+            a << b
+        }
+        pub fn shr(a: Self, b: ::num::u32) -> Self {
+            a >> b
+        }
+        pub fn and(a: Self, b: Self) -> Self {
+            a & b
+        }
+        pub fn or(a: Self, b: Self) -> Self {
+            a | b
+        }
+        pub fn xor(a: Self, b: Self) -> Self {
+            a ^ b
+        }
+    }
+
+    impl i8 {
+        pub const MIN: Self = -128;
+        pub const MAX: Self = 127;
+        pub const BIT_WIDTH: ::num::u32 = 1;
+        pub fn default() -> Self {
+            0
+        }
+        pub fn mul(a: Self, b: Self) -> Self {
+            a * b
+        }
+        pub fn div(a: Self, b: Self) -> Self {
+            a / b
+        }
+        pub fn rem(a: Self, b: Self) -> Self {
+            a % b
+        }
+        pub fn add(a: Self, b: Self) -> Self {
+            a + b
+        }
+        pub fn sub(a: Self, b: Self) -> Self {
+            a - b
+        }
+        pub fn shl(a: Self, b: ::num::u32) -> Self {
+            a << b
+        }
+        pub fn shr(a: Self, b: ::num::u32) -> Self {
+            a >> b
+        }
+        pub fn and(a: Self, b: Self) -> Self {
+            a & b
+        }
+        pub fn or(a: Self, b: Self) -> Self {
+            a | b
+        }
+        pub fn xor(a: Self, b: Self) -> Self {
+            a ^ b
+        }
+    }
+
+    impl i16 {
+        pub const MIN: Self = -32768;
+        pub const MAX: Self = 32767;
+        pub const BIT_WIDTH: ::num::u32 = 2;
+        pub fn default() -> Self {
+            0
+        }
+        pub fn mul(a: Self, b: Self) -> Self {
+            a * b
+        }
+        pub fn div(a: Self, b: Self) -> Self {
+            a / b
+        }
+        pub fn rem(a: Self, b: Self) -> Self {
+            a % b
+        }
+        pub fn add(a: Self, b: Self) -> Self {
+            a + b
+        }
+        pub fn sub(a: Self, b: Self) -> Self {
+            a - b
+        }
+        pub fn shl(a: Self, b: ::num::u32) -> Self {
+            a << b
+        }
+        pub fn shr(a: Self, b: ::num::u32) -> Self {
+            a >> b
+        }
+        pub fn and(a: Self, b: Self) -> Self {
+            a & b
+        }
+        pub fn or(a: Self, b: Self) -> Self {
+            a | b
+        }
+        pub fn xor(a: Self, b: Self) -> Self {
+            a ^ b
+        }
+    }
+
+    impl i32 {
+        pub const MIN: Self = -2147483648;
+        pub const MAX: Self = 2147483647;
+        pub const BIT_WIDTH: ::num::u32 = 4;
+        pub fn default() -> Self {
+            0
+        }
+        pub fn mul(a: Self, b: Self) -> Self {
+            a * b
+        }
+        pub fn div(a: Self, b: Self) -> Self {
+            a / b
+        }
+        pub fn rem(a: Self, b: Self) -> Self {
+            a % b
+        }
+        pub fn add(a: Self, b: Self) -> Self {
+            a + b
+        }
+        pub fn sub(a: Self, b: Self) -> Self {
+            a - b
+        }
+        pub fn shl(a: Self, b: ::num::u32) -> Self {
+            a << b
+        }
+        pub fn shr(a: Self, b: ::num::u32) -> Self {
+            a >> b
+        }
+        pub fn and(a: Self, b: Self) -> Self {
+            a & b
+        }
+        pub fn or(a: Self, b: Self) -> Self {
+            a | b
+        }
+        pub fn xor(a: Self, b: Self) -> Self {
+            a ^ b
+        }
+    }
+
+    impl i64 {
+        pub const MIN: Self = -9223372036854775808;
+        pub const MAX: Self = 9223372036854775807;
+        pub const BIT_WIDTH: ::num::u32 = 8;
+        pub fn default() -> Self {
+            0
+        }
+        pub fn mul(a: Self, b: Self) -> Self {
+            a * b
+        }
+        pub fn div(a: Self, b: Self) -> Self {
+            a / b
+        }
+        pub fn rem(a: Self, b: Self) -> Self {
+            a % b
+        }
+        pub fn add(a: Self, b: Self) -> Self {
+            a + b
+        }
+        pub fn sub(a: Self, b: Self) -> Self {
+            a - b
+        }
+        pub fn shl(a: Self, b: ::num::u32) -> Self {
+            a << b
+        }
+        pub fn shr(a: Self, b: ::num::u32) -> Self {
+            a >> b
+        }
+        pub fn and(a: Self, b: Self) -> Self {
+            a & b
+        }
+        pub fn or(a: Self, b: Self) -> Self {
+            a | b
+        }
+        pub fn xor(a: Self, b: Self) -> Self {
+            a ^ b
+        }
+    }
+
+    impl isize {
+        pub const MIN: Self = __march_ptr_width_signed_min();
+        pub const MAX: Self = __march_ptr_width_signed_max();
+        pub const BIT_WIDTH: ::num::u32 = __march_ptr_width_bits();
+        pub fn default() -> Self {
+            0
+        }
+        pub fn mul(a: Self, b: Self) -> Self {
+            a * b
+        }
+        pub fn div(a: Self, b: Self) -> Self {
+            a / b
+        }
+        pub fn rem(a: Self, b: Self) -> Self {
+            a % b
+        }
+        pub fn add(a: Self, b: Self) -> Self {
+            a + b
+        }
+        pub fn sub(a: Self, b: Self) -> Self {
+            a - b
+        }
+        pub fn shl(a: Self, b: ::num::u32) -> Self {
+            a << b
+        }
+        pub fn shr(a: Self, b: ::num::u32) -> Self {
+            a >> b
+        }
+        pub fn and(a: Self, b: Self) -> Self {
+            a & b
+        }
+        pub fn or(a: Self, b: Self) -> Self {
+            a | b
+        }
+        pub fn xor(a: Self, b: Self) -> Self {
+            a ^ b
+        }
+    }
 }
