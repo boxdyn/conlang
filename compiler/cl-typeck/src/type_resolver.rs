@@ -272,7 +272,23 @@ impl<'a> TypeResolvable<'a> for &'a Impl {
         .map_err(|_| "Unresolved type in impl target")?;
 
         prj[id].module.parent = Some(target);
-
+        match prj.pool.get_many_mut([id, target]) {
+            // TODO: Better error handling
+            Err(_) => Err(concat!(
+                file!(),
+                line!(),
+                column!(),
+                "id and target are same"
+            ))?,
+            Ok([id, target]) => {
+                for (name, def) in &id.module.types {
+                    target.module.insert_type(*name, *def);
+                }
+                for (name, def) in &id.module.values {
+                    target.module.insert_value(*name, *def);
+                }
+            }
+        }
         Ok(DefKind::Impl(target))
     }
 }
