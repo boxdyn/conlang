@@ -26,7 +26,6 @@ pub mod interned {
     /// dereference to the wrapped pointers, and as such, may produce
     /// results inconsistent with [PartialEq] or [Eq].
     #[repr(transparent)]
-    #[derive(Eq)]
     pub struct Interned<'a, T: ?Sized> {
         value: &'a T,
     }
@@ -80,6 +79,7 @@ pub mod interned {
     //     }
     // }
 
+    impl<'a, T: ?Sized> Eq for Interned<'a, T> {}
     impl<'a, T: ?Sized> PartialEq for Interned<'a, T> {
         fn eq(&self, other: &Self) -> bool {
             std::ptr::eq(self.value, other.value)
