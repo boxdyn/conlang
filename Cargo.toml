@@ -20,3 +20,6 @@ authors = ["John <j@soft.fish>"]
 edition = "2021"
 license = "MIT"
 publish = ["soft-fish"]
+
+[profile.dev]
+opt-level = 1
