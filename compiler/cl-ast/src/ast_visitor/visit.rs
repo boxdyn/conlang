@@ -223,6 +223,14 @@ pub trait Visit<'a>: Sized {
         self.visit_expr_kind(tail);
     }
     fn visit_unary_kind(&mut self, _kind: &'a UnaryKind) {}
+    fn visit_member(&mut self, m: &'a Member) {
+        let Member { head, kind } = m;
+        self.visit_expr_kind(head);
+        self.visit_member_kind(kind);
+    }
+    fn visit_member_kind(&mut self, kind: &'a MemberKind) {
+        or_visit_member_kind(self, kind)
+    }
     fn visit_index(&mut self, i: &'a Index) {
         let Index { head, indices } = i;
         self.visit_expr_kind(head);
@@ -431,6 +439,7 @@ pub fn or_visit_expr_kind<'a, V: Visit<'a>>(visitor: &mut V, e: &'a ExprKind) {
         ExprKind::Assign(a) => visitor.visit_assign(a),
         ExprKind::Binary(b) => visitor.visit_binary(b),
         ExprKind::Unary(u) => visitor.visit_unary(u),
+        ExprKind::Member(m) => visitor.visit_member(m),
         ExprKind::Index(i) => visitor.visit_index(i),
         ExprKind::Structor(s) => visitor.visit_structor(s),
         ExprKind::Path(p) => visitor.visit_path(p),
@@ -448,5 +457,15 @@ pub fn or_visit_expr_kind<'a, V: Visit<'a>>(visitor: &mut V, e: &'a ExprKind) {
         ExprKind::Break(b) => visitor.visit_break(b),
         ExprKind::Return(r) => visitor.visit_return(r),
         ExprKind::Continue(c) => visitor.visit_continue(c),
+    }
+}
+pub fn or_visit_member_kind<'a, V: Visit<'a>>(visitor: &mut V, kind: &'a MemberKind) {
+    match kind {
+        MemberKind::Call(field, args) => {
+            visitor.visit_identifier(field);
+            visitor.visit_tuple(args);
+        }
+        MemberKind::Struct(field) => visitor.visit_identifier(field),
+        MemberKind::Tuple(field) => visitor.visit_literal(field),
     }
 }

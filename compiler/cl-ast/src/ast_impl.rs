@@ -422,6 +422,7 @@ mod display {
                 ExprKind::Assign(v) => v.fmt(f),
                 ExprKind::Binary(v) => v.fmt(f),
                 ExprKind::Unary(v) => v.fmt(f),
+                ExprKind::Member(v) => v.fmt(f),
                 ExprKind::Index(v) => v.fmt(f),
                 ExprKind::Structor(v) => v.fmt(f),
                 ExprKind::Path(v) => v.fmt(f),
@@ -474,7 +475,6 @@ mod display {
             let Self { kind, parts } = self;
             let (head, tail) = parts.borrow();
             match kind {
-                BinaryKind::Dot => write!(f, "{head}{kind}{tail}"),
                 BinaryKind::Call => write!(f, "{head}{tail}"),
                 _ => write!(f, "{head} {kind} {tail}"),
             }
@@ -505,7 +505,6 @@ mod display {
                 BinaryKind::Mul => "*",
                 BinaryKind::Div => "/",
                 BinaryKind::Rem => "%",
-                BinaryKind::Dot => ".",
                 BinaryKind::Call => "()",
             }
             .fmt(f)
@@ -529,6 +528,23 @@ mod display {
                 UnaryKind::Tilde => "~",
             }
             .fmt(f)
+        }
+    }
+
+    impl Display for Member {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let Self { head, kind } = self;
+            write!(f, "{head}.{kind}")
+        }
+    }
+
+    impl Display for MemberKind {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                MemberKind::Call(name, args) => write!(f, "{name}{args}"),
+                MemberKind::Struct(name) => write!(f, "{name}"),
+                MemberKind::Tuple(name) => write!(f, "{name}"),
+            }
         }
     }
 
@@ -735,6 +751,7 @@ mod convert {
             Assign => ExprKind::Assign,
             Binary => ExprKind::Binary,
             Unary => ExprKind::Unary,
+            Member => ExprKind::Member,
             Index => ExprKind::Index,
             Path => ExprKind::Path,
             Literal => ExprKind::Literal,

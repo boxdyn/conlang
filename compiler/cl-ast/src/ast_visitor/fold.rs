@@ -262,6 +262,13 @@ pub trait Fold {
     fn fold_unary_kind(&mut self, kind: UnaryKind) -> UnaryKind {
         kind
     }
+    fn fold_member(&mut self, m: Member) -> Member {
+        let Member { head, kind } = m;
+        Member { head: Box::new(self.fold_expr_kind(*head)), kind: self.fold_member_kind(kind) }
+    }
+    fn fold_member_kind(&mut self, kind: MemberKind) -> MemberKind {
+        or_fold_member_kind(self, kind)
+    }
     fn fold_index(&mut self, i: Index) -> Index {
         let Index { head, indices } = i;
         Index {
@@ -517,6 +524,7 @@ pub fn or_fold_expr_kind<F: Fold + ?Sized>(folder: &mut F, kind: ExprKind) -> Ex
         ExprKind::Assign(a) => ExprKind::Assign(folder.fold_assign(a)),
         ExprKind::Binary(b) => ExprKind::Binary(folder.fold_binary(b)),
         ExprKind::Unary(u) => ExprKind::Unary(folder.fold_unary(u)),
+        ExprKind::Member(m) => ExprKind::Member(folder.fold_member(m)),
         ExprKind::Index(i) => ExprKind::Index(folder.fold_index(i)),
         ExprKind::Structor(s) => ExprKind::Structor(folder.fold_structor(s)),
         ExprKind::Path(p) => ExprKind::Path(folder.fold_path(p)),
@@ -534,5 +542,14 @@ pub fn or_fold_expr_kind<F: Fold + ?Sized>(folder: &mut F, kind: ExprKind) -> Ex
         ExprKind::Break(b) => ExprKind::Break(folder.fold_break(b)),
         ExprKind::Return(r) => ExprKind::Return(folder.fold_return(r)),
         ExprKind::Continue(c) => ExprKind::Continue(folder.fold_continue(c)),
+    }
+}
+pub fn or_fold_member_kind<F: Fold + ?Sized>(folder: &mut F, kind: MemberKind) -> MemberKind {
+    match kind {
+        MemberKind::Call(name, args) => {
+            MemberKind::Call(folder.fold_identifier(name), folder.fold_tuple(args))
+        }
+        MemberKind::Struct(name) => MemberKind::Struct(folder.fold_identifier(name)),
+        MemberKind::Tuple(name) => MemberKind::Tuple(folder.fold_literal(name)),
     }
 }

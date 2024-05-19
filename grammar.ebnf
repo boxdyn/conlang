@@ -95,7 +95,8 @@ Term        = Unary    (TermOp    Unary  )* ;
 
 Unary       = (UnaryKind)* Member ;
 
-Member      = Call ('.' Call)* ;
+Member      = Call (Access)* ;
+Access      = '.' (Identifier ('(' Tuple? ')')? | Literal) ;
 
 Call        = Index  ('(' Tuple? ')')* ;
 

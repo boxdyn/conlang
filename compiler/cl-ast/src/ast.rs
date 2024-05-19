@@ -352,6 +352,8 @@ pub enum ExprKind {
     Binary(Binary),
     /// A [Unary] expression: [`UnaryKind`]\* [`Expr`]
     Unary(Unary),
+    /// A [Member] access expression: [`Expr`] [`MemberKind`]\*
+    Member(Member),
     /// An Array [Index] expression: a[10, 20, 30]
     Index(Index),
     /// A [Struct creation](Structor) expression: [Path] `{` ([Fielder] `,`)* [Fielder]? `}`
@@ -443,7 +445,6 @@ pub enum BinaryKind {
     Mul,
     Div,
     Rem,
-    Dot,
     Call,
 }
 
@@ -465,6 +466,22 @@ pub enum UnaryKind {
     /// Unused
     Tilde,
 }
+
+/// A [Member] access expression: [`Expr`] [`MemberKind`]\*
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Member {
+    pub head: Box<ExprKind>,
+    pub kind: MemberKind,
+}
+
+/// The kind of [Member] access
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum MemberKind {
+    Call(Identifier, Tuple),
+    Struct(Identifier),
+    Tuple(Literal),
+}
+
 /// A repeated [Index] expression: a[10, 20, 30][40, 50, 60]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Index {

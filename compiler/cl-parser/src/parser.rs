@@ -862,6 +862,7 @@ impl<'t> Parser<'t> {
             Some(match op {
                 Punct::LBrack => Precedence::Index,
                 Punct::LParen => Precedence::Call,
+                Punct::Dot => Precedence::Member,
                 _ => None?,
             })
         }
@@ -888,6 +889,10 @@ impl<'t> Parser<'t> {
                             parts: (head, Tuple { exprs }.into()).into(),
                         }
                         .into()
+                    }
+                    Punct::Dot => {
+                        let kind = self.access()?;
+                        Member { head: Box::new(head), kind }.into()
                     }
                     _ => Err(self.error(Unexpected(TokenKind::Punct(op)), parsing))?,
                 };
@@ -920,6 +925,28 @@ impl<'t> Parser<'t> {
             break;
         }
         Ok(head)
+    }
+
+    pub fn access(&mut self) -> PResult<MemberKind> {
+        const PARSING: Parsing = Parsing::Member;
+        const DEL: (Punct, Punct) = PARENS; // delimiter
+        match self.peek_kind(PARSING)? {
+            TokenKind::Identifier => {
+                let name = self.identifier()?;
+                if self.match_op(DEL.0, PARSING).is_err() {
+                    Ok(MemberKind::Struct(name))
+                } else {
+                    let exprs = sep(Self::expr, Punct::Comma, DEL.1, PARSING)(self)?;
+                    self.match_op(DEL.1, PARSING)?; // should succeed
+                    Ok(MemberKind::Call(name, Tuple { exprs }))
+                }
+            }
+            TokenKind::Literal => {
+                let name = self.literal()?; // TODO: Maybe restrict this to just 
+                Ok(MemberKind::Tuple(name))
+            }
+            t => Err(self.error(Unexpected(t), PARSING)),
+        }
     }
 
     /// Parses an expression beginning with a [Path] (i.e. [Path] or [Structor])
@@ -1174,7 +1201,7 @@ impl Precedence {
     }
     pub fn postfix(self) -> Option<(u8, ())> {
         match self {
-            Self::Index | Self::Call => Some((self.level(), ())),
+            Self::Index | Self::Call | Self::Member => Some((self.level(), ())),
             _ => None,
         }
     }
@@ -1190,7 +1217,6 @@ impl From<BinaryKind> for Precedence {
         use BinaryKind as Op;
         match value {
             Op::Call => Precedence::Call,
-            Op::Dot => Precedence::Member,
             Op::Mul | Op::Div | Op::Rem => Precedence::Term,
             Op::Add | Op::Sub => Precedence::Factor,
             Op::Shl | Op::Shr => Precedence::Shift,
@@ -1264,6 +1290,5 @@ operator! {
         Star => Mul,
         Slash => Div,
         Rem => Rem,
-        Dot => Dot,
     };
 }

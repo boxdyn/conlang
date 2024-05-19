@@ -130,6 +130,7 @@ impl Interpret for ExprKind {
             ExprKind::Assign(v) => v.interpret(env),
             ExprKind::Binary(v) => v.interpret(env),
             ExprKind::Unary(v) => v.interpret(env),
+            ExprKind::Member(v) => v.interpret(env),
             ExprKind::Index(v) => v.interpret(env),
             ExprKind::Structor(v) => v.interpret(env),
             ExprKind::Path(v) => v.interpret(env),
@@ -256,7 +257,6 @@ impl Interpret for Binary {
             BinaryKind::Mul => head * tail,
             BinaryKind::Div => head / tail,
             BinaryKind::Rem => head % tail,
-            BinaryKind::Dot => todo!("search within a type's namespace!"),
             BinaryKind::Call => match tail {
                 ConValue::Empty => head.call(env, &[]),
                 ConValue::Tuple(args) => head.call(env, &args),
@@ -310,6 +310,26 @@ impl Interpret for Unary {
                 Ok(operand)
             }
             UnaryKind::Tilde => unimplemented!("Tilde operator"),
+        }
+    }
+}
+impl Interpret for Member {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let Member { head, kind } = self;
+        let head = head.interpret(env)?;
+        match (head, kind) {
+            (ConValue::Tuple(v), MemberKind::Tuple(Literal::Int(id))) => v
+                .get(*id as usize)
+                .cloned()
+                .ok_or(Error::OobIndex(*id as usize, v.len())),
+            (head, MemberKind::Call(name, args)) => {
+                let mut values = vec![head];
+                for arg in &args.exprs {
+                    values.push(arg.interpret(env)?);
+                }
+                env.call(name.0, &values)
+            }
+            _ => Err(Error::TypeError)?,
         }
     }
 }
