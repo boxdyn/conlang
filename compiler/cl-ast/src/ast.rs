@@ -45,7 +45,7 @@ pub struct File {
     pub items: Vec<Item>,
 }
 
-// Metadata decorators
+/// A list of [Meta] decorators
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Attrs {
     pub meta: Vec<Meta>,
