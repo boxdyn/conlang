@@ -5,7 +5,7 @@ use crate::{
     menu,
     tools::print_token,
 };
-use cl_interpret::{env::Environment, interpret::Interpret, temp_type_impl::ConValue};
+use cl_interpret::{convalue::ConValue, env::Environment, interpret::Interpret};
 use cl_lexer::Lexer;
 use cl_parser::Parser;
 use std::{error::Error, path::Path};

@@ -1,5 +1,5 @@
 #![allow(unused_imports)]
-use crate::{env::Environment, temp_type_impl::ConValue, Interpret};
+use crate::{env::Environment, convalue::ConValue, Interpret};
 use cl_ast::*;
 use cl_lexer::Lexer;
 use cl_parser::Parser;

@@ -3,10 +3,10 @@
 #![feature(decl_macro)]
 
 use cl_ast::Sym;
+use convalue::ConValue;
 use env::Environment;
 use error::{Error, IResult};
 use interpret::Interpret;
-use temp_type_impl::ConValue;
 
 /// Callable types can be called from within a Conlang program
 pub trait Callable: std::fmt::Debug {
@@ -22,8 +22,8 @@ pub trait BuiltIn: std::fmt::Debug + Callable {
     fn description(&self) -> &str;
 }
 
-pub mod temp_type_impl {
-    //! Temporary implementations of Conlang values
+pub mod convalue {
+    //! Values in the dynamically typed AST interpreter.
     //!
     //! The most permanent fix is a temporary one.
     use cl_ast::Sym;
@@ -37,10 +37,7 @@ pub mod temp_type_impl {
 
     type Integer = isize;
 
-    /// A Conlang value
-    ///
-    /// This is a hack to work around the fact that Conlang doesn't
-    /// have a functioning type system yet :(
+    /// A Conlang value stores data in the interpreter
     #[derive(Clone, Debug, Default)]
     pub enum ConValue {
         /// The empty/unit `()` type
@@ -365,9 +362,9 @@ pub mod env {
     //! Lexical and non-lexical scoping for variables
     use super::{
         builtin::{BINARY, MISC, RANGE, UNARY},
+        convalue::ConValue,
         error::{Error, IResult},
         function::Function,
-        temp_type_impl::ConValue,
         BuiltIn, Callable, Interpret,
     };
     use cl_ast::{Function as FnDecl, Sym};
@@ -534,7 +531,7 @@ pub mod error {
 
     use cl_ast::Sym;
 
-    use super::temp_type_impl::ConValue;
+    use super::convalue::ConValue;
 
     pub type IResult<T> = Result<T, Error>;
 
