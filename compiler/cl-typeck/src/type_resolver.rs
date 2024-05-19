@@ -34,7 +34,7 @@ pub fn resolve(prj: &mut Prj, id: DefID) -> Result<(), &'static str> {
 
     eprintln!("Resolver: \x1b[32mEvaluating\x1b[0m \"\x1b[36m{kind} {name}\x1b[0m\" (`{id:?}`)");
 
-    for Meta { name: Identifier(name), kind } in meta {
+    for Meta { name, kind } in meta {
         if let ("intrinsic", MetaKind::Equals(Literal::String(s))) = (&**name, kind) {
             prj[id].kind = DefKind::Type(TypeKind::Intrinsic(
                 s.parse().map_err(|_| "Failed to parse intrinsic")?,
@@ -85,7 +85,7 @@ impl<'a> TypeResolvable<'a> for &'a Meta {
 
     #[allow(unused_variables)]
     fn resolve_type(self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
-        let Meta { name: Identifier(name), kind } = self;
+        let Meta { name, kind } = self;
         match (name.as_ref(), kind) {
             ("intrinsic", MetaKind::Equals(Literal::String(intrinsic))) => Ok(DefKind::Type(
                 TypeKind::Intrinsic(intrinsic.parse().map_err(|_| "unknown intrinsic type")?),
@@ -134,7 +134,7 @@ impl<'a> TypeResolvable<'a> for &'a Enum {
             return Ok(DefKind::Type(TypeKind::Adt(Adt::FieldlessEnum)));
         };
         let mut fields = vec![];
-        for Variant { name: Identifier(name), kind: _ } in v {
+        for Variant { name, kind: _ } in v {
             let id = prj[id].module.get_type(*name);
             fields.push((*name, id))
         }
@@ -201,7 +201,7 @@ impl<'a> TypeResolvable<'a> for &'a StructMember {
 
     fn resolve_type(self, prj: &mut Prj<'a>, id: DefID) -> Result<Self::Out, &'static str> {
         let parent = prj.parent_of(id).unwrap_or(id);
-        let StructMember { name: Identifier(name), vis, ty } = self;
+        let StructMember { name, vis, ty } = self;
 
         let ty = ty
             .evaluate(prj, parent)

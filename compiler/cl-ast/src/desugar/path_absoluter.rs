@@ -24,9 +24,9 @@ impl Default for NormalizePaths {
 impl Fold for NormalizePaths {
     fn fold_module(&mut self, m: Module) -> Module {
         let Module { name, kind } = m;
-        self.path.push(PathPart::Ident(name.clone()));
+        self.path.push(PathPart::Ident(name));
 
-        let (name, kind) = (self.fold_identifier(name), self.fold_module_kind(kind));
+        let (name, kind) = (self.fold_sym(name), self.fold_module_kind(kind));
 
         self.path.pop();
         Module { name, kind }

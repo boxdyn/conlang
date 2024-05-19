@@ -16,7 +16,7 @@ pub trait Visit<'a>: Sized {
     fn visit_span(&mut self, _extents: &'a Span) {}
     fn visit_mutability(&mut self, _mutable: &'a Mutability) {}
     fn visit_visibility(&mut self, _vis: &'a Visibility) {}
-    fn visit_identifier(&mut self, _name: &'a Identifier) {}
+    fn visit_sym(&mut self, _name: &'a Sym) {}
     fn visit_literal(&mut self, l: &'a Literal) {
         or_visit_literal(self, l)
     }
@@ -34,7 +34,7 @@ pub trait Visit<'a>: Sized {
     }
     fn visit_meta(&mut self, m: &'a Meta) {
         let Meta { name, kind } = m;
-        self.visit_identifier(name);
+        self.visit_sym(name);
         self.visit_meta_kind(kind);
     }
     fn visit_meta_kind(&mut self, kind: &'a MetaKind) {
@@ -52,27 +52,27 @@ pub trait Visit<'a>: Sized {
     }
     fn visit_alias(&mut self, a: &'a Alias) {
         let Alias { to, from } = a;
-        self.visit_identifier(to);
+        self.visit_sym(to);
         if let Some(t) = from {
             self.visit_ty(t)
         }
     }
     fn visit_const(&mut self, c: &'a Const) {
         let Const { name, ty, init } = c;
-        self.visit_identifier(name);
+        self.visit_sym(name);
         self.visit_ty(ty);
         self.visit_expr(init);
     }
     fn visit_static(&mut self, s: &'a Static) {
         let Static { mutable, name, ty, init } = s;
         self.visit_mutability(mutable);
-        self.visit_identifier(name);
+        self.visit_sym(name);
         self.visit_ty(ty);
         self.visit_expr(init);
     }
     fn visit_module(&mut self, m: &'a Module) {
         let Module { name, kind } = m;
-        self.visit_identifier(name);
+        self.visit_sym(name);
         self.visit_module_kind(kind);
     }
     fn visit_module_kind(&mut self, kind: &'a ModuleKind) {
@@ -80,7 +80,7 @@ pub trait Visit<'a>: Sized {
     }
     fn visit_function(&mut self, f: &'a Function) {
         let Function { name, sign, bind, body } = f;
-        self.visit_identifier(name);
+        self.visit_sym(name);
         self.visit_ty_fn(sign);
         bind.iter().for_each(|p| self.visit_param(p));
         if let Some(b) = body {
@@ -90,11 +90,11 @@ pub trait Visit<'a>: Sized {
     fn visit_param(&mut self, p: &'a Param) {
         let Param { mutability, name } = p;
         self.visit_mutability(mutability);
-        self.visit_identifier(name);
+        self.visit_sym(name);
     }
     fn visit_struct(&mut self, s: &'a Struct) {
         let Struct { name, kind } = s;
-        self.visit_identifier(name);
+        self.visit_sym(name);
         self.visit_struct_kind(kind);
     }
     fn visit_struct_kind(&mut self, kind: &'a StructKind) {
@@ -103,12 +103,12 @@ pub trait Visit<'a>: Sized {
     fn visit_struct_member(&mut self, m: &'a StructMember) {
         let StructMember { vis, name, ty } = m;
         self.visit_visibility(vis);
-        self.visit_identifier(name);
+        self.visit_sym(name);
         self.visit_ty(ty);
     }
     fn visit_enum(&mut self, e: &'a Enum) {
         let Enum { name, kind } = e;
-        self.visit_identifier(name);
+        self.visit_sym(name);
         self.visit_enum_kind(kind);
     }
     fn visit_enum_kind(&mut self, kind: &'a EnumKind) {
@@ -116,7 +116,7 @@ pub trait Visit<'a>: Sized {
     }
     fn visit_variant(&mut self, v: &'a Variant) {
         let Variant { name, kind } = v;
-        self.visit_identifier(name);
+        self.visit_sym(name);
         self.visit_variant_kind(kind);
     }
     fn visit_variant_kind(&mut self, kind: &'a VariantKind) {
@@ -169,7 +169,7 @@ pub trait Visit<'a>: Sized {
         match p {
             PathPart::SuperKw => {}
             PathPart::SelfKw => {}
-            PathPart::Ident(i) => self.visit_identifier(i),
+            PathPart::Ident(i) => self.visit_sym(i),
         }
     }
     fn visit_stmt(&mut self, s: &'a Stmt) {
@@ -185,7 +185,7 @@ pub trait Visit<'a>: Sized {
     fn visit_let(&mut self, l: &'a Let) {
         let Let { mutable, name, ty, init } = l;
         self.visit_mutability(mutable);
-        self.visit_identifier(name);
+        self.visit_sym(name);
         if let Some(ty) = ty {
             self.visit_ty(ty);
         }
@@ -249,7 +249,7 @@ pub trait Visit<'a>: Sized {
     }
     fn visit_fielder(&mut self, f: &'a Fielder) {
         let Fielder { name, init } = f;
-        self.visit_identifier(name);
+        self.visit_sym(name);
         if let Some(init) = init {
             self.visit_expr(init);
         }
@@ -298,7 +298,7 @@ pub trait Visit<'a>: Sized {
     }
     fn visit_for(&mut self, f: &'a For) {
         let For { bind, cond, pass, fail } = f;
-        self.visit_identifier(bind);
+        self.visit_sym(bind);
         self.visit_expr(cond);
         self.visit_block(pass);
         self.visit_else(fail);
@@ -408,11 +408,11 @@ pub fn or_visit_use_tree<'a, V: Visit<'a>>(visitor: &mut V, tree: &'a UseTree) {
             visitor.visit_use_tree(rest)
         }
         UseTree::Alias(path, name) => {
-            visitor.visit_identifier(path);
-            visitor.visit_identifier(name);
+            visitor.visit_sym(path);
+            visitor.visit_sym(name);
         }
         UseTree::Name(name) => {
-            visitor.visit_identifier(name);
+            visitor.visit_sym(name);
         }
         UseTree::Glob => {}
     }
@@ -469,10 +469,10 @@ pub fn or_visit_expr_kind<'a, V: Visit<'a>>(visitor: &mut V, e: &'a ExprKind) {
 pub fn or_visit_member_kind<'a, V: Visit<'a>>(visitor: &mut V, kind: &'a MemberKind) {
     match kind {
         MemberKind::Call(field, args) => {
-            visitor.visit_identifier(field);
+            visitor.visit_sym(field);
             visitor.visit_tuple(args);
         }
-        MemberKind::Struct(field) => visitor.visit_identifier(field),
+        MemberKind::Struct(field) => visitor.visit_sym(field),
         MemberKind::Tuple(field) => visitor.visit_literal(field),
     }
 }

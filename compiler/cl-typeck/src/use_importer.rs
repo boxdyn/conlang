@@ -58,7 +58,7 @@ impl<'a> Project<'a> {
             }
 
             UseTree::Name(name) => self.visit_use_leaf(name, parent, c)?,
-            UseTree::Alias(Identifier(from), Identifier(to)) => {
+            UseTree::Alias(from, to) => {
                 self.visit_use_alias(from, to, parent, c)?
             }
             UseTree::Glob => self.visit_use_glob(parent, c)?,
@@ -70,8 +70,7 @@ impl<'a> Project<'a> {
         Ok(())
     }
 
-    pub fn visit_use_leaf(&mut self, part: &'a Identifier, parent: DefID, c: DefID) -> UseResult {
-        let Identifier(name) = part;
+    pub fn visit_use_leaf(&mut self, name: &'a Sym, parent: DefID, c: DefID) -> UseResult {
         self.visit_use_alias(name, name, parent, c)
     }
 

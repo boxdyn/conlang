@@ -22,7 +22,7 @@ pub trait Fold {
     fn fold_visibility(&mut self, visibility: Visibility) -> Visibility {
         visibility
     }
-    fn fold_identifier(&mut self, ident: Identifier) -> Identifier {
+    fn fold_sym(&mut self, ident: Sym) -> Sym {
         ident
     }
     fn fold_literal(&mut self, lit: Literal) -> Literal {
@@ -50,7 +50,7 @@ pub trait Fold {
     }
     fn fold_meta(&mut self, m: Meta) -> Meta {
         let Meta { name, kind } = m;
-        Meta { name: self.fold_identifier(name), kind: self.fold_meta_kind(kind) }
+        Meta { name: self.fold_sym(name), kind: self.fold_meta_kind(kind) }
     }
     fn fold_meta_kind(&mut self, kind: MetaKind) -> MetaKind {
         or_fold_meta_kind(self, kind)
@@ -69,12 +69,12 @@ pub trait Fold {
     }
     fn fold_alias(&mut self, a: Alias) -> Alias {
         let Alias { to, from } = a;
-        Alias { to: self.fold_identifier(to), from: from.map(|from| Box::new(self.fold_ty(*from))) }
+        Alias { to: self.fold_sym(to), from: from.map(|from| Box::new(self.fold_ty(*from))) }
     }
     fn fold_const(&mut self, c: Const) -> Const {
         let Const { name, ty, init } = c;
         Const {
-            name: self.fold_identifier(name),
+            name: self.fold_sym(name),
             ty: Box::new(self.fold_ty(*ty)),
             init: Box::new(self.fold_expr(*init)),
         }
@@ -83,14 +83,14 @@ pub trait Fold {
         let Static { mutable, name, ty, init } = s;
         Static {
             mutable: self.fold_mutability(mutable),
-            name: self.fold_identifier(name),
+            name: self.fold_sym(name),
             ty: Box::new(self.fold_ty(*ty)),
             init: Box::new(self.fold_expr(*init)),
         }
     }
     fn fold_module(&mut self, m: Module) -> Module {
         let Module { name, kind } = m;
-        Module { name: self.fold_identifier(name), kind: self.fold_module_kind(kind) }
+        Module { name: self.fold_sym(name), kind: self.fold_module_kind(kind) }
     }
     fn fold_module_kind(&mut self, m: ModuleKind) -> ModuleKind {
         match m {
@@ -101,7 +101,7 @@ pub trait Fold {
     fn fold_function(&mut self, f: Function) -> Function {
         let Function { name, sign, bind, body } = f;
         Function {
-            name: self.fold_identifier(name),
+            name: self.fold_sym(name),
             sign: self.fold_ty_fn(sign),
             bind: bind.into_iter().map(|p| self.fold_param(p)).collect(),
             body: body.map(|b| self.fold_block(b)),
@@ -109,11 +109,11 @@ pub trait Fold {
     }
     fn fold_param(&mut self, p: Param) -> Param {
         let Param { mutability, name } = p;
-        Param { mutability: self.fold_mutability(mutability), name: self.fold_identifier(name) }
+        Param { mutability: self.fold_mutability(mutability), name: self.fold_sym(name) }
     }
     fn fold_struct(&mut self, s: Struct) -> Struct {
         let Struct { name, kind } = s;
-        Struct { name: self.fold_identifier(name), kind: self.fold_struct_kind(kind) }
+        Struct { name: self.fold_sym(name), kind: self.fold_struct_kind(kind) }
     }
     fn fold_struct_kind(&mut self, kind: StructKind) -> StructKind {
         match kind {
@@ -132,13 +132,13 @@ pub trait Fold {
         let StructMember { vis, name, ty } = m;
         StructMember {
             vis: self.fold_visibility(vis),
-            name: self.fold_identifier(name),
+            name: self.fold_sym(name),
             ty: self.fold_ty(ty),
         }
     }
     fn fold_enum(&mut self, e: Enum) -> Enum {
         let Enum { name, kind } = e;
-        Enum { name: self.fold_identifier(name), kind: self.fold_enum_kind(kind) }
+        Enum { name: self.fold_sym(name), kind: self.fold_enum_kind(kind) }
     }
     fn fold_enum_kind(&mut self, kind: EnumKind) -> EnumKind {
         or_fold_enum_kind(self, kind)
@@ -146,7 +146,7 @@ pub trait Fold {
     fn fold_variant(&mut self, v: Variant) -> Variant {
         let Variant { name, kind } = v;
 
-        Variant { name: self.fold_identifier(name), kind: self.fold_variant_kind(kind) }
+        Variant { name: self.fold_sym(name), kind: self.fold_variant_kind(kind) }
     }
     fn fold_variant_kind(&mut self, kind: VariantKind) -> VariantKind {
         or_fold_variant_kind(self, kind)
@@ -200,7 +200,7 @@ pub trait Fold {
         match p {
             PathPart::SuperKw => PathPart::SuperKw,
             PathPart::SelfKw => PathPart::SelfKw,
-            PathPart::Ident(i) => PathPart::Ident(self.fold_identifier(i)),
+            PathPart::Ident(i) => PathPart::Ident(self.fold_sym(i)),
         }
     }
     fn fold_stmt(&mut self, s: Stmt) -> Stmt {
@@ -221,7 +221,7 @@ pub trait Fold {
         let Let { mutable, name, ty, init } = l;
         Let {
             mutable: self.fold_mutability(mutable),
-            name: self.fold_identifier(name),
+            name: self.fold_sym(name),
             ty: ty.map(|t| Box::new(self.fold_ty(*t))),
             init: init.map(|e| Box::new(self.fold_expr(*e))),
         }
@@ -292,10 +292,7 @@ pub trait Fold {
 
     fn fold_fielder(&mut self, f: Fielder) -> Fielder {
         let Fielder { name, init } = f;
-        Fielder {
-            name: self.fold_identifier(name),
-            init: init.map(|e| Box::new(self.fold_expr(*e))),
-        }
+        Fielder { name: self.fold_sym(name), init: init.map(|e| Box::new(self.fold_expr(*e))) }
     }
     fn fold_array(&mut self, a: Array) -> Array {
         let Array { values } = a;
@@ -351,7 +348,7 @@ pub trait Fold {
     fn fold_for(&mut self, f: For) -> For {
         let For { bind, cond, pass, fail } = f;
         For {
-            bind: self.fold_identifier(bind),
+            bind: self.fold_sym(bind),
             cond: Box::new(self.fold_expr(*cond)),
             pass: Box::new(self.fold_block(*pass)),
             fail: self.fold_else(fail),
@@ -489,10 +486,8 @@ pub fn or_fold_use_tree<F: Fold + ?Sized>(folder: &mut F, tree: UseTree) -> UseT
             folder.fold_path_part(path),
             Box::new(folder.fold_use_tree(*rest)),
         ),
-        UseTree::Alias(path, name) => {
-            UseTree::Alias(folder.fold_identifier(path), folder.fold_identifier(name))
-        }
-        UseTree::Name(name) => UseTree::Name(folder.fold_identifier(name)),
+        UseTree::Alias(path, name) => UseTree::Alias(folder.fold_sym(path), folder.fold_sym(name)),
+        UseTree::Name(name) => UseTree::Name(folder.fold_sym(name)),
         UseTree::Glob => UseTree::Glob,
     }
 }
@@ -553,9 +548,9 @@ pub fn or_fold_expr_kind<F: Fold + ?Sized>(folder: &mut F, kind: ExprKind) -> Ex
 pub fn or_fold_member_kind<F: Fold + ?Sized>(folder: &mut F, kind: MemberKind) -> MemberKind {
     match kind {
         MemberKind::Call(name, args) => {
-            MemberKind::Call(folder.fold_identifier(name), folder.fold_tuple(args))
+            MemberKind::Call(folder.fold_sym(name), folder.fold_tuple(args))
         }
-        MemberKind::Struct(name) => MemberKind::Struct(folder.fold_identifier(name)),
+        MemberKind::Struct(name) => MemberKind::Struct(folder.fold_sym(name)),
         MemberKind::Tuple(name) => MemberKind::Tuple(folder.fold_literal(name)),
     }
 }

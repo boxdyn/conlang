@@ -769,8 +769,8 @@ impl<'t> Parser<'t> {
         self.consume_peeked();
         Ok(out)
     }
-    /// [Identifier] = [`Identifier`](TokenKind::Identifier)
-    pub fn identifier(&mut self) -> PResult<Identifier> {
+    /// [Sym] = [`Identifier`](TokenKind::Identifier)
+    pub fn identifier(&mut self) -> PResult<Sym> {
         let tok = self.match_type(TokenKind::Identifier, Parsing::Identifier)?;
         match tok.data() {
             TokenData::String(ident) => Ok(ident.into()),

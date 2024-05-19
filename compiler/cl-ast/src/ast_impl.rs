@@ -44,12 +44,6 @@ mod display {
         }
     }
 
-    impl Display for Identifier {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            self.0.fmt(f)
-        }
-    }
-
     impl Display for Literal {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
@@ -691,11 +685,6 @@ mod convert {
     //! Converts between major enums and enum variants
     use super::*;
 
-    impl<T: AsRef<str>> From<T> for Identifier {
-        fn from(value: T) -> Self {
-            Identifier(value.as_ref().into())
-        }
-    }
     impl<T: AsRef<str>> From<T> for PathPart {
         fn from(value: T) -> Self {
             match value.as_ref() {
@@ -799,7 +788,7 @@ mod convert {
 
 mod path {
     //! Utils for [Path]
-    use crate::{ast::Path, Identifier, PathPart};
+    use crate::{ast::Path, PathPart, Sym};
 
     impl Path {
         /// Appends a [PathPart] to this [Path]
@@ -822,7 +811,7 @@ mod path {
         }
     }
     impl PathPart {
-        pub fn from_ident(ident: Identifier) -> Self {
+        pub fn from_sym(ident: Sym) -> Self {
             Self::Ident(ident)
         }
     }

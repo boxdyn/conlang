@@ -29,11 +29,6 @@ pub enum Visibility {
     Public,
 }
 
-// TODO: Capture token?
-/// A name
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Identifier(pub Sym);
-
 /// A [Literal]: 0x42, 1e123, 2.4, "Hello"
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Literal {
@@ -58,7 +53,7 @@ pub struct Attrs {
 /// A metadata decorator
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Meta {
-    pub name: Identifier,
+    pub name: Sym,
     pub kind: MetaKind,
 }
 
@@ -108,14 +103,14 @@ pub enum ItemKind {
 /// An alias to another [Ty]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Alias {
-    pub to: Identifier,
+    pub to: Sym,
     pub from: Option<Box<Ty>>,
 }
 
 /// A compile-time constant
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Const {
-    pub name: Identifier,
+    pub name: Sym,
     pub ty: Box<Ty>,
     pub init: Box<Expr>,
 }
@@ -124,7 +119,7 @@ pub struct Const {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Static {
     pub mutable: Mutability,
-    pub name: Identifier,
+    pub name: Sym,
     pub ty: Box<Ty>,
     pub init: Box<Expr>,
 }
@@ -132,7 +127,7 @@ pub struct Static {
 /// An ordered collection of [Items](Item)
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Module {
-    pub name: Identifier,
+    pub name: Sym,
     pub kind: ModuleKind,
 }
 
@@ -146,7 +141,7 @@ pub enum ModuleKind {
 /// Code, and the interface to that code
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Function {
-    pub name: Identifier,
+    pub name: Sym,
     pub sign: TyFn,
     pub bind: Vec<Param>,
     pub body: Option<Block>,
@@ -156,13 +151,13 @@ pub struct Function {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Param {
     pub mutability: Mutability,
-    pub name: Identifier,
+    pub name: Sym,
 }
 
 /// A user-defined product type
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Struct {
-    pub name: Identifier,
+    pub name: Sym,
     pub kind: StructKind,
 }
 
@@ -174,18 +169,18 @@ pub enum StructKind {
     Struct(Vec<StructMember>),
 }
 
-/// The [Visibility], [Identifier], and [Ty]pe of a single [Struct] member
+/// The [Visibility], [Sym], and [Ty]pe of a single [Struct] member
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct StructMember {
     pub vis: Visibility,
-    pub name: Identifier,
+    pub name: Sym,
     pub ty: Ty,
 }
 
 /// A user-defined sum type
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Enum {
-    pub name: Identifier,
+    pub name: Sym,
     pub kind: EnumKind,
 }
 
@@ -200,7 +195,7 @@ pub enum EnumKind {
 /// A single [Enum] variant
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Variant {
-    pub name: Identifier,
+    pub name: Sym,
     pub kind: VariantKind,
 }
 
@@ -239,8 +234,8 @@ pub struct Use {
 pub enum UseTree {
     Tree(Vec<UseTree>),
     Path(PathPart, Box<UseTree>),
-    Alias(Identifier, Identifier),
-    Name(Identifier),
+    Alias(Sym, Sym),
+    Name(Sym),
     Glob,
 }
 
@@ -297,7 +292,7 @@ pub struct Path {
 pub enum PathPart {
     SuperKw,
     SelfKw,
-    Ident(Identifier),
+    Ident(Sym),
 }
 
 /// An abstract statement, and associated metadata
@@ -328,7 +323,7 @@ pub enum Semi {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Let {
     pub mutable: Mutability,
-    pub name: Identifier,
+    pub name: Sym,
     pub ty: Option<Box<Ty>>,
     pub init: Option<Box<Expr>>,
 }
@@ -483,8 +478,8 @@ pub struct Member {
 /// The kind of [Member] access
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum MemberKind {
-    Call(Identifier, Tuple),
-    Struct(Identifier),
+    Call(Sym, Tuple),
+    Struct(Sym),
     Tuple(Literal),
 }
 
@@ -502,10 +497,10 @@ pub struct Structor {
     pub init: Vec<Fielder>,
 }
 
-/// A [Struct field initializer] expression: [Identifier] (`=` [Expr])?
+/// A [Struct field initializer] expression: [Sym] (`=` [Expr])?
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Fielder {
-    pub name: Identifier,
+    pub name: Sym,
     pub init: Option<Box<Expr>>,
 }
 
@@ -574,7 +569,7 @@ pub struct If {
 /// A [For] expression: `for` Pattern `in` [`Expr`] [`Block`] [`Else`]?
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct For {
-    pub bind: Identifier, // TODO: Patterns?
+    pub bind: Sym, // TODO: Patterns?
     pub cond: Box<Expr>,
     pub pass: Box<Block>,
     pub fail: Else,

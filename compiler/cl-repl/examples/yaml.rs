@@ -588,10 +588,9 @@ pub mod yamlify {
             y.value(format_args!("\"{self}\""));
         }
     }
-    impl Yamlify for Identifier {
+    impl Yamlify for Sym {
         fn yaml(&self, y: &mut Yamler) {
-            let Self(name) = self;
-            y.value(name);
+            y.value(self);
         }
     }
     impl Yamlify for Param {

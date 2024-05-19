@@ -47,15 +47,15 @@ impl<'a> NodeSource<'a> {
     pub fn name(&self) -> Option<Sym> {
         match self {
             NodeSource::Root => None,
-            NodeSource::Module(v) => Some(v.name.0),
-            NodeSource::Alias(v) => Some(v.to.0),
-            NodeSource::Enum(v) => Some(v.name.0),
-            NodeSource::Variant(v) => Some(v.name.0),
-            NodeSource::Struct(v) => Some(v.name.0),
-            NodeSource::Const(v) => Some(v.name.0),
-            NodeSource::Static(v) => Some(v.name.0),
-            NodeSource::Function(v) => Some(v.name.0),
-            NodeSource::Local(l) => Some(l.name.0),
+            NodeSource::Module(v) => Some(v.name),
+            NodeSource::Alias(v) => Some(v.to),
+            NodeSource::Enum(v) => Some(v.name),
+            NodeSource::Variant(v) => Some(v.name),
+            NodeSource::Struct(v) => Some(v.name),
+            NodeSource::Const(v) => Some(v.name),
+            NodeSource::Static(v) => Some(v.name),
+            NodeSource::Function(v) => Some(v.name),
+            NodeSource::Local(l) => Some(l.name),
             NodeSource::Impl(_) | NodeSource::Use(_) | NodeSource::Ty(_) => None,
         }
     }
@@ -166,7 +166,7 @@ pub mod sorcerer {
     impl<'a> Visit<'a> for NodeSorcerer<'a> {
         fn visit_module(&mut self, m: &'a Module) {
             let Module { name, kind } = m;
-            self.path.push(PathPart::Ident(name.clone()));
+            self.path.push(PathPart::Ident(*name));
             self.visit_module_kind(kind);
             self.path.pop();
         }

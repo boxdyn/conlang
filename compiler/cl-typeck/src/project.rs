@@ -6,7 +6,7 @@ use crate::{
     node::{Node, NodeSource},
     path::Path,
 };
-use cl_ast::{Identifier, PathPart};
+use cl_ast::PathPart;
 use cl_structures::deprecated_intern_pool::Pool;
 use std::{
     collections::HashMap,
@@ -85,11 +85,11 @@ impl<'a> Project<'a> {
         }
         match path.as_ref() {
             [] => Some((Some(within), None, path)),
-            [PathPart::Ident(Identifier(name))] => {
+            [PathPart::Ident(name)] => {
                 let (ty, val) = self[within].module.get(*name);
                 Some((ty, val, path.pop_front()?))
             }
-            [PathPart::Ident(Identifier(name)), ..] => {
+            [PathPart::Ident(name), ..] => {
                 let ty = self[within].module.get_type(*name)?;
                 self.get(path.pop_front()?, ty)
             }
@@ -108,7 +108,7 @@ impl<'a> Project<'a> {
             match front {
                 PathPart::SelfKw => self.get_type(path.pop_front()?, within),
                 PathPart::SuperKw => self.get_type(path.pop_front()?, module.parent?),
-                PathPart::Ident(Identifier(name)) => match module.types.get(name) {
+                PathPart::Ident(name) => match module.types.get(name) {
                     Some(&submodule) => self.get_type(path.pop_front()?, submodule),
                     None => Some((within, path)),
                 },
@@ -120,7 +120,7 @@ impl<'a> Project<'a> {
 
     pub fn get_value<'p>(&self, path: Path<'p>, within: DefID) -> Option<(DefID, Path<'p>)> {
         match path.front()? {
-            PathPart::Ident(Identifier(name)) => Some((
+            PathPart::Ident(name) => Some((
                 self[within].module.values.get(name).copied()?,
                 path.pop_front()?,
             )),
@@ -280,7 +280,7 @@ pub mod evaluate {
                     .parent_of(parent)
                     .ok_or_else(|| "Attempt to get super of root".into()),
                 PathPart::SelfKw => Ok(parent),
-                PathPart::Ident(Identifier(name)) => name.evaluate(prj, parent),
+                PathPart::Ident(name) => name.evaluate(prj, parent),
             }
         }
     }

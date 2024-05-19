@@ -51,7 +51,7 @@ impl<'prj, 'a> Visit<'a> for NameCollector<'prj, 'a> {
     }
     fn visit_module(&mut self, m: &'a Module) {
         let Self { prj, parent, path, retval: _ } = self;
-        let Module { name: Identifier(name), kind } = m;
+        let Module { name, kind } = m;
 
         let def = Def {
             module: Mod::new(*parent),
@@ -60,14 +60,14 @@ impl<'prj, 'a> Visit<'a> for NameCollector<'prj, 'a> {
         };
         let id = prj.pool.insert(def);
         prj[*parent].module.insert_type(*name, id);
-        self.path.push(PathPart::Ident(Identifier(*name)));
+        self.path.push(PathPart::Ident(*name));
         self.with_parent(id, kind, Self::visit_module_kind);
         self.path.pop();
         self.retval = Some(id);
     }
     fn visit_alias(&mut self, a: &'a Alias) {
         let Self { prj, parent, path, retval: _ } = self;
-        let Alias { to: Identifier(name), from: _ } = a;
+        let Alias { to: name, from: _ } = a;
 
         let def = Def {
             module: Mod::new(*parent),
@@ -81,7 +81,7 @@ impl<'prj, 'a> Visit<'a> for NameCollector<'prj, 'a> {
     }
     fn visit_enum(&mut self, e: &'a Enum) {
         let Self { prj, parent, path, retval: _ } = self;
-        let Enum { name: Identifier(name), kind } = e;
+        let Enum { name, kind } = e;
 
         let def = Def {
             module: Mod::new(*parent),
@@ -96,7 +96,7 @@ impl<'prj, 'a> Visit<'a> for NameCollector<'prj, 'a> {
     }
     fn visit_variant(&mut self, v: &'a Variant) {
         let Self { path, prj, parent, retval: _ } = self;
-        let Variant { name: Identifier(name), kind } = v;
+        let Variant { name, kind } = v;
 
         let def = Def {
             module: Mod::new(*parent),
@@ -111,7 +111,7 @@ impl<'prj, 'a> Visit<'a> for NameCollector<'prj, 'a> {
     }
     fn visit_struct(&mut self, s: &'a Struct) {
         let Self { prj, parent, path, retval: _ } = self;
-        let Struct { name: Identifier(name), kind } = s;
+        let Struct { name, kind } = s;
 
         let def = Def {
             module: Mod::new(*parent),
@@ -126,7 +126,7 @@ impl<'prj, 'a> Visit<'a> for NameCollector<'prj, 'a> {
     }
     fn visit_const(&mut self, c: &'a Const) {
         let Self { prj, parent, path, retval: _ } = self;
-        let Const { name: Identifier(name), ty: _, init } = c;
+        let Const { name, ty: _, init } = c;
 
         let def = Def {
             module: Mod::new(*parent),
@@ -141,7 +141,7 @@ impl<'prj, 'a> Visit<'a> for NameCollector<'prj, 'a> {
     }
     fn visit_static(&mut self, s: &'a Static) {
         let Self { prj, parent, path, retval: _ } = self;
-        let Static { name: Identifier(name), mutable: _, ty: _, init } = s;
+        let Static { name, mutable: _, ty: _, init } = s;
 
         let def = Def {
             module: Mod::new(*parent),
@@ -156,7 +156,7 @@ impl<'prj, 'a> Visit<'a> for NameCollector<'prj, 'a> {
     }
     fn visit_function(&mut self, f: &'a Function) {
         let Self { prj, parent, path, retval: _ } = self;
-        let Function { name: Identifier(name), body, .. } = f;
+        let Function { name, body, .. } = f;
 
         let def = Def {
             module: Mod::new(*parent),
@@ -201,7 +201,7 @@ impl<'prj, 'a> Visit<'a> for NameCollector<'prj, 'a> {
     }
     fn visit_let(&mut self, l: &'a Let) {
         let Self { prj, parent, path, retval: _ } = self;
-        let Let { name: Identifier(name), init, .. } = l;
+        let Let { name, init, .. } = l;
         let def = Def {
             module: Mod::new(*parent),
             kind: DefKind::Undecided,

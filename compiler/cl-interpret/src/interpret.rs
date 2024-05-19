@@ -110,7 +110,7 @@ impl Interpret for Stmt {
 }
 impl Interpret for Let {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Let { mutable: _, name: Identifier(name), ty: _, init } = self;
+        let Let { mutable: _, name, ty: _, init } = self;
         let init = init.as_ref().map(|i| i.interpret(env)).transpose()?;
         env.insert(*name, init);
         Ok(ConValue::Empty)
@@ -162,7 +162,7 @@ fn evaluate_place_expr<'e>(
             match parts.last().expect("parts should not be empty") {
                 PathPart::SuperKw => Err(Error::NotAssignable),
                 PathPart::SelfKw => todo!("Assignment to `self`"),
-                PathPart::Ident(Identifier(s)) => env.get_mut(*s).map(|v| (v, *s)),
+                PathPart::Ident(s) => env.get_mut(*s).map(|v| (v, *s)),
             }
         }
         ExprKind::Index(_) => todo!("Assignment to an index operation"),
@@ -340,7 +340,7 @@ impl Interpret for Member {
                 for arg in &args.exprs {
                     values.push(arg.interpret(env)?);
                 }
-                env.call(name.0, &values)
+                env.call(*name, &values)
             }
             _ => Err(Error::TypeError)?,
         }
@@ -368,7 +368,7 @@ impl Interpret for Path {
         if parts.len() == 1 {
             match parts.last().expect("parts should not be empty") {
                 PathPart::SuperKw | PathPart::SelfKw => todo!("Path navigation"),
-                PathPart::Ident(Identifier(name)) => env.get(*name),
+                PathPart::Ident(name) => env.get(*name),
             }
         } else {
             todo!("Path navigation!")
@@ -413,7 +413,7 @@ impl Interpret for AddrOf {
         match expr.as_ref() {
             ExprKind::Index(_) => todo!("AddrOf array index"),
             // ExprKind::Path(Path { absolute: false, parts }) => match parts.as_slice() {
-            //     [PathPart::Ident(Identifier(id))] => env.get_ref(id),
+            //     [PathPart::Ident(id)] => env.get_ref(id),
             //     _ => todo!("Path traversal in addrof"),
             // },
             ExprKind::Path(_) => todo!("Path traversal in addrof"),
@@ -492,7 +492,7 @@ impl Interpret for If {
 }
 impl Interpret for For {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { bind: Identifier(name), cond, pass, fail } = self;
+        let Self { bind: name, cond, pass, fail } = self;
         // TODO: A better iterator model
         let mut bounds = match cond.interpret(env)? {
             ConValue::RangeExc(a, b) => a..=b,
