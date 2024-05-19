@@ -234,14 +234,19 @@ pub trait Fold {
         or_fold_expr_kind(self, kind)
     }
     fn fold_assign(&mut self, a: Assign) -> Assign {
-        let Assign { kind, parts } = a;
+        let Assign { parts } = a;
         let (head, tail) = *parts;
-        Assign {
-            kind: self.fold_assign_kind(kind),
+        Assign { parts: Box::new((self.fold_expr_kind(head), self.fold_expr_kind(tail))) }
+    }
+    fn fold_modify(&mut self, m: Modify) -> Modify {
+        let Modify { kind, parts } = m;
+        let (head, tail) = *parts;
+        Modify {
+            kind: self.fold_modify_kind(kind),
             parts: Box::new((self.fold_expr_kind(head), self.fold_expr_kind(tail))),
         }
     }
-    fn fold_assign_kind(&mut self, kind: AssignKind) -> AssignKind {
+    fn fold_modify_kind(&mut self, kind: ModifyKind) -> ModifyKind {
         kind
     }
     fn fold_binary(&mut self, b: Binary) -> Binary {
@@ -522,6 +527,7 @@ pub fn or_fold_expr_kind<F: Fold + ?Sized>(folder: &mut F, kind: ExprKind) -> Ex
     match kind {
         ExprKind::Empty => ExprKind::Empty,
         ExprKind::Assign(a) => ExprKind::Assign(folder.fold_assign(a)),
+        ExprKind::Modify(m) => ExprKind::Modify(folder.fold_modify(m)),
         ExprKind::Binary(b) => ExprKind::Binary(folder.fold_binary(b)),
         ExprKind::Unary(u) => ExprKind::Unary(folder.fold_unary(u)),
         ExprKind::Member(m) => ExprKind::Member(folder.fold_member(m)),

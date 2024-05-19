@@ -420,6 +420,7 @@ mod display {
             match self {
                 ExprKind::Empty => "()".fmt(f),
                 ExprKind::Assign(v) => v.fmt(f),
+                ExprKind::Modify(v) => v.fmt(f),
                 ExprKind::Binary(v) => v.fmt(f),
                 ExprKind::Unary(v) => v.fmt(f),
                 ExprKind::Member(v) => v.fmt(f),
@@ -446,25 +447,31 @@ mod display {
 
     impl Display for Assign {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let Self { parts } = self;
+            write!(f, "{} = {}", parts.0, parts.1)
+        }
+    }
+
+    impl Display for Modify {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { kind, parts } = self;
             write!(f, "{} {kind} {}", parts.0, parts.1)
         }
     }
 
-    impl Display for AssignKind {
+    impl Display for ModifyKind {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
-                AssignKind::Plain => "=",
-                AssignKind::Mul => "*=",
-                AssignKind::Div => "/=",
-                AssignKind::Rem => "%=",
-                AssignKind::Add => "+=",
-                AssignKind::Sub => "-=",
-                AssignKind::And => "&=",
-                AssignKind::Or => "|=",
-                AssignKind::Xor => "^=",
-                AssignKind::Shl => "<<=",
-                AssignKind::Shr => ">>=",
+                ModifyKind::Mul => "*=",
+                ModifyKind::Div => "/=",
+                ModifyKind::Rem => "%=",
+                ModifyKind::Add => "+=",
+                ModifyKind::Sub => "-=",
+                ModifyKind::And => "&=",
+                ModifyKind::Or => "|=",
+                ModifyKind::Xor => "^=",
+                ModifyKind::Shl => "<<=",
+                ModifyKind::Shr => ">>=",
             }
             .fmt(f)
         }
@@ -749,6 +756,7 @@ mod convert {
         }
         impl From for ExprKind {
             Assign => ExprKind::Assign,
+            Modify => ExprKind::Modify,
             Binary => ExprKind::Binary,
             Unary => ExprKind::Unary,
             Member => ExprKind::Member,

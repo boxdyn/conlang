@@ -82,7 +82,8 @@ Bool        = "true" | "false" ;
 
 Expr        = Assign ;
 
-Assign      = Path (AssignKind  Assign ) | Compare ;
+Assign      = Path (AssignKind  Assign ) | Modify ;
+Modify      = Path (ModifyKind  Assign ) | Compare ;
 
 (* Binary      = Compare | Range | Logic | Bitwise | Shift | Factor | Term ; *)
 Compare     = Range    (CompareOp Range  )* ;
@@ -131,7 +132,8 @@ Break       = "break"  Expr ;
 Return      = "return" Expr ;
 Continue    = "continue" ;
 
-AssignKind  =  '=' | '+=' | '-=' | '*=' | '/=' | '&=' | '|=' | '^=' |'<<=' |'>>=' ;
+AssignKind  =  '=' ;
+ModifyKind  = '+=' | '-=' | '*=' | '/=' | '&=' | '|=' | '^=' |'<<=' |'>>=' ;
 
 CompareOp   =  '<' | '<=' | '==' | '!=' | '>=' | '>' ;
 RangeOp     = '..' | '..=' ;

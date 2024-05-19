@@ -911,7 +911,7 @@ impl<'t> Parser<'t> {
                 continue;
             }
 
-            if let Some((kind, prec)) = from_assign(op) {
+            if let Some((kind, prec)) = from_modify(op) {
                 let (before, after) = prec.infix().expect("should have a precedence");
                 if before < power {
                     break;
@@ -919,8 +919,20 @@ impl<'t> Parser<'t> {
                 self.consume_peeked();
 
                 let tail = self.exprkind(after)?;
-                head = Assign { kind, parts: (head, tail).into() }.into();
+                head = Modify { kind, parts: (head, tail).into() }.into();
                 continue;
+            }
+
+            if let Punct::Eq = op {
+                let (before, after) = Precedence::Assign
+                    .infix()
+                    .expect("should have a precedence");
+                if before < power {
+                    break;
+                }
+                self.consume_peeked();
+                let tail = self.exprkind(after)?;
+                head = Assign { parts: (head, tail).into() }.into();
             }
             break;
         }
@@ -942,7 +954,7 @@ impl<'t> Parser<'t> {
                 }
             }
             TokenKind::Literal => {
-                let name = self.literal()?; // TODO: Maybe restrict this to just 
+                let name = self.literal()?; // TODO: Maybe restrict this to just
                 Ok(MemberKind::Tuple(name))
             }
             t => Err(self.error(Unexpected(t), PARSING)),
@@ -1206,8 +1218,8 @@ impl Precedence {
         }
     }
 }
-impl From<AssignKind> for Precedence {
-    fn from(_value: AssignKind) -> Self {
+impl From<ModifyKind> for Precedence {
+    fn from(_value: ModifyKind) -> Self {
         Precedence::Assign
     }
 }
@@ -1254,8 +1266,7 @@ operator! {
         At => At,
         Tilde => Tilde,
     };
-    from_assign(Punct => AssignKind) {
-        Eq => Plain,
+    from_modify(Punct => ModifyKind) {
         AmpEq => And,
         BarEq => Or,
         XorEq => Xor,

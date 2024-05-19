@@ -128,6 +128,7 @@ impl Interpret for ExprKind {
         match self {
             ExprKind::Empty => Ok(ConValue::Empty),
             ExprKind::Assign(v) => v.interpret(env),
+            ExprKind::Modify(v) => v.interpret(env),
             ExprKind::Binary(v) => v.interpret(env),
             ExprKind::Unary(v) => v.interpret(env),
             ExprKind::Member(v) => v.interpret(env),
@@ -151,59 +152,71 @@ impl Interpret for ExprKind {
         }
     }
 }
+
+fn evaluate_place_expr<'e>(
+    env: &'e mut Environment,
+    expr: &ExprKind,
+) -> IResult<(&'e mut Option<ConValue>, Sym)> {
+    match expr {
+        ExprKind::Path(Path { parts, .. }) if parts.len() == 1 => {
+            match parts.last().expect("parts should not be empty") {
+                PathPart::SuperKw => Err(Error::NotAssignable),
+                PathPart::SelfKw => todo!("Assignment to `self`"),
+                PathPart::Ident(Identifier(s)) => env.get_mut(*s).map(|v| (v, *s)),
+            }
+        }
+        ExprKind::Index(_) => todo!("Assignment to an index operation"),
+        ExprKind::Path(_) => todo!("Path expression resolution (IMPORTANT)"),
+        ExprKind::Empty | ExprKind::Group(_) | ExprKind::Tuple(_) => {
+            todo!("Pattern Destructuring?")
+        }
+        _ => Err(Error::NotAssignable),
+    }
+}
+
 impl Interpret for Assign {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Assign { kind: op, parts } = self;
+        let Assign { parts } = self;
         let (head, tail) = parts.borrow();
+        let init = tail.interpret(env)?;
         // Resolve the head pattern
-        let head = match &head {
-            ExprKind::Path(Path { parts, .. }) if parts.len() == 1 => {
-                match parts.last().expect("parts should not be empty") {
-                    PathPart::SuperKw => Err(Error::NotAssignable)?,
-                    PathPart::SelfKw => todo!("Assignment to `self`"),
-                    PathPart::Ident(Identifier(s)) => s,
-                }
+        let target = evaluate_place_expr(env, head)?;
+        use std::mem::discriminant as variant;
+        // runtime typecheck
+        match target.0 {
+            Some(value) if variant(value) == variant(&init) => {
+                *value = init;
             }
-            ExprKind::Index(_) => todo!("Assignment to an index operation"),
-            ExprKind::Path(_) => todo!("Path expression resolution (IMPORTANT)"),
-            ExprKind::Empty | ExprKind::Group(_) | ExprKind::Tuple(_) => {
-                todo!("Pattern Destructuring?")
-            }
-            _ => Err(Error::NotAssignable)?,
-        };
+            value @ None => *value = Some(init),
+            _ => Err(Error::TypeError)?,
+        }
+        Ok(ConValue::Empty)
+    }
+}
+impl Interpret for Modify {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let Modify { kind: op, parts } = self;
+        let (head, tail) = parts.borrow();
         // Get the initializer and the tail
         let init = tail.interpret(env)?;
-        let target = env.get_mut(*head)?;
-
-        if let AssignKind::Plain = op {
-            use std::mem::discriminant as variant;
-            // runtime typecheck
-            match target {
-                Some(value) if variant(value) == variant(&init) => {
-                    *value = init;
-                }
-                value @ None => *value = Some(init),
-                _ => Err(Error::TypeError)?,
-            }
-            return Ok(ConValue::Empty);
-        }
-        let Some(target) = target else {
-            return Err(Error::NotInitialized(*head));
+        // Resolve the head pattern
+        let target = evaluate_place_expr(env, head)?;
+        let (Some(target), _) = target else {
+            return Err(Error::NotInitialized(target.1));
         };
 
         match op {
-            AssignKind::Add => target.add_assign(init)?,
-            AssignKind::Sub => target.sub_assign(init)?,
-            AssignKind::Mul => target.mul_assign(init)?,
-            AssignKind::Div => target.div_assign(init)?,
-            AssignKind::Rem => target.rem_assign(init)?,
-            AssignKind::And => target.bitand_assign(init)?,
-            AssignKind::Or => target.bitor_assign(init)?,
-            AssignKind::Xor => target.bitxor_assign(init)?,
-            AssignKind::Shl => target.shl_assign(init)?,
-            AssignKind::Shr => target.shr_assign(init)?,
-            _ => (),
-        }
+            ModifyKind::Add => target.add_assign(init),
+            ModifyKind::Sub => target.sub_assign(init),
+            ModifyKind::Mul => target.mul_assign(init),
+            ModifyKind::Div => target.div_assign(init),
+            ModifyKind::Rem => target.rem_assign(init),
+            ModifyKind::And => target.bitand_assign(init),
+            ModifyKind::Or => target.bitor_assign(init),
+            ModifyKind::Xor => target.bitxor_assign(init),
+            ModifyKind::Shl => target.shl_assign(init),
+            ModifyKind::Shr => target.shr_assign(init),
+        }?;
         Ok(ConValue::Empty)
     }
 }

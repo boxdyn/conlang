@@ -202,13 +202,19 @@ pub trait Visit<'a>: Sized {
         or_visit_expr_kind(self, e)
     }
     fn visit_assign(&mut self, a: &'a Assign) {
-        let Assign { kind, parts } = a;
+        let Assign { parts } = a;
         let (head, tail) = parts.as_ref();
-        self.visit_assign_kind(kind);
         self.visit_expr_kind(head);
         self.visit_expr_kind(tail);
     }
-    fn visit_assign_kind(&mut self, _kind: &'a AssignKind) {}
+    fn visit_modify(&mut self, m: &'a Modify) {
+        let Modify { kind, parts } = m;
+        let (head, tail) = parts.as_ref();
+        self.visit_modify_kind(kind);
+        self.visit_expr_kind(head);
+        self.visit_expr_kind(tail);
+    }
+    fn visit_modify_kind(&mut self, _kind: &'a ModifyKind) {}
     fn visit_binary(&mut self, b: &'a Binary) {
         let Binary { kind, parts } = b;
         let (head, tail) = parts.as_ref();
@@ -437,6 +443,7 @@ pub fn or_visit_expr_kind<'a, V: Visit<'a>>(visitor: &mut V, e: &'a ExprKind) {
     match e {
         ExprKind::Empty => {}
         ExprKind::Assign(a) => visitor.visit_assign(a),
+        ExprKind::Modify(m) => visitor.visit_modify(m),
         ExprKind::Binary(b) => visitor.visit_binary(b),
         ExprKind::Unary(u) => visitor.visit_unary(u),
         ExprKind::Member(m) => visitor.visit_member(m),

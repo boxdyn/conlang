@@ -346,8 +346,10 @@ pub enum ExprKind {
     /// An empty expression: `(` `)`
     #[default]
     Empty,
-    /// An [Assign]ment expression: [`Expr`] ([`AssignKind`] [`Expr`])\+
+    /// An [Assign]ment expression: [`Expr`] (`=` [`Expr`])\+
     Assign(Assign),
+    /// A [Modify]-assignment expression: [`Expr`] ([`ModifyKind`] [`Expr`])\+
+    Modify(Modify),
     /// A [Binary] expression: [`Expr`] ([`BinaryKind`] [`Expr`])\+
     Binary(Binary),
     /// A [Unary] expression: [`UnaryKind`]\* [`Expr`]
@@ -394,14 +396,18 @@ pub enum ExprKind {
 /// An [Assign]ment expression: [`Expr`] ([`AssignKind`] [`Expr`])\+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Assign {
-    pub kind: AssignKind,
+    pub parts: Box<(ExprKind, ExprKind)>,
+}
+
+/// A [Modify]-assignment expression: [`Expr`] ([`ModifyKind`] [`Expr`])\+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Modify {
+    pub kind: ModifyKind,
     pub parts: Box<(ExprKind, ExprKind)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum AssignKind {
-    /// Standard Assignment with no read-back
-    Plain,
+pub enum ModifyKind {
     And,
     Or,
     Xor,

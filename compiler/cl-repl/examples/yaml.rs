@@ -389,6 +389,7 @@ pub mod yamlify {
         fn yaml(&self, y: &mut Yamler) {
             match self {
                 ExprKind::Assign(k) => k.yaml(y),
+                ExprKind::Modify(k) => k.yaml(y),
                 ExprKind::Binary(k) => k.yaml(y),
                 ExprKind::Unary(k) => k.yaml(y),
                 ExprKind::Member(k) => k.yaml(y),
@@ -415,14 +416,22 @@ pub mod yamlify {
     }
     impl Yamlify for Assign {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { kind, parts } = self;
+            let Self { parts } = self;
             y.key("Assign")
+                .pair("head", &parts.0)
+                .pair("tail", &parts.1);
+        }
+    }
+    impl Yamlify for Modify {
+        fn yaml(&self, y: &mut Yamler) {
+            let Self { kind, parts } = self;
+            y.key("Modify")
                 .pair("kind", kind)
                 .pair("head", &parts.0)
                 .pair("tail", &parts.1);
         }
     }
-    impl Yamlify for AssignKind {
+    impl Yamlify for ModifyKind {
         fn yaml(&self, y: &mut Yamler) {
             y.value(self);
         }
