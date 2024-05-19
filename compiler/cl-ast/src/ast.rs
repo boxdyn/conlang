@@ -5,12 +5,13 @@
 //! - [Item] and [ItemKind]: Top-level constructs
 //! - [Stmt] and [StmtKind]: Statements
 //! - [Expr] and [ExprKind]: Expressions
-//!   - [Assign], [Binary], and [Unary] expressions
-//!   - [AssignKind], [BinaryKind], and [UnaryKind] operators
+//!   - [Assign], [Modify], [Binary], and [Unary] expressions
+//!   - [ModifyKind], [BinaryKind], and [UnaryKind] operators
 //! - [Ty] and [TyKind]: Type qualifiers
 //! - [Path]: Path expressions
 use cl_structures::{intern::interned::Interned, span::*};
 
+/// An [Interned] static [str], used in place of an identifier
 pub type Sym = Interned<'static, str>;
 
 /// Whether a binding ([Static] or [Let]) or reference is mutable or not
@@ -388,7 +389,7 @@ pub enum ExprKind {
     Continue(Continue),
 }
 
-/// An [Assign]ment expression: [`Expr`] ([`AssignKind`] [`Expr`])\+
+/// An [Assign]ment expression: [`Expr`] ([`ModifyKind`] [`Expr`])\+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Assign {
     pub parts: Box<(ExprKind, ExprKind)>,

@@ -756,7 +756,7 @@ macro path_like() {
 }
 /// # Path parsing
 impl<'t> Parser<'t> {
-    /// [PathPart] = `super` | `self` | [Identifier]
+    /// [PathPart] = `super` | `self` | [`Identifier`](TokenKind::Identifier)
     pub fn path_part(&mut self) -> PResult<PathPart> {
         const PARSING: Parsing = Parsing::PathPart;
         let out = match self.peek_kind(PARSING)? {
@@ -981,7 +981,7 @@ impl<'t> Parser<'t> {
         Ok(Structor { to, init })
     }
 
-    /// [Fielder] = [Identifier] (`:` [Expr])?
+    /// [Fielder] = [`Identifier`](TokenKind::Identifier) (`:` [Expr])?
     pub fn fielder(&mut self) -> PResult<Fielder> {
         const PARSING: Parsing = Parsing::Fielder;
         Ok(Fielder {
