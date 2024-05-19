@@ -3,9 +3,12 @@
 //! - [Loc](struct@span::Loc): Stores the index in a stream
 //! - [TypedInterner][ti] & [StringInterner][si]: Provies stable, unique allocations
 //! - [Stack](stack::Stack): Contiguous collections with constant capacity
-//! 
+//! - [IndexMap][im]: A map from [map indices][mi] to values
+//!
 //! [ti]: intern::typed_interner::TypedInterner
 //! [si]: intern::string_interner::StringInterner
+//! [im]: index_map::IndexMap
+//! [mi]: index_map::MapIndex
 #![warn(clippy::all)]
 #![feature(inline_const, dropck_eyepatch, decl_macro, get_many_mut)]
 #![deny(unsafe_op_in_unsafe_fn)]
