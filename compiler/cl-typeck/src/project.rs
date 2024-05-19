@@ -7,7 +7,7 @@ use crate::{
     path::Path,
 };
 use cl_ast::PathPart;
-use cl_structures::deprecated_intern_pool::Pool;
+use cl_structures::index_map::IndexMap;
 use std::{
     collections::HashMap,
     ops::{Index, IndexMut},
@@ -17,7 +17,7 @@ use self::evaluate::EvaluableTypeExpression;
 
 #[derive(Clone, Debug)]
 pub struct Project<'a> {
-    pub pool: Pool<Def<'a>, DefID>,
+    pub pool: IndexMap<DefID, Def<'a>>,
     /// Stores anonymous tuples, function pointer types, etc.
     pub anon_types: HashMap<TypeKind, DefID>,
     pub root: DefID,
@@ -33,7 +33,7 @@ impl Default for Project<'_> {
     fn default() -> Self {
         const ROOT_PATH: cl_ast::Path = cl_ast::Path { absolute: true, parts: Vec::new() };
 
-        let mut pool = Pool::default();
+        let mut pool = IndexMap::default();
         let root = pool.insert(Def {
             module: Default::default(),
             kind: DefKind::Type(TypeKind::Module),

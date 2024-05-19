@@ -1,7 +1,7 @@
-use cl_structures::deprecated_intern_pool::*;
+use cl_structures::index_map::*;
 
 // define the index types
-make_intern_key! {
+make_index! {
     /// Uniquely represents a [Def][1] in the [Def][1] [Pool]
     ///
     /// [1]: crate::definition::Def

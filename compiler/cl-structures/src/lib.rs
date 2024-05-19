@@ -18,4 +18,4 @@ pub mod tree;
 
 pub mod stack;
 
-pub mod deprecated_intern_pool;
+pub mod index_map;

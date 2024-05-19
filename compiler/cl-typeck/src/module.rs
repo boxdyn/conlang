@@ -1,7 +1,7 @@
 //! A [Module] is a node in the Module Tree (a component of a
 //! [Project](crate::project::Project))
 use cl_ast::Sym;
-use cl_structures::deprecated_intern_pool::InternKey;
+use cl_structures::index_map::MapIndex;
 
 use crate::key::DefID;
 use std::collections::HashMap;
