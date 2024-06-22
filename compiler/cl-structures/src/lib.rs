@@ -10,7 +10,7 @@
 //! [im]: index_map::IndexMap
 //! [mi]: index_map::MapIndex
 #![warn(clippy::all)]
-#![feature(inline_const, dropck_eyepatch, decl_macro, get_many_mut)]
+#![feature(dropck_eyepatch, decl_macro, get_many_mut)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
 pub mod intern;
