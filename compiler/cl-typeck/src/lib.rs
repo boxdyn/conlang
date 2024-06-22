@@ -44,8 +44,8 @@
 //!
 //! 1. Traverse the AST, [collecting all Items into item definitions](name_collector)
 //! 2. Eagerly [resolve `use` imports](use_importer)
-//! 3. Traverse all [definitions](definition::Def),
-//! and [resolve the types for every item](type_resolver)
+//! 3. Traverse all [definitions](definition::Def), and [resolve the types for every
+//!    item](type_resolver)
 //! 4. TODO: Construct a typed AST for expressions, and type-check them
 #![warn(clippy::all)]
 
