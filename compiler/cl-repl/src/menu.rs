@@ -15,6 +15,7 @@ pub fn banner() {
 /// Presents a selection interface to the user
 pub fn main_menu(ctx: &mut ctx::Context) -> ReplResult<()> {
     banner();
+    run(ctx)?;
     read_and(ansi::GREEN, "mu>", " ?>", |line| {
         match line.trim() {
             "clear" => clear(),
