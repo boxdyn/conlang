@@ -20,6 +20,14 @@ builtins! {
         for arg in args {
             write!(out, "{arg}").ok();
         }
+        Ok(ConValue::Empty)
+    }
+    /// Unstable variadic println function
+    pub fn println<_, args> () -> IResult<ConValue> {
+        let mut out = stdout().lock();
+        for arg in args {
+            write!(out, "{arg}").ok();
+        }
         writeln!(out).ok();
         Ok(ConValue::Empty)
     }
