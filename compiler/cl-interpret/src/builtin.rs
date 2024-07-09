@@ -1,9 +1,9 @@
 //! Implementations of built-in functions
 
 use super::{
+    convalue::ConValue,
     env::Environment,
     error::{Error, IResult},
-    convalue::ConValue,
     BuiltIn, Callable,
 };
 use cl_ast::Sym;
@@ -183,7 +183,7 @@ builtins! {
     pub fn neg(tail) -> IResult<ConValue> {
         Ok(match tail {
             ConValue::Empty => ConValue::Empty,
-            ConValue::Int(v) => ConValue::Int(-v),
+            ConValue::Int(v) => ConValue::Int(v.wrapping_neg()),
             _ => Err(Error::TypeError)?,
         })
     }

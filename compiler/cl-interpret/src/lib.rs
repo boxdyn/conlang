@@ -207,7 +207,7 @@ pub mod convalue {
     ops! {
         Add: add = [
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
-            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a + b),
+            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_add(b)),
             (ConValue::String(a), ConValue::String(b)) => (a.to_string() + &b.to_string()).into(),
             _ => Err(Error::TypeError)?
             ]
@@ -231,32 +231,36 @@ pub mod convalue {
         ]
         Div: div = [
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
-            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a / b),
+            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.checked_div(b).unwrap_or_else(|| {
+                eprintln!("Warning: Divide by zero in {a} / {b}"); a
+            })),
             _ => Err(Error::TypeError)?
         ]
         Mul: mul = [
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
-            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a * b),
+            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_mul(b)),
             _ => Err(Error::TypeError)?
         ]
         Rem: rem = [
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
-            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a % b),
+            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.checked_rem(b).unwrap_or_else(|| {
+                eprintln!("Warning: Divide by zero in {a} % {b}"); a
+            })),
             _ => Err(Error::TypeError)?
         ]
         Shl: shl = [
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
-            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a << b),
+            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_shl(b as _)),
             _ => Err(Error::TypeError)?
         ]
         Shr: shr = [
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
-            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a >> b),
+            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_shr(b as _)),
             _ => Err(Error::TypeError)?
         ]
         Sub: sub = [
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
-            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a - b),
+            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_sub(b)),
             _ => Err(Error::TypeError)?
         ]
     }
