@@ -209,6 +209,10 @@ pub mod convalue {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_add(b)),
             (ConValue::String(a), ConValue::String(b)) => (a.to_string() + &b.to_string()).into(),
+            (ConValue::String(s), ConValue::Char(c)) => { let mut s = s.to_string(); s.push(c); s.into() }
+            (ConValue::Char(a), ConValue::Char(b)) => {
+                ConValue::String([a, b].into_iter().collect::<String>().into())
+            }
             _ => Err(Error::TypeError)?
             ]
         BitAnd: bitand = [
