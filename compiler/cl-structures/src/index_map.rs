@@ -6,12 +6,12 @@
 //! ```rust
 //! # use cl_structures::index_map::*;
 //! // first, create a new MapIndex type (this ensures type safety)
-//! make_intern_key!{
-//!     NumbersKey
+//! make_index! {
+//!     Number
 //! }
 //!
 //! // then, create a map with that type
-//! let mut numbers: IndexMap<i32, NumbersKey> = IndexMap::new();
+//! let mut numbers: IndexMap<Number, i32> = IndexMap::new();
 //! let first = numbers.insert(1);
 //! let second = numbers.insert(2);
 //! let third = numbers.insert(3);
@@ -29,6 +29,10 @@
 //! ```
 
 /// Creates newtype indices over [`usize`] for use as [IndexMap] keys.
+///
+/// Generated key types implement [Clone], [Copy],
+/// [Debug](core::fmt::Debug), [PartialEq], [Eq], [PartialOrd], [Ord], [Hash](core::hash::Hash),
+/// and [MapIndex].
 #[macro_export]
 macro_rules! make_index {($($(#[$meta:meta])* $name:ident),*$(,)?) => {$(
     $(#[$meta])*
@@ -39,25 +43,28 @@ macro_rules! make_index {($($(#[$meta:meta])* $name:ident),*$(,)?) => {$(
     impl $crate::index_map::MapIndex for $name {
         #[doc = concat!("Constructs a [`", stringify!($name), "`] from a [`usize`] without checking bounds.\n")]
         /// The provided value should be within the bounds of its associated container
+        #[inline]
         fn from_usize(value: usize) -> Self {
             Self(value)
         }
+        #[inline]
         fn get(&self) -> usize {
             self.0
         }
     }
+
     impl From< $name > for usize {
         fn from(value: $name) -> Self {
             value.0
         }
     }
 )*}}
+
+use self::iter::MapIndexIter;
 use core::slice::GetManyMutError;
 use std::ops::{Index, IndexMut};
 
 pub use make_index;
-
-use self::iter::MapIndexIter;
 
 /// An index into a [IndexMap]. For full type-safety,
 /// there should be a unique [MapIndex] for each [IndexMap].
@@ -65,13 +72,12 @@ pub trait MapIndex: std::fmt::Debug {
     /// Constructs an [`MapIndex`] from a [`usize`] without checking bounds.
     ///
     /// The provided value should be within the bounds of its associated container.
-    // ID::from_raw_unchecked here isn't *actually* unsafe, since bounds should always be
-    // checked, however, the function has unverifiable preconditions.
     fn from_usize(value: usize) -> Self;
     /// Gets the index of the [`MapIndex`] by value
     fn get(&self) -> usize;
 }
 
+/// It's an array. Lmao.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IndexMap<K: MapIndex, V> {
     map: Vec<V>,
@@ -79,16 +85,24 @@ pub struct IndexMap<K: MapIndex, V> {
 }
 
 impl<V, K: MapIndex> IndexMap<K, V> {
+    /// Constructs an empty IndexMap.
     pub fn new() -> Self {
         Self::default()
     }
+
+    /// Gets a reference to the value in slot `index`.
     pub fn get(&self, index: K) -> Option<&V> {
         self.map.get(index.get())
     }
+
+    /// Gets a mutable reference to the value in slot `index`.
     pub fn get_mut(&mut self, index: K) -> Option<&mut V> {
         self.map.get_mut(index.get())
     }
 
+    /// Returns mutable references to many indices at once.
+    ///
+    /// Returns an error if any index is out of bounds, or if the same index was passed twice.
     pub fn get_many_mut<const N: usize>(
         &mut self,
         indices: [K; N],
@@ -96,13 +110,18 @@ impl<V, K: MapIndex> IndexMap<K, V> {
         self.map.get_many_mut(indices.map(|id| id.get()))
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &V> {
+    /// Returns an iterator over the IndexMap.
+    pub fn values(&self) -> impl Iterator<Item = &V> {
         self.map.iter()
     }
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut V> {
+
+    /// Returns an iterator that allows modifying each value.
+    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut V> {
         self.map.iter_mut()
     }
-    pub fn key_iter(&self) -> iter::MapIndexIter<K> {
+
+    /// Returns an iterator over all keys in the IndexMap.
+    pub fn keys(&self) -> iter::MapIndexIter<K> {
         // Safety: IndexMap currently has map.len() entries, and data cannot be removed
         MapIndexIter::new(0..self.map.len())
     }
@@ -113,12 +132,18 @@ impl<V, K: MapIndex> IndexMap<K, V> {
         (value < self.map.len()).then(|| K::from_usize(value))
     }
 
+    /// Inserts a new item into the IndexMap, returning the key associated with it.
     pub fn insert(&mut self, value: V) -> K {
         let id = self.map.len();
         self.map.push(value);
 
         // Safety: value was pushed to `self.map[id]`
         K::from_usize(id)
+    }
+
+    /// Replaces a value in the IndexMap, returning the old value.
+    pub fn replace(&mut self, key: K, value: V) -> V {
+        std::mem::replace(&mut self[key], value)
     }
 }
 
@@ -138,6 +163,7 @@ impl<K: MapIndex, V> Index<K> for IndexMap<K, V> {
         }
     }
 }
+
 impl<K: MapIndex, V> IndexMut<K> for IndexMap<K, V> {
     fn index_mut(&mut self, index: K) -> &mut Self::Output {
         match self.map.get_mut(index.get()) {
@@ -148,15 +174,14 @@ impl<K: MapIndex, V> IndexMut<K> for IndexMap<K, V> {
 }
 
 mod iter {
-    use std::{marker::PhantomData, ops::Range};
-
+    //! Iterators for [IndexMap](super::IndexMap)
     use super::MapIndex;
+    use std::{marker::PhantomData, ops::Range};
 
     /// Iterates over the keys of an [IndexMap](super::IndexMap), independently of the map.
     ///
-    /// This is guaranteed to never overrun the length of the map,
-    /// but is *NOT* guaranteed to iterate over all elements of the map
-    /// if the map is extended during iteration.
+    /// This is guaranteed to never overrun the length of the map, but is *NOT* guaranteed
+    /// to iterate over all elements of the map if the map is extended during iteration.
     #[derive(Clone, Debug, PartialEq, Eq, Hash)]
     pub struct MapIndexIter<K: MapIndex> {
         range: Range<usize>,
@@ -165,13 +190,8 @@ mod iter {
 
     impl<K: MapIndex> MapIndexIter<K> {
         /// Creates a new [MapIndexIter] producing the given [MapIndex]
-        ///
-        /// # Safety:
-        /// - Range must not exceed bounds of the associated [IndexMap](super::IndexMap)
-        /// - Items must not be removed from the map
-        /// - Items must be contiguous within the map
         pub(super) fn new(range: Range<usize>) -> Self {
-            Self { range, _id: Default::default() }
+            Self { range, _id: PhantomData }
         }
     }
 
@@ -179,18 +199,19 @@ mod iter {
         type Item = ID;
 
         fn next(&mut self) -> Option<Self::Item> {
-            // Safety: MapIndexIter can only be created by MapIndexIter::new()
             Some(ID::from_usize(self.range.next()?))
         }
         fn size_hint(&self) -> (usize, Option<usize>) {
             self.range.size_hint()
         }
     }
+
     impl<ID: MapIndex> DoubleEndedIterator for MapIndexIter<ID> {
         fn next_back(&mut self) -> Option<Self::Item> {
             // Safety: see above
             Some(ID::from_usize(self.range.next_back()?))
         }
     }
+
     impl<ID: MapIndex> ExactSizeIterator for MapIndexIter<ID> {}
 }

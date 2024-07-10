@@ -126,7 +126,7 @@ fn query_type_expression(prj: &mut Project) -> Result<(), RlError> {
 
 fn resolve_all(prj: &mut Project) -> Result<(), Box<dyn Error>> {
     prj.resolve_imports()?;
-    for id in prj.pool.key_iter() {
+    for id in prj.pool.keys() {
         resolve(prj, id)?;
     }
     println!("Types resolved successfully!");
@@ -135,7 +135,8 @@ fn resolve_all(prj: &mut Project) -> Result<(), Box<dyn Error>> {
 
 fn list_types(prj: &mut Project) {
     println!("     name\x1b[30G  type");
-    for (idx, Def { kind, node: Node { vis, kind: source, .. }, .. }) in prj.pool.iter().enumerate()
+    for (idx, Def { kind, node: Node { vis, kind: source, .. }, .. }) in
+        prj.pool.values().enumerate()
     {
         print!("{idx:3}: {vis}");
         if let Some(Some(name)) = source.as_ref().map(NodeSource::name) {

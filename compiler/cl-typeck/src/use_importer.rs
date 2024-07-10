@@ -24,7 +24,7 @@ type UseResult = Result<(), String>;
 
 impl<'a> Project<'a> {
     pub fn resolve_imports(&mut self) -> UseResult {
-        for id in self.pool.key_iter() {
+        for id in self.pool.keys() {
             self.visit_def(id)?;
         }
         Ok(())
@@ -58,9 +58,7 @@ impl<'a> Project<'a> {
             }
 
             UseTree::Name(name) => self.visit_use_leaf(name, parent, c)?,
-            UseTree::Alias(from, to) => {
-                self.visit_use_alias(from, to, parent, c)?
-            }
+            UseTree::Alias(from, to) => self.visit_use_alias(from, to, parent, c)?,
             UseTree::Glob => self.visit_use_glob(parent, c)?,
         }
         Ok(())
