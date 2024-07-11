@@ -47,14 +47,20 @@ impl Interpret for Alias {
     }
 }
 impl Interpret for Const {
-    fn interpret(&self, _env: &mut Environment) -> IResult<ConValue> {
-        println!("TODO: {self}");
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let Const { name, ty: _, init } = self;
+
+        let init = init.as_ref().interpret(env)?;
+        env.insert(*name, Some(init));
         Ok(ConValue::Empty)
     }
 }
 impl Interpret for Static {
-    fn interpret(&self, _env: &mut Environment) -> IResult<ConValue> {
-        println!("TODO: {self}");
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let Static { mutable: _, name, ty: _, init } = self;
+
+        let init = init.as_ref().interpret(env)?;
+        env.insert(*name, Some(init));
         Ok(ConValue::Empty)
     }
 }
