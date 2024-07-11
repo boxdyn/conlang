@@ -14,6 +14,16 @@ use std::{
 
 builtins! {
     const MISC;
+    /// Unstable variadic format function
+    pub fn format<_, args> () -> IResult<ConValue> {
+        use std::fmt::Write;
+        let mut out = String::new();
+        for arg in args {
+            write!(out, "{arg}").ok();
+        }
+        Ok(ConValue::String(out.into()))
+    }
+
     /// Unstable variadic print function
     pub fn print<_, args> () -> IResult<ConValue> {
         let mut out = stdout().lock();
