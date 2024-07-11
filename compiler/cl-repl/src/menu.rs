@@ -38,8 +38,12 @@ pub fn main_menu(ctx: &mut ctx::Context) -> ReplResult<()> {
 }
 
 pub fn run(ctx: &mut ctx::Context) -> ReplResult<()> {
+    use cl_ast::ast_visitor::Fold;
+    use cl_parser::inliner::ModuleInliner;
+
     read_and(ansi::CYAN, "cl>", " ?>", |line| {
         let code = Parser::new(Lexer::new(line)).stmt()?;
+        let code = ModuleInliner::new(".").fold_stmt(code);
 
         print!("{}", ansi::OUTPUT);
         match ctx.run(&code) {

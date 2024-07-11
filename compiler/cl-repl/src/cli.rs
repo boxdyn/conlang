@@ -46,8 +46,22 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
 }
 
 fn load_file(env: &mut Environment, path: impl AsRef<Path>) -> Result<ConValue, Box<dyn Error>> {
+    let inliner =
+        cl_parser::inliner::ModuleInliner::new(path.as_ref().parent().unwrap_or(Path::new("")));
     let file = std::fs::read_to_string(path)?;
     let code = Parser::new(Lexer::new(&file)).file()?;
+    let code = match inliner.inline(code) {
+        Ok(a) => a,
+        Err((code, io_errs, parse_errs)) => {
+            for (file, err) in io_errs {
+                eprintln!("{}:{err}", file.display());
+            }
+            for (file, err) in parse_errs {
+                eprintln!("{}:{err}", file.display());
+            }
+            code
+        }
+    };
     Ok(env.eval(&code)?)
 }
 
