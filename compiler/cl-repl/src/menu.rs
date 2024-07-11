@@ -9,7 +9,7 @@ fn clear() {
 }
 
 pub fn banner() {
-    println!("--- conlang v{} 💪🦈 ---\n", env!("CARGO_PKG_VERSION"))
+    println!("--- conlang v{} 💪🦈 ---", env!("CARGO_PKG_VERSION"))
 }
 
 /// Presents a selection interface to the user
