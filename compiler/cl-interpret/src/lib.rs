@@ -580,7 +580,7 @@ pub mod error {
             want: usize,
             got: usize,
         },
-        NullPointer,
+        Outlined(Sym),
     }
 
     impl std::error::Error for Error {}
@@ -620,8 +620,8 @@ pub mod error {
                         if *want == 1 { "" } else { "s" }
                     )
                 }
-                Error::NullPointer => {
-                    write!(f, "Attempted to dereference a null pointer?")
+                Error::Outlined(name) => {
+                    write!(f, "Module {name} specified, but not imported.")
                 }
             }
         }

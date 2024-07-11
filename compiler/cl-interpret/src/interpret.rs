@@ -60,10 +60,11 @@ impl Interpret for Static {
 }
 impl Interpret for Module {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let Self { name, kind } = self;
         // TODO: Enter this module's namespace
-        match &self.kind {
+        match kind {
             ModuleKind::Inline(file) => file.interpret(env),
-            ModuleKind::Outline => todo!("Load and parse external files"),
+            ModuleKind::Outline => Err(Error::Outlined(*name)),
         }
     }
 }
