@@ -1,4 +1,4 @@
-//! The [Editor]
+//! The [Editor] is a multi-line buffer of [`char`]s which operates on an ANSI-compatible terminal.
 
 use crossterm::{cursor::*, execute, queue, style::*, terminal::*};
 use std::{collections::VecDeque, fmt::Display, io::Write};
@@ -19,6 +19,7 @@ fn write_chars<'a, W: Write>(
     Ok(())
 }
 
+/// A multi-line editor which operates on an un-cleared ANSI terminal.
 #[derive(Clone, Debug)]
 pub struct Editor<'a> {
     head: VecDeque<char>,
@@ -30,13 +31,20 @@ pub struct Editor<'a> {
 }
 
 impl<'a> Editor<'a> {
+    /// Constructs a new Editor with the provided prompt color, begin prompt, and again prompt.
     pub fn new(color: &'a str, begin: &'a str, again: &'a str) -> Self {
         Self { head: Default::default(), tail: Default::default(), color, begin, again }
     }
+
+    /// Returns an iterator over characters in the editor.
     pub fn iter(&self) -> impl Iterator<Item = &char> {
         let Self { head, tail, .. } = self;
         head.iter().chain(tail.iter())
     }
+
+    /// Moves up to the first line of the editor, and clears the screen.
+    ///
+    /// This assumes the screen hasn't moved since the last draw.
     pub fn undraw<W: Write>(&self, w: &mut W) -> ReplResult<()> {
         let Self { head, .. } = self;
         match head.iter().copied().filter(is_newline).count() {
@@ -47,6 +55,8 @@ impl<'a> Editor<'a> {
         // write!(w, "\x1b[0J")?;
         Ok(())
     }
+
+    /// Redraws the entire editor
     pub fn redraw<W: Write>(&self, w: &mut W) -> ReplResult<()> {
         let Self { head, tail, color, begin, again } = self;
         write!(w, "{color}{begin}\x1b[0m ")?;
@@ -70,6 +80,9 @@ impl<'a> Editor<'a> {
         execute!(w, RestorePosition)?;
         Ok(())
     }
+
+    /// Prints a context-sensitive prompt (either `begin` if this is the first line,
+    /// or `again` for subsequent lines)
     pub fn prompt<W: Write>(&self, w: &mut W) -> ReplResult<()> {
         let Self { head, color, begin, again, .. } = self;
         queue!(
@@ -82,6 +95,8 @@ impl<'a> Editor<'a> {
         )?;
         Ok(())
     }
+
+    /// Prints the characters before the cursor on the current line.
     pub fn print_head<W: Write>(&self, w: &mut W) -> ReplResult<()> {
         self.prompt(w)?;
         write_chars(
@@ -96,6 +111,8 @@ impl<'a> Editor<'a> {
         )?;
         Ok(())
     }
+
+    /// Prints the characters after the cursor on the current line.
     pub fn print_tail<W: Write>(&self, w: &mut W) -> ReplResult<()> {
         let Self { tail, .. } = self;
         queue!(w, SavePosition, Clear(ClearType::UntilNewLine))?;
@@ -103,6 +120,8 @@ impl<'a> Editor<'a> {
         queue!(w, RestorePosition)?;
         Ok(())
     }
+
+    /// Writes a character at the cursor, shifting the text around as necessary.
     pub fn push<W: Write>(&mut self, c: char, w: &mut W) -> ReplResult<()> {
         // Tail optimization: if the tail is empty,
         //we don't have to undraw and redraw on newline
@@ -133,6 +152,8 @@ impl<'a> Editor<'a> {
         }
         Ok(())
     }
+
+    /// Erases a character at the cursor, shifting the text around as necessary.
     pub fn pop<W: Write>(&mut self, w: &mut W) -> ReplResult<Option<char>> {
         if let Some('\n') = self.head.back() {
             self.undraw(w)?;
@@ -151,6 +172,7 @@ impl<'a> Editor<'a> {
         Ok(c)
     }
 
+    /// Writes characters into the editor at the location of the cursor.
     pub fn extend<T: IntoIterator<Item = char>, W: Write>(
         &mut self,
         iter: T,
@@ -162,14 +184,19 @@ impl<'a> Editor<'a> {
         Ok(())
     }
 
+    /// Sets the editor to the contents of a string, placing the cursor at the end.
     pub fn restore(&mut self, s: &str) {
         self.clear();
         self.head.extend(s.chars())
     }
+
+    /// Clears the editor, removing all characters.
     pub fn clear(&mut self) {
         self.head.clear();
         self.tail.clear();
     }
+
+    /// Pops the character after the cursor, redrawing if necessary
     pub fn delete<W: Write>(&mut self, w: &mut W) -> ReplResult<char> {
         match self.tail.front() {
             Some('\n') => {
@@ -186,16 +213,25 @@ impl<'a> Editor<'a> {
         }
         .ok_or(Error::EndOfInput)
     }
+
+    /// Erases a word from the buffer, where a word is any non-whitespace characters
+    /// preceded by a single whitespace character
     pub fn erase_word<W: Write>(&mut self, w: &mut W) -> ReplResult<()> {
         while self.pop(w)?.filter(|c| !c.is_whitespace()).is_some() {}
         Ok(())
     }
+
+    /// Returns the number of characters in the buffer
     pub fn len(&self) -> usize {
         self.head.len() + self.tail.len()
     }
+
+    /// Returns true if the buffer is empty.
     pub fn is_empty(&self) -> bool {
         self.head.is_empty() && self.tail.is_empty()
     }
+
+    /// Returns true if the buffer ends with a given pattern
     pub fn ends_with(&self, iter: impl DoubleEndedIterator<Item = char>) -> bool {
         let mut iter = iter.rev();
         let mut head = self.head.iter().rev();
@@ -208,6 +244,7 @@ impl<'a> Editor<'a> {
             }
         }
     }
+
     /// Moves the cursor back `steps` steps
     pub fn cursor_back<W: Write>(&mut self, steps: usize, w: &mut W) -> ReplResult<()> {
         for _ in 0..steps {
@@ -225,6 +262,7 @@ impl<'a> Editor<'a> {
         }
         Ok(())
     }
+
     /// Moves the cursor forward `steps` steps
     pub fn cursor_forward<W: Write>(&mut self, steps: usize, w: &mut W) -> ReplResult<()> {
         for _ in 0..steps {
@@ -242,7 +280,8 @@ impl<'a> Editor<'a> {
         }
         Ok(())
     }
-    /// Goes to the beginning of the current line
+
+    /// Moves the cursor to the beginning of the current line
     pub fn home<W: Write>(&mut self, w: &mut W) -> ReplResult<()> {
         loop {
             match self.head.back() {
@@ -251,7 +290,8 @@ impl<'a> Editor<'a> {
             }
         }
     }
-    /// Goes to the end of the current line
+
+    /// Moves the cursor to the end of the current line
     pub fn end<W: Write>(&mut self, w: &mut W) -> ReplResult<()> {
         loop {
             match self.tail.front() {
@@ -272,6 +312,7 @@ impl<'a, 'e> IntoIterator for &'e Editor<'a> {
         self.head.iter().chain(self.tail.iter())
     }
 }
+
 impl<'a> Display for Editor<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use std::fmt::Write;
