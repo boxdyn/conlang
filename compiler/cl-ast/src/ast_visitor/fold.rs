@@ -200,6 +200,7 @@ pub trait Fold {
         match p {
             PathPart::SuperKw => PathPart::SuperKw,
             PathPart::SelfKw => PathPart::SelfKw,
+            PathPart::SelfTy => PathPart::SelfTy,
             PathPart::Ident(i) => PathPart::Ident(self.fold_sym(i)),
         }
     }
@@ -498,7 +499,6 @@ pub fn or_fold_ty_kind<F: Fold + ?Sized>(folder: &mut F, kind: TyKind) -> TyKind
     match kind {
         TyKind::Never => TyKind::Never,
         TyKind::Empty => TyKind::Empty,
-        TyKind::SelfTy => TyKind::SelfTy,
         TyKind::Path(p) => TyKind::Path(folder.fold_path(p)),
         TyKind::Tuple(t) => TyKind::Tuple(folder.fold_ty_tuple(t)),
         TyKind::Ref(t) => TyKind::Ref(folder.fold_ty_ref(t)),

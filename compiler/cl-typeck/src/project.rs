@@ -49,16 +49,10 @@ impl Default for Project<'_> {
             kind: DefKind::Type(TypeKind::Empty),
             node: Node::new(ROOT_PATH, None),
         });
-        let selfty = pool.insert(Def {
-            module: module::Module::new(root),
-            kind: DefKind::Type(TypeKind::SelfTy),
-            node: Node::new(ROOT_PATH, None),
-        });
 
         let mut anon_types = HashMap::new();
         anon_types.insert(TypeKind::Empty, empty);
         anon_types.insert(TypeKind::Never, never);
-        anon_types.insert(TypeKind::SelfTy, selfty);
 
         Self { pool, root, anon_types }
     }
@@ -68,10 +62,20 @@ impl<'a> Project<'a> {
     pub fn parent_of(&self, module: DefID) -> Option<DefID> {
         self[module].module.parent
     }
+
     pub fn root_of(&self, module: DefID) -> DefID {
         match self.parent_of(module) {
             Some(module) => self.root_of(module),
             None => module,
+        }
+    }
+
+    /// Returns the DefID of the Self type within the given DefID's context
+    pub fn selfty_of(&self, node: DefID) -> Option<DefID> {
+        match self[node].kind {
+            DefKind::Impl(id) => Some(id),
+            DefKind::Type(_) => Some(node),
+            _ => self.selfty_of(self.parent_of(node)?),
         }
     }
 
@@ -93,6 +97,7 @@ impl<'a> Project<'a> {
                 let ty = self[within].module.get_type(*name)?;
                 self.get(path.pop_front()?, ty)
             }
+            [PathPart::SelfTy, ..] => self.get(path.pop_front()?, self.selfty_of(within)?),
             [PathPart::SelfKw, ..] => self.get(path.pop_front()?, within),
             [PathPart::SuperKw, ..] => self.get(path.pop_front()?, self.parent_of(within)?),
         }
@@ -108,6 +113,7 @@ impl<'a> Project<'a> {
             match front {
                 PathPart::SelfKw => self.get_type(path.pop_front()?, within),
                 PathPart::SuperKw => self.get_type(path.pop_front()?, module.parent?),
+                PathPart::SelfTy => self.get_type(path.pop_front()?, self.selfty_of(within)?),
                 PathPart::Ident(name) => match module.types.get(name) {
                     Some(&submodule) => self.get_type(path.pop_front()?, submodule),
                     None => Some((within, path)),
@@ -189,7 +195,6 @@ pub mod evaluate {
                 // TODO: reduce duplication here
                 TyKind::Never => prj.anon_types[&TypeKind::Never],
                 TyKind::Empty => prj.anon_types[&TypeKind::Empty],
-                TyKind::SelfTy => prj.anon_types[&TypeKind::SelfTy],
                 // TyKind::Path must be looked up explicitly
                 TyKind::Path(path) => path.evaluate(prj, parent)?,
                 TyKind::Tuple(tup) => tup.evaluate(prj, parent)?,
@@ -280,6 +285,9 @@ pub mod evaluate {
                     .parent_of(parent)
                     .ok_or_else(|| "Attempt to get super of root".into()),
                 PathPart::SelfKw => Ok(parent),
+                PathPart::SelfTy => prj
+                    .selfty_of(parent)
+                    .ok_or_else(|| "Attempt to get Self outside a Self-able context".into()),
                 PathPart::Ident(name) => name.evaluate(prj, parent),
             }
         }

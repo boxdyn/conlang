@@ -306,7 +306,6 @@ mod display {
             match self {
                 TyKind::Never => "!".fmt(f),
                 TyKind::Empty => "()".fmt(f),
-                TyKind::SelfTy => "Self".fmt(f),
                 TyKind::Path(v) => v.fmt(f),
                 TyKind::Tuple(v) => v.fmt(f),
                 TyKind::Ref(v) => v.fmt(f),
@@ -357,6 +356,7 @@ mod display {
             match self {
                 PathPart::SuperKw => "super".fmt(f),
                 PathPart::SelfKw => "self".fmt(f),
+                PathPart::SelfTy => "Self".fmt(f),
                 PathPart::Ident(id) => id.fmt(f),
             }
         }

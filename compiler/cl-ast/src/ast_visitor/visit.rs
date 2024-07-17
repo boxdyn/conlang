@@ -169,6 +169,7 @@ pub trait Visit<'a>: Sized {
         match p {
             PathPart::SuperKw => {}
             PathPart::SelfKw => {}
+            PathPart::SelfTy => {}
             PathPart::Ident(i) => self.visit_sym(i),
         }
     }
@@ -422,7 +423,6 @@ pub fn or_visit_ty_kind<'a, V: Visit<'a>>(visitor: &mut V, kind: &'a TyKind) {
     match kind {
         TyKind::Never => {}
         TyKind::Empty => {}
-        TyKind::SelfTy => {}
         TyKind::Path(p) => visitor.visit_path(p),
         TyKind::Tuple(t) => visitor.visit_ty_tuple(t),
         TyKind::Ref(t) => visitor.visit_ty_ref(t),

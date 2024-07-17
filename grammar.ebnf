@@ -62,7 +62,7 @@ TyFn        = "fn" TyTuple ('->' Ty)? ;
 (* path *)
 Path        = PathPart ('::' PathPart)*
             | '::' (PathPart ('::' PathPart)*)? ;
-PathPart    = "super" | "self" | Identifier ;
+PathPart    = "super" | "self" | "Self" | Identifier ;
 Identifier  = IDENTIFIER ;
 
 

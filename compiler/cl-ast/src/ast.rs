@@ -252,7 +252,6 @@ pub struct Ty {
 pub enum TyKind {
     Never,
     Empty,
-    SelfTy,
     Path(Path),
     Tuple(TyTuple),
     Ref(TyRef),
@@ -293,6 +292,7 @@ pub struct Path {
 pub enum PathPart {
     SuperKw,
     SelfKw,
+    SelfTy,
     Ident(Sym),
 }
 

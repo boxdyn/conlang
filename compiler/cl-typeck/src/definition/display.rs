@@ -100,7 +100,6 @@ impl Display for TypeKind {
             TypeKind::FnSig { args, rety } => write!(f, "fn (#{args}) -> #{rety}"),
             TypeKind::Empty => f.write_str("()"),
             TypeKind::Never => f.write_str("!"),
-            TypeKind::SelfTy => f.write_str("Self"),
             TypeKind::Module => f.write_str("mod"),
         }
     }

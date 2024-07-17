@@ -169,6 +169,7 @@ fn evaluate_place_expr<'e>(
             match parts.last().expect("parts should not be empty") {
                 PathPart::SuperKw => Err(Error::NotAssignable),
                 PathPart::SelfKw => todo!("Assignment to `self`"),
+                PathPart::SelfTy => todo!("What does it mean to assign to capital-S Self?"),
                 PathPart::Ident(s) => env.get_mut(*s).map(|v| (v, *s)),
             }
         }
@@ -375,6 +376,7 @@ impl Interpret for Path {
         if parts.len() == 1 {
             match parts.last().expect("parts should not be empty") {
                 PathPart::SuperKw | PathPart::SelfKw => todo!("Path navigation"),
+                PathPart::SelfTy => todo!("Path navigation to Self"),
                 PathPart::Ident(name) => env.get(*name),
             }
         } else {

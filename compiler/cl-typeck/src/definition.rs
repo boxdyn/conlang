@@ -105,8 +105,6 @@ pub enum TypeKind {
     Empty,
     /// The never type
     Never,
-    /// The Self type
-    SelfTy,
     /// An untyped module
     Module,
 }

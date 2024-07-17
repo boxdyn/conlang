@@ -672,10 +672,6 @@ impl<'t> Parser<'t> {
                 self.consume_peeked();
                 TyKind::Never
             }
-            TokenKind::SelfTy => {
-                self.consume_peeked();
-                TyKind::SelfTy
-            }
             TokenKind::Punct(Punct::Amp) | TokenKind::Punct(Punct::AmpAmp) => self.tyref()?.into(),
             TokenKind::Punct(Punct::LParen) => {
                 let out = self.tytuple()?;
@@ -751,6 +747,7 @@ macro literal_like() {
 macro path_like() {
     TokenKind::Super
         | TokenKind::SelfKw
+        | TokenKind::SelfTy
         | TokenKind::Identifier
         | TokenKind::Punct(Punct::ColonColon)
 }
@@ -762,6 +759,7 @@ impl<'t> Parser<'t> {
         let out = match self.peek_kind(PARSING)? {
             TokenKind::Super => PathPart::SuperKw,
             TokenKind::SelfKw => PathPart::SelfKw,
+            TokenKind::SelfTy => PathPart::SelfTy,
             TokenKind::Identifier => PathPart::Ident(self.identifier()?),
             t => return Err(self.error(Unexpected(t), PARSING)),
         };

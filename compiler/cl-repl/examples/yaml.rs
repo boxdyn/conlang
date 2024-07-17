@@ -610,7 +610,6 @@ pub mod yamlify {
             match self {
                 TyKind::Never => y.value("Never"),
                 TyKind::Empty => y.value("Empty"),
-                TyKind::SelfTy => y.value("Self"),
                 TyKind::Path(t) => y.yaml(t),
                 TyKind::Tuple(t) => y.yaml(t),
                 TyKind::Ref(t) => y.yaml(t),
@@ -635,6 +634,7 @@ pub mod yamlify {
             match self {
                 PathPart::SuperKw => y.value("super"),
                 PathPart::SelfKw => y.value("self"),
+                PathPart::SelfTy => y.value("Self"),
                 PathPart::Ident(i) => y.yaml(i),
             };
         }
