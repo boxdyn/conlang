@@ -253,10 +253,25 @@ pub enum TyKind {
     Never,
     Empty,
     Path(Path),
+    Array(TyArray),
+    Slice(TySlice),
     Tuple(TyTuple),
     Ref(TyRef),
     Fn(TyFn),
     // TODO: slice, array types
+}
+
+/// An array of [`T`](Ty)
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct TyArray {
+    pub ty: Box<TyKind>,
+    pub count: usize,
+}
+
+/// A [Ty]pe slice expression: `[T]`
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct TySlice {
+    pub ty: Box<TyKind>,
 }
 
 /// A tuple of [Ty]pes

@@ -145,6 +145,14 @@ pub trait Visit<'a>: Sized {
     fn visit_ty_kind(&mut self, kind: &'a TyKind) {
         or_visit_ty_kind(self, kind)
     }
+    fn visit_ty_array(&mut self, a: &'a TyArray) {
+        let TyArray { ty, count: _ } = a;
+        self.visit_ty_kind(ty);
+    }
+    fn visit_ty_slice(&mut self, s: &'a TySlice) {
+        let TySlice { ty } = s;
+        self.visit_ty_kind(ty)
+    }
     fn visit_ty_tuple(&mut self, t: &'a TyTuple) {
         let TyTuple { types } = t;
         types.iter().for_each(|kind| self.visit_ty_kind(kind))
@@ -424,6 +432,8 @@ pub fn or_visit_ty_kind<'a, V: Visit<'a>>(visitor: &mut V, kind: &'a TyKind) {
         TyKind::Never => {}
         TyKind::Empty => {}
         TyKind::Path(p) => visitor.visit_path(p),
+        TyKind::Array(t) => visitor.visit_ty_array(t),
+        TyKind::Slice(t) => visitor.visit_ty_slice(t),
         TyKind::Tuple(t) => visitor.visit_ty_tuple(t),
         TyKind::Ref(t) => visitor.visit_ty_ref(t),
         TyKind::Fn(t) => visitor.visit_ty_fn(t),

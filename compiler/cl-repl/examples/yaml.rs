@@ -614,6 +614,8 @@ pub mod yamlify {
                 TyKind::Tuple(t) => y.yaml(t),
                 TyKind::Ref(t) => y.yaml(t),
                 TyKind::Fn(t) => y.yaml(t),
+                TyKind::Slice(_) => todo!(),
+                TyKind::Array(_) => todo!(),
             };
         }
     }
@@ -637,6 +639,18 @@ pub mod yamlify {
                 PathPart::SelfTy => y.value("Self"),
                 PathPart::Ident(i) => y.yaml(i),
             };
+        }
+    }
+    impl Yamlify for TyArray {
+        fn yaml(&self, y: &mut Yamler) {
+            let Self { ty, count } = self;
+            y.key("TyArray").pair("ty", ty).pair("count", count);
+        }
+    }
+    impl Yamlify for TySlice {
+        fn yaml(&self, y: &mut Yamler) {
+            let Self { ty } = self;
+            y.key("TyArray").pair("ty", ty);
         }
     }
     impl Yamlify for TyTuple {

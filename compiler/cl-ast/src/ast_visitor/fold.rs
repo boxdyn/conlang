@@ -172,6 +172,14 @@ pub trait Fold {
     fn fold_ty_kind(&mut self, kind: TyKind) -> TyKind {
         or_fold_ty_kind(self, kind)
     }
+    fn fold_ty_array(&mut self, a: TyArray) -> TyArray {
+        let TyArray { ty, count } = a;
+        TyArray { ty: Box::new(self.fold_ty_kind(*ty)), count }
+    }
+    fn fold_ty_slice(&mut self, s: TySlice) -> TySlice {
+        let TySlice { ty } = s;
+        TySlice { ty: Box::new(self.fold_ty_kind(*ty)) }
+    }
     fn fold_ty_tuple(&mut self, t: TyTuple) -> TyTuple {
         let TyTuple { types } = t;
         TyTuple {
@@ -500,6 +508,8 @@ pub fn or_fold_ty_kind<F: Fold + ?Sized>(folder: &mut F, kind: TyKind) -> TyKind
         TyKind::Never => TyKind::Never,
         TyKind::Empty => TyKind::Empty,
         TyKind::Path(p) => TyKind::Path(folder.fold_path(p)),
+        TyKind::Array(a) => TyKind::Array(folder.fold_ty_array(a)),
+        TyKind::Slice(s) => TyKind::Slice(folder.fold_ty_slice(s)),
         TyKind::Tuple(t) => TyKind::Tuple(folder.fold_ty_tuple(t)),
         TyKind::Ref(t) => TyKind::Ref(folder.fold_ty_ref(t)),
         TyKind::Fn(t) => TyKind::Fn(folder.fold_ty_fn(t)),

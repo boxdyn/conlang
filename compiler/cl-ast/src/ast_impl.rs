@@ -307,10 +307,26 @@ mod display {
                 TyKind::Never => "!".fmt(f),
                 TyKind::Empty => "()".fmt(f),
                 TyKind::Path(v) => v.fmt(f),
+                TyKind::Array(v) => v.fmt(f),
+                TyKind::Slice(v) => v.fmt(f),
                 TyKind::Tuple(v) => v.fmt(f),
                 TyKind::Ref(v) => v.fmt(f),
                 TyKind::Fn(v) => v.fmt(f),
             }
+        }
+    }
+
+    impl Display for TyArray {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let Self { ty, count } = self;
+            write!(f, "[{ty}; {count}]")
+        }
+    }
+
+    impl Display for TySlice {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let Self { ty } = self;
+            write!(f, "[{ty}]")
         }
     }
 

@@ -172,7 +172,7 @@ pub mod evaluate {
 
     use super::*;
     use crate::module;
-    use cl_ast::{Sym, Ty, TyFn, TyKind, TyRef, TyTuple};
+    use cl_ast::{Sym, Ty, TyArray, TyFn, TyKind, TyRef, TySlice, TyTuple};
 
     /// Things that can be evaluated as a type expression
     pub trait EvaluableTypeExpression {
@@ -197,6 +197,8 @@ pub mod evaluate {
                 TyKind::Empty => prj.anon_types[&TypeKind::Empty],
                 // TyKind::Path must be looked up explicitly
                 TyKind::Path(path) => path.evaluate(prj, parent)?,
+                TyKind::Slice(slice) => slice.evaluate(prj, parent)?,
+                TyKind::Array(array) => array.evaluate(prj, parent)?,
                 TyKind::Tuple(tup) => tup.evaluate(prj, parent)?,
                 TyKind::Ref(tyref) => tyref.evaluate(prj, parent)?,
                 TyKind::Fn(tyfn) => tyfn.evaluate(prj, parent)?,
@@ -217,6 +219,38 @@ pub mod evaluate {
                 .get(self)
                 .copied()
                 .ok_or_else(|| format!("{self} is not a member of {:?}", prj[parent].name()))
+        }
+    }
+
+    impl EvaluableTypeExpression for TySlice {
+        type Out = DefID;
+
+        fn evaluate(&self, prj: &mut Project, parent: DefID) -> Result<Self::Out, String> {
+            let ty = self.ty.evaluate(prj, parent)?;
+            let root = prj.root;
+            let id = prj.insert_anonymous_type(TypeKind::Slice(ty), move || Def {
+                module: module::Module::new(root),
+                node: Node::new(Default::default(), None),
+                kind: DefKind::Type(TypeKind::Slice(ty)),
+            });
+
+            Ok(id)
+        }
+    }
+
+    impl EvaluableTypeExpression for TyArray {
+        type Out = DefID;
+
+        fn evaluate(&self, prj: &mut Project, parent: DefID) -> Result<Self::Out, String> {
+            let kind = TypeKind::Array(self.ty.evaluate(prj, parent)?, self.count);
+            let root = prj.root;
+            let id = prj.insert_anonymous_type(kind.clone(), move || Def {
+                module: module::Module::new(root),
+                node: Node::new(Default::default(), None),
+                kind: DefKind::Type(kind),
+            });
+
+            Ok(id)
         }
     }
 

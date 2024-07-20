@@ -50,10 +50,12 @@ UseTree     = '*' | '{' (UseTree ',')* UseTree? '}'
             | PathPart ('::' UseTree | "as" Identifier)? ;
 
 (* type *)
-Ty          = Never | Empty | Path | TyTuple | TyRef | TyFn ;
+Ty          = Never | Empty | Path | TyArray | TySlice | TyTuple | TyRef | TyFn ;
 Never       = '!' ;
 Empty       = '(' ')' ;
 TyTuple     = '(' (Ty ',')* Ty? ')' ;
+TyArray     = '[' Ty ';' INTEGER ']' ;
+TySlice     = '[' Ty ']' ;
 TyRef       = Amps* Path ;
 Amps        = '&' | '&&' ;
 TyFn        = "fn" TyTuple ('->' Ty)? ;

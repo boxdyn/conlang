@@ -673,6 +673,7 @@ impl<'t> Parser<'t> {
                 TyKind::Never
             }
             TokenKind::Punct(Punct::Amp) | TokenKind::Punct(Punct::AmpAmp) => self.tyref()?.into(),
+            TokenKind::Punct(Punct::LBrack) => self.tyslice_or_array()?,
             TokenKind::Punct(Punct::LParen) => {
                 let out = self.tytuple()?;
                 match out.types.is_empty() {
@@ -687,6 +688,32 @@ impl<'t> Parser<'t> {
 
         Ok(out)
     }
+
+    /// [`TySlice`] = `[` [Ty] `]`  \
+    /// [`TyArray`] = `[` [Ty] `;` [usize] `]`
+    pub fn tyslice_or_array(&mut self) -> PResult<TyKind> {
+        self.match_op(BRACKETS.0, Parsing::TySlice)?;
+        let ty = self.tykind()?;
+        let (out, kind) = match self.match_op(Punct::Semi, Parsing::TyArray).is_ok() {
+            true => {
+                let literal = self.match_type(TokenKind::Literal, Parsing::TyArray)?;
+                let &TokenData::Integer(count) = literal.data() else {
+                    Err(self.error(Unexpected(TokenKind::Literal), Parsing::TyArray))?
+                };
+                (
+                    TyKind::Array(TyArray { ty: Box::new(ty), count: count as _ }),
+                    Parsing::TyArray,
+                )
+            }
+            false => (
+                TyKind::Slice(TySlice { ty: Box::new(ty) }),
+                Parsing::TySlice,
+            ),
+        };
+        self.match_op(BRACKETS.1, kind)?;
+        Ok(out)
+    }
+
     /// [TyTuple] = `(` ([Ty] `,`)* [Ty]? `)`
     pub fn tytuple(&mut self) -> PResult<TyTuple> {
         const PARSING: Parsing = Parsing::TyTuple;

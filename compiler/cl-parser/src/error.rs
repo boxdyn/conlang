@@ -78,6 +78,8 @@ pub enum Parsing {
 
     Ty,
     TyKind,
+    TySlice,
+    TyArray,
     TyTuple,
     TyRef,
     TyFn,
@@ -181,13 +183,15 @@ impl Display for Parsing {
 
             Parsing::Ty => "a type",
             Parsing::TyKind => "a type",
+            Parsing::TySlice => "a slice type",
+            Parsing::TyArray => "an array type",
             Parsing::TyTuple => "a tuple of types",
             Parsing::TyRef => "a reference type",
             Parsing::TyFn => "a function pointer type",
 
             Parsing::Path => "a path",
             Parsing::PathPart => "a path component",
-            
+
             Parsing::Stmt => "a statement",
             Parsing::StmtKind => "a statement",
             Parsing::Let => "a local variable declaration",
