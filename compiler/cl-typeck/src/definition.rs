@@ -1,5 +1,5 @@
 use crate::{
-    key::DefID,
+    handle::DefID,
     module::Module,
     node::{Node, NodeSource},
 };

@@ -2,7 +2,7 @@
 
 use crate::{
     definition::{Adt, Def, DefKind, TypeKind, ValueKind},
-    key::DefID,
+    handle::DefID,
     node::{Node, NodeSource},
     project::{evaluate::EvaluableTypeExpression, Project as Prj},
 };

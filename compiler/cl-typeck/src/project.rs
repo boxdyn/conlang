@@ -1,7 +1,7 @@
 //! A [Project] contains a tree of [Def]initions, referred to by their [Path]
 use crate::{
     definition::{Def, DefKind, TypeKind},
-    key::DefID,
+    handle::DefID,
     module,
     node::{Node, NodeSource},
     path::Path,

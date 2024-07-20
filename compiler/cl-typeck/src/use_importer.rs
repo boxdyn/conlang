@@ -15,7 +15,7 @@ use cl_ast::*;
 
 use crate::{
     definition::{Def, DefKind},
-    key::DefID,
+    handle::DefID,
     node::NodeSource,
     project::Project,
 };

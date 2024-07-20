@@ -3,7 +3,7 @@
 use cl_ast::Sym;
 use cl_structures::index_map::MapIndex;
 
-use crate::key::DefID;
+use crate::handle::DefID;
 use std::collections::HashMap;
 
 /// A [Module] is a node in the Module Tree (a component of a

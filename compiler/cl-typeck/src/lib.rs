@@ -67,7 +67,7 @@ Value: Either
 
 */
 
-pub mod key;
+pub mod handle;
 
 pub mod node;
 

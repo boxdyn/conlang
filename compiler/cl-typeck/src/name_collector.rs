@@ -1,7 +1,7 @@
 //! Performs step 1 of type checking: Collecting all the names of things into [Module] units
 use crate::{
     definition::{Def, DefKind},
-    key::DefID,
+    handle::DefID,
     module::Module as Mod,
     node::{Node, NodeSource},
     project::Project as Prj,
