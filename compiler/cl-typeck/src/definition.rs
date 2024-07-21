@@ -28,6 +28,10 @@ impl Def<'_> {
             None => None,
         }
     }
+
+    pub fn is_transparent(&self) -> bool {
+        !matches!(self.kind, DefKind::Type(_))
+    }
 }
 
 mod builder_functions {

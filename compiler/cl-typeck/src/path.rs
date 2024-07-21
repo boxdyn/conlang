@@ -19,13 +19,17 @@ impl<'p> Path<'p> {
         let Self { absolute, parts } = self;
         Some(Self { absolute, parts: parts.get(1..)? })
     }
+    pub fn front(self) -> Option<Self> {
+        let Self { absolute, parts } = self;
+        Some(Self { absolute, parts: parts.get(..1)? })
+    }
     pub fn is_empty(&self) -> bool {
         self.parts.is_empty()
     }
     pub fn len(&self) -> usize {
         self.parts.len()
     }
-    pub fn front(&self) -> Option<&PathPart> {
+    pub fn first(&self) -> Option<&PathPart> {
         self.parts.first()
     }
 }

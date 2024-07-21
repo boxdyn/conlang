@@ -271,7 +271,6 @@ impl<'a> TypeResolvable<'a> for &'a Impl {
         }
         .map_err(|_| "Unresolved type in impl target")?;
 
-        prj[id].module.parent = Some(target);
         match prj.pool.get_many_mut([id, target]) {
             // TODO: Better error handling
             Err(_) => Err(concat!(

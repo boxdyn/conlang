@@ -88,18 +88,32 @@ impl<'a> Project<'a> {
             return self.get(path.relative(), self.root_of(within));
         }
         match path.as_ref() {
-            [] => Some((Some(within), None, path)),
+            [PathPart::SuperKw, ..] => self.get(path.pop_front()?, self.parent_of(within)?),
+            [PathPart::SelfTy, ..] => self.get(path.pop_front()?, self.selfty_of(within)?),
+            [PathPart::SelfKw, ..] => self.get(path.pop_front()?, within),
             [PathPart::Ident(name)] => {
                 let (ty, val) = self[within].module.get(*name);
+
+                // Transparent nodes can be looked through in reverse
+                if self[within].is_transparent() {
+                    let lookback = self.parent_of(within).and_then(|p| self.get(path, p));
+                    if let Some((subty, subval, path)) = lookback {
+                        return Some((ty.or(subty), val.or(subval), path));
+                    }
+                }
                 Some((ty, val, path.pop_front()?))
             }
             [PathPart::Ident(name), ..] => {
-                let ty = self[within].module.get_type(*name)?;
+                // TODO: This is currently too permissive, and treats undecided nodes as if they're
+                // always transparent, among other issues.
+                let (tysub, _, _) = match self[within].is_transparent() {
+                    true => self.get(path.front()?, within)?,
+                    false => (None, None, path),
+                };
+                let ty = self[within].module.get_type(*name).or(tysub)?;
                 self.get(path.pop_front()?, ty)
             }
-            [PathPart::SelfTy, ..] => self.get(path.pop_front()?, self.selfty_of(within)?),
-            [PathPart::SelfKw, ..] => self.get(path.pop_front()?, within),
-            [PathPart::SuperKw, ..] => self.get(path.pop_front()?, self.parent_of(within)?),
+            [] => Some((Some(within), None, path)),
         }
     }
 
@@ -108,7 +122,7 @@ impl<'a> Project<'a> {
     pub fn get_type<'p>(&self, path: Path<'p>, within: DefID) -> Option<(DefID, Path<'p>)> {
         if path.absolute {
             self.get_type(path.relative(), self.root_of(within))
-        } else if let Some(front) = path.front() {
+        } else if let Some(front) = path.first() {
             let module = &self[within].module;
             match front {
                 PathPart::SelfKw => self.get_type(path.pop_front()?, within),
@@ -121,16 +135,6 @@ impl<'a> Project<'a> {
             }
         } else {
             Some((within, path))
-        }
-    }
-
-    pub fn get_value<'p>(&self, path: Path<'p>, within: DefID) -> Option<(DefID, Path<'p>)> {
-        match path.front()? {
-            PathPart::Ident(name) => Some((
-                self[within].module.values.get(name).copied()?,
-                path.pop_front()?,
-            )),
-            _ => None,
         }
     }
 
