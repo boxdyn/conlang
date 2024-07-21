@@ -1,4 +1,3 @@
-
 use delimiters::Delimiters;
 use std::fmt::Write;
 
@@ -7,8 +6,13 @@ pub trait FmtAdapter: Write {
     fn indent(&mut self) -> Indent<Self> {
         Indent { f: self }
     }
+
     fn delimit(&mut self, delim: Delimiters) -> Delimit<Self> {
         Delimit::new(self, delim)
+    }
+
+    fn delimit_with(&mut self, open: &'static str, close: &'static str) -> Delimit<Self> {
+        Delimit::new(self, Delimiters { open, close })
     }
 }
 

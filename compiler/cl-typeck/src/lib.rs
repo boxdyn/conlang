@@ -87,6 +87,8 @@ pub mod type_resolver;
 
 pub mod inference;
 
+pub(crate) mod format_utils;
+
 /*
 
 LET THERE BE NOTES:

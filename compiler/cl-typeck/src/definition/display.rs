@@ -1,34 +1,9 @@
 //! [Display] implementations for [TypeKind], [Adt], and [Intrinsic]
 
-use crate::node::Node;
-
 use super::{Adt, Def, DefKind, Intrinsic, TypeKind, ValueKind};
+use crate::{format_utils::*, node::Node};
 use cl_ast::format::FmtAdapter;
-use std::{
-    fmt::{self, Display, Write},
-    iter,
-};
-
-fn sep<'f, 's, Item, F>(
-    before: &'s str,
-    after: &'s str,
-    t: F,
-) -> impl FnOnce(&mut fmt::Formatter<'f>) -> fmt::Result + 's
-where
-    Item: FnMut(&mut fmt::Formatter<'f>) -> fmt::Result,
-    F: FnMut() -> Option<Item> + 's,
-{
-    move |f| {
-        f.write_str(before)?;
-        for (idx, mut disp) in iter::from_fn(t).enumerate() {
-            if idx > 0 {
-                f.write_str(", ")?;
-            }
-            disp(f)?;
-        }
-        f.write_str(after)
-    }
-}
+use std::fmt::{self, Display, Write};
 
 impl Display for Def<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -92,10 +67,10 @@ impl Display for TypeKind {
             TypeKind::Array(def, size) => write!(f, "array [#{def}; {size}]"),
             TypeKind::Tuple(defs) => {
                 let mut defs = defs.iter();
-                sep("tuple (", ")", || {
+                separate(", ", || {
                     let def = defs.next()?;
-                    Some(move |f: &mut fmt::Formatter| write!(f, "#{def}"))
-                })(f)
+                    Some(move |f: &mut Delimit<_>| write!(f, "#{def}"))
+                })(f.delimit_with("tuple (", ")"))
             }
             TypeKind::FnSig { args, rety } => write!(f, "fn (#{args}) -> #{rety}"),
             TypeKind::Empty => f.write_str("()"),
@@ -110,43 +85,43 @@ impl Display for Adt {
         match self {
             Adt::Enum(variants) => {
                 let mut variants = variants.iter();
-                sep("enum {", "}", || {
+                separate(", ", || {
                     let (name, def) = variants.next()?;
-                    Some(move |f: &mut fmt::Formatter| match def {
+                    Some(move |f: &mut Delimit<_>| match def {
                         Some(def) => write!(f, "{name}: #{def}"),
                         None => write!(f, "{name}"),
                     })
-                })(f)
+                })(f.delimit_with("enum {", "}"))
             }
             Adt::CLikeEnum(variants) => {
                 let mut variants = variants.iter();
-                sep("enum {", "}", || {
+                separate(", ", || {
                     let (name, descrim) = variants.next()?;
-                    Some(move |f: &mut fmt::Formatter| write!(f, "{name} = {descrim}"))
-                })(f)
+                    Some(move |f: &mut Delimit<_>| write!(f, "{name} = {descrim}"))
+                })(f.delimit_with("enum {", "}"))
             }
             Adt::FieldlessEnum => write!(f, "enum"),
             Adt::Struct(members) => {
                 let mut members = members.iter();
-                sep("struct {", "}", || {
+                separate(", ", || {
                     let (name, vis, def) = members.next()?;
-                    Some(move |f: &mut fmt::Formatter| write!(f, "{vis}{name}: #{def}"))
-                })(f)
+                    Some(move |f: &mut Delimit<_>| write!(f, "{vis}{name}: #{def}"))
+                })(f.delimit_with("struct {", "}"))
             }
             Adt::TupleStruct(members) => {
                 let mut members = members.iter();
-                sep("struct (", ")", || {
+                separate(", ", || {
                     let (vis, def) = members.next()?;
-                    Some(move |f: &mut fmt::Formatter| write!(f, "{vis}#{def}"))
-                })(f)
+                    Some(move |f: &mut Delimit<_>| write!(f, "{vis}#{def}"))
+                })(f.delimit_with("struct (", ")"))
             }
-            Adt::UnitStruct => write!(f, "struct ()"),
+            Adt::UnitStruct => write!(f, "struct"),
             Adt::Union(variants) => {
                 let mut variants = variants.iter();
-                sep("union {", "}", || {
+                separate(", ", || {
                     let (name, def) = variants.next()?;
-                    Some(move |f: &mut fmt::Formatter| write!(f, "{name}: #{def}"))
-                })(f)
+                    Some(move |f: &mut Delimit<_>| write!(f, "{name}: #{def}"))
+                })(f.delimit_with("union {", "}"))
             }
         }
     }
