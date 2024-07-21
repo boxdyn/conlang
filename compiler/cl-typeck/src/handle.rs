@@ -1,4 +1,4 @@
-use crate::{definition::Def, project::Project};
+use crate::{definition::Def, path::Path, project::Project};
 use cl_structures::index_map::*;
 
 // define the index types
@@ -44,6 +44,15 @@ impl<'p, 'c> Handle<'p, 'c> {
     /// Gets the [Def] this handle points to.
     pub fn get(self) -> Option<&'p Def<'c>> {
         self.prj.pool.get(self.id)
+    }
+
+    pub fn navigate(self, path: Path) -> (Option<Self>, Option<Self>) {
+        match self.prj.get(path, self.id) {
+            Some((Some(ty), Some(vl), _)) => (Some(self.with(ty)), Some(self.with(vl))),
+            Some((_, Some(vl), _)) => (None, Some(self.with(vl))),
+            Some((Some(ty), _, _)) => (Some(self.with(ty)), None),
+            _ => (None, None),
+        }
     }
 
     /// Gets the [Project] this handle points to.

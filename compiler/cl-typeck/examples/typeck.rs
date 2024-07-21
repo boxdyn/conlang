@@ -24,6 +24,7 @@ const STDLIB: &str = include_str!("../../../stdlib/lib.cl");
 const C_MAIN: &str = "";
 const C_RESV: &str = "\x1b[35m";
 const C_CODE: &str = "\x1b[36m";
+const C_BYID: &str = "\x1b[95m";
 const C_LISTING: &str = "\x1b[38;5;117m";
 
 /// A home for immutable intermediate ASTs
@@ -58,6 +59,7 @@ fn main_menu(prj: &mut Project) -> Result<(), RlError> {
             "e" | "exit" => return Ok(Response::Break),
             "l" | "list" => list_types(prj),
             "q" | "query" => query_type_expression(prj)?,
+            "i" | "id" => get_by_id(prj)?,
             "r" | "resolve" => resolve_all(prj)?,
             "d" | "desugar" => live_desugar()?,
             "h" | "help" => {
@@ -66,6 +68,7 @@ fn main_menu(prj: &mut Project) -> Result<(), RlError> {
     code    (c): Enter code to type-check
     list    (l): List all known types
     query   (q): Query the type system
+    id      (i): Get a type by its type ID
     resolve (r): Perform type resolution
     desugar (d): WIP: Test the experimental desugaring passes
     help    (h): Print this list
@@ -121,6 +124,48 @@ fn query_type_expression(prj: &mut Project) -> Result<(), RlError> {
         let ty = Parser::new(Lexer::new(line)).ty()?.kind;
         let id = prj.evaluate(&ty, prj.root)?.handle_unchecked(prj);
         pretty_handle(id)?;
+        Ok(Response::Accept)
+    })
+}
+
+fn get_by_id(prj: &mut Project) -> Result<(), RlError> {
+    use cl_structures::index_map::MapIndex;
+    use cl_typeck::handle::DefID;
+    read_and(C_BYID, "id>", "? >", |line| {
+        if line.trim().is_empty() {
+            return Ok(Response::Break);
+        }
+        let mut parser = Parser::new(Lexer::new(line));
+        let def_id = match parser.literal()? {
+            cl_ast::Literal::Int(int) => int as _,
+            other => Err(format!("Expected integer, got {other}"))?,
+        };
+        let mut path = parser.path().unwrap_or_default();
+        path.absolute = false;
+
+        let Some(handle) = DefID::from_usize(def_id).handle(prj) else {
+            return Ok(Response::Deny);
+        };
+
+        print!("  > {{{C_LISTING}{handle}\x1b[0m}}");
+        if !path.parts.is_empty() {
+            print!("::{path}")
+        }
+        println!();
+
+        let (ty, value) = handle.navigate((&path).into());
+        if let (None, None) = (ty, value) {
+            Err("No results.")?
+        }
+        if let Some(t) = ty {
+            println!("Result in type namespace: {}", t.id());
+            pretty_handle(t)?;
+        }
+        if let Some(v) = value {
+            println!("Result in value namespace: {}", v.id());
+            pretty_handle(v)?;
+        }
+
         Ok(Response::Accept)
     })
 }
