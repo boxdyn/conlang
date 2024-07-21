@@ -49,7 +49,7 @@ pub mod ops {
     impl bool {
         pub const MIN: Self = false;
         pub const MAX: Self = true;
-        pub const BIT_WIDTH: ::num::u32 = 1;
+        pub const BIT_WIDTH: u32 = 1;
         pub fn default() -> Self {
             false
         }
@@ -73,7 +73,7 @@ pub mod ops {
     impl u8 {
         pub const MIN: Self = 0;
         pub const MAX: Self = !0;
-        pub const BIT_WIDTH: ::num::u32 = 1;
+        pub const BIT_WIDTH: u32 = 1;
         pub fn default() -> Self {
             0
         }
@@ -92,10 +92,10 @@ pub mod ops {
         pub fn sub(a: Self, b: Self) -> Self {
             a - b
         }
-        pub fn shl(a: Self, b: ::num::u32) -> Self {
+        pub fn shl(a: Self, b: u32) -> Self {
             a << b
         }
-        pub fn shr(a: Self, b: ::num::u32) -> Self {
+        pub fn shr(a: Self, b: u32) -> Self {
             a >> b
         }
         pub fn and(a: Self, b: Self) -> Self {
@@ -112,7 +112,7 @@ pub mod ops {
     impl u16 {
         pub const MIN: Self = 0;
         pub const MAX: Self = !0;
-        pub const BIT_WIDTH: ::num::u32 = 2;
+        pub const BIT_WIDTH: u32 = 2;
         pub fn default() -> Self {
             0
         }
@@ -131,10 +131,10 @@ pub mod ops {
         pub fn sub(a: Self, b: Self) -> Self {
             a - b
         }
-        pub fn shl(a: Self, b: ::num::u32) -> Self {
+        pub fn shl(a: Self, b: u32) -> Self {
             a << b
         }
-        pub fn shr(a: Self, b: ::num::u32) -> Self {
+        pub fn shr(a: Self, b: u32) -> Self {
             a >> b
         }
         pub fn and(a: Self, b: Self) -> Self {
@@ -151,7 +151,7 @@ pub mod ops {
     impl u32 {
         pub const MIN: Self = 0;
         pub const MAX: Self = !0;
-        pub const BIT_WIDTH: ::num::u32 = 4;
+        pub const BIT_WIDTH: u32 = 4;
         pub fn default() -> Self {
             0
         }
@@ -170,10 +170,10 @@ pub mod ops {
         pub fn sub(a: Self, b: Self) -> Self {
             a - b
         }
-        pub fn shl(a: Self, b: ::num::u32) -> Self {
+        pub fn shl(a: Self, b: u32) -> Self {
             a << b
         }
-        pub fn shr(a: Self, b: ::num::u32) -> Self {
+        pub fn shr(a: Self, b: u32) -> Self {
             a >> b
         }
         pub fn and(a: Self, b: Self) -> Self {
@@ -190,7 +190,7 @@ pub mod ops {
     impl u64 {
         pub const MIN: Self = 0;
         pub const MAX: Self = !0;
-        pub const BIT_WIDTH: ::num::u32 = 8;
+        pub const BIT_WIDTH: u32 = 8;
         pub fn default() -> Self {
             0
         }
@@ -209,10 +209,10 @@ pub mod ops {
         pub fn sub(a: Self, b: Self) -> Self {
             a - b
         }
-        pub fn shl(a: Self, b: ::num::u32) -> Self {
+        pub fn shl(a: Self, b: u32) -> Self {
             a << b
         }
-        pub fn shr(a: Self, b: ::num::u32) -> Self {
+        pub fn shr(a: Self, b: u32) -> Self {
             a >> b
         }
         pub fn and(a: Self, b: Self) -> Self {
@@ -229,7 +229,7 @@ pub mod ops {
     impl usize {
         pub const MIN: Self = __march_ptr_width_unsigned_min();
         pub const MAX: Self = __march_ptr_width_unsigned_max();
-        pub const BIT_WIDTH: ::num::u32 = __march_ptr_width_bits();
+        pub const BIT_WIDTH: u32 = __march_ptr_width_bits();
         pub fn default() -> Self {
             0
         }
@@ -248,10 +248,10 @@ pub mod ops {
         pub fn sub(a: Self, b: Self) -> Self {
             a - b
         }
-        pub fn shl(a: Self, b: ::num::u32) -> Self {
+        pub fn shl(a: Self, b: u32) -> Self {
             a << b
         }
-        pub fn shr(a: Self, b: ::num::u32) -> Self {
+        pub fn shr(a: Self, b: u32) -> Self {
             a >> b
         }
         pub fn and(a: Self, b: Self) -> Self {
@@ -268,7 +268,7 @@ pub mod ops {
     impl i8 {
         pub const MIN: Self = -128;
         pub const MAX: Self = 127;
-        pub const BIT_WIDTH: ::num::u32 = 1;
+        pub const BIT_WIDTH: u32 = 1;
         pub fn default() -> Self {
             0
         }
@@ -287,10 +287,10 @@ pub mod ops {
         pub fn sub(a: Self, b: Self) -> Self {
             a - b
         }
-        pub fn shl(a: Self, b: ::num::u32) -> Self {
+        pub fn shl(a: Self, b: u32) -> Self {
             a << b
         }
-        pub fn shr(a: Self, b: ::num::u32) -> Self {
+        pub fn shr(a: Self, b: u32) -> Self {
             a >> b
         }
         pub fn and(a: Self, b: Self) -> Self {
@@ -307,7 +307,7 @@ pub mod ops {
     impl i16 {
         pub const MIN: Self = -32768;
         pub const MAX: Self = 32767;
-        pub const BIT_WIDTH: ::num::u32 = 2;
+        pub const BIT_WIDTH: u32 = 2;
         pub fn default() -> Self {
             0
         }
@@ -326,10 +326,10 @@ pub mod ops {
         pub fn sub(a: Self, b: Self) -> Self {
             a - b
         }
-        pub fn shl(a: Self, b: ::num::u32) -> Self {
+        pub fn shl(a: Self, b: u32) -> Self {
             a << b
         }
-        pub fn shr(a: Self, b: ::num::u32) -> Self {
+        pub fn shr(a: Self, b: u32) -> Self {
             a >> b
         }
         pub fn and(a: Self, b: Self) -> Self {
@@ -346,7 +346,7 @@ pub mod ops {
     impl i32 {
         pub const MIN: Self = -2147483648;
         pub const MAX: Self = 2147483647;
-        pub const BIT_WIDTH: ::num::u32 = 4;
+        pub const BIT_WIDTH: u32 = 4;
         pub fn default() -> Self {
             0
         }
@@ -365,10 +365,10 @@ pub mod ops {
         pub fn sub(a: Self, b: Self) -> Self {
             a - b
         }
-        pub fn shl(a: Self, b: ::num::u32) -> Self {
+        pub fn shl(a: Self, b: u32) -> Self {
             a << b
         }
-        pub fn shr(a: Self, b: ::num::u32) -> Self {
+        pub fn shr(a: Self, b: u32) -> Self {
             a >> b
         }
         pub fn and(a: Self, b: Self) -> Self {
@@ -385,7 +385,7 @@ pub mod ops {
     impl i64 {
         pub const MIN: Self = -9223372036854775808;
         pub const MAX: Self = 9223372036854775807;
-        pub const BIT_WIDTH: ::num::u32 = 8;
+        pub const BIT_WIDTH: u32 = 8;
         pub fn default() -> Self {
             0
         }
@@ -404,10 +404,10 @@ pub mod ops {
         pub fn sub(a: Self, b: Self) -> Self {
             a - b
         }
-        pub fn shl(a: Self, b: ::num::u32) -> Self {
+        pub fn shl(a: Self, b: u32) -> Self {
             a << b
         }
-        pub fn shr(a: Self, b: ::num::u32) -> Self {
+        pub fn shr(a: Self, b: u32) -> Self {
             a >> b
         }
         pub fn and(a: Self, b: Self) -> Self {
@@ -424,7 +424,7 @@ pub mod ops {
     impl isize {
         pub const MIN: Self = __march_ptr_width_signed_min();
         pub const MAX: Self = __march_ptr_width_signed_max();
-        pub const BIT_WIDTH: ::num::u32 = __march_ptr_width_bits();
+        pub const BIT_WIDTH: u32 = __march_ptr_width_bits();
         pub fn default() -> Self {
             0
         }
@@ -443,10 +443,10 @@ pub mod ops {
         pub fn sub(a: Self, b: Self) -> Self {
             a - b
         }
-        pub fn shl(a: Self, b: ::num::u32) -> Self {
+        pub fn shl(a: Self, b: u32) -> Self {
             a << b
         }
-        pub fn shr(a: Self, b: ::num::u32) -> Self {
+        pub fn shr(a: Self, b: u32) -> Self {
             a >> b
         }
         pub fn and(a: Self, b: Self) -> Self {
