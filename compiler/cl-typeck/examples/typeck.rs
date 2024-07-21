@@ -6,6 +6,7 @@ use cl_lexer::Lexer;
 use cl_parser::{inliner::ModuleInliner, Parser};
 use cl_typeck::{
     definition::Def,
+    handle::Handle,
     name_collector::NameCollector,
     node::{Node, NodeSource},
     project::Project,
@@ -118,8 +119,8 @@ fn query_type_expression(prj: &mut Project) -> Result<(), RlError> {
         }
         // parse it as a path, and convert the path into a borrowed path
         let ty = Parser::new(Lexer::new(line)).ty()?.kind;
-        let id = prj.evaluate(&ty, prj.root)?;
-        pretty_def(&prj[id], id);
+        let id = prj.evaluate(&ty, prj.root)?.handle_unchecked(prj);
+        pretty_handle(id)?;
         Ok(Response::Accept)
     })
 }
@@ -135,31 +136,43 @@ fn resolve_all(prj: &mut Project) -> Result<(), Box<dyn Error>> {
 
 fn list_types(prj: &mut Project) {
     println!("     name\x1b[30G  type");
-    for (idx, Def { kind, node: Node { vis, kind: source, .. }, .. }) in
-        prj.pool.values().enumerate()
-    {
-        print!("{idx:3}: {vis}");
-        if let Some(Some(name)) = source.as_ref().map(NodeSource::name) {
-            print!("{name}");
-        }
-        println!("\x1b[30G| {kind}")
+    for (idx, key) in prj.pool.keys().enumerate() {
+        let Def { node: Node { vis, kind: source, .. }, .. } = &prj[key];
+        let name = match source.as_ref().map(NodeSource::name) {
+            Some(Some(name)) => name,
+            _ => "".into(),
+        };
+        print!(
+            "{idx:3}: {vis}{name}\x1b[30G = {}",
+            key.handle_unchecked(prj)
+        );
+        println!();
     }
 }
 
-fn pretty_def(def: &Def, id: impl Into<usize>) {
-    let id = id.into();
-    let Def { module, kind, node: Node { meta, vis, kind: source, .. } } = def;
-    for meta in *meta {
-        println!("#[{meta}]")
+fn pretty_handle(handle: Handle) -> Result<(), std::io::Error> {
+    use std::io::Write;
+    let mut stdout = std::io::stdout().lock();
+    let Some(Def { module, node: Node { vis, .. }, .. }) = handle.get() else {
+        return writeln!(stdout, "Invalid handle: {handle}");
+    };
+    writeln!(stdout, "{C_LISTING}{vis}{handle}\x1b[0m: {}", handle.id())?;
+    if let Some(parent) = module.parent {
+        writeln!(stdout, "{C_LISTING}Parent\x1b[0m: {}", handle.with(parent))?;
     }
-    if let Some(Some(name)) = source.as_ref().map(NodeSource::name) {
-        print!("{vis}{name} ");
+    if !module.types.is_empty() {
+        writeln!(stdout, "{C_LISTING}Types:\x1b[0m")?;
+        for (name, def) in &module.types {
+            writeln!(stdout, "- {C_LISTING}{name}\x1b[0m: {}", handle.with(*def))?
+        }
     }
-    println!("[id: {id}] = {kind}");
-    if let Some(source) = source {
-        println!("Source:\n{C_LISTING}{source}\x1b[0m");
+    if !module.values.is_empty() {
+        writeln!(stdout, "{C_LISTING}Values:\x1b[0m")?;
+        for (name, def) in &module.values {
+            writeln!(stdout, "- {C_LISTING}{name}\x1b[0m: {}", handle.with(*def))?
+        }
     }
-    println!("\x1b[90m{module}\x1b[0m");
+    write!(stdout, "\x1b[0m")
 }
 
 fn inline_modules(code: cl_ast::File, path: impl AsRef<path::Path>) -> cl_ast::File {
