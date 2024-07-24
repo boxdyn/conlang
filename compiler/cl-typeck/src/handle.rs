@@ -72,6 +72,36 @@ impl<'p, 'c> Handle<'p, 'c> {
     }
 }
 
+mod emulate_def {
+    use super::*;
+    use cl_ast::{Sym, Visibility};
+    use cl_structures::span::Span;
+    use std::collections::HashMap;
+
+    impl<'p, 'c> Handle<'p, 'c> {
+        pub fn name(self) -> Option<Sym> {
+            self.get()?.name()
+        }
+        pub fn vis(self) -> Option<Visibility> {
+            Some(self.get()?.node.vis)
+        }
+        pub fn span(self) -> Option<Span> {
+            Some(*self.get()?.node.span)
+        }
+        pub fn parent(self) -> Option<Self> {
+            self.get()?.module.parent.map(|id| self.with(id))
+        }
+        pub fn types(self) -> Option<&'p HashMap<Sym, DefID>> {
+            let types = &self.get()?.module.types;
+            (!types.is_empty()).then_some(types)
+        }
+        pub fn values(self) -> Option<&'p HashMap<Sym, DefID>> {
+            let values = &self.get()?.module.values;
+            (!values.is_empty()).then_some(values)
+        }
+    }
+}
+
 mod display {
     use super::*;
     use crate::{definition::*, format_utils::*};

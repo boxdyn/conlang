@@ -5,10 +5,8 @@ use cl_ast::{
 use cl_lexer::Lexer;
 use cl_parser::{inliner::ModuleInliner, Parser};
 use cl_typeck::{
-    definition::Def,
     handle::Handle,
     name_collector::NameCollector,
-    node::{Node, NodeSource},
     project::Project,
     type_resolver::resolve,
 };
@@ -158,7 +156,7 @@ fn get_by_id(prj: &mut Project) -> Result<(), RlError> {
             Err("No results.")?
         }
         if let Some(t) = ty {
-            println!("Result in type namespace: {}", t.id());
+            println!("Result: {}", t.id());
             pretty_handle(t)?;
         }
         if let Some(v) = value {
@@ -180,40 +178,34 @@ fn resolve_all(prj: &mut Project) -> Result<(), Box<dyn Error>> {
 }
 
 fn list_types(prj: &mut Project) {
-    println!("     name\x1b[30G  type");
+    println!("     name            | type");
     for (idx, key) in prj.pool.keys().enumerate() {
-        let Def { node: Node { vis, kind: source, .. }, .. } = &prj[key];
-        let name = match source.as_ref().map(NodeSource::name) {
-            Some(Some(name)) => name,
-            _ => "".into(),
-        };
-        print!(
-            "{idx:3}: {vis}{name}\x1b[30G = {}",
-            key.handle_unchecked(prj)
-        );
-        println!();
+        let handle = key.handle_unchecked(prj);
+        let vis = handle.vis().unwrap_or_default();
+        let name = handle.name().unwrap_or("".into());
+        println!("{idx:3}: {name:16}| {vis}{handle}");
     }
 }
 
 fn pretty_handle(handle: Handle) -> Result<(), std::io::Error> {
     use std::io::Write;
     let mut stdout = std::io::stdout().lock();
-    let Some(Def { module, node: Node { vis, .. }, .. }) = handle.get() else {
+    let Some(vis) = handle.vis() else {
         return writeln!(stdout, "Invalid handle: {handle}");
     };
-    writeln!(stdout, "{C_LISTING}{vis}{handle}\x1b[0m: {}", handle.id())?;
-    if let Some(parent) = module.parent {
-        writeln!(stdout, "{C_LISTING}Parent\x1b[0m: {}", handle.with(parent))?;
+    writeln!(stdout, "{C_LISTING}{}\x1b[0m: {vis}{handle}", handle.id())?;
+    if let Some(parent) = handle.parent() {
+        writeln!(stdout, "{C_LISTING}Parent\x1b[0m: {parent}")?;
     }
-    if !module.types.is_empty() {
+    if let Some(types) = handle.types() {
         writeln!(stdout, "{C_LISTING}Types:\x1b[0m")?;
-        for (name, def) in &module.types {
+        for (name, def) in types {
             writeln!(stdout, "- {C_LISTING}{name}\x1b[0m: {}", handle.with(*def))?
         }
     }
-    if !module.values.is_empty() {
+    if let Some(values) = handle.values() {
         writeln!(stdout, "{C_LISTING}Values:\x1b[0m")?;
-        for (name, def) in &module.values {
+        for (name, def) in values {
             writeln!(stdout, "- {C_LISTING}{name}\x1b[0m: {}", handle.with(*def))?
         }
     }
