@@ -1,110 +1,34 @@
-use crate::{
-    handle::DefID,
-    module::Module,
-    node::{Node, NodeSource},
-};
-use cl_ast::{Meta, Sym, Visibility};
+use crate::handle::Handle;
+use cl_ast::{Sym, Visibility};
 use std::{fmt::Debug, str::FromStr};
 
 mod display;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Def<'a> {
-    pub node: Node<'a>,
-    pub kind: DefKind,
-    pub module: Module,
+pub enum EntryKind {
+    Variable(Option<Handle>),
+    Operator(TypeKind),
 }
 
-impl<'a> Def<'a> {
-    pub fn with_node(node: Node<'a>) -> Self {
-        Self { node, kind: DefKind::Undecided, module: Default::default() }
-    }
-}
-
-impl Def<'_> {
-    pub fn name(&self) -> Option<Sym> {
-        match self.node.kind {
-            Some(source) => source.name(),
-            None => None,
-        }
-    }
-
-    pub fn is_transparent(&self) -> bool {
-        !matches!(self.kind, DefKind::Type(_))
-    }
-}
-
-mod builder_functions {
-    use super::*;
-
-    impl<'a> Def<'a> {
-        pub fn set_vis(&mut self, vis: Visibility) -> &mut Self {
-            self.node.vis = vis;
-            self
-        }
-        pub fn set_meta(&mut self, meta: &'a [Meta]) -> &mut Self {
-            self.node.meta = meta;
-            self
-        }
-        pub fn set_kind(&mut self, kind: DefKind) -> &mut Self {
-            self.kind = kind;
-            self
-        }
-        pub fn set_source(&mut self, source: NodeSource<'a>) -> &mut Self {
-            self.node.kind = Some(source);
-            self
-        }
-        pub fn set_module(&mut self, module: Module) -> &mut Self {
-            self.module = module;
-            self
-        }
-    }
-}
-
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
-pub enum DefKind {
-    /// An unevaluated definition
-    #[default]
-    Undecided,
-    /// An impl block
-    Impl(DefID),
-    /// A use tree, and its parent
-    Use(DefID),
-    /// A type, such as a `type`, `struct`, or `enum`
-    Type(TypeKind),
-    /// A value, such as a `const`, `static`, or `fn`
-    Value(ValueKind),
-}
-
-/// A [ValueKind] represents an item in the Value Namespace
-/// (a component of a [Project](crate::project::Project)).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ValueKind {
-    Const(DefID),
-    Static(DefID),
-    Local(DefID),
-    Fn(DefID),
-}
-/// A [TypeKind] represents an item in the Type Namespace
+/// A [TypeKind] represents an item
 /// (a component of a [Project](crate::project::Project)).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum TypeKind {
     /// An alias for an already-defined type
-    Alias(Option<DefID>),
+    Alias(Handle),
     /// A primitive type, built-in to the compiler
     Intrinsic(Intrinsic),
     /// A user-defined aromatic data type
     Adt(Adt),
     /// A reference to an already-defined type: &T
-    Ref(u16, DefID),
+    Ref(u16, Handle),
     /// A contiguous view of dynamically sized memory
-    Slice(DefID),
+    Slice(Handle),
     /// A contiguous view of statically sized memory
-    Array(DefID, usize),
+    Array(Handle, usize),
     /// A tuple of existing types
-    Tuple(Vec<DefID>),
+    Tuple(Vec<Handle>),
     /// A function which accepts multiple inputs and produces an output
-    FnSig { args: DefID, rety: DefID },
+    FnSig { args: Handle, rety: Handle },
     /// The unit type
     Empty,
     /// The never type
@@ -117,22 +41,22 @@ pub enum TypeKind {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Adt {
     /// A union-like enum type
-    Enum(Vec<(Sym, Option<DefID>)>),
+    Enum(Vec<(Sym, Option<Handle>)>),
     /// A C-like enum
     CLikeEnum(Vec<(Sym, u128)>),
     /// An enum with no fields, which can never be constructed
     FieldlessEnum,
 
     /// A structural product type with named members
-    Struct(Vec<(Sym, Visibility, DefID)>),
+    Struct(Vec<(Sym, Visibility, Handle)>),
     /// A structural product type with unnamed members
-    TupleStruct(Vec<(Visibility, DefID)>),
+    TupleStruct(Vec<(Visibility, Handle)>),
     /// A structural product type of neither named nor unnamed members
     UnitStruct,
 
     /// A choose your own undefined behavior type
     /// TODO: should unions be a language feature?
-    Union(Vec<(Sym, DefID)>),
+    Union(Vec<(Sym, Handle)>),
 }
 
 /// The set of compiler-intrinsic types.

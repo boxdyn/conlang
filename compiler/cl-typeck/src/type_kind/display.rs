@@ -1,60 +1,14 @@
 //! [Display] implementations for [TypeKind], [Adt], and [Intrinsic]
 
-use super::{Adt, Def, DefKind, Intrinsic, TypeKind, ValueKind};
-use crate::{format_utils::*, node::Node};
+use super::{Adt, Intrinsic, TypeKind};
+use crate::format_utils::*;
 use cl_ast::format::FmtAdapter;
 use std::fmt::{self, Display, Write};
-
-impl Display for Def<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self { module, node: Node { in_path: _, span: _, meta, vis, kind: source }, kind } =
-            self;
-        if !meta.is_empty() {
-            writeln!(f, "#{meta:?}")?;
-        }
-        if let Some(source) = source {
-            if let Some(name) = source.name() {
-                writeln!(f, "{vis}{name}:")?;
-            }
-            writeln!(f.indent(), "source:\n{source}")?;
-        } else {
-            writeln!(f, "{vis}: ")?;
-        }
-        writeln!(f, "kind: {kind}")?;
-        write!(f, "module: {module}")
-    }
-}
-
-impl Display for DefKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DefKind::Undecided => write!(f, "undecided"),
-            DefKind::Impl(id) => write!(f, "impl {id}"),
-            DefKind::Use(id) => write!(f, "use (inside {id})"),
-            DefKind::Type(kind) => write!(f, "{kind}"),
-            DefKind::Value(kind) => write!(f, "{kind}"),
-        }
-    }
-}
-
-impl std::fmt::Display for ValueKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ValueKind::Const(id) => write!(f, "const ({id})"),
-            ValueKind::Static(id) => write!(f, "static ({id})"),
-            ValueKind::Local(id) => write!(f, "let ({id})"),
-            ValueKind::Fn(id) => write!(f, "fn def ({id})"),
-        }
-    }
-}
 
 impl Display for TypeKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TypeKind::Alias(def) => match def {
-                Some(def) => write!(f, "alias to #{def}"),
-                None => f.write_str("type"),
-            },
+            TypeKind::Alias(def) => write!(f, "alias to #{def}"),
             TypeKind::Intrinsic(i) => i.fmt(f),
             TypeKind::Adt(a) => a.fmt(f),
             TypeKind::Ref(cnt, def) => {

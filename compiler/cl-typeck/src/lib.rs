@@ -67,27 +67,27 @@ Value: Either
 
 */
 
-pub mod handle;
-
-pub mod node;
-
-pub mod definition;
-
-pub mod module;
-
-pub mod path;
-
-pub mod project;
-
-pub mod name_collector;
-
-pub mod use_importer;
-
-pub mod type_resolver;
-
 pub mod inference;
 
 pub(crate) mod format_utils;
+
+pub mod table;
+
+pub mod handle;
+
+pub mod entry;
+
+pub mod source;
+
+pub mod type_kind;
+
+pub mod type_expression;
+
+pub mod populate;
+
+pub mod import;
+
+pub mod categorize;
 
 /*
 
