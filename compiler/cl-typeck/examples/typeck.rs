@@ -15,7 +15,10 @@ use std::{
 // Path to display in standard library errors
 const STDLIB_DISPLAY_PATH: &str = "stdlib/lib.cl";
 // Statically included standard library
-const STDLIB: &str = include_str!("../../../stdlib/lib.cl");
+const PREAMBLE: &str = r"
+pub mod std;
+pub use std::preamble::*;
+";
 
 // Colors
 const C_MAIN: &str = C_LISTING;
@@ -33,7 +36,7 @@ static mut TREES: TreeManager = TreeManager::new();
 fn main() -> Result<(), Box<dyn Error>> {
     let mut prj = Table::default();
 
-    let mut parser = Parser::new(Lexer::new(STDLIB));
+    let mut parser = Parser::new(Lexer::new(PREAMBLE));
     let code = match parser.file() {
         Ok(code) => code,
         Err(e) => {
@@ -41,9 +44,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             Err(e)?
         }
     };
-    let code = inline_modules(code, concat!(env!("PWD"), "/stdlib"));
+    // This code is special - it gets loaded from a hard-coded project directory (for now)
+    let code = inline_modules(code, concat!(env!("CARGO_MANIFEST_DIR"), "/../../stdlib"));
     Populator::new(&mut prj).visit_file(unsafe { TREES.push(code) });
-    // NameCollector::new(&mut prj).visit_file(unsafe { TREES.push(code) });
 
     main_menu(&mut prj)?;
     Ok(())
