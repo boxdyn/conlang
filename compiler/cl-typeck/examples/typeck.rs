@@ -7,7 +7,10 @@ use cl_ast::{
 use cl_lexer::Lexer;
 use cl_parser::{inliner::ModuleInliner, Parser};
 use repline::{error::Error as RlError, prebaked::*};
-use std::{error::Error, path};
+use std::{
+    error::Error,
+    path::{self, PathBuf},
+};
 
 // Path to display in standard library errors
 const STDLIB_DISPLAY_PATH: &str = "stdlib/lib.cl";
@@ -19,6 +22,7 @@ const C_MAIN: &str = C_LISTING;
 const C_RESV: &str = "\x1b[35m";
 const C_CODE: &str = "\x1b[36m";
 const C_BYID: &str = "\x1b[95m";
+const C_ERROR: &str = "\x1b[31m";
 const C_LISTING: &str = "\x1b[38;5;117m";
 
 /// A home for immutable intermediate ASTs
@@ -52,6 +56,7 @@ fn main_menu(prj: &mut Table) -> Result<(), RlError> {
             "c" | "code" => enter_code(prj)?,
             "clear" => clear()?,
             "e" | "exit" => return Ok(Response::Break),
+            "f" | "file" => import_files(prj)?,
             "l" | "list" => list_types(prj),
             "q" | "query" => query_type_expression(prj)?,
             "i" | "id" => get_by_id(prj)?,
@@ -61,6 +66,7 @@ fn main_menu(prj: &mut Table) -> Result<(), RlError> {
                 println!(
                     "Valid commands are:
     code    (c): Enter code to type-check
+    file    (f): Load files from disk
     list    (l): List all known types
     query   (q): Query the type system
     id      (i): Get a type by its type ID
@@ -180,6 +186,35 @@ fn list_types(table: &mut Table) {
         let name = handle.name().unwrap_or("".into());
         println!("{id:3}: {name:16}| {kind}: {handle}");
     }
+}
+
+fn import_files(table: &mut Table) -> Result<(), RlError> {
+    read_and(C_RESV, "fi>", "? >", |line| {
+        let line = line.trim();
+        if line.is_empty() {
+            return Ok(Response::Break);
+        }
+        let Ok(file) = std::fs::read_to_string(line) else {
+            for file in std::fs::read_dir(line)? {
+                println!("{}", file?.path().display())
+            }
+            return Ok(Response::Accept);
+        };
+
+        let mut parser = Parser::new(Lexer::new(&file));
+        let code = match parser.file() {
+            Ok(code) => inline_modules(code, PathBuf::from(line).parent().unwrap_or("".as_ref())),
+            Err(e) => {
+                eprintln!("{C_ERROR}{line}:{e}\x1b[0m");
+                return Ok(Response::Deny);
+            }
+        };
+
+        Populator::new(table).visit_file(unsafe { TREES.push(code) });
+
+        println!("...Imported!");
+        Ok(Response::Accept)
+    })
 }
 
 fn pretty_handle(entry: Entry) -> Result<(), std::io::Error> {
