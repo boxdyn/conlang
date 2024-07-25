@@ -1,20 +1,17 @@
+//! A [TypeKind] is a node in the [Table](crate::table::Table)'s type graph
+
 use crate::handle::Handle;
 use cl_ast::{Sym, Visibility};
 use std::{fmt::Debug, str::FromStr};
 
 mod display;
 
-pub enum EntryKind {
-    Variable(Option<Handle>),
-    Operator(TypeKind),
-}
-
 /// A [TypeKind] represents an item
-/// (a component of a [Project](crate::project::Project)).
+/// (a component of a [Table](crate::table::Table))
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum TypeKind {
     /// An alias for an already-defined type
-    Alias(Handle),
+    Instance(Handle),
     /// A primitive type, built-in to the compiler
     Intrinsic(Intrinsic),
     /// A user-defined aromatic data type
@@ -42,10 +39,6 @@ pub enum TypeKind {
 pub enum Adt {
     /// A union-like enum type
     Enum(Vec<(Sym, Option<Handle>)>),
-    /// A C-like enum
-    CLikeEnum(Vec<(Sym, u128)>),
-    /// An enum with no fields, which can never be constructed
-    FieldlessEnum,
 
     /// A structural product type with named members
     Struct(Vec<(Sym, Visibility, Handle)>),

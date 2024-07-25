@@ -1,4 +1,29 @@
-//! Conlang's symbol table
+//! The [Table] is a monolithic data structure representing everything the type checker
+//! knows about a program.
+//!
+//! Individual nodes in the table can be queried using the [Entry] API ([Table::entry])
+//! or modified using the [EntryMut] API ([Table::entry_mut]).
+//!
+//! # Contents of a "node"
+//! Always present:
+//! - [NodeKind]: Determines how this node will be treated during the [stages](crate::stage) of
+//!   compilation
+//! - [Parent node](Handle): Arranges this node in the hierarchical graph structure
+//!
+//! Populated as needed:
+//! - Children: An associative array of [names](Sym) to child nodes in the graph. Child nodes are
+//!   arranged in a *strict* tree structure, with no back edges
+//! - Imports: An associative array of [names](Sym) to other nodes in the graph. Not all import
+//!   nodes are back edges, but all back edges *must be* import nodes.
+//! - [Types](TypeKind): Contains type information populated through type checking and inference.
+//!   Nodes with unpopulated types may be considered type variables in the future.
+//! - [Spans][span]: Positional information from the source text. See [cl_structures::span].
+//! - [Metas](Meta): Metadata decorators. These may have an effect throughout the compiler.
+//! - [Sources](Source): Pointers back into the AST, for future analysis.
+//! - Impl Targets: Sparse mapping of `impl` nodes to their corresponding targets.
+//! - etc.
+//!
+//! [span]: struct@Span
 
 use crate::{
     entry::{Entry, EntryMut},
@@ -12,6 +37,10 @@ use std::collections::HashMap;
 
 // TODO: Cycle detection external to this module
 
+/// The table is a monolithic data structure representing everything the type checker
+/// knows about a program.
+///
+/// See [module documentation](self).
 #[derive(Debug)]
 pub struct Table<'a> {
     root: Handle,
@@ -20,13 +49,16 @@ pub struct Table<'a> {
     parents: IndexMap<Handle, Handle>,
     pub(crate) children: HashMap<Handle, HashMap<Sym, Handle>>,
     pub(crate) imports: HashMap<Handle, HashMap<Sym, Handle>>,
+    pub(crate) use_items: HashMap<Handle, Vec<Handle>>,
     types: HashMap<Handle, TypeKind>,
     spans: HashMap<Handle, Span>,
     metas: HashMap<Handle, &'a [Meta]>,
     sources: HashMap<Handle, Source<'a>>,
-    // code: HashMap<DefID, BasicBlock>, // TODO: lower sources
+    // code: HashMap<Handle, BasicBlock>, // TODO: lower sources
     impl_targets: HashMap<Handle, Handle>,
     anon_types: HashMap<TypeKind, Handle>,
+
+    // --- Queues for algorithms ---
     pub(crate) impls: Vec<Handle>,
     pub(crate) uses: Vec<Handle>,
 }
@@ -44,6 +76,7 @@ impl<'a> Table<'a> {
             parents,
             children: HashMap::new(),
             imports: HashMap::new(),
+            use_items: HashMap::new(),
             types: HashMap::new(),
             spans: HashMap::new(),
             metas: HashMap::new(),
@@ -78,6 +111,8 @@ impl<'a> Table<'a> {
     }
 
     pub fn mark_use_item(&mut self, item: Handle) {
+        let parent = self.parents[item];
+        self.use_items.entry(parent).or_default().push(item);
         self.uses.push(item);
     }
 
@@ -85,14 +120,18 @@ impl<'a> Table<'a> {
         self.impls.push(item);
     }
 
-    /// Returns handles to all nodes sequentially by [DefID]
-    pub fn debug_handle_iter(&self) -> impl Iterator<Item = Entry<'_, 'a>> {
+    pub fn handle_iter(&mut self) -> impl Iterator<Item = Handle> {
+        self.kinds.keys()
+    }
+
+    /// Returns handles to all nodes sequentially by [Entry]
+    pub fn debug_entry_iter(&self) -> impl Iterator<Item = Entry<'_, 'a>> {
         self.kinds.keys().map(|key| key.to_entry(self))
     }
 
-    /// Gets the [DefID] of an anonymous type with the provided [TypeKind].
+    /// Gets the [Handle] of an anonymous type with the provided [TypeKind].
     /// If not already present, a new one is created.
-    pub fn anon_type(&mut self, kind: TypeKind) -> Handle {
+    pub(crate) fn anon_type(&mut self, kind: TypeKind) -> Handle {
         if let Some(id) = self.anon_types.get(&kind) {
             return *id;
         }
@@ -103,11 +142,11 @@ impl<'a> Table<'a> {
         entry
     }
 
-    pub const fn root_handle(&self) -> Entry<'_, 'a> {
+    pub const fn root_entry(&self) -> Entry<'_, 'a> {
         self.root.to_entry(self)
     }
 
-    pub fn root_handle_mut(&mut self) -> crate::entry::EntryMut<'_, 'a> {
+    pub fn root_entry_mut(&mut self) -> crate::entry::EntryMut<'_, 'a> {
         self.root.to_entry_mut(self)
     }
 

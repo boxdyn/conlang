@@ -12,29 +12,29 @@ fn write_name_or(h: Entry, f: &mut impl Write) -> fmt::Result {
 
 impl fmt::Display for Entry<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.kind().is_none() {
+        let Some(&kind) = self.kind() else {
             return write!(f, "<invalid type: {}>", self.id);
-        }
+        };
 
         if let Some(ty) = self.ty() {
             match ty {
-                TypeKind::Alias(id) => write!(f, "= {}", self.with_id(*id))?,
-                TypeKind::Intrinsic(kind) => write!(f, "{kind}")?,
-                TypeKind::Adt(adt) => write_adt(adt, self, f)?,
+                TypeKind::Instance(id) => write!(f, "{}", self.with_id(*id)),
+                TypeKind::Intrinsic(kind) => write!(f, "{kind}"),
+                TypeKind::Adt(adt) => write_adt(adt, self, f),
                 &TypeKind::Ref(cnt, id) => {
                     for _ in 0..cnt {
                         f.write_str("&")?;
                     }
                     let h_id = self.with_id(id);
-                    write_name_or(h_id, f)?;
+                    write_name_or(h_id, f)
                 }
                 TypeKind::Slice(id) => {
-                    write_name_or(self.with_id(*id), &mut f.delimit_with("[", "]"))?;
+                    write_name_or(self.with_id(*id), &mut f.delimit_with("[", "]"))
                 }
                 &TypeKind::Array(t, cnt) => {
                     let mut f = f.delimit_with("[", "]");
                     write_name_or(self.with_id(t), &mut f)?;
-                    write!(f, "; {cnt}")?;
+                    write!(f, "; {cnt}")
                 }
                 TypeKind::Tuple(ids) => {
                     let mut f = f.delimit_with("(", ")");
@@ -44,18 +44,19 @@ impl fmt::Display for Entry<'_, '_> {
                         }
                         write_name_or(self.with_id(id), &mut f)?;
                     }
+                    Ok(())
                 }
                 TypeKind::FnSig { args, rety } => {
                     write!(f, "fn {} -> ", self.with_id(*args))?;
-                    write_name_or(self.with_id(*rety), f)?;
+                    write_name_or(self.with_id(*rety), f)
                 }
-                TypeKind::Empty => write!(f, "()")?,
-                TypeKind::Never => write!(f, "!")?,
-                TypeKind::Module => write!(f, "module?")?,
+                TypeKind::Empty => write!(f, "()"),
+                TypeKind::Never => write!(f, "!"),
+                TypeKind::Module => write!(f, "module?"),
             }
+        } else {
+            write!(f, "{kind}")
         }
-
-        Ok(())
     }
 }
 
@@ -63,35 +64,27 @@ fn write_adt(adt: &Adt, h: &Entry, f: &mut impl Write) -> fmt::Result {
     match adt {
         Adt::Enum(variants) => {
             let mut variants = variants.iter();
-            separate(",", || {
+            separate(", ", || {
                 variants.next().map(|(name, def)| {
                     move |f: &mut Delimit<_>| match def {
                         Some(def) => {
-                            write!(f, "\n{name}: ")?;
+                            write!(f, "{name}: ")?;
                             write_name_or(h.with_id(*def), f)
                         }
-                        None => write!(f, "\n{name}"),
+                        None => write!(f, "{name}"),
                     }
                 })
-            })(f.delimit_with("enum {", "\n}"))
+            })(f.delimit_with("enum {", "}"))
         }
-        Adt::CLikeEnum(variants) => {
-            let mut variants = variants.iter();
-            separate(",", || {
-                let (name, descrim) = variants.next()?;
-                Some(move |f: &mut Delimit<_>| write!(f, "\n{name} = {descrim}"))
-            })(f.delimit_with("enum {", "\n}"))
-        }
-        Adt::FieldlessEnum => write!(f, "enum"),
         Adt::Struct(members) => {
             let mut members = members.iter();
-            separate(",", || {
+            separate(", ", || {
                 let (name, vis, id) = members.next()?;
                 Some(move |f: &mut Delimit<_>| {
-                    write!(f, "\n{vis}{name}: ")?;
+                    write!(f, "{vis}{name}: ")?;
                     write_name_or(h.with_id(*id), f)
                 })
-            })(f.delimit_with("struct {", "\n}"))
+            })(f.delimit_with("struct {", "}"))
         }
         Adt::TupleStruct(members) => {
             let mut members = members.iter();

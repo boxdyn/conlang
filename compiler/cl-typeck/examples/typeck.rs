@@ -1,7 +1,4 @@
-use cl_typeck::{
-    entry::Entry, import::import, populate::Populator, table::Table,
-    type_expression::TypeExpression,
-};
+use cl_typeck::{entry::Entry, stage::*, table::Table, type_expression::TypeExpression};
 
 use cl_ast::{
     ast_visitor::{Fold, Visit},
@@ -18,7 +15,7 @@ const STDLIB_DISPLAY_PATH: &str = "stdlib/lib.cl";
 const STDLIB: &str = include_str!("../../../stdlib/lib.cl");
 
 // Colors
-const C_MAIN: &str = "";
+const C_MAIN: &str = C_LISTING;
 const C_RESV: &str = "\x1b[35m";
 const C_CODE: &str = "\x1b[36m";
 const C_BYID: &str = "\x1b[95m";
@@ -148,56 +145,65 @@ fn get_by_id(prj: &mut Table) -> Result<(), RlError> {
         }
         println!();
 
-        let Some(handle) = handle.nav(&path.parts) else {
+        let Some(entry) = handle.nav(&path.parts) else {
             Err("No results.")?
         };
 
-        pretty_handle(handle)?;
+        pretty_handle(entry)?;
 
         Ok(Response::Accept)
     })
 }
 
-fn resolve_all(prj: &mut Table) -> Result<(), Box<dyn Error>> {
-    println!("Resolving imports:");
-    for (id, error) in import(prj) {
-        eprintln!("{error} in {} ({id})", id.to_entry(prj))
+fn resolve_all(table: &mut Table) -> Result<(), Box<dyn Error>> {
+    for (id, error) in import(table) {
+        eprintln!("{error} in {} ({id})", id.to_entry(table))
     }
-    // todo!("Resolve imports");
-    // prj.resolve_imports()?;
-    // for id in prj.pool.keys() {
-    //     resolve(prj, id)?;
-    // }
-    // println!("Types resolved successfully!");
+    for handle in table.handle_iter() {
+        if let Err(error) = handle.to_entry_mut(table).categorize() {
+            eprintln!("{error}");
+        }
+    }
+
+    for handle in implement(table) {
+        eprintln!("Unable to reparent {} ({handle})", handle.to_entry(table))
+    }
+
+    println!("...Resolved!");
     Ok(())
 }
 
-fn list_types(prj: &mut Table) {
-    for handle in prj.debug_handle_iter() {
+fn list_types(table: &mut Table) {
+    for handle in table.debug_entry_iter() {
         let id = handle.id();
         let kind = handle.kind().unwrap();
         let name = handle.name().unwrap_or("".into());
-        println!("{id:3}: {name:16}| {kind} {handle}");
+        println!("{id:3}: {name:16}| {kind}: {handle}");
     }
 }
 
-fn pretty_handle(h: Entry) -> Result<(), std::io::Error> {
+fn pretty_handle(entry: Entry) -> Result<(), std::io::Error> {
     use std::io::Write;
     let mut out = std::io::stdout().lock();
-    let Some(kind) = h.kind() else {
-        return writeln!(out, "Invalid handle: {h}");
+    let Some(kind) = entry.kind() else {
+        return writeln!(out, "{entry}");
     };
     write!(out, "{C_LISTING}{kind}")?;
-    if let Some(name) = h.name() {
+
+    if let Some(name) = entry.name() {
         write!(out, " {name}")?;
     }
-    writeln!(out, "\x1b[0m: {h}")?;
+    writeln!(out, "\x1b[0m ({}): {entry}", entry.id())?;
 
-    if let Some(parent) = h.parent() {
-        writeln!(out, "- {C_LISTING}Parent\x1b[0m: {parent}")?;
+    if let Some(parent) = entry.parent() {
+        writeln!(
+            out,
+            "- {C_LISTING}Parent\x1b[0m: {parent} ({})",
+            parent.id()
+        )?;
     }
 
-    if let Some(span) = h.span() {
+    if let Some(span) = entry.span() {
         writeln!(
             out,
             "- {C_LISTING}Span:\x1b[0m ({}, {})",
@@ -205,7 +211,7 @@ fn pretty_handle(h: Entry) -> Result<(), std::io::Error> {
         )?;
     }
 
-    match h.meta() {
+    match entry.meta() {
         Some(meta) if !meta.is_empty() => {
             writeln!(out, "- {C_LISTING}Meta:\x1b[0m")?;
             for meta in meta {
@@ -215,46 +221,28 @@ fn pretty_handle(h: Entry) -> Result<(), std::io::Error> {
         _ => {}
     }
 
-    if let Some(children) = h.children() {
+    if let Some(children) = entry.children() {
         writeln!(out, "- {C_LISTING}Children:\x1b[0m")?;
         for (name, child) in children {
             writeln!(
                 out,
                 "  - {C_LISTING}{name}\x1b[0m ({child}): {}",
-                h.with_id(*child)
+                entry.with_id(*child)
             )?
         }
     }
 
-    if let Some(imports) = h.imports() {
+    if let Some(imports) = entry.imports() {
         writeln!(out, "- {C_LISTING}Imports:\x1b[0m")?;
         for (name, child) in imports {
             writeln!(
                 out,
                 "  - {C_LISTING}{name}\x1b[0m ({child}): {}",
-                h.with_id(*child)
+                entry.with_id(*child)
             )?
         }
     }
 
-    // let Some(vis) = handle.vis() else {
-    //     return writeln!(stdout, "Invalid handle: {handle}");
-    // };
-    // writeln!(stdout, "{C_LISTING}{}\x1b[0m: {vis}{handle}", handle.id())?;
-    // if let Some(parent) = handle.parent() {
-    // }
-    // if let Some(types) = handle.types() {
-    //     writeln!(stdout, "{C_LISTING}Types:\x1b[0m")?;
-    //     for (name, def) in types {
-    //     }
-    // }
-    // if let Some(values) = handle.values() {
-    //     writeln!(stdout, "{C_LISTING}Values:\x1b[0m")?;
-    //     for (name, def) in values {
-    //         writeln!(stdout, "- {C_LISTING}{name}\x1b[0m: {}", handle.with(*def))?
-    //     }
-    // }
-    // write!(stdout, "\x1b[0m")
     Ok(())
 }
 

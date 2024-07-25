@@ -1,10 +1,10 @@
-//! A [Handle] is an accessor for [Entries](Entry) in a [Table].
+//! An [Entry] is an accessor for [nodes](Handle) in a [Table].
 //!
-//! There are two kinds of handle:
-//! - [Handle]: Provides getters for an entry's fields, and an implementation of
+//! There are two kinds of entry:
+//! - [Entry]: Provides getters for an entry's fields, and an implementation of
 //!   [Display](std::fmt::Display)
-//! - [HandleMut]: Provides setters for an entry's fields, and an [`as_ref`](HandleMut::as_ref)
-//!   method to demote to a [Handle].
+//! - [EntryMut]: Provides setters for an entry's fields, and an [`as_ref`](EntryMut::as_ref) method
+//!   to demote to an [Entry].
 
 use std::collections::HashMap;
 
@@ -14,11 +14,13 @@ use cl_structures::span::Span;
 use crate::{
     handle::Handle,
     source::Source,
+    stage::categorize as cat,
     table::{NodeKind, Table},
+    type_expression::{self as tex, TypeExpression},
     type_kind::TypeKind,
 };
 
-pub mod display;
+mod display;
 
 impl Handle {
     pub const fn to_entry<'t, 'a>(self, table: &'t Table<'a>) -> Entry<'t, 'a> {
@@ -48,11 +50,11 @@ impl<'t, 'a> Entry<'t, 'a> {
         self.table
     }
 
-    pub const fn with_id(&self, id: Handle) -> Entry<'t, 'a> {
+    pub const fn with_id(&self, id: Handle) -> Entry<'_, 'a> {
         Self { table: self.table, id }
     }
 
-    pub fn nav(&self, path: &[PathPart]) -> Option<Entry<'t, 'a>> {
+    pub fn nav(&self, path: &[PathPart]) -> Option<Entry<'_, 'a>> {
         Some(Entry { id: self.table.nav(self.id, path)?, table: self.table })
     }
 
@@ -64,8 +66,8 @@ impl<'t, 'a> Entry<'t, 'a> {
         self.table.kind(self.id)
     }
 
-    pub fn parent(&self) -> Option<&Handle> {
-        self.table.parent(self.id)
+    pub fn parent(&self) -> Option<Entry<'_, 'a>> {
+        Some(Entry { id: *self.table.parent(self.id)?, ..*self })
     }
 
     pub fn children(&self) -> Option<&HashMap<Sym, Handle>> {
@@ -92,12 +94,12 @@ impl<'t, 'a> Entry<'t, 'a> {
         self.table.source(self.id)
     }
 
-    pub fn impl_target(&self) -> Option<Handle> {
-        self.table.impl_target(self.id)
+    pub fn impl_target(&self) -> Option<Entry<'_, 'a>> {
+        Some(Entry { id: self.table.impl_target(self.id)?, ..*self })
     }
 
-    pub fn selfty(&self) -> Option<Handle> {
-        self.table.selfty(self.id)
+    pub fn selfty(&self) -> Option<Entry<'_, 'a>> {
+        Some(Entry { id: self.table.selfty(self.id)?, ..*self })
     }
 
     pub fn name(&self) -> Option<Sym> {
@@ -124,7 +126,17 @@ impl<'t, 'a> EntryMut<'t, 'a> {
         self.id
     }
 
-    /// Constructs a new Handle with the provided parent [DefID]
+    /// Evaluates a [TypeExpression] in this entry's context
+    pub fn evaluate<Out>(&mut self, ty: &impl TypeExpression<Out>) -> Result<Out, tex::Error> {
+        let Self { table, id } = self;
+        ty.evaluate(table, *id)
+    }
+
+    pub fn categorize(&mut self) -> Result<(), cat::Error> {
+        cat::categorize(self.table, self.id)
+    }
+
+    /// Constructs a new Handle with the provided parent [Handle]
     pub fn with_id(&mut self, parent: Handle) -> EntryMut<'_, 'a> {
         EntryMut { table: self.table, id: parent }
     }

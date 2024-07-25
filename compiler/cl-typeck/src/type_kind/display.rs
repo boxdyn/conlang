@@ -8,7 +8,7 @@ use std::fmt::{self, Display, Write};
 impl Display for TypeKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TypeKind::Alias(def) => write!(f, "alias to #{def}"),
+            TypeKind::Instance(def) => write!(f, "alias to #{def}"),
             TypeKind::Intrinsic(i) => i.fmt(f),
             TypeKind::Adt(a) => a.fmt(f),
             TypeKind::Ref(cnt, def) => {
@@ -47,14 +47,6 @@ impl Display for Adt {
                     })
                 })(f.delimit_with("enum {", "}"))
             }
-            Adt::CLikeEnum(variants) => {
-                let mut variants = variants.iter();
-                separate(", ", || {
-                    let (name, descrim) = variants.next()?;
-                    Some(move |f: &mut Delimit<_>| write!(f, "{name} = {descrim}"))
-                })(f.delimit_with("enum {", "}"))
-            }
-            Adt::FieldlessEnum => write!(f, "enum"),
             Adt::Struct(members) => {
                 let mut members = members.iter();
                 separate(", ", || {

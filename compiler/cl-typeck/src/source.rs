@@ -37,12 +37,12 @@ impl<'a> Source<'a> {
         }
     }
 
-    /// Returns `true` if this [NodeSource] defines a named value
+    /// Returns `true` if this [Source] defines a named value
     pub fn is_named_value(&self) -> bool {
         matches!(self, Self::Const(_) | Self::Static(_) | Self::Function(_))
     }
 
-    /// Returns `true` if this [NodeSource] defines a named type
+    /// Returns `true` if this [Source] defines a named type
     pub fn is_named_type(&self) -> bool {
         matches!(
             self,
@@ -50,17 +50,17 @@ impl<'a> Source<'a> {
         )
     }
 
-    /// Returns `true` if this [NodeSource] refers to a [Ty] with no name
+    /// Returns `true` if this [Source] refers to a [Ty] with no name
     pub fn is_anon_type(&self) -> bool {
         matches!(self, Self::Ty(_))
     }
 
-    /// Returns `true` if this [NodeSource] refers to an [Impl] block
+    /// Returns `true` if this [Source] refers to an [Impl] block
     pub fn is_impl(&self) -> bool {
         matches!(self, Self::Impl(_))
     }
 
-    /// Returns `true` if this [NodeSource] refers to a [Use] import
+    /// Returns `true` if this [Source] refers to a [Use] import
     pub fn is_use_import(&self) -> bool {
         matches!(self, Self::Use(_))
     }

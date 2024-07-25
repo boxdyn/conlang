@@ -15,9 +15,9 @@ pub struct Populator<'t, 'a> {
 
 impl<'t, 'a> Populator<'t, 'a> {
     pub fn new(table: &'t mut Table<'a>) -> Self {
-        Self { inner: table.root_handle_mut(), name: None }
+        Self { inner: table.root_entry_mut(), name: None }
     }
-    /// Constructs a new Populator with the provided parent DefID
+    /// Constructs a new Populator with the provided parent Handle
     pub fn with_id(&mut self, parent: Handle) -> Populator<'_, 'a> {
         Populator { inner: self.inner.with_id(parent), name: None }
     }

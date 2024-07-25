@@ -27,7 +27,7 @@ enum Hodgepodge {
 
 fn noop () -> bool {
     loop if false {
-        
+
     } else break loop if false {
         
     } else break loop if false {
@@ -61,4 +61,19 @@ fn if_else() -> i32 {
         // end block 3, goto block 4
     }
     // block 4
+}
+
+mod horrible_imports {
+    mod foo {
+        use super::{bar::*, baz::*};
+        struct Foo(&Foo, &Bar)
+    }
+    mod bar {
+        use super::{foo::*, baz::*};
+        struct Bar(&Foo, &Baz)
+    }
+    mod baz {
+        use super::{foo::*, bar::*};
+        struct Baz(&Foo, &Bar)
+    }
 }
