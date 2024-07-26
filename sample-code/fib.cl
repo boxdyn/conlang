@@ -2,10 +2,10 @@
 
 fn main() {
     for num in 0..=30 {
-        print("fib(", num, ") = ", fib_iterative(num))
+        println("fib(", num, ") = ", fib_iterative(num))
     }
     for num in 0..=30 {
-        print("fib(", num, ") = ", fib(num))
+        println("fib(", num, ") = ", fib(num))
     }
 }
 
