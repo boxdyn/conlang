@@ -21,10 +21,8 @@ impl fmt::Display for Entry<'_, '_> {
                 TypeKind::Instance(id) => write!(f, "{}", self.with_id(*id)),
                 TypeKind::Intrinsic(kind) => write!(f, "{kind}"),
                 TypeKind::Adt(adt) => write_adt(adt, self, f),
-                &TypeKind::Ref(cnt, id) => {
-                    for _ in 0..cnt {
-                        f.write_str("&")?;
-                    }
+                &TypeKind::Ref(id) => {
+                    f.write_str("&")?;
                     let h_id = self.with_id(id);
                     write_name_or(h_id, f)
                 }

@@ -17,7 +17,7 @@ pub enum TypeKind {
     /// A user-defined aromatic data type
     Adt(Adt),
     /// A reference to an already-defined type: &T
-    Ref(u16, Handle),
+    Ref(Handle),
     /// A contiguous view of dynamically sized memory
     Slice(Handle),
     /// A contiguous view of statically sized memory

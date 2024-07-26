@@ -97,8 +97,12 @@ impl TypeExpression for TyTuple {
 impl TypeExpression for TyRef {
     fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Handle, Error> {
         let Self { mutable: _, count, to } = self;
-        let kind = TypeKind::Ref(*count, to.evaluate(table, node)?);
-        Ok(table.anon_type(kind))
+        let mut t = to.evaluate(table, node)?;
+        for _ in 0..*count {
+            let kind = TypeKind::Ref(t);
+            t = table.anon_type(kind)
+        }
+        Ok(t)
     }
 }
 

@@ -11,12 +11,7 @@ impl Display for TypeKind {
             TypeKind::Instance(def) => write!(f, "alias to #{def}"),
             TypeKind::Intrinsic(i) => i.fmt(f),
             TypeKind::Adt(a) => a.fmt(f),
-            TypeKind::Ref(cnt, def) => {
-                for _ in 0..*cnt {
-                    f.write_str("&")?;
-                }
-                def.fmt(f)
-            }
+            TypeKind::Ref(def) => write!(f, "&{def}"),
             TypeKind::Slice(def) => write!(f, "slice [#{def}]"),
             TypeKind::Array(def, size) => write!(f, "array [#{def}; {size}]"),
             TypeKind::Tuple(defs) => {
