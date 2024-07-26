@@ -2,7 +2,7 @@
 
 fn main() {
     for num in 0..=30 {
-        println("fib(", num, ") = ", fib_iterative(num))
+        println("fib(", num, ") = ", fibit(num))
     }
     for num in 0..=30 {
         println("fib(", num, ") = ", fib(num))
@@ -17,7 +17,7 @@ fn fib(a: i64) -> i64 {
 }
 
 /// The classic iterative algorithm for fib()
-fn fib_iterative(n: i64) -> i64 {
+fn fibit(n: i64) -> i64 {
     let mut a = 0;
     let mut b = 1;
     let mut c = 1;
