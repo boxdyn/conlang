@@ -276,6 +276,10 @@ pub trait Fold {
     fn fold_unary_kind(&mut self, kind: UnaryKind) -> UnaryKind {
         kind
     }
+    fn fold_cast(&mut self, cast: Cast) -> Cast {
+        let Cast { head, ty } = cast;
+        Cast { head: Box::new(self.fold_expr_kind(*head)), ty: self.fold_ty(ty) }
+    }
     fn fold_member(&mut self, m: Member) -> Member {
         let Member { head, kind } = m;
         Member { head: Box::new(self.fold_expr_kind(*head)), kind: self.fold_member_kind(kind) }
@@ -535,6 +539,7 @@ pub fn or_fold_expr_kind<F: Fold + ?Sized>(folder: &mut F, kind: ExprKind) -> Ex
         ExprKind::Modify(m) => ExprKind::Modify(folder.fold_modify(m)),
         ExprKind::Binary(b) => ExprKind::Binary(folder.fold_binary(b)),
         ExprKind::Unary(u) => ExprKind::Unary(folder.fold_unary(u)),
+        ExprKind::Cast(c) => ExprKind::Cast(folder.fold_cast(c)),
         ExprKind::Member(m) => ExprKind::Member(folder.fold_member(m)),
         ExprKind::Index(i) => ExprKind::Index(folder.fold_index(i)),
         ExprKind::Structor(s) => ExprKind::Structor(folder.fold_structor(s)),

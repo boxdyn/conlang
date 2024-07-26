@@ -433,6 +433,7 @@ mod display {
                 ExprKind::Modify(v) => v.fmt(f),
                 ExprKind::Binary(v) => v.fmt(f),
                 ExprKind::Unary(v) => v.fmt(f),
+                ExprKind::Cast(v) => v.fmt(f),
                 ExprKind::Member(v) => v.fmt(f),
                 ExprKind::Index(v) => v.fmt(f),
                 ExprKind::Structor(v) => v.fmt(f),
@@ -545,6 +546,13 @@ mod display {
                 UnaryKind::Tilde => "~",
             }
             .fmt(f)
+        }
+    }
+
+    impl Display for Cast {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let Self { head, ty } = self;
+            write!(f, "{head} as {ty}")
         }
     }
 
@@ -764,6 +772,7 @@ mod convert {
             Modify => ExprKind::Modify,
             Binary => ExprKind::Binary,
             Unary => ExprKind::Unary,
+            Cast => ExprKind::Cast,
             Member => ExprKind::Member,
             Index => ExprKind::Index,
             Path => ExprKind::Path,

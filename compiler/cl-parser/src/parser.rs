@@ -948,6 +948,17 @@ impl<'t> Parser<'t> {
                 continue;
             }
 
+            if let Punct::As = op {
+                let before = Precedence::Cast.level();
+                if before < power {
+                    break;
+                }
+                self.consume_peeked();
+                let ty = self.ty()?;
+                head = Cast { head: head.into(), ty }.into();
+                continue;
+            }
+
             if let Punct::Eq = op {
                 let (before, after) = Precedence::Assign
                     .infix()
@@ -961,6 +972,7 @@ impl<'t> Parser<'t> {
             }
             break;
         }
+
         Ok(head)
     }
 
@@ -1213,13 +1225,14 @@ pub enum Precedence {
     Factor,
     Term,
     Unary,
+    Cast,
     Member, // left-associative
     Call,
 }
 
 impl Precedence {
     #[inline]
-    pub fn level(self) -> u8 {
+    pub const fn level(self) -> u8 {
         (self as u8) << 1
     }
     pub fn prefix(self) -> Option<((), u8)> {

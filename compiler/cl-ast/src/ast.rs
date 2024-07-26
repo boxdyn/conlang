@@ -365,6 +365,8 @@ pub enum ExprKind {
     Binary(Binary),
     /// A [Unary] expression: [`UnaryKind`]\* [`Expr`]
     Unary(Unary),
+    /// A [Cast] expression: [`Expr`] `as` [`Ty`]
+    Cast(Cast),
     /// A [Member] access expression: [`Expr`] [`MemberKind`]\*
     Member(Member),
     /// An Array [Index] expression: a[10, 20, 30]
@@ -482,6 +484,12 @@ pub enum UnaryKind {
     At,
     /// Unused
     Tilde,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Cast {
+    pub head: Box<ExprKind>,
+    pub ty: Ty,
 }
 
 /// A [Member] access expression: [`Expr`] [`MemberKind`]\*

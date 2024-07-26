@@ -96,7 +96,9 @@ Shift       = Factor   (ShiftOp   Factor )* ;
 Factor      = Term     (FactorOp  Term   )* ;
 Term        = Unary    (TermOp    Unary  )* ;
 
-Unary       = (UnaryKind)* Member ;
+Unary       = (UnaryKind)* Cast ;
+
+Cast        = Member ("as" Ty)? ;
 
 Member      = Call (Access)* ;
 Access      = '.' (Identifier ('(' Tuple? ')')? | Literal) ;

@@ -238,6 +238,11 @@ pub trait Visit<'a>: Sized {
         self.visit_expr_kind(tail);
     }
     fn visit_unary_kind(&mut self, _kind: &'a UnaryKind) {}
+    fn visit_cast(&mut self, cast: &'a Cast) {
+        let Cast { head, ty } = cast;
+        self.visit_expr_kind(head);
+        self.visit_ty(ty);
+    }
     fn visit_member(&mut self, m: &'a Member) {
         let Member { head, kind } = m;
         self.visit_expr_kind(head);
@@ -456,6 +461,7 @@ pub fn or_visit_expr_kind<'a, V: Visit<'a>>(visitor: &mut V, e: &'a ExprKind) {
         ExprKind::Modify(m) => visitor.visit_modify(m),
         ExprKind::Binary(b) => visitor.visit_binary(b),
         ExprKind::Unary(u) => visitor.visit_unary(u),
+        ExprKind::Cast(c) => visitor.visit_cast(c),
         ExprKind::Member(m) => visitor.visit_member(m),
         ExprKind::Index(i) => visitor.visit_index(i),
         ExprKind::Structor(s) => visitor.visit_structor(s),

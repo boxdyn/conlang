@@ -13,7 +13,6 @@ pub enum TokenKind {
     /// A non-keyword identifier
     Identifier,
     // A keyword
-    As,
     Break,
     Cl,
     Const,
@@ -48,6 +47,7 @@ pub enum TokenKind {
 /// An operator character (delimiter, punctuation)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Punct {
+    As,         // as
     LCurly,     // {
     RCurly,     // }
     LBrack,     // [
@@ -112,7 +112,6 @@ impl Display for TokenKind {
             TokenKind::Literal => "literal".fmt(f),
             TokenKind::Identifier => "identifier".fmt(f),
 
-            TokenKind::As => "as".fmt(f),
             TokenKind::Break => "break".fmt(f),
             TokenKind::Cl => "cl".fmt(f),
             TokenKind::Const => "const".fmt(f),
@@ -151,7 +150,7 @@ impl FromStr for TokenKind {
     /// Parses a string s to return a Keyword
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
-            "as" => Self::As,
+            "as" => Self::Punct(Punct::As),
             "break" => Self::Break,
             "cl" => Self::Cl,
             "const" => Self::Const,
@@ -187,6 +186,7 @@ impl FromStr for TokenKind {
 impl Display for Punct {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Punct::As => "as".fmt(f),
             Punct::LCurly => "{".fmt(f),
             Punct::RCurly => "}".fmt(f),
             Punct::LBrack => "[".fmt(f),

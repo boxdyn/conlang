@@ -392,6 +392,7 @@ pub mod yamlify {
                 ExprKind::Modify(k) => k.yaml(y),
                 ExprKind::Binary(k) => k.yaml(y),
                 ExprKind::Unary(k) => k.yaml(y),
+                ExprKind::Cast(k) => k.yaml(y),
                 ExprKind::Member(k) => k.yaml(y),
                 ExprKind::Index(k) => k.yaml(y),
                 ExprKind::Structor(k) => k.yaml(y),
@@ -459,6 +460,12 @@ pub mod yamlify {
     impl Yamlify for UnaryKind {
         fn yaml(&self, y: &mut Yamler) {
             y.value(self);
+        }
+    }
+    impl Yamlify for Cast {
+        fn yaml(&self, y: &mut Yamler) {
+            let Self { head, ty } = self;
+            y.key("Cast").pair("head", head).pair("ty", ty);
         }
     }
     impl Yamlify for Member {

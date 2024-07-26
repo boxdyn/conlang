@@ -138,6 +138,7 @@ impl Interpret for ExprKind {
             ExprKind::Modify(v) => v.interpret(env),
             ExprKind::Binary(v) => v.interpret(env),
             ExprKind::Unary(v) => v.interpret(env),
+            ExprKind::Cast(v) => v.interpret(env),
             ExprKind::Member(v) => v.interpret(env),
             ExprKind::Index(v) => v.interpret(env),
             ExprKind::Structor(v) => v.interpret(env),
@@ -334,6 +335,48 @@ impl Interpret for Unary {
         }
     }
 }
+
+fn cast(value: ConValue, ty: Sym) -> IResult<ConValue> {
+    let value = match value {
+        ConValue::Empty => 0,
+        ConValue::Int(i) => i as _,
+        ConValue::Bool(b) => b as _,
+        ConValue::Char(c) => c as _,
+        ConValue::Ref(v) => return cast((*v).clone(), ty),
+        _ => Err(Error::TypeError)?,
+    };
+    Ok(match &*ty {
+        "u8" => ConValue::Int(value as u8 as _),
+        "i8" => ConValue::Int(value as i8 as _),
+        "u16" => ConValue::Int(value as u16 as _),
+        "i16" => ConValue::Int(value as i16 as _),
+        "u32" => ConValue::Int(value as u32 as _),
+        "i32" => ConValue::Int(value as i32 as _),
+        "u64" => ConValue::Int(value),
+        "i64" => ConValue::Int(value),
+        "char" => ConValue::Char(char::from_u32(value as _).unwrap_or('\u{fffd}')),
+        "bool" => ConValue::Bool(value < 0),
+        _ => Err(Error::NotDefined(ty))?,
+    })
+}
+
+impl Interpret for Cast {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let Cast { head, ty } = self;
+        let value = head.interpret(env)?;
+        if TyKind::Empty == ty.kind {
+            return Ok(ConValue::Empty);
+        };
+        let TyKind::Path(Path { absolute: false, parts }) = &ty.kind else {
+            Err(Error::TypeError)?
+        };
+        match parts.as_slice() {
+            [PathPart::Ident(ty)] => cast(value, *ty),
+            _ => Err(Error::TypeError),
+        }
+    }
+}
+
 impl Interpret for Member {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Member { head, kind } = self;
