@@ -18,6 +18,9 @@ pub type i32;
 #[intrinsic = "i64"]
 pub type i64;
 
+#[intrinsic = "i128"]
+pub type i128;
+
 #[intrinsic = "isize"]
 pub type isize;
 
@@ -33,8 +36,17 @@ pub type u32;
 #[intrinsic = "u64"]
 pub type u64;
 
+#[intrinsic = "u128"]
+pub type u128;
+
 #[intrinsic = "usize"]
 pub type usize;
+
+#[intrinsic = "f32"]
+pub type f32;
+
+#[intrinsic = "f64"]
+pub type f64;
 
 // Contains implementations for (TODO) overloaded operators on num types
 pub mod ops {
@@ -188,6 +200,45 @@ pub mod ops {
     }
 
     impl u64 {
+        pub const MIN: Self = 0;
+        pub const MAX: Self = !0;
+        pub const BIT_WIDTH: u32 = 8;
+        pub fn default() -> Self {
+            0
+        }
+        pub fn mul(a: Self, b: Self) -> Self {
+            a * b
+        }
+        pub fn div(a: Self, b: Self) -> Self {
+            a / b
+        }
+        pub fn rem(a: Self, b: Self) -> Self {
+            a % b
+        }
+        pub fn add(a: Self, b: Self) -> Self {
+            a + b
+        }
+        pub fn sub(a: Self, b: Self) -> Self {
+            a - b
+        }
+        pub fn shl(a: Self, b: u32) -> Self {
+            a << b
+        }
+        pub fn shr(a: Self, b: u32) -> Self {
+            a >> b
+        }
+        pub fn and(a: Self, b: Self) -> Self {
+            a & b
+        }
+        pub fn or(a: Self, b: Self) -> Self {
+            a | b
+        }
+        pub fn xor(a: Self, b: Self) -> Self {
+            a ^ b
+        }
+    }
+
+    impl u128 {
         pub const MIN: Self = 0;
         pub const MAX: Self = !0;
         pub const BIT_WIDTH: u32 = 8;
@@ -385,6 +436,45 @@ pub mod ops {
     impl i64 {
         pub const MIN: Self = -9223372036854775808;
         pub const MAX: Self = 9223372036854775807;
+        pub const BIT_WIDTH: u32 = 8;
+        pub fn default() -> Self {
+            0
+        }
+        pub fn mul(a: Self, b: Self) -> Self {
+            a * b
+        }
+        pub fn div(a: Self, b: Self) -> Self {
+            a / b
+        }
+        pub fn rem(a: Self, b: Self) -> Self {
+            a % b
+        }
+        pub fn add(a: Self, b: Self) -> Self {
+            a + b
+        }
+        pub fn sub(a: Self, b: Self) -> Self {
+            a - b
+        }
+        pub fn shl(a: Self, b: u32) -> Self {
+            a << b
+        }
+        pub fn shr(a: Self, b: u32) -> Self {
+            a >> b
+        }
+        pub fn and(a: Self, b: Self) -> Self {
+            a & b
+        }
+        pub fn or(a: Self, b: Self) -> Self {
+            a | b
+        }
+        pub fn xor(a: Self, b: Self) -> Self {
+            a ^ b
+        }
+    }
+
+    impl i128 {
+        pub const MIN: Self = !(1 << 128);
+        pub const MAX: Self = 1 << 128;
         pub const BIT_WIDTH: u32 = 8;
         pub fn default() -> Self {
             0

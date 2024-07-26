@@ -54,38 +54,17 @@ pub enum Adt {
 
 /// The set of compiler-intrinsic types.
 /// These primitive types have native implementations of the basic operations.
-#[allow(non_camel_case_types)]
+#[rustfmt::skip]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Intrinsic {
-    /// An 8-bit signed integer: `#[intrinsic = "i8"]`
-    I8,
-    /// A 16-bit signed integer: `#[intrinsic = "i16"]`
-    I16,
-    /// A 32-bit signed integer: `#[intrinsic = "i32"]`
-    I32,
-    /// A 64-bit signed integer: `#[intrinsic = "i32"]`
-    I64,
-    // /// A 128-bit signed integer: `#[intrinsic = "i32"]`
-    // I128,
-    /// A ptr-len signed integer: `#[intrinsic = "isize"]`
-    Isize,
-    /// An 8-bit unsigned integer: `#[intrinsic = "u8"]`
-    U8,
-    /// A 16-bit unsigned integer: `#[intrinsic = "u16"]`
-    U16,
-    /// A 32-bit unsigned integer: `#[intrinsic = "u32"]`
-    U32,
-    /// A 64-bit unsigned integer: `#[intrinsic = "u64"]`
-    U64,
-    // /// A 128-bit unsigned integer: `#[intrinsic = "u128"]`
-    // U128,
-    /// A ptr-len unsigned integer: `#[intrinsic = "isize"]`
-    Usize,
-    /// A boolean (`true` or `false`): `#[intrinsic = "bool"]`
-    Bool,
-    /// The unicode codepoint type: #[intrinsic = "char"]
-    Char,
+    I8, I16, I32, I64, I128, Isize, // Signed integers
+    U8, U16, U32, U64, U128, Usize, // Unsigned integers
+    F8, F16, F32, F64, F128, Fsize, // Floating point numbers
+    Bool,                           // boolean value
+    Char,                           // Unicode codepoint
 }
+
+// Author's note: the fsize type is a meme
 
 impl FromStr for Intrinsic {
     type Err = ();
@@ -96,12 +75,20 @@ impl FromStr for Intrinsic {
             "i16" => Intrinsic::I16,
             "i32" => Intrinsic::I32,
             "i64" => Intrinsic::I64,
+            "i128" => Intrinsic::I128,
             "isize" => Intrinsic::Isize,
             "u8" => Intrinsic::U8,
             "u16" => Intrinsic::U16,
             "u32" => Intrinsic::U32,
             "u64" => Intrinsic::U64,
+            "u128" => Intrinsic::U128,
             "usize" => Intrinsic::Usize,
+            "f8" => Intrinsic::F8,
+            "f16" => Intrinsic::F16,
+            "f32" => Intrinsic::F32,
+            "f64" => Intrinsic::F64,
+            "f128" => Intrinsic::F128,
+            "fsize" => Intrinsic::Fsize,
             "bool" => Intrinsic::Bool,
             "char" => Intrinsic::Char,
             _ => Err(())?,
