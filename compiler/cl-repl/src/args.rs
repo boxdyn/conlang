@@ -35,6 +35,10 @@ argwerk::define! {
     [#[option] path] if file.is_none() => {
         file = path.map(Into::into);
     }
+
+    [path] if file.is_some() => {
+        include.push(path.into());
+    }
 }
 
 /// gets whether stdin AND stdout are a terminal, for pipelining
