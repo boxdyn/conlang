@@ -48,9 +48,9 @@ mod display {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 Literal::Bool(v) => v.fmt(f),
-                Literal::Char(v) => write!(f, "'{v}'"),
+                Literal::Char(v) => write!(f, "'{}'", v.escape_debug()),
                 Literal::Int(v) => v.fmt(f),
-                Literal::String(v) => write!(f, "\"{v}\""),
+                Literal::String(v) => write!(f, "\"{}\"", v.escape_debug()),
             }
         }
     }
