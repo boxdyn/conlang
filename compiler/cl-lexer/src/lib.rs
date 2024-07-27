@@ -321,18 +321,21 @@ impl<'t> Lexer<'t> {
 /// Comments
 impl<'t> Lexer<'t> {
     fn line_comment(&mut self) -> LResult<Token> {
+        let mut comment = String::new();
         while Ok('\n') != self.peek() {
-            self.consume()?;
+            comment.push(self.next()?);
         }
-        self.produce(Kind::Comment, ())
+        self.produce(Kind::Comment, comment)
     }
     fn block_comment(&mut self) -> LResult<Token> {
+        let mut comment = String::new();
         while let Ok(c) = self.next() {
-            if '*' == c && Ok('/') == self.next() {
+            if '*' == c && Ok('/') == self.peek() {
                 break;
             }
+            comment.push(c);
         }
-        self.produce(Kind::Comment, ())
+        self.consume()?.produce(Kind::Comment, comment)
     }
 }
 /// Identifiers
