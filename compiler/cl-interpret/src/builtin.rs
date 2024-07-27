@@ -10,6 +10,7 @@ use cl_ast::Sym;
 use std::{
     io::{stdout, Write},
     rc::Rc,
+    slice,
 };
 
 builtins! {
@@ -56,6 +57,19 @@ builtins! {
     pub fn dump<env, _>() -> IResult<ConValue> {
         println!("{}", *env);
         Ok(ConValue::Empty)
+    }
+
+    pub fn len<env, _>(list) -> IResult<ConValue> {
+        Ok(ConValue::Int(match list {
+            ConValue::Empty => 0,
+            ConValue::String(s) => s.chars().count() as _,
+            ConValue::Ref(r) => return len.call(env, slice::from_ref(r.as_ref())),
+            ConValue::Array(t) => t.len() as _,
+            ConValue::Tuple(t) => t.len() as _,
+            ConValue::RangeExc(start, end) => (end - start) as _,
+            ConValue::RangeInc(start, end) => (end - start + 1) as _,
+            _ => Err(Error::TypeError)?,
+        }))
     }
 }
 builtins! {
