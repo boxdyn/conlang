@@ -254,8 +254,14 @@ impl<'t> Lexer<'t> {
     }
     fn hash(&mut self) -> LResult<Token> {
         match self.peek() {
-            Ok('!') => self.consume()?.produce_op(Punct::HashBang),
+            Ok('!') => self.consume()?.hashbang(),
             _ => self.produce_op(Punct::Hash),
+        }
+    }
+    fn hashbang(&mut self) -> LResult<Token> {
+        match self.peek() {
+            Ok('/' | '\'') => self.line_comment(),
+            _ => self.produce_op(Punct::HashBang),
         }
     }
     fn less(&mut self) -> LResult<Token> {
