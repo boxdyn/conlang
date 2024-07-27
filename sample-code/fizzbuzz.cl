@@ -1,7 +1,8 @@
+#!/usr/bin/env -S conlang -r false
 // FizzBuzz, using the unstable variadic-`print` builtin
 
 fn main() {
-    fizzbuzz(10, 20)
+    fizzbuzz(0, 30)
 }
 
 // Outputs FizzBuzz for numbers between `start` and `end`, inclusive

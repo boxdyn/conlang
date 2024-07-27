@@ -1,3 +1,4 @@
+#!/usr/bin/env -S conlang -r false
 // Calculate Fibonacci numbers
 
 fn main() {
