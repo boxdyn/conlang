@@ -90,12 +90,18 @@ pub mod convalue {
             let Self::Int(index) = index else {
                 Err(Error::TypeError)?
             };
-            let Self::Array(arr) = self else {
-                Err(Error::TypeError)?
-            };
-            arr.get(*index as usize)
-                .cloned()
-                .ok_or(Error::OobIndex(*index as usize, arr.len()))
+            match self {
+                ConValue::String(string) => string
+                    .chars()
+                    .nth(*index as _)
+                    .map(ConValue::Char)
+                    .ok_or(Error::OobIndex(*index as usize, string.chars().count())),
+                ConValue::Array(arr) => arr
+                    .get(*index as usize)
+                    .cloned()
+                    .ok_or(Error::OobIndex(*index as usize, arr.len())),
+                _ => Err(Error::TypeError),
+            }
         }
         cmp! {
             lt: false, <;
