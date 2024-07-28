@@ -8,9 +8,9 @@ fn main () {
 
 fn n_digit(n: u32) -> char {
     (if n > 9 {
-        n - 10 + ('a' as u32)
+        ('a' as u32) + n - 10
     } else {
-        n + ('0' as u32)
+        ('0' as u32) + n
     }) as char
 }
 
@@ -24,15 +24,14 @@ fn ascii() {
             if col == 8 {
                 print(' ')
             }
-            let i = row * 16 + col
-            print(n_digit((i >> 4) & 0xf), n_digit(i & 0xf), ' ')
+            print(n_digit(row), n_digit(col), ' ')
         }
-        print(" |")
+        print(" │")
         for col in 0..16 {
-            let i = row * 16 + col
+            let i = row << 4 | col
             print(ascii_picture(i))
         }
-        println("|")
+        println("│")
     }
 }
 
