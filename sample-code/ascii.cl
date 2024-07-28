@@ -15,7 +15,7 @@ fn n_digit(n: u32) -> char {
 }
 
 fn in_range(num: u32, start: u32, end: u32) -> bool {
-    (start <= i) && (i <= end )
+    (start <= num) && (num <= end )
 }
 
 fn ascii() {
@@ -28,8 +28,7 @@ fn ascii() {
         }
         print(" │")
         for col in 0..16 {
-            let i = row << 4 | col
-            print(ascii_picture(i))
+            print(ascii_picture(row << 4 | col))
         }
         println("│")
     }
