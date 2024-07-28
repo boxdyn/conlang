@@ -1,28 +1,50 @@
+#!/usr/bin/env -S conlang -r false
 //! Prints out the characters in the ASCII printable range
-//! in the format of a hex-dump
+//! and the Latin-1 supplement in the format of a hex-dump
 
-// TODO: Convenient stuff like this in the stdlib
-const HEX_LUT: [char; 16] = [
-    '0', '1', '2', '3', //
-    '4', '5', '6', '7', //
-    '8', '9', 'a', 'b', //
-    'c', 'd', 'e', 'f', //
-];
+fn main () {
+    ascii()
+}
+
+fn n_digit(n: u32) -> char {
+    (if n > 9 {
+        n - 10 + ('a' as u32)
+    } else {
+        n + ('0' as u32)
+    }) as char
+}
+
+fn in_range(num: u32, start: u32, end: u32) -> bool {
+    (start <= i) && (i <= end )
+}
 
 fn ascii() {
-    for row in 0..6 {
+    for row in 0..16 {
         for col in 0..16 {
             if col == 8 {
                 print(' ')
             }
-            let i = 0x20 + row * 16 + col
-            print(HEX_LUT[(i >> 4) & 0xf], HEX_LUT[i & 0xf], ' ')
+            let i = row * 16 + col
+            print(n_digit((i >> 4) & 0xf), n_digit(i & 0xf), ' ')
         }
         print(" |")
         for col in 0..16 {
-            let i = 0x20 + row * 16 + col
-            print(i as char)
+            let i = row * 16 + col
+            print(ascii_picture(i))
         }
         println("|")
     }
+}
+
+// Start of the C0 control pictures region
+const CO_CONTROL_PICTURES: u32 = '\u{2400}' as u32;
+
+fn ascii_picture(c: i32) -> char {
+    if c < ' ' as i32 {                 // C0
+        (CO_CONTROL_PICTURES + c) as char
+    } else if c == 127 {                // C0:DEL
+        '␡' // SYMBOL_FOR_DELETE
+    } else if c.in_range(0x7f, 0xa0) {  // C1
+        ' '
+    } else c as char
 }
