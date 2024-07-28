@@ -39,8 +39,8 @@ fn ascii() {
 // Start of the C0 control pictures region
 const CO_CONTROL_PICTURES: u32 = '\u{2400}' as u32;
 
-fn ascii_picture(c: i32) -> char {
-    if c < ' ' as i32 {                 // C0
+fn ascii_picture(c: u32) -> char {
+    if c < ' ' as u32 {                 // C0
         (CO_CONTROL_PICTURES + c) as char
     } else if c == 127 {                // C0:DEL
         '␡' // SYMBOL_FOR_DELETE
