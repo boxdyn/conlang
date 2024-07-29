@@ -185,6 +185,24 @@ pub mod string_interner {
         }
     }
 
+    impl std::fmt::Display for StringInterner<'_> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let Ok(keys) = self.keys.read() else {
+                return write!(f, "Could not lock StringInterner key map.");
+            };
+            let mut keys: Vec<_> = keys.iter().collect();
+            keys.sort();
+
+            writeln!(f, "Keys:")?;
+            for (idx, key) in keys.iter().enumerate() {
+                writeln!(f, "{idx}:\t\"{key}\"")?
+            }
+            writeln!(f, "Count: {}", keys.len())?;
+
+            Ok(())
+        }
+    }
+
     // # Safety:
     // This is fine because StringInterner::get_or_insert(v) holds a RwLock
     // for its entire duration, and doesn't touch the non-(Send+Sync) arena
