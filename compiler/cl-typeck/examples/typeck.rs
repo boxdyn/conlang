@@ -1,3 +1,4 @@
+use cl_structures::intern::string_interner::StringInterner;
 use cl_typeck::{entry::Entry, stage::*, table::Table, type_expression::TypeExpression};
 
 use cl_ast::{
@@ -58,23 +59,25 @@ fn main_menu(prj: &mut Table) -> Result<(), RlError> {
         match line.trim() {
             "c" | "code" => enter_code(prj)?,
             "clear" => clear()?,
+            "d" | "desugar" => live_desugar()?,
             "e" | "exit" => return Ok(Response::Break),
             "f" | "file" => import_files(prj)?,
+            "i" | "id" => get_by_id(prj)?,
             "l" | "list" => list_types(prj),
             "q" | "query" => query_type_expression(prj)?,
-            "i" | "id" => get_by_id(prj)?,
             "r" | "resolve" => resolve_all(prj)?,
-            "d" | "desugar" => live_desugar()?,
-            "h" | "help" => {
+            "s" | "strings" => print_strings(),
+            "h" | "help" | "" => {
                 println!(
                     "Valid commands are:
+    clear      : Clear the screen
     code    (c): Enter code to type-check
+    desugar (d): WIP: Test the experimental desugaring passes
     file    (f): Load files from disk
+    id      (i): Get a type by its type ID
     list    (l): List all known types
     query   (q): Query the type system
-    id      (i): Get a type by its type ID
     resolve (r): Perform type resolution
-    desugar (d): WIP: Test the experimental desugaring passes
     help    (h): Print this list
     exit    (e): Exit the program"
                 );
@@ -116,6 +119,10 @@ fn live_desugar() -> Result<(), RlError> {
 
         Ok(Response::Accept)
     })
+}
+
+fn print_strings() {
+    println!("{}", StringInterner::global());
 }
 
 fn query_type_expression(prj: &mut Table) -> Result<(), RlError> {
