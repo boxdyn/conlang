@@ -96,7 +96,7 @@ impl Type {
     }
     /// Checks whether there are any unbound type variables in this type.
     /// ```rust
-    /// # use cl_typeck::inference::*;
+    /// # use cl_typeck::stage::infer::*;
     /// let bool = Type::new_op("bool".into(), &[]);
     /// let true_v = Type::new_inst(&bool);
     /// let unbound = Type::new_var();
@@ -149,7 +149,7 @@ impl Type {
     /// Panics if this type variable's instance field is already borrowed.
     /// # Examples
     /// ```rust
-    /// # use cl_typeck::inference::*;
+    /// # use cl_typeck::stage::infer::*;
     /// let t_bool = Type::new_op("bool".into(), &[]);
     /// let t_nest = Type::new_inst(&Type::new_inst(&Type::new_inst(&t_bool)));
     /// let pruned = t_nest.prune();
