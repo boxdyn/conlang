@@ -227,12 +227,13 @@ pub trait Fold {
         s
     }
     fn fold_let(&mut self, l: Let) -> Let {
-        let Let { mutable, name, ty, init } = l;
+        let Let { mutable, name, ty, init, tail } = l;
         Let {
             mutable: self.fold_mutability(mutable),
             name: self.fold_sym(name),
             ty: ty.map(|t| Box::new(self.fold_ty(*t))),
             init: init.map(|e| Box::new(self.fold_expr(*e))),
+            tail: tail.map(|e| Box::new(self.fold_expr(*e))),
         }
     }
     fn fold_expr(&mut self, e: Expr) -> Expr {
@@ -525,7 +526,6 @@ pub fn or_fold_ty_kind<F: Fold + ?Sized>(folder: &mut F, kind: TyKind) -> TyKind
 pub fn or_fold_stmt_kind<F: Fold + ?Sized>(folder: &mut F, kind: StmtKind) -> StmtKind {
     match kind {
         StmtKind::Empty => StmtKind::Empty,
-        StmtKind::Local(l) => StmtKind::Local(folder.fold_let(l)),
         StmtKind::Item(i) => StmtKind::Item(Box::new(folder.fold_item(*i))),
         StmtKind::Expr(e) => StmtKind::Expr(Box::new(folder.fold_expr(*e))),
     }
@@ -535,6 +535,7 @@ pub fn or_fold_stmt_kind<F: Fold + ?Sized>(folder: &mut F, kind: StmtKind) -> St
 pub fn or_fold_expr_kind<F: Fold + ?Sized>(folder: &mut F, kind: ExprKind) -> ExprKind {
     match kind {
         ExprKind::Empty => ExprKind::Empty,
+        ExprKind::Let(l) => ExprKind::Let(folder.fold_let(l)),
         ExprKind::Assign(a) => ExprKind::Assign(folder.fold_assign(a)),
         ExprKind::Modify(m) => ExprKind::Modify(folder.fold_modify(m)),
         ExprKind::Binary(b) => ExprKind::Binary(folder.fold_binary(b)),

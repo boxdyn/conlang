@@ -105,7 +105,6 @@ impl Interpret for Stmt {
         let Self { extents: _, kind, semi } = self;
         let out = match kind {
             StmtKind::Empty => ConValue::Empty,
-            StmtKind::Local(stmt) => stmt.interpret(env)?,
             StmtKind::Item(stmt) => stmt.interpret(env)?,
             StmtKind::Expr(stmt) => stmt.interpret(env)?,
         };
@@ -117,9 +116,10 @@ impl Interpret for Stmt {
 }
 impl Interpret for Let {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Let { mutable: _, name, ty: _, init } = self;
+        let Let { mutable: _, name, ty: _, init, tail } = self;
         let init = init.as_ref().map(|i| i.interpret(env)).transpose()?;
         env.insert(*name, init);
+        tail.as_ref().map(|e| e.interpret(env)).transpose()?;
         Ok(ConValue::Empty)
     }
 }
@@ -134,6 +134,7 @@ impl Interpret for ExprKind {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         match self {
             ExprKind::Empty => Ok(ConValue::Empty),
+            ExprKind::Let(v) => v.interpret(env),
             ExprKind::Assign(v) => v.interpret(env),
             ExprKind::Modify(v) => v.interpret(env),
             ExprKind::Binary(v) => v.interpret(env),

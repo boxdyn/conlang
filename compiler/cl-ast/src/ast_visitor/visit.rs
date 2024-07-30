@@ -192,7 +192,7 @@ pub trait Visit<'a>: Sized {
     }
     fn visit_semi(&mut self, _s: &'a Semi) {}
     fn visit_let(&mut self, l: &'a Let) {
-        let Let { mutable, name, ty, init } = l;
+        let Let { mutable, name, ty, init, tail } = l;
         self.visit_mutability(mutable);
         self.visit_sym(name);
         if let Some(ty) = ty {
@@ -200,6 +200,9 @@ pub trait Visit<'a>: Sized {
         }
         if let Some(init) = init {
             self.visit_expr(init)
+        }
+        if let Some(tail) = tail {
+            self.visit_expr(tail)
         }
     }
     fn visit_expr(&mut self, e: &'a Expr) {
@@ -448,7 +451,6 @@ pub fn or_visit_ty_kind<'a, V: Visit<'a>>(visitor: &mut V, kind: &'a TyKind) {
 pub fn or_visit_stmt_kind<'a, V: Visit<'a>>(visitor: &mut V, kind: &'a StmtKind) {
     match kind {
         StmtKind::Empty => {}
-        StmtKind::Local(l) => visitor.visit_let(l),
         StmtKind::Item(i) => visitor.visit_item(i),
         StmtKind::Expr(e) => visitor.visit_expr(e),
     }
@@ -457,6 +459,7 @@ pub fn or_visit_stmt_kind<'a, V: Visit<'a>>(visitor: &mut V, kind: &'a StmtKind)
 pub fn or_visit_expr_kind<'a, V: Visit<'a>>(visitor: &mut V, e: &'a ExprKind) {
     match e {
         ExprKind::Empty => {}
+        ExprKind::Let(l) => visitor.visit_let(l),
         ExprKind::Assign(a) => visitor.visit_assign(a),
         ExprKind::Modify(m) => visitor.visit_modify(m),
         ExprKind::Binary(b) => visitor.visit_binary(b),

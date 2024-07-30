@@ -389,7 +389,6 @@ mod display {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 StmtKind::Empty => Ok(()),
-                StmtKind::Local(v) => v.fmt(f),
                 StmtKind::Item(v) => v.fmt(f),
                 StmtKind::Expr(v) => v.fmt(f),
             }
@@ -407,13 +406,16 @@ mod display {
 
     impl Display for Let {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { mutable, name, ty, init } = self;
+            let Self { mutable, name, ty, init, tail } = self;
             write!(f, "let {mutable}{name}")?;
             if let Some(value) = ty {
                 write!(f, ": {value}")?;
             }
             if let Some(value) = init {
                 write!(f, " = {value}")?;
+            }
+            if let Some(value) = tail {
+                write!(f, ";\n{value}")?;
             }
             Ok(())
         }
@@ -429,6 +431,7 @@ mod display {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 ExprKind::Empty => "()".fmt(f),
+                ExprKind::Let(v) => v.fmt(f),
                 ExprKind::Assign(v) => v.fmt(f),
                 ExprKind::Modify(v) => v.fmt(f),
                 ExprKind::Binary(v) => v.fmt(f),
@@ -763,11 +766,11 @@ mod convert {
             TyFn => TyKind::Fn,
         }
         impl From for StmtKind {
-            Let => StmtKind::Local,
             Item => StmtKind::Item,
             Expr => StmtKind::Expr,
         }
         impl From for ExprKind {
+            Let => ExprKind::Let,
             Assign => ExprKind::Assign,
             Modify => ExprKind::Modify,
             Binary => ExprKind::Binary,

@@ -363,7 +363,6 @@ pub mod yamlify {
         fn yaml(&self, y: &mut Yamler) {
             match self {
                 StmtKind::Empty => y,
-                StmtKind::Local(s) => y.yaml(s),
                 StmtKind::Item(s) => y.yaml(s),
                 StmtKind::Expr(s) => y.yaml(s),
             };
@@ -371,12 +370,13 @@ pub mod yamlify {
     }
     impl Yamlify for Let {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { mutable, name, ty, init } = self;
+            let Self { mutable, name, ty, init, tail } = self;
             y.key("Let")
                 .pair("name", name)
                 .yaml(mutable)
                 .pair("ty", ty)
-                .pair("init", init);
+                .pair("init", init)
+                .pair("tail", tail);
         }
     }
     impl Yamlify for Expr {
@@ -388,6 +388,7 @@ pub mod yamlify {
     impl Yamlify for ExprKind {
         fn yaml(&self, y: &mut Yamler) {
             match self {
+                ExprKind::Let(k) => k.yaml(y),
                 ExprKind::Assign(k) => k.yaml(y),
                 ExprKind::Modify(k) => k.yaml(y),
                 ExprKind::Binary(k) => k.yaml(y),

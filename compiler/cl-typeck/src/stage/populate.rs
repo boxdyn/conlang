@@ -145,35 +145,25 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         self.visit_use_tree(tree);
     }
 
-    fn visit_stmt(&mut self, s: &'a cl_ast::Stmt) {
-        let cl_ast::Stmt { extents, kind, semi } = s;
-        let cl_ast::StmtKind::Local(local) = kind else {
-            self.visit_span(extents);
-            self.visit_stmt_kind(kind);
-            self.visit_semi(semi);
-            return;
-        };
-
-        let mut entry = self.new_entry(NodeKind::Local);
-        entry.inner.set_span(*extents);
-        entry.visit_let(local);
-
-        if let (Some(name), child) = (entry.name, entry.inner.id()) {
-            self.inner.add_child(name, child);
-        }
-    }
-
     fn visit_let(&mut self, l: &'a cl_ast::Let) {
-        let cl_ast::Let { mutable, name, ty, init } = l;
-        self.inner.set_source(Source::Local(l));
-        self.set_name(*name);
+        let cl_ast::Let { mutable, name, ty, init, tail } = l;
+        let mut entry = self.new_entry(NodeKind::Local);
 
-        self.visit_mutability(mutable);
+        entry.inner.set_source(Source::Local(l));
+        entry.set_name(*name);
+
+        entry.visit_mutability(mutable);
         if let Some(ty) = ty {
-            self.visit_ty(ty);
+            entry.visit_ty(ty);
         }
         if let Some(init) = init {
-            self.visit_expr(init)
+            entry.visit_expr(init)
         }
+        if let Some(tail) = tail {
+            entry.visit_expr(tail)
+        }
+
+        let child = entry.inner.id();
+        self.inner.add_child(*name, child);
     }
 }

@@ -815,29 +815,8 @@ impl<'t> Parser<'t> {
     pub fn stmtkind(&mut self) -> PResult<StmtKind> {
         Ok(match self.peek_kind(Parsing::StmtKind)? {
             TokenKind::Semi => StmtKind::Empty,
-            TokenKind::Let => self.parse_let()?.into(),
             item_like!() => self.item()?.into(),
             _ => self.expr()?.into(),
-        })
-    }
-
-    pub fn parse_let(&mut self) -> PResult<Let> {
-        self.consume_peeked();
-        Ok(Let {
-            mutable: self.mutability(),
-            name: self.identifier()?,
-            ty: if Ok(TokenKind::Colon) == self.peek_kind(Parsing::Let) {
-                self.consume_peeked();
-                Some(self.ty()?.into())
-            } else {
-                None
-            },
-            init: if Ok(TokenKind::Eq) == self.peek_kind(Parsing::Let) {
-                self.consume_peeked();
-                Some(self.expr()?.into())
-            } else {
-                None
-            },
         })
     }
 }
@@ -863,6 +842,7 @@ impl<'t> Parser<'t> {
             TokenKind::LCurly => self.block()?.into(),
             TokenKind::LBrack => self.exprkind_arraylike()?,
             TokenKind::LParen => self.exprkind_tuplelike()?,
+            TokenKind::Let => self.parse_let()?.into(),
             TokenKind::Loop => {
                 self.consume_peeked();
                 Loop { body: self.expr()?.into() }.into()
@@ -1156,6 +1136,29 @@ impl<'t> Parser<'t> {
     pub fn block(&mut self) -> PResult<Block> {
         const A_BLOCK: Parsing = Parsing::Block;
         Ok(Block { stmts: delim(rep(Self::stmt, CURLIES.1, A_BLOCK), CURLIES, A_BLOCK)(self)? })
+    }
+
+    pub fn parse_let(&mut self) -> PResult<Let> {
+        self.consume_peeked();
+        Ok(Let {
+            mutable: self.mutability(),
+            name: self.identifier()?,
+            ty: if self.match_type(TokenKind::Colon, Parsing::Let).is_ok() {
+                Some(self.ty()?.into())
+            } else {
+                None
+            },
+            init: if self.match_type(TokenKind::Eq, Parsing::Let).is_ok() {
+                Some(self.expr()?.into())
+            } else {
+                None
+            },
+            tail: if self.match_type(TokenKind::Semi, Parsing::Let).is_ok() {
+                Some(self.expr()?.into())
+            } else {
+                None
+            },
+        })
     }
 }
 /// ## Control flow subexpressions

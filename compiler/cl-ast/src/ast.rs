@@ -323,7 +323,6 @@ pub struct Stmt {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum StmtKind {
     Empty,
-    Local(Let),
     Item(Box<Item>),
     Expr(Box<Expr>),
 }
@@ -342,6 +341,7 @@ pub struct Let {
     pub name: Sym,
     pub ty: Option<Box<Ty>>,
     pub init: Option<Box<Expr>>,
+    pub tail: Option<Box<Expr>>,
 }
 
 /// An expression, the beating heart of the language
@@ -357,6 +357,8 @@ pub enum ExprKind {
     /// An empty expression: `(` `)`
     #[default]
     Empty,
+    /// A local bind instruction, `let` [`Sym`] `=` [`Expr`]
+    Let(Let),
     /// An [Assign]ment expression: [`Expr`] (`=` [`Expr`])\+
     Assign(Assign),
     /// A [Modify]-assignment expression: [`Expr`] ([`ModifyKind`] [`Expr`])\+
