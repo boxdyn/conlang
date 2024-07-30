@@ -13,41 +13,35 @@ pub enum TokenKind {
     /// A non-keyword identifier
     Identifier,
     // A keyword
-    Break,
-    Cl,
-    Const,
-    Continue,
-    Else,
-    Enum,
-    False,
-    For,
-    Fn,
-    If,
-    Impl,
-    In,
-    Let,
-    Loop,
-    Mod,
-    Mut,
-    Pub,
-    Return,
-    SelfKw,
-    SelfTy,
-    Static,
-    Struct,
-    Super,
-    True,
-    Type,
-    Use,
-    While,
-    /// Delimiter or punctuation
-    Punct(Punct),
-}
-
-/// An operator character (delimiter, punctuation)
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Punct {
-    As,         // as
+    As,       // as
+    Break,    // "break"
+    Cl,       // "cl"
+    Const,    // "const"
+    Continue, // "continue"
+    Else,     // "else"
+    Enum,     // "enum"
+    False,    // "false"
+    Fn,       // "fn"
+    For,      // "for"
+    If,       // "if"
+    Impl,     // "impl"
+    In,       // "in"
+    Let,      // "let"
+    Loop,     // "loop"
+    Mod,      // "mod"
+    Mut,      // "mut"
+    Pub,      // "pub"
+    Return,   // "return"
+    SelfKw,   // "self"
+    SelfTy,   // "Self"
+    Static,   // "static"
+    Struct,   // "struct"
+    Super,    // "super"
+    True,     // "true"
+    Type,     // "type"
+    Use,      // "use"
+    While,    // "while"
+    // Delimiter or punctuation
     LCurly,     // {
     RCurly,     // }
     LBrack,     // [
@@ -112,6 +106,7 @@ impl Display for TokenKind {
             TokenKind::Literal => "literal".fmt(f),
             TokenKind::Identifier => "identifier".fmt(f),
 
+            TokenKind::As => "as".fmt(f),
             TokenKind::Break => "break".fmt(f),
             TokenKind::Cl => "cl".fmt(f),
             TokenKind::Const => "const".fmt(f),
@@ -119,8 +114,8 @@ impl Display for TokenKind {
             TokenKind::Else => "else".fmt(f),
             TokenKind::Enum => "enum".fmt(f),
             TokenKind::False => "false".fmt(f),
-            TokenKind::For => "for".fmt(f),
             TokenKind::Fn => "fn".fmt(f),
+            TokenKind::For => "for".fmt(f),
             TokenKind::If => "if".fmt(f),
             TokenKind::Impl => "impl".fmt(f),
             TokenKind::In => "in".fmt(f),
@@ -140,7 +135,60 @@ impl Display for TokenKind {
             TokenKind::Use => "use".fmt(f),
             TokenKind::While => "while".fmt(f),
 
-            TokenKind::Punct(op) => op.fmt(f),
+            TokenKind::LCurly => "{".fmt(f),
+            TokenKind::RCurly => "}".fmt(f),
+            TokenKind::LBrack => "[".fmt(f),
+            TokenKind::RBrack => "]".fmt(f),
+            TokenKind::LParen => "(".fmt(f),
+            TokenKind::RParen => ")".fmt(f),
+            TokenKind::Amp => "&".fmt(f),
+            TokenKind::AmpAmp => "&&".fmt(f),
+            TokenKind::AmpEq => "&=".fmt(f),
+            TokenKind::Arrow => "->".fmt(f),
+            TokenKind::At => "@".fmt(f),
+            TokenKind::Backslash => "\\".fmt(f),
+            TokenKind::Bang => "!".fmt(f),
+            TokenKind::BangBang => "!!".fmt(f),
+            TokenKind::BangEq => "!=".fmt(f),
+            TokenKind::Bar => "|".fmt(f),
+            TokenKind::BarBar => "||".fmt(f),
+            TokenKind::BarEq => "|=".fmt(f),
+            TokenKind::Colon => ":".fmt(f),
+            TokenKind::ColonColon => "::".fmt(f),
+            TokenKind::Comma => ",".fmt(f),
+            TokenKind::Dot => ".".fmt(f),
+            TokenKind::DotDot => "..".fmt(f),
+            TokenKind::DotDotEq => "..=".fmt(f),
+            TokenKind::Eq => "=".fmt(f),
+            TokenKind::EqEq => "==".fmt(f),
+            TokenKind::FatArrow => "=>".fmt(f),
+            TokenKind::Grave => "`".fmt(f),
+            TokenKind::Gt => ">".fmt(f),
+            TokenKind::GtEq => ">=".fmt(f),
+            TokenKind::GtGt => ">>".fmt(f),
+            TokenKind::GtGtEq => ">>=".fmt(f),
+            TokenKind::Hash => "#".fmt(f),
+            TokenKind::HashBang => "#!".fmt(f),
+            TokenKind::Lt => "<".fmt(f),
+            TokenKind::LtEq => "<=".fmt(f),
+            TokenKind::LtLt => "<<".fmt(f),
+            TokenKind::LtLtEq => "<<=".fmt(f),
+            TokenKind::Minus => "-".fmt(f),
+            TokenKind::MinusEq => "-=".fmt(f),
+            TokenKind::Plus => "+".fmt(f),
+            TokenKind::PlusEq => "+=".fmt(f),
+            TokenKind::Question => "?".fmt(f),
+            TokenKind::Rem => "%".fmt(f),
+            TokenKind::RemEq => "%=".fmt(f),
+            TokenKind::Semi => ";".fmt(f),
+            TokenKind::Slash => "/".fmt(f),
+            TokenKind::SlashEq => "/=".fmt(f),
+            TokenKind::Star => "*".fmt(f),
+            TokenKind::StarEq => "*=".fmt(f),
+            TokenKind::Tilde => "~".fmt(f),
+            TokenKind::Xor => "^".fmt(f),
+            TokenKind::XorEq => "^=".fmt(f),
+            TokenKind::XorXor => "^^".fmt(f),
         }
     }
 }
@@ -150,7 +198,7 @@ impl FromStr for TokenKind {
     /// Parses a string s to return a Keyword
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
-            "as" => Self::Punct(Punct::As),
+            "as" => Self::As,
             "break" => Self::Break,
             "cl" => Self::Cl,
             "const" => Self::Const,
@@ -158,8 +206,8 @@ impl FromStr for TokenKind {
             "else" => Self::Else,
             "enum" => Self::Enum,
             "false" => Self::False,
-            "for" => Self::For,
             "fn" => Self::Fn,
+            "for" => Self::For,
             "if" => Self::If,
             "impl" => Self::Impl,
             "in" => Self::In,
@@ -180,67 +228,5 @@ impl FromStr for TokenKind {
             "while" => Self::While,
             _ => Err(())?,
         })
-    }
-}
-
-impl Display for Punct {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Punct::As => "as".fmt(f),
-            Punct::LCurly => "{".fmt(f),
-            Punct::RCurly => "}".fmt(f),
-            Punct::LBrack => "[".fmt(f),
-            Punct::RBrack => "]".fmt(f),
-            Punct::LParen => "(".fmt(f),
-            Punct::RParen => ")".fmt(f),
-            Punct::Amp => "&".fmt(f),
-            Punct::AmpAmp => "&&".fmt(f),
-            Punct::AmpEq => "&=".fmt(f),
-            Punct::Arrow => "->".fmt(f),
-            Punct::At => "@".fmt(f),
-            Punct::Backslash => "\\".fmt(f),
-            Punct::Bang => "!".fmt(f),
-            Punct::BangBang => "!!".fmt(f),
-            Punct::BangEq => "!=".fmt(f),
-            Punct::Bar => "|".fmt(f),
-            Punct::BarBar => "||".fmt(f),
-            Punct::BarEq => "|=".fmt(f),
-            Punct::Colon => ":".fmt(f),
-            Punct::ColonColon => "::".fmt(f),
-            Punct::Comma => ",".fmt(f),
-            Punct::Dot => ".".fmt(f),
-            Punct::DotDot => "..".fmt(f),
-            Punct::DotDotEq => "..=".fmt(f),
-            Punct::Eq => "=".fmt(f),
-            Punct::EqEq => "==".fmt(f),
-            Punct::FatArrow => "=>".fmt(f),
-            Punct::Grave => "`".fmt(f),
-            Punct::Gt => ">".fmt(f),
-            Punct::GtEq => ">=".fmt(f),
-            Punct::GtGt => ">>".fmt(f),
-            Punct::GtGtEq => ">>=".fmt(f),
-            Punct::Hash => "#".fmt(f),
-            Punct::HashBang => "#!".fmt(f),
-            Punct::Lt => "<".fmt(f),
-            Punct::LtEq => "<=".fmt(f),
-            Punct::LtLt => "<<".fmt(f),
-            Punct::LtLtEq => "<<=".fmt(f),
-            Punct::Minus => "-".fmt(f),
-            Punct::MinusEq => "-=".fmt(f),
-            Punct::Plus => "+".fmt(f),
-            Punct::PlusEq => "+=".fmt(f),
-            Punct::Question => "?".fmt(f),
-            Punct::Rem => "%".fmt(f),
-            Punct::RemEq => "%=".fmt(f),
-            Punct::Semi => ";".fmt(f),
-            Punct::Slash => "/".fmt(f),
-            Punct::SlashEq => "/=".fmt(f),
-            Punct::Star => "*".fmt(f),
-            Punct::StarEq => "*=".fmt(f),
-            Punct::Tilde => "~".fmt(f),
-            Punct::Xor => "^".fmt(f),
-            Punct::XorEq => "^=".fmt(f),
-            Punct::XorXor => "^^".fmt(f),
-        }
     }
 }

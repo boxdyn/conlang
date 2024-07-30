@@ -83,30 +83,26 @@ impl<'t> Parser<'t> {
             Err(self.error(ExpectedToken { want, got }, while_parsing))
         }
     }
-    #[inline]
-    pub fn match_op(&mut self, want: Punct, while_parsing: Parsing) -> PResult<Token> {
-        self.match_type(TokenKind::Punct(want), while_parsing)
-    }
 }
 
 // the three matched delimiter pairs
 /// Square brackets: `[` `]`
-const BRACKETS: (Punct, Punct) = (Punct::LBrack, Punct::RBrack);
+const BRACKETS: (TokenKind, TokenKind) = (TokenKind::LBrack, TokenKind::RBrack);
 /// Curly braces: `{` `}`
-const CURLIES: (Punct, Punct) = (Punct::LCurly, Punct::RCurly);
+const CURLIES: (TokenKind, TokenKind) = (TokenKind::LCurly, TokenKind::RCurly);
 /// Parentheses: `(` `)`
-const PARENS: (Punct, Punct) = (Punct::LParen, Punct::RParen);
+const PARENS: (TokenKind, TokenKind) = (TokenKind::LParen, TokenKind::RParen);
 
 /// Parses constructions of the form `delim.0 f delim.1` (i.e. `(` `foobar` `)`)
 const fn delim<'t, T>(
     f: impl Fn(&mut Parser<'t>) -> PResult<T>,
-    delim: (Punct, Punct),
+    delim: (TokenKind, TokenKind),
     while_parsing: Parsing,
 ) -> impl Fn(&mut Parser<'t>) -> PResult<T> {
     move |parser| {
-        parser.match_op(delim.0, while_parsing)?;
+        parser.match_type(delim.0, while_parsing)?;
         let out = f(parser)?;
-        parser.match_op(delim.1, while_parsing)?;
+        parser.match_type(delim.1, while_parsing)?;
         Ok(out)
     }
 }
@@ -116,15 +112,15 @@ const fn delim<'t, T>(
 /// where `~until` is a negative lookahead assertion
 const fn sep<'t, T>(
     f: impl Fn(&mut Parser<'t>) -> PResult<T>,
-    sep: Punct,
-    until: Punct,
+    sep: TokenKind,
+    until: TokenKind,
     while_parsing: Parsing,
 ) -> impl Fn(&mut Parser<'t>) -> PResult<Vec<T>> {
     move |parser| {
         let mut args = vec![];
-        while TokenKind::Punct(until) != parser.peek_kind(while_parsing)? {
+        while until != parser.peek_kind(while_parsing)? {
             args.push(f(parser)?);
-            if TokenKind::Punct(sep) != parser.peek_kind(while_parsing)? {
+            if sep != parser.peek_kind(while_parsing)? {
                 break;
             }
             parser.consume_peeked();
@@ -138,12 +134,12 @@ const fn sep<'t, T>(
 /// where `~until` is a negative lookahead assertion
 const fn rep<'t, T>(
     f: impl Fn(&mut Parser<'t>) -> PResult<T>,
-    until: Punct,
+    until: TokenKind,
     while_parsing: Parsing,
 ) -> impl Fn(&mut Parser<'t>) -> PResult<Vec<T>> {
     move |parser| {
         let mut out = vec![];
-        while TokenKind::Punct(until) != parser.peek_kind(while_parsing)? {
+        while until != parser.peek_kind(while_parsing)? {
             out.push(f(parser)?)
         }
         Ok(out)
@@ -152,7 +148,7 @@ const fn rep<'t, T>(
 
 /// Expands to a pattern which matches item-like [Token] [TokenKind]s
 macro item_like() {
-    TokenKind::Punct(Punct::Hash)
+    TokenKind::Hash
         | TokenKind::Pub
         | TokenKind::Type
         | TokenKind::Const
@@ -171,7 +167,7 @@ impl<'t> Parser<'t> {
     pub fn file(&mut self) -> PResult<File> {
         let mut items = vec![];
         while match self.peek_kind(Parsing::File) {
-            Ok(TokenKind::Punct(Punct::RCurly)) | Err(Error { reason: EndOfInput, .. }) => false,
+            Ok(TokenKind::RCurly) | Err(Error { reason: EndOfInput, .. }) => false,
             Ok(_) => true,
             Err(e) => Err(e)?,
         } {
@@ -209,7 +205,7 @@ impl<'t> Parser<'t> {
     /// *RelativePath* = [PathPart] (`::` [PathPart])*
     pub fn path(&mut self) -> PResult<Path> {
         const PARSING: Parsing = Parsing::Path;
-        let absolute = self.match_op(Punct::ColonColon, PARSING).is_ok();
+        let absolute = self.match_type(TokenKind::ColonColon, PARSING).is_ok();
         let mut parts = vec![];
 
         if absolute {
@@ -221,7 +217,10 @@ impl<'t> Parser<'t> {
             parts.push(self.path_part()?)
         };
 
-        while self.match_op(Punct::ColonColon, Parsing::Path).is_ok() {
+        while self
+            .match_type(TokenKind::ColonColon, Parsing::Path)
+            .is_ok()
+        {
             parts.push(self.path_part()?)
         }
 
@@ -235,7 +234,7 @@ impl<'t> Parser<'t> {
         let start = self.loc();
         Ok(Stmt {
             kind: self.stmtkind()?,
-            semi: match self.match_op(Punct::Semi, Parsing::Stmt) {
+            semi: match self.match_type(TokenKind::Semi, Parsing::Stmt) {
                 Ok(_) => Semi::Terminated,
                 _ => Semi::Unterminated,
             },
@@ -255,11 +254,11 @@ impl<'t> Parser<'t> {
 impl<'t> Parser<'t> {
     /// Parses an [attribute set](Attrs)
     pub fn attributes(&mut self) -> PResult<Attrs> {
-        if self.match_op(Punct::Hash, Parsing::Attrs).is_err() {
+        if self.match_type(TokenKind::Hash, Parsing::Attrs).is_err() {
             return Ok(Attrs { meta: vec![] });
         }
         let meta = delim(
-            sep(Self::meta, Punct::Comma, BRACKETS.1, Parsing::Attrs),
+            sep(Self::meta, TokenKind::Comma, BRACKETS.1, Parsing::Attrs),
             BRACKETS,
             Parsing::Attrs,
         )(self)?;
@@ -273,16 +272,16 @@ impl<'t> Parser<'t> {
     pub fn meta_kind(&mut self) -> PResult<MetaKind> {
         const PARSING: Parsing = Parsing::Meta;
         let lit_tuple = delim(
-            sep(Self::literal, Punct::Comma, PARENS.1, PARSING),
+            sep(Self::literal, TokenKind::Comma, PARENS.1, PARSING),
             PARENS,
             PARSING,
         );
         Ok(match self.peek_kind(PARSING) {
-            Ok(TokenKind::Punct(Punct::Eq)) => {
+            Ok(TokenKind::Eq) => {
                 self.consume_peeked();
                 MetaKind::Equals(self.literal()?)
             }
-            Ok(TokenKind::Punct(Punct::LParen)) => MetaKind::Func(lit_tuple(self)?),
+            Ok(TokenKind::LParen) => MetaKind::Func(lit_tuple(self)?),
             _ => MetaKind::Plain,
         })
     }
@@ -315,13 +314,13 @@ impl<'t> Parser<'t> {
 
         let out = Ok(Alias {
             to: self.identifier()?,
-            from: if self.match_op(Punct::Eq, PARSING).is_ok() {
+            from: if self.match_type(TokenKind::Eq, PARSING).is_ok() {
                 Some(self.ty()?.into())
             } else {
                 None
             },
         });
-        self.match_op(Punct::Semi, PARSING)?;
+        self.match_type(TokenKind::Semi, PARSING)?;
         out
     }
 
@@ -333,15 +332,15 @@ impl<'t> Parser<'t> {
         let out = Ok(Const {
             name: self.identifier()?,
             ty: {
-                self.match_op(Punct::Colon, PARSING)?;
+                self.match_type(TokenKind::Colon, PARSING)?;
                 self.ty()?.into()
             },
             init: {
-                self.match_op(Punct::Eq, PARSING)?;
+                self.match_type(TokenKind::Eq, PARSING)?;
                 self.expr()?.into()
             },
         });
-        self.match_op(Punct::Semi, PARSING)?;
+        self.match_type(TokenKind::Semi, PARSING)?;
         out
     }
 
@@ -354,15 +353,15 @@ impl<'t> Parser<'t> {
             mutable: self.mutability(),
             name: self.identifier()?,
             ty: {
-                self.match_op(Punct::Colon, PARSING)?;
+                self.match_type(TokenKind::Colon, PARSING)?;
                 self.ty()?.into()
             },
             init: {
-                self.match_op(Punct::Eq, PARSING)?;
+                self.match_type(TokenKind::Eq, PARSING)?;
                 self.expr()?.into()
             },
         });
-        self.match_op(Punct::Semi, PARSING)?;
+        self.match_type(TokenKind::Semi, PARSING)?;
         out
     }
 
@@ -379,15 +378,12 @@ impl<'t> Parser<'t> {
         let inline = delim(Self::file, CURLIES, PARSING);
 
         match self.peek_kind(PARSING)? {
-            TokenKind::Punct(Punct::LCurly) => Ok(ModuleKind::Inline(inline(self)?)),
-            TokenKind::Punct(Punct::Semi) => {
+            TokenKind::LCurly => Ok(ModuleKind::Inline(inline(self)?)),
+            TokenKind::Semi => {
                 self.consume_peeked();
                 Ok(ModuleKind::Outline)
             }
-            got => Err(self.error(
-                ExpectedToken { want: TokenKind::Punct(Punct::Semi), got },
-                PARSING,
-            )),
+            got => Err(self.error(ExpectedToken { want: TokenKind::Semi, got }, PARSING)),
         }
     }
 
@@ -410,8 +406,8 @@ impl<'t> Parser<'t> {
             sign,
             bind,
             body: match self.peek_kind(PARSING)? {
-                TokenKind::Punct(Punct::LCurly) => Some(self.block()?),
-                TokenKind::Punct(Punct::Semi) => {
+                TokenKind::LCurly => Some(self.block()?),
+                TokenKind::Semi => {
                     self.consume_peeked();
                     None
                 }
@@ -424,11 +420,11 @@ impl<'t> Parser<'t> {
     pub fn parse_params(&mut self) -> PResult<(Vec<Param>, Vec<TyKind>)> {
         const PARSING: Parsing = Parsing::Function;
         let (mut params, mut types) = (vec![], vec![]);
-        while Ok(TokenKind::Punct(Punct::RParen)) != self.peek_kind(PARSING) {
+        while Ok(TokenKind::RParen) != self.peek_kind(PARSING) {
             let (param, ty) = self.parse_param()?;
             params.push(param);
             types.push(ty);
-            if self.match_op(Punct::Comma, PARSING).is_err() {
+            if self.match_type(TokenKind::Comma, PARSING).is_err() {
                 break;
             }
         }
@@ -440,7 +436,7 @@ impl<'t> Parser<'t> {
         Ok((
             Param { mutability: self.mutability(), name: self.identifier()? },
             {
-                self.match_op(Punct::Colon, Parsing::Param)?;
+                self.match_type(TokenKind::Colon, Parsing::Param)?;
                 self.tykind()?
             },
         ))
@@ -454,16 +450,13 @@ impl<'t> Parser<'t> {
         Ok(Struct {
             name: self.identifier()?,
             kind: match self.peek_kind(PARSING)? {
-                TokenKind::Punct(Punct::LParen) => self.structkind_tuple()?,
-                TokenKind::Punct(Punct::LCurly) => self.structkind_struct()?,
-                TokenKind::Punct(Punct::Semi) => {
+                TokenKind::LParen => self.structkind_tuple()?,
+                TokenKind::LCurly => self.structkind_struct()?,
+                TokenKind::Semi => {
                     self.consume_peeked();
                     StructKind::Empty
                 }
-                got => Err(self.error(
-                    ExpectedToken { want: TokenKind::Punct(Punct::Semi), got },
-                    PARSING,
-                ))?,
+                got => Err(self.error(ExpectedToken { want: TokenKind::Semi, got }, PARSING))?,
             },
         })
     }
@@ -473,7 +466,7 @@ impl<'t> Parser<'t> {
         const PARSING: Parsing = Parsing::StructKind;
 
         Ok(StructKind::Tuple(delim(
-            sep(Self::ty, Punct::Comma, PARENS.1, PARSING),
+            sep(Self::ty, TokenKind::Comma, PARENS.1, PARSING),
             PARENS,
             PARSING,
         )(self)?))
@@ -484,7 +477,7 @@ impl<'t> Parser<'t> {
         const PARSING: Parsing = Parsing::StructKind;
 
         Ok(StructKind::Struct(delim(
-            sep(Self::struct_member, Punct::Comma, CURLIES.1, PARSING),
+            sep(Self::struct_member, TokenKind::Comma, CURLIES.1, PARSING),
             CURLIES,
             PARSING,
         )(self)?))
@@ -497,7 +490,7 @@ impl<'t> Parser<'t> {
             vis: self.visibility(),
             name: self.identifier()?,
             ty: {
-                self.match_op(Punct::Colon, PARSING)?;
+                self.match_type(TokenKind::Colon, PARSING)?;
                 self.ty()?
             },
         })
@@ -511,12 +504,17 @@ impl<'t> Parser<'t> {
         Ok(Enum {
             name: self.identifier()?,
             kind: match self.peek_kind(PARSING)? {
-                TokenKind::Punct(Punct::LCurly) => EnumKind::Variants(delim(
-                    sep(Self::enum_variant, Punct::Comma, Punct::RCurly, PARSING),
+                TokenKind::LCurly => EnumKind::Variants(delim(
+                    sep(
+                        Self::enum_variant,
+                        TokenKind::Comma,
+                        TokenKind::RCurly,
+                        PARSING,
+                    ),
                     CURLIES,
                     PARSING,
                 )(self)?),
-                TokenKind::Punct(Punct::Semi) => {
+                TokenKind::Semi => {
                     self.consume_peeked();
                     EnumKind::NoVariants
                 }
@@ -532,9 +530,9 @@ impl<'t> Parser<'t> {
         Ok(Variant {
             name: self.identifier()?,
             kind: match self.peek_kind(PARSING)? {
-                TokenKind::Punct(Punct::Eq) => self.variantkind_clike()?,
-                TokenKind::Punct(Punct::LCurly) => self.variantkind_struct()?,
-                TokenKind::Punct(Punct::LParen) => self.variantkind_tuple()?,
+                TokenKind::Eq => self.variantkind_clike()?,
+                TokenKind::LCurly => self.variantkind_struct()?,
+                TokenKind::LParen => self.variantkind_tuple()?,
                 _ => VariantKind::Plain,
             },
         })
@@ -544,7 +542,7 @@ impl<'t> Parser<'t> {
     pub fn variantkind_clike(&mut self) -> PResult<VariantKind> {
         const PARSING: Parsing = Parsing::VariantKind;
 
-        self.match_op(Punct::Eq, PARSING)?;
+        self.match_type(TokenKind::Eq, PARSING)?;
         let tok = self.match_type(TokenKind::Literal, PARSING)?;
 
         Ok(VariantKind::CLike(match tok.data() {
@@ -557,7 +555,12 @@ impl<'t> Parser<'t> {
     pub fn variantkind_struct(&mut self) -> PResult<VariantKind> {
         const PARSING: Parsing = Parsing::VariantKind;
         Ok(VariantKind::Struct(delim(
-            sep(Self::struct_member, Punct::Comma, Punct::RCurly, PARSING),
+            sep(
+                Self::struct_member,
+                TokenKind::Comma,
+                TokenKind::RCurly,
+                PARSING,
+            ),
             CURLIES,
             PARSING,
         )(self)?))
@@ -607,9 +610,9 @@ impl<'t> Parser<'t> {
 
     pub fn parse_use(&mut self) -> PResult<Use> {
         self.consume_peeked();
-        let absolute = self.match_op(Punct::ColonColon, Parsing::Use).is_ok();
+        let absolute = self.match_type(TokenKind::ColonColon, Parsing::Use).is_ok();
         let tree = self.parse_use_tree()?;
-        self.match_op(Punct::Semi, Parsing::Use)?;
+        self.match_type(TokenKind::Semi, Parsing::Use)?;
         Ok(Use { tree, absolute })
     }
 
@@ -617,18 +620,18 @@ impl<'t> Parser<'t> {
         const PARSING: Parsing = Parsing::UseTree;
         // glob import
         Ok(match self.peek_kind(PARSING)? {
-            TokenKind::Punct(Punct::Star) => {
+            TokenKind::Star => {
                 self.consume_peeked();
                 UseTree::Glob
             }
-            TokenKind::Punct(Punct::LCurly) => UseTree::Tree(delim(
-                sep(Self::parse_use_tree, Punct::Comma, CURLIES.1, PARSING),
+            TokenKind::LCurly => UseTree::Tree(delim(
+                sep(Self::parse_use_tree, TokenKind::Comma, CURLIES.1, PARSING),
                 CURLIES,
                 PARSING,
             )(self)?),
             TokenKind::SelfKw | TokenKind::Super | TokenKind::Identifier => {
                 let name = self.path_part()?;
-                if self.match_op(Punct::ColonColon, PARSING).is_ok() {
+                if self.match_type(TokenKind::ColonColon, PARSING).is_ok() {
                     UseTree::Path(name, Box::new(self.parse_use_tree()?))
                 } else {
                     let PathPart::Ident(name) = name else {
@@ -668,13 +671,13 @@ impl<'t> Parser<'t> {
     pub fn tykind(&mut self) -> PResult<TyKind> {
         const PARSING: Parsing = Parsing::TyKind;
         let out = match self.peek_kind(PARSING)? {
-            TokenKind::Punct(Punct::Bang) => {
+            TokenKind::Bang => {
                 self.consume_peeked();
                 TyKind::Never
             }
-            TokenKind::Punct(Punct::Amp) | TokenKind::Punct(Punct::AmpAmp) => self.tyref()?.into(),
-            TokenKind::Punct(Punct::LBrack) => self.tyslice_or_array()?,
-            TokenKind::Punct(Punct::LParen) => {
+            TokenKind::Amp | TokenKind::AmpAmp => self.tyref()?.into(),
+            TokenKind::LBrack => self.tyslice_or_array()?,
+            TokenKind::LParen => {
                 let out = self.tytuple()?;
                 match out.types.is_empty() {
                     true => TyKind::Empty,
@@ -692,9 +695,9 @@ impl<'t> Parser<'t> {
     /// [`TySlice`] = `[` [Ty] `]`  \
     /// [`TyArray`] = `[` [Ty] `;` [usize] `]`
     pub fn tyslice_or_array(&mut self) -> PResult<TyKind> {
-        self.match_op(BRACKETS.0, Parsing::TySlice)?;
+        self.match_type(BRACKETS.0, Parsing::TySlice)?;
         let ty = self.tykind()?;
-        let (out, kind) = match self.match_op(Punct::Semi, Parsing::TyArray).is_ok() {
+        let (out, kind) = match self.match_type(TokenKind::Semi, Parsing::TyArray).is_ok() {
             true => {
                 let literal = self.match_type(TokenKind::Literal, Parsing::TyArray)?;
                 let &TokenData::Integer(count) = literal.data() else {
@@ -710,7 +713,7 @@ impl<'t> Parser<'t> {
                 Parsing::TySlice,
             ),
         };
-        self.match_op(BRACKETS.1, kind)?;
+        self.match_type(BRACKETS.1, kind)?;
         Ok(out)
     }
 
@@ -719,7 +722,7 @@ impl<'t> Parser<'t> {
         const PARSING: Parsing = Parsing::TyTuple;
         Ok(TyTuple {
             types: delim(
-                sep(Self::tykind, Punct::Comma, PARENS.1, PARSING),
+                sep(Self::tykind, TokenKind::Comma, PARENS.1, PARSING),
                 PARENS,
                 PARSING,
             )(self)?,
@@ -731,8 +734,8 @@ impl<'t> Parser<'t> {
         let mut count = 0;
         loop {
             match self.peek_kind(PARSING)? {
-                TokenKind::Punct(Punct::Amp) => count += 1,
-                TokenKind::Punct(Punct::AmpAmp) => count += 2,
+                TokenKind::Amp => count += 1,
+                TokenKind::AmpAmp => count += 2,
                 _ => break,
             }
             self.consume_peeked();
@@ -754,7 +757,7 @@ impl<'t> Parser<'t> {
     }
 
     pub fn parse_rety(&mut self) -> PResult<Option<Ty>> {
-        Ok(match self.match_op(Punct::Arrow, Parsing::TyFn) {
+        Ok(match self.match_type(TokenKind::Arrow, Parsing::TyFn) {
             Ok(_) => Some(self.ty()?),
             Err(_) => None,
         })
@@ -762,7 +765,7 @@ impl<'t> Parser<'t> {
 
     pub fn tyfn_args(&mut self) -> PResult<Vec<TyKind>> {
         const P: Parsing = Parsing::TyFn;
-        delim(sep(Self::tykind, Punct::Comma, PARENS.1, P), PARENS, P)(self)
+        delim(sep(Self::tykind, TokenKind::Comma, PARENS.1, P), PARENS, P)(self)
     }
 }
 
@@ -776,7 +779,7 @@ macro path_like() {
         | TokenKind::SelfKw
         | TokenKind::SelfTy
         | TokenKind::Identifier
-        | TokenKind::Punct(Punct::ColonColon)
+        | TokenKind::ColonColon
 }
 /// # Path parsing
 impl<'t> Parser<'t> {
@@ -811,7 +814,7 @@ impl<'t> Parser<'t> {
     /// See also: [Parser::stmt]
     pub fn stmtkind(&mut self) -> PResult<StmtKind> {
         Ok(match self.peek_kind(Parsing::StmtKind)? {
-            TokenKind::Punct(Punct::Semi) => StmtKind::Empty,
+            TokenKind::Semi => StmtKind::Empty,
             TokenKind::Let => self.parse_let()?.into(),
             item_like!() => self.item()?.into(),
             _ => self.expr()?.into(),
@@ -823,13 +826,13 @@ impl<'t> Parser<'t> {
         Ok(Let {
             mutable: self.mutability(),
             name: self.identifier()?,
-            ty: if Ok(TokenKind::Punct(Punct::Colon)) == self.peek_kind(Parsing::Let) {
+            ty: if Ok(TokenKind::Colon) == self.peek_kind(Parsing::Let) {
                 self.consume_peeked();
                 Some(self.ty()?.into())
             } else {
                 None
             },
-            init: if Ok(TokenKind::Punct(Punct::Eq)) == self.peek_kind(Parsing::Let) {
+            init: if Ok(TokenKind::Eq) == self.peek_kind(Parsing::Let) {
                 self.consume_peeked();
                 Some(self.expr()?.into())
             } else {
@@ -856,17 +859,10 @@ impl<'t> Parser<'t> {
         let mut head = match self.peek_kind(Parsing::Unary)? {
             literal_like!() => self.literal()?.into(),
             path_like!() => self.exprkind_pathlike()?,
-            TokenKind::Punct(Punct::Amp | Punct::AmpAmp) => self.addrof()?.into(),
-            TokenKind::Punct(Punct::LCurly) => self.block()?.into(),
-            TokenKind::Punct(Punct::LBrack) => self.exprkind_arraylike()?,
-            TokenKind::Punct(Punct::LParen) => self.exprkind_tuplelike()?,
-            TokenKind::Punct(op) => {
-                let (kind, prec) = from_prefix(op)
-                    .ok_or_else(|| self.error(Unexpected(TokenKind::Punct(op)), parsing))?;
-                let ((), after) = prec.prefix().expect("should have a precedence");
-                self.consume_peeked();
-                Unary { kind, tail: self.exprkind(after)?.into() }.into()
-            }
+            TokenKind::Amp | TokenKind::AmpAmp => self.addrof()?.into(),
+            TokenKind::LCurly => self.block()?.into(),
+            TokenKind::LBrack => self.exprkind_arraylike()?,
+            TokenKind::LParen => self.exprkind_tuplelike()?,
             TokenKind::Loop => {
                 self.consume_peeked();
                 Loop { body: self.expr()?.into() }.into()
@@ -880,19 +876,26 @@ impl<'t> Parser<'t> {
                 self.consume_peeked();
                 Continue.into()
             }
-            t => Err(self.error(Unexpected(t), Parsing::Unary))?,
+
+            op => {
+                let (kind, prec) =
+                    from_prefix(op).ok_or_else(|| self.error(Unexpected(op), parsing))?;
+                let ((), after) = prec.prefix().expect("should have a precedence");
+                self.consume_peeked();
+                Unary { kind, tail: self.exprkind(after)?.into() }.into()
+            }
         };
 
-        fn from_postfix(op: Punct) -> Option<Precedence> {
+        fn from_postfix(op: TokenKind) -> Option<Precedence> {
             Some(match op {
-                Punct::LBrack => Precedence::Index,
-                Punct::LParen => Precedence::Call,
-                Punct::Dot => Precedence::Member,
+                TokenKind::LBrack => Precedence::Index,
+                TokenKind::LParen => Precedence::Call,
+                TokenKind::Dot => Precedence::Member,
                 _ => None?,
             })
         }
 
-        while let Ok(TokenKind::Punct(op)) = self.peek_kind(parsing) {
+        while let Ok(op) = self.peek_kind(parsing) {
             // Postfix expressions
             if let Some((before, ())) = from_postfix(op).and_then(Precedence::postfix) {
                 if before < power {
@@ -901,25 +904,27 @@ impl<'t> Parser<'t> {
                 self.consume_peeked();
 
                 head = match op {
-                    Punct::LBrack => {
-                        let indices = sep(Self::expr, Punct::Comma, Punct::RBrack, parsing)(self)?;
-                        self.match_op(Punct::RBrack, parsing)?;
+                    TokenKind::LBrack => {
+                        let indices =
+                            sep(Self::expr, TokenKind::Comma, TokenKind::RBrack, parsing)(self)?;
+                        self.match_type(TokenKind::RBrack, parsing)?;
                         ExprKind::Index(Index { head: head.into(), indices })
                     }
-                    Punct::LParen => {
-                        let exprs = sep(Self::expr, Punct::Comma, Punct::RParen, parsing)(self)?;
-                        self.match_op(Punct::RParen, parsing)?;
+                    TokenKind::LParen => {
+                        let exprs =
+                            sep(Self::expr, TokenKind::Comma, TokenKind::RParen, parsing)(self)?;
+                        self.match_type(TokenKind::RParen, parsing)?;
                         Binary {
                             kind: BinaryKind::Call,
                             parts: (head, Tuple { exprs }.into()).into(),
                         }
                         .into()
                     }
-                    Punct::Dot => {
+                    TokenKind::Dot => {
                         let kind = self.access()?;
                         Member { head: Box::new(head), kind }.into()
                     }
-                    _ => Err(self.error(Unexpected(TokenKind::Punct(op)), parsing))?,
+                    _ => Err(self.error(Unexpected(op), parsing))?,
                 };
                 continue;
             }
@@ -948,7 +953,7 @@ impl<'t> Parser<'t> {
                 continue;
             }
 
-            if let Punct::As = op {
+            if let TokenKind::As = op {
                 let before = Precedence::Cast.level();
                 if before < power {
                     break;
@@ -959,7 +964,7 @@ impl<'t> Parser<'t> {
                 continue;
             }
 
-            if let Punct::Eq = op {
+            if let TokenKind::Eq = op {
                 let (before, after) = Precedence::Assign
                     .infix()
                     .expect("should have a precedence");
@@ -978,15 +983,15 @@ impl<'t> Parser<'t> {
 
     pub fn access(&mut self) -> PResult<MemberKind> {
         const PARSING: Parsing = Parsing::Member;
-        const DEL: (Punct, Punct) = PARENS; // delimiter
+        const DEL: (TokenKind, TokenKind) = PARENS; // delimiter
         match self.peek_kind(PARSING)? {
             TokenKind::Identifier => {
                 let name = self.identifier()?;
-                if self.match_op(DEL.0, PARSING).is_err() {
+                if self.match_type(DEL.0, PARSING).is_err() {
                     Ok(MemberKind::Struct(name))
                 } else {
-                    let exprs = sep(Self::expr, Punct::Comma, DEL.1, PARSING)(self)?;
-                    self.match_op(DEL.1, PARSING)?; // should succeed
+                    let exprs = sep(Self::expr, TokenKind::Comma, DEL.1, PARSING)(self)?;
+                    self.match_type(DEL.1, PARSING)?; // should succeed
                     Ok(MemberKind::Call(name, Tuple { exprs }))
                 }
             }
@@ -1001,7 +1006,7 @@ impl<'t> Parser<'t> {
     /// Parses an expression beginning with a [Path] (i.e. [Path] or [Structor])
     pub fn exprkind_pathlike(&mut self) -> PResult<ExprKind> {
         let head = self.path()?;
-        Ok(match self.match_op(Punct::Colon, Parsing::Path) {
+        Ok(match self.match_type(TokenKind::Colon, Parsing::Path) {
             Ok(_) => ExprKind::Structor(self.structor_body(head)?),
             Err(_) => ExprKind::Path(head),
         })
@@ -1010,7 +1015,12 @@ impl<'t> Parser<'t> {
     /// [Structor]Body = `{` ([Fielder] `,`)* [Fielder]? `}`
     pub fn structor_body(&mut self, to: Path) -> PResult<Structor> {
         let init = delim(
-            sep(Self::fielder, Punct::Comma, CURLIES.1, Parsing::Structor),
+            sep(
+                Self::fielder,
+                TokenKind::Comma,
+                CURLIES.1,
+                Parsing::Structor,
+            ),
             CURLIES,
             Parsing::Structor,
         )(self)?;
@@ -1023,7 +1033,7 @@ impl<'t> Parser<'t> {
         const PARSING: Parsing = Parsing::Fielder;
         Ok(Fielder {
             name: self.identifier()?,
-            init: match self.match_op(Punct::Colon, PARSING) {
+            init: match self.match_type(TokenKind::Colon, PARSING) {
                 Ok(_) => Some(Box::new(self.expr()?)),
                 Err(_) => None,
             },
@@ -1036,26 +1046,26 @@ impl<'t> Parser<'t> {
     /// so they can't be independent subexpressions
     pub fn exprkind_arraylike(&mut self) -> PResult<ExprKind> {
         const PARSING: Parsing = Parsing::Array;
-        const START: Punct = Punct::LBrack;
-        const END: Punct = Punct::RBrack;
+        const START: TokenKind = TokenKind::LBrack;
+        const END: TokenKind = TokenKind::RBrack;
 
-        self.match_op(START, PARSING)?;
+        self.match_type(START, PARSING)?;
         let out = match self.peek_kind(PARSING)? {
-            TokenKind::Punct(END) => Array { values: vec![] }.into(),
+            END => Array { values: vec![] }.into(),
             _ => self.exprkind_array_rep()?,
         };
-        self.match_op(END, PARSING)?;
+        self.match_type(END, PARSING)?;
         Ok(out)
     }
 
     /// [ArrayRep] = `[` [Expr] `;` [Expr] `]`
     pub fn exprkind_array_rep(&mut self) -> PResult<ExprKind> {
         const PARSING: Parsing = Parsing::Array;
-        const END: Punct = Punct::RBrack;
+        const END: TokenKind = TokenKind::RBrack;
 
         let first = self.expr()?;
         Ok(match self.peek_kind(PARSING)? {
-            TokenKind::Punct(Punct::Semi) => ArrayRep {
+            TokenKind::Semi => ArrayRep {
                 value: first.kind.into(),
                 repeat: {
                     self.consume_peeked();
@@ -1063,12 +1073,12 @@ impl<'t> Parser<'t> {
                 },
             }
             .into(),
-            TokenKind::Punct(Punct::RBrack) => Array { values: vec![first] }.into(),
-            TokenKind::Punct(Punct::Comma) => Array {
+            TokenKind::RBrack => Array { values: vec![first] }.into(),
+            TokenKind::Comma => Array {
                 values: {
                     self.consume_peeked();
                     let mut out = vec![first];
-                    out.extend(sep(Self::expr, Punct::Comma, END, PARSING)(self)?);
+                    out.extend(sep(Self::expr, TokenKind::Comma, END, PARSING)(self)?);
                     out
                 },
             }
@@ -1080,25 +1090,25 @@ impl<'t> Parser<'t> {
     ///
     /// [ExprKind::Empty] and [Group] are special cases of [Tuple]
     pub fn exprkind_tuplelike(&mut self) -> PResult<ExprKind> {
-        self.match_op(Punct::LParen, Parsing::Group)?;
+        self.match_type(TokenKind::LParen, Parsing::Group)?;
         let out = match self.peek_kind(Parsing::Group)? {
-            TokenKind::Punct(Punct::RParen) => Ok(ExprKind::Empty),
+            TokenKind::RParen => Ok(ExprKind::Empty),
             _ => self.exprkind_group(),
         };
-        self.match_op(Punct::RParen, Parsing::Group)?;
+        self.match_type(TokenKind::RParen, Parsing::Group)?;
         out
     }
     /// [Group] = `(`([Empty](ExprKind::Empty)|[Expr]|[Tuple])`)`
     pub fn exprkind_group(&mut self) -> PResult<ExprKind> {
         let first = self.expr()?;
         match self.peek_kind(Parsing::Group)? {
-            TokenKind::Punct(Punct::Comma) => {
+            TokenKind::Comma => {
                 let mut exprs = vec![first];
                 self.consume_peeked();
-                while TokenKind::Punct(Punct::RParen) != self.peek_kind(Parsing::Tuple)? {
+                while TokenKind::RParen != self.peek_kind(Parsing::Tuple)? {
                     exprs.push(self.expr()?);
                     match self.peek_kind(Parsing::Tuple)? {
-                        TokenKind::Punct(Punct::Comma) => self.consume_peeked(),
+                        TokenKind::Comma => self.consume_peeked(),
                         _ => break,
                     };
                 }
@@ -1117,8 +1127,8 @@ impl<'t> Parser<'t> {
         let mut count = 0;
         loop {
             count += match self.peek_kind(PARSING)? {
-                TokenKind::Punct(Punct::Amp) => 1,
-                TokenKind::Punct(Punct::AmpAmp) => 2,
+                TokenKind::Amp => 1,
+                TokenKind::AmpAmp => 2,
                 _ => break,
             };
             self.consume_peeked();
@@ -1163,7 +1173,7 @@ impl<'t> Parser<'t> {
     /// ret_body = (*unconsumed* `;` | [Expr])
     fn ret_body(&mut self, while_parsing: Parsing) -> PResult<Option<Box<Expr>>> {
         Ok(match self.peek_kind(while_parsing)? {
-            TokenKind::Punct(Punct::Semi) => None,
+            TokenKind::Semi => None,
             _ => Some(self.expr()?.into()),
         })
     }
@@ -1297,14 +1307,14 @@ macro operator($($name:ident ($takes:ident => $returns:ident) {$($t:ident => $p:
 }
 
 operator! {
-    from_prefix (Punct => UnaryKind) {
+    from_prefix (TokenKind => UnaryKind) {
         Star => Deref,
         Minus => Neg,
         Bang => Not,
         At => At,
         Tilde => Tilde,
     };
-    from_modify(Punct => ModifyKind) {
+    from_modify(TokenKind => ModifyKind) {
         AmpEq => And,
         BarEq => Or,
         XorEq => Xor,
@@ -1316,7 +1326,7 @@ operator! {
         SlashEq => Div,
         RemEq => Rem,
     };
-    from_infix (Punct => BinaryKind) {
+    from_infix (TokenKind => BinaryKind) {
 
         Lt => Lt,
         LtEq => LtEq,
