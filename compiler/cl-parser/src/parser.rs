@@ -843,10 +843,6 @@ impl<'t> Parser<'t> {
             TokenKind::LBrack => self.exprkind_arraylike()?,
             TokenKind::LParen => self.exprkind_tuplelike()?,
             TokenKind::Let => self.parse_let()?.into(),
-            TokenKind::Loop => {
-                self.consume_peeked();
-                Loop { body: self.expr()?.into() }.into()
-            }
             TokenKind::While => ExprKind::While(self.parse_while()?),
             TokenKind::If => ExprKind::If(self.parse_if()?),
             TokenKind::For => ExprKind::For(self.parse_for()?),
@@ -1250,6 +1246,7 @@ impl Precedence {
     }
     pub fn prefix(self) -> Option<((), u8)> {
         match self {
+            Self::Assign => Some(((), self.level())),
             Self::Unary => Some(((), self.level())),
             _ => None,
         }
@@ -1294,6 +1291,7 @@ impl From<UnaryKind> for Precedence {
     fn from(value: UnaryKind) -> Self {
         use UnaryKind as Op;
         match value {
+            Op::Loop => Precedence::Assign,
             Op::Deref | Op::Neg | Op::Not | Op::At | Op::Tilde => Precedence::Unary,
         }
     }
@@ -1311,6 +1309,7 @@ macro operator($($name:ident ($takes:ident => $returns:ident) {$($t:ident => $p:
 
 operator! {
     from_prefix (TokenKind => UnaryKind) {
+        Loop => Loop,
         Star => Deref,
         Minus => Neg,
         Bang => Not,

@@ -448,7 +448,6 @@ mod display {
                 ExprKind::Block(v) => v.fmt(f),
                 ExprKind::Group(v) => v.fmt(f),
                 ExprKind::Tuple(v) => v.fmt(f),
-                ExprKind::Loop(v) => v.fmt(f),
                 ExprKind::While(v) => v.fmt(f),
                 ExprKind::If(v) => v.fmt(f),
                 ExprKind::For(v) => v.fmt(f),
@@ -542,6 +541,7 @@ mod display {
     impl Display for UnaryKind {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
+                UnaryKind::Loop => "loop ",
                 UnaryKind::Deref => "*",
                 UnaryKind::Neg => "-",
                 UnaryKind::Not => "!",
@@ -641,13 +641,6 @@ mod display {
     impl Display for Tuple {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             separate(&self.exprs, ", ")(f.delimit(INLINE_PARENS))
-        }
-    }
-
-    impl Display for Loop {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { body } = self;
-            write!(f, "loop {body}")
         }
     }
 
@@ -786,7 +779,6 @@ mod convert {
             Block => ExprKind::Block,
             Group => ExprKind::Group,
             Tuple => ExprKind::Tuple,
-            Loop => ExprKind::Loop,
             While => ExprKind::While,
             If => ExprKind::If,
             For => ExprKind::For,

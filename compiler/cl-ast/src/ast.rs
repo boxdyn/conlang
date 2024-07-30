@@ -392,8 +392,6 @@ pub enum ExprKind {
     Group(Group),
     /// A [Tuple] expression: `(` [`Expr`] (`,` [`Expr`])+ `)`
     Tuple(Tuple),
-    /// A [Loop] expression: `loop` [`Block`]
-    Loop(Loop),
     /// A [While] expression: `while` [`Expr`] [`Block`] [`Else`]?
     While(While),
     /// An [If] expression: `if` [`Expr`] [`Block`] [`Else`]?
@@ -482,6 +480,8 @@ pub enum UnaryKind {
     Deref,
     Neg,
     Not,
+    /// A Loop expression: `loop` [`Block`]
+    Loop,
     /// Unused
     At,
     /// Unused
@@ -568,12 +568,6 @@ pub struct Group {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Tuple {
     pub exprs: Vec<Expr>,
-}
-
-/// A [Loop] expression: `loop` [`Block`]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Loop {
-    pub body: Box<Expr>,
 }
 
 /// A [While] expression: `while` [`Expr`] [`Block`] [`Else`]?

@@ -297,10 +297,6 @@ pub trait Visit<'a>: Sized {
         let Tuple { exprs } = t;
         exprs.iter().for_each(|e| self.visit_expr(e))
     }
-    fn visit_loop(&mut self, l: &'a Loop) {
-        let Loop { body } = l;
-        self.visit_expr(body)
-    }
     fn visit_while(&mut self, w: &'a While) {
         let While { cond, pass, fail } = w;
         self.visit_expr(cond);
@@ -476,7 +472,6 @@ pub fn or_visit_expr_kind<'a, V: Visit<'a>>(visitor: &mut V, e: &'a ExprKind) {
         ExprKind::Block(b) => visitor.visit_block(b),
         ExprKind::Group(g) => visitor.visit_group(g),
         ExprKind::Tuple(t) => visitor.visit_tuple(t),
-        ExprKind::Loop(l) => visitor.visit_loop(l),
         ExprKind::While(w) => visitor.visit_while(w),
         ExprKind::If(i) => visitor.visit_if(i),
         ExprKind::For(f) => visitor.visit_for(f),

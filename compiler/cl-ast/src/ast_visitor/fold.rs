@@ -339,10 +339,6 @@ pub trait Fold {
         let Tuple { exprs } = t;
         Tuple { exprs: exprs.into_iter().map(|e| self.fold_expr(e)).collect() }
     }
-    fn fold_loop(&mut self, l: Loop) -> Loop {
-        let Loop { body } = l;
-        Loop { body: Box::new(self.fold_expr(*body)) }
-    }
     fn fold_while(&mut self, w: While) -> While {
         let While { cond, pass, fail } = w;
         While {
@@ -552,7 +548,6 @@ pub fn or_fold_expr_kind<F: Fold + ?Sized>(folder: &mut F, kind: ExprKind) -> Ex
         ExprKind::Block(b) => ExprKind::Block(folder.fold_block(b)),
         ExprKind::Group(g) => ExprKind::Group(folder.fold_group(g)),
         ExprKind::Tuple(t) => ExprKind::Tuple(folder.fold_tuple(t)),
-        ExprKind::Loop(l) => ExprKind::Loop(folder.fold_loop(l)),
         ExprKind::While(w) => ExprKind::While(folder.fold_while(w)),
         ExprKind::If(i) => ExprKind::If(folder.fold_if(i)),
         ExprKind::For(f) => ExprKind::For(folder.fold_for(f)),

@@ -151,7 +151,6 @@ impl Interpret for ExprKind {
             ExprKind::Block(v) => v.interpret(env),
             ExprKind::Group(v) => v.interpret(env),
             ExprKind::Tuple(v) => v.interpret(env),
-            ExprKind::Loop(v) => v.interpret(env),
             ExprKind::While(v) => v.interpret(env),
             ExprKind::If(v) => v.interpret(env),
             ExprKind::For(v) => v.interpret(env),
@@ -323,12 +322,28 @@ impl Interpret for Binary {
 impl Interpret for Unary {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Unary { kind, tail } = self;
-        let operand = tail.interpret(env)?;
         match kind {
-            UnaryKind::Deref => env.call("deref".into(), &[operand]),
-            UnaryKind::Neg => env.call("neg".into(), &[operand]),
-            UnaryKind::Not => env.call("not".into(), &[operand]),
+            UnaryKind::Loop => loop {
+                match tail.interpret(env) {
+                    Err(Error::Break(value)) => return Ok(value),
+                    Err(Error::Continue) => continue,
+                    e => e?,
+                };
+            },
+            UnaryKind::Deref => {
+                let operand = tail.interpret(env)?;
+                env.call("deref".into(), &[operand])
+            }
+            UnaryKind::Neg => {
+                let operand = tail.interpret(env)?;
+                env.call("neg".into(), &[operand])
+            }
+            UnaryKind::Not => {
+                let operand = tail.interpret(env)?;
+                env.call("not".into(), &[operand])
+            }
             UnaryKind::At => {
+                let operand = tail.interpret(env)?;
                 println!("{operand}");
                 Ok(operand)
             }
@@ -503,18 +518,6 @@ impl Interpret for Tuple {
                 })?
                 .into(),
         ))
-    }
-}
-impl Interpret for Loop {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { body } = self;
-        loop {
-            match body.interpret(env) {
-                Err(Error::Break(value)) => return Ok(value),
-                Err(Error::Continue) => continue,
-                e => e?,
-            };
-        }
     }
 }
 impl Interpret for While {
