@@ -409,6 +409,8 @@ pub mod yamlify {
                 ExprKind::While(k) => k.yaml(y),
                 ExprKind::If(k) => k.yaml(y),
                 ExprKind::For(k) => k.yaml(y),
+                ExprKind::Break(k) => k.yaml(y),
+                ExprKind::Return(k) => k.yaml(y),
                 ExprKind::Continue => {
                     y.key("Continue");
                 }
@@ -565,6 +567,18 @@ pub mod yamlify {
                 .pair("cond", cond)
                 .pair("pass", pass)
                 .yaml(fail);
+        }
+    }
+    impl Yamlify for Break {
+        fn yaml(&self, y: &mut Yamler) {
+            let Self { body } = self;
+            y.key("Break").yaml(body);
+        }
+    }
+    impl Yamlify for Return {
+        fn yaml(&self, y: &mut Yamler) {
+            let Self { body } = self;
+            y.key("Return").yaml(body);
         }
     }
     impl Yamlify for Literal {

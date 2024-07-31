@@ -21,12 +21,9 @@ fn desugar_while(extents: Span, kind: ExprKind) -> ExprKind {
     match kind {
         // work backwards: fail -> break -> if -> loop
         ExprKind::While(While { cond, pass, fail: Else { body } }) => {
-            let Expr { extents, kind } = body
-                .map(|b| *b)
-                .unwrap_or(Expr { extents, kind: ExprKind::Empty });
             // Preserve the else-expression's extents, if present, or use the parent's extents
-            let kind = ExprKind::Unary(Unary { kind: UnaryKind::Break, tail: kind.into() });
-            let break_expr = Expr { extents, kind };
+            let fail_span = body.as_ref().map(|body| body.extents).unwrap_or(extents);
+            let break_expr = Expr { extents: fail_span, kind: ExprKind::Break(Break { body }) };
 
             let loop_body = If { cond, pass, fail: Else { body: Some(Box::new(break_expr)) } };
             let loop_body = ExprKind::If(loop_body);
