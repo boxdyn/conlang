@@ -451,8 +451,6 @@ mod display {
                 ExprKind::While(v) => v.fmt(f),
                 ExprKind::If(v) => v.fmt(f),
                 ExprKind::For(v) => v.fmt(f),
-                ExprKind::Break(v) => v.fmt(f),
-                ExprKind::Return(v) => v.fmt(f),
                 ExprKind::Continue => "continue".fmt(f),
             }
         }
@@ -542,6 +540,8 @@ mod display {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 UnaryKind::Loop => "loop ",
+                UnaryKind::Break => "break ",
+                UnaryKind::Return => "return ",
                 UnaryKind::Deref => "*",
                 UnaryKind::Neg => "-",
                 UnaryKind::Not => "!",
@@ -673,26 +673,6 @@ mod display {
             }
         }
     }
-
-    impl Display for Break {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "break")?;
-            match &self.body {
-                Some(body) => write!(f, " {body}"),
-                _ => Ok(()),
-            }
-        }
-    }
-
-    impl Display for Return {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "return")?;
-            match &self.body {
-                Some(body) => write!(f, " {body}"),
-                _ => Ok(()),
-            }
-        }
-    }
 }
 
 mod convert {
@@ -776,8 +756,6 @@ mod convert {
             While => ExprKind::While,
             If => ExprKind::If,
             For => ExprKind::For,
-            Break => ExprKind::Break,
-            Return => ExprKind::Return,
         }
         impl From for Literal {
             bool => Literal::Bool,

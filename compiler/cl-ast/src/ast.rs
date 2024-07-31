@@ -398,10 +398,6 @@ pub enum ExprKind {
     If(If),
     /// A [For] expression: `for` Pattern `in` [`Expr`] [`Block`] [`Else`]?
     For(For),
-    /// A [Break] expression: `break` [`Expr`]?
-    Break(Break),
-    /// A [Return] expression `return` [`Expr`]?
-    Return(Return),
     /// A continue expression: `continue`
     Continue,
 }
@@ -482,6 +478,8 @@ pub enum UnaryKind {
     Not,
     /// A Loop expression: `loop` [`Block`]
     Loop,
+    Break,
+    Return,
     /// Unused
     At,
     /// Unused
@@ -598,17 +596,5 @@ pub struct For {
 /// The (optional) `else` clause of a [While], [If], or [For] expression
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Else {
-    pub body: Option<Box<Expr>>,
-}
-
-/// A [Break] expression: `break` [`Expr`]?
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Break {
-    pub body: Option<Box<Expr>>,
-}
-
-/// A [Return] expression `return` [`Expr`]?
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Return {
     pub body: Option<Box<Expr>>,
 }

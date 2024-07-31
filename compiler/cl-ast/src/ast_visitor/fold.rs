@@ -368,14 +368,6 @@ pub trait Fold {
         let Else { body } = e;
         Else { body: body.map(|e| Box::new(self.fold_expr(*e))) }
     }
-    fn fold_break(&mut self, b: Break) -> Break {
-        let Break { body } = b;
-        Break { body: body.map(|e| Box::new(self.fold_expr(*e))) }
-    }
-    fn fold_return(&mut self, r: Return) -> Return {
-        let Return { body } = r;
-        Return { body: body.map(|e| Box::new(self.fold_expr(*e))) }
-    }
 }
 
 #[inline]
@@ -547,8 +539,6 @@ pub fn or_fold_expr_kind<F: Fold + ?Sized>(folder: &mut F, kind: ExprKind) -> Ex
         ExprKind::While(w) => ExprKind::While(folder.fold_while(w)),
         ExprKind::If(i) => ExprKind::If(folder.fold_if(i)),
         ExprKind::For(f) => ExprKind::For(folder.fold_for(f)),
-        ExprKind::Break(b) => ExprKind::Break(folder.fold_break(b)),
-        ExprKind::Return(r) => ExprKind::Return(folder.fold_return(r)),
         ExprKind::Continue => ExprKind::Continue,
     }
 }

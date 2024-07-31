@@ -322,18 +322,6 @@ pub trait Visit<'a>: Sized {
             self.visit_expr(body)
         }
     }
-    fn visit_break(&mut self, b: &'a Break) {
-        let Break { body } = b;
-        if let Some(body) = body {
-            self.visit_expr(body)
-        }
-    }
-    fn visit_return(&mut self, r: &'a Return) {
-        let Return { body } = r;
-        if let Some(body) = body {
-            self.visit_expr(body)
-        }
-    }
     fn visit_continue(&mut self) {}
 }
 
@@ -473,8 +461,6 @@ pub fn or_visit_expr_kind<'a, V: Visit<'a>>(visitor: &mut V, e: &'a ExprKind) {
         ExprKind::While(w) => visitor.visit_while(w),
         ExprKind::If(i) => visitor.visit_if(i),
         ExprKind::For(f) => visitor.visit_for(f),
-        ExprKind::Break(b) => visitor.visit_break(b),
-        ExprKind::Return(r) => visitor.visit_return(r),
         ExprKind::Continue => visitor.visit_continue(),
     }
 }

@@ -154,8 +154,6 @@ impl Interpret for ExprKind {
             ExprKind::While(v) => v.interpret(env),
             ExprKind::If(v) => v.interpret(env),
             ExprKind::For(v) => v.interpret(env),
-            ExprKind::Break(v) => v.interpret(env),
-            ExprKind::Return(v) => v.interpret(env),
             ExprKind::Continue => Err(Error::Continue),
         }
     }
@@ -330,6 +328,8 @@ impl Interpret for Unary {
                     e => e?,
                 };
             },
+            UnaryKind::Break => Err(Error::Break(tail.interpret(env)?)),
+            UnaryKind::Return => Err(Error::Return(tail.interpret(env)?)),
             UnaryKind::Deref => {
                 let operand = tail.interpret(env)?;
                 env.call("deref".into(), &[operand])
@@ -577,25 +577,5 @@ impl Interpret for Else {
             Some(body) => body.interpret(env),
             None => Ok(ConValue::Empty),
         }
-    }
-}
-impl Interpret for Return {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { body } = self;
-        Err(Error::Return(
-            body.as_ref()
-                .map(|body| body.interpret(env))
-                .unwrap_or(Ok(ConValue::Empty))?,
-        ))
-    }
-}
-impl Interpret for Break {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { body } = self;
-        Err(Error::Break(
-            body.as_ref()
-                .map(|body| body.interpret(env))
-                .unwrap_or(Ok(ConValue::Empty))?,
-        ))
     }
 }

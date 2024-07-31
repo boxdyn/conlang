@@ -836,6 +836,7 @@ impl<'t> Parser<'t> {
         let parsing = Parsing::ExprKind;
         // Prefix expressions
         let mut head = match self.peek_kind(Parsing::Unary)? {
+            TokenKind::Semi => return Ok(ExprKind::Empty), // TODO: is this okay?
             literal_like!() => self.literal()?.into(),
             path_like!() => self.exprkind_pathlike()?,
             TokenKind::Amp | TokenKind::AmpAmp => self.addrof()?.into(),
@@ -846,8 +847,6 @@ impl<'t> Parser<'t> {
             TokenKind::While => ExprKind::While(self.parse_while()?),
             TokenKind::If => ExprKind::If(self.parse_if()?),
             TokenKind::For => ExprKind::For(self.parse_for()?),
-            TokenKind::Break => ExprKind::Break(self.parse_break()?),
-            TokenKind::Return => ExprKind::Return(self.parse_return()?),
             TokenKind::Continue => {
                 self.consume_peeked();
                 ExprKind::Continue
@@ -1159,24 +1158,6 @@ impl<'t> Parser<'t> {
 }
 /// ## Control flow subexpressions
 impl<'t> Parser<'t> {
-    /// [Break] = `break` (*unconsumed* `;` | [Expr])
-    pub fn parse_break(&mut self) -> PResult<Break> {
-        self.consume_peeked();
-        Ok(Break { body: self.ret_body(Parsing::Break)? })
-    }
-    /// [Return] = `return` (*unconsumed* `;` | [Expr])
-    pub fn parse_return(&mut self) -> PResult<Return> {
-        self.consume_peeked();
-        Ok(Return { body: self.ret_body(Parsing::Return)? })
-    }
-    /// ret_body = (*unconsumed* `;` | [Expr])
-    fn ret_body(&mut self, while_parsing: Parsing) -> PResult<Option<Box<Expr>>> {
-        Ok(match self.peek_kind(while_parsing)? {
-            TokenKind::Semi => None,
-            _ => Some(self.expr()?.into()),
-        })
-    }
-
     /// [While] = `while` [Expr] [Block] [Else]?
     pub fn parse_while(&mut self) -> PResult<While> {
         self.consume_peeked();
@@ -1291,7 +1272,7 @@ impl From<UnaryKind> for Precedence {
     fn from(value: UnaryKind) -> Self {
         use UnaryKind as Op;
         match value {
-            Op::Loop => Precedence::Assign,
+            Op::Loop | Op::Break | Op::Return => Precedence::Assign,
             Op::Deref | Op::Neg | Op::Not | Op::At | Op::Tilde => Precedence::Unary,
         }
     }
@@ -1310,6 +1291,8 @@ macro operator($($name:ident ($takes:ident => $returns:ident) {$($t:ident => $p:
 operator! {
     from_prefix (TokenKind => UnaryKind) {
         Loop => Loop,
+        Break => Break,
+        Return => Return,
         Star => Deref,
         Minus => Neg,
         Bang => Not,
