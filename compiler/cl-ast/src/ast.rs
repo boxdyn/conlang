@@ -258,7 +258,6 @@ pub enum TyKind {
     Tuple(TyTuple),
     Ref(TyRef),
     Fn(TyFn),
-    // TODO: slice, array types
 }
 
 /// An array of [`T`](Ty)
@@ -334,16 +333,6 @@ pub enum Semi {
     Unterminated,
 }
 
-/// A local variable declaration [Stmt]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Let {
-    pub mutable: Mutability,
-    pub name: Sym,
-    pub ty: Option<Box<Ty>>,
-    pub init: Option<Box<Expr>>,
-    pub tail: Option<Box<Expr>>,
-}
-
 /// An expression, the beating heart of the language
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Expr {
@@ -404,6 +393,16 @@ pub enum ExprKind {
     Return(Return),
     /// A continue expression: `continue`
     Continue,
+}
+
+/// A local variable declaration [Stmt]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Let {
+    pub mutable: Mutability,
+    pub name: Sym,
+    pub ty: Option<Box<Ty>>,
+    pub init: Option<Box<Expr>>,
+    pub tail: Option<Box<Expr>>,
 }
 
 /// An [Assign]ment expression: [`Expr`] ([`ModifyKind`] [`Expr`])\+
