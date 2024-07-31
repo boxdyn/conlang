@@ -489,7 +489,7 @@ pub mod error {
     pub enum Reason {
         /// Found an opening delimiter of type [char], but not the expected closing delimiter
         UnmatchedDelimiters(char),
-        /// Found a character that doesn't belong to any [Kind](cl_token::Kind)
+        /// Found a character that doesn't belong to any [TokenKind](cl_token::TokenKind)
         UnexpectedChar(char),
         /// Found a character that's not valid in identifiers while looking for an identifier
         NotIdentifier(char),

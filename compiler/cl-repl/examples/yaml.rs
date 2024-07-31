@@ -1,5 +1,6 @@
 //! Pretty prints a conlang AST in yaml
 
+use cl_ast::Stmt;
 use cl_lexer::Lexer;
 use cl_parser::Parser;
 use repline::{error::Error as RlError, Repline};
@@ -19,7 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         };
 
         let mut parser = Parser::new(Lexer::new(&line));
-        let code = match parser.stmt() {
+        let code = match parser.parse::<Stmt>() {
             Ok(code) => {
                 rl.accept();
                 code

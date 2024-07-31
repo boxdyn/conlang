@@ -1,4 +1,5 @@
 use crate::{ansi, ctx};
+use cl_ast::Stmt;
 use cl_lexer::Lexer;
 use cl_parser::Parser;
 use repline::{error::ReplResult, prebaked::*};
@@ -42,7 +43,7 @@ pub fn run(ctx: &mut ctx::Context) -> ReplResult<()> {
     use cl_parser::inliner::ModuleInliner;
 
     read_and(ansi::CYAN, "cl>", " ?>", |line| {
-        let code = Parser::new(Lexer::new(line)).stmt()?;
+        let code = Parser::new(Lexer::new(line)).parse::<Stmt>()?;
         let code = ModuleInliner::new(".").fold_stmt(code);
 
         print!("{}", ansi::OUTPUT);
@@ -71,7 +72,7 @@ pub fn fmt(_ctx: &mut ctx::Context) -> ReplResult<()> {
     read_and(ansi::BRIGHT_MAGENTA, "cl>", " ?>", |line| {
         let mut p = Parser::new(Lexer::new(line));
 
-        match p.stmt() {
+        match p.parse::<Stmt>() {
             Ok(code) => println!("{}{code}{}", ansi::OUTPUT, ansi::RESET),
             Err(e) => Err(e)?,
         }

@@ -5,6 +5,7 @@ use crate::{
     menu,
     tools::print_token,
 };
+use cl_ast::File;
 use cl_interpret::{convalue::ConValue, env::Environment, interpret::Interpret};
 use cl_lexer::Lexer;
 use cl_parser::Parser;
@@ -49,7 +50,7 @@ fn load_file(env: &mut Environment, path: impl AsRef<Path>) -> Result<ConValue, 
     let inliner =
         cl_parser::inliner::ModuleInliner::new(path.as_ref().parent().unwrap_or(Path::new("")));
     let file = std::fs::read_to_string(path)?;
-    let code = Parser::new(Lexer::new(&file)).file()?;
+    let code = Parser::new(Lexer::new(&file)).parse()?;
     let code = match inliner.inline(code) {
         Ok(a) => a,
         Err((code, io_errs, parse_errs)) => {
@@ -79,13 +80,13 @@ fn lex_code(code: &str, path: Option<impl AsRef<Path>>) -> Result<(), Box<dyn Er
 }
 
 fn fmt_code(code: &str) -> Result<(), Box<dyn Error>> {
-    let code = Parser::new(Lexer::new(code)).file()?;
+    let code = Parser::new(Lexer::new(code)).parse::<File>()?;
     println!("{code}");
     Ok(())
 }
 
 fn run_code(code: &str, env: &mut Environment) -> Result<(), Box<dyn Error>> {
-    let code = Parser::new(Lexer::new(code)).file()?;
+    let code = Parser::new(Lexer::new(code)).parse::<File>()?;
     match code.interpret(env)? {
         ConValue::Empty => {}
         ret => println!("{ret}"),

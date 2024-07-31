@@ -2,6 +2,7 @@
 
 use std::{error::Error, path::PathBuf};
 
+use cl_ast::Expr;
 use cl_interpret::{convalue::ConValue, env::Environment};
 use cl_lexer::Lexer;
 use cl_parser::{inliner::ModuleInliner, Parser};
@@ -18,7 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let parent = path.parent().unwrap_or("".as_ref());
 
     let code = std::fs::read_to_string(&path)?;
-    let code = Parser::new(Lexer::new(&code)).file()?;
+    let code = Parser::new(Lexer::new(&code)).parse()?;
     let code = match ModuleInliner::new(parent).inline(code) {
         Ok(code) => code,
         Err((code, ioerrs, perrs)) => {
@@ -40,7 +41,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let args = args
             .flat_map(|arg| {
                 Parser::new(Lexer::new(&arg))
-                    .expr()
+                    .parse::<Expr>()
                     .map(|arg| env.eval(&arg))
             })
             .collect::<Result<Vec<_>, _>>()?;

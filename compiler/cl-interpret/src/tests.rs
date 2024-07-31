@@ -48,6 +48,7 @@ mod macros {
     //! ```
     #![allow(unused_macros)]
     use crate::IResult;
+    use cl_parser::parser::Parse;
 
     use super::*;
 
@@ -63,14 +64,14 @@ mod macros {
     ///
     /// Returns a `Result<`[`File`]`, ParseError>`
     pub macro file($($t:tt)*) {
-        Parser::new(Lexer::new(stringify!( $($t)* ))).file()
+        File::parse(&mut Parser::new(Lexer::new(stringify!( $($t)* ))))
     }
 
     /// Stringifies, lexes, and parses everything you give to it
     ///
     /// Returns a `Result<`[`Block`]`, ParseError>`
     pub macro block($($t:tt)*) {
-        Parser::new(Lexer::new(stringify!({ $($t)* }))).block()
+        Block::parse(&mut Parser::new(Lexer::new(stringify!({ $($t)* }))))
     }
 
     /// Evaluates a block of code in the given environment

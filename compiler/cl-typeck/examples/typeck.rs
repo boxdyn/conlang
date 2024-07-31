@@ -4,6 +4,7 @@ use cl_typeck::{entry::Entry, stage::*, table::Table, type_expression::TypeExpre
 use cl_ast::{
     ast_visitor::{Fold, Visit},
     desugar::*,
+    Stmt, Ty,
 };
 use cl_lexer::Lexer;
 use cl_parser::{inliner::ModuleInliner, Parser};
@@ -38,7 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut prj = Table::default();
 
     let mut parser = Parser::new(Lexer::new(PREAMBLE));
-    let code = match parser.file() {
+    let code = match parser.parse() {
         Ok(code) => code,
         Err(e) => {
             eprintln!("{STDLIB_DISPLAY_PATH}:{e}");
@@ -94,7 +95,7 @@ fn enter_code(prj: &mut Table) -> Result<(), RlError> {
         if line.trim().is_empty() {
             return Ok(Response::Break);
         }
-        let code = Parser::new(Lexer::new(line)).file()?;
+        let code = Parser::new(Lexer::new(line)).parse()?;
         let code = inline_modules(code, "");
         let code = WhileElseDesugar.fold_file(code);
         // Safety: this is totally unsafe
@@ -105,7 +106,7 @@ fn enter_code(prj: &mut Table) -> Result<(), RlError> {
 
 fn live_desugar() -> Result<(), RlError> {
     read_and(C_RESV, "se>", "? >", |line| {
-        let code = Parser::new(Lexer::new(line)).stmt()?;
+        let code = Parser::new(Lexer::new(line)).parse::<Stmt>()?;
         println!("Raw, as parsed:\n{C_LISTING}{code}\x1b[0m");
 
         let code = SquashGroups.fold_stmt(code);
@@ -131,7 +132,7 @@ fn query_type_expression(prj: &mut Table) -> Result<(), RlError> {
             return Ok(Response::Break);
         }
         // parse it as a path, and convert the path into a borrowed path
-        let ty = Parser::new(Lexer::new(line)).ty()?.kind;
+        let ty: Ty = Parser::new(Lexer::new(line)).parse()?;
         let id = ty.evaluate(prj, prj.root())?;
         pretty_handle(id.to_entry(prj))?;
         Ok(Response::Accept)
@@ -139,6 +140,7 @@ fn query_type_expression(prj: &mut Table) -> Result<(), RlError> {
 }
 
 fn get_by_id(prj: &mut Table) -> Result<(), RlError> {
+    use cl_parser::parser::Parse;
     use cl_structures::index_map::MapIndex;
     use cl_typeck::handle::Handle;
     read_and(C_BYID, "id>", "? >", |line| {
@@ -146,11 +148,11 @@ fn get_by_id(prj: &mut Table) -> Result<(), RlError> {
             return Ok(Response::Break);
         }
         let mut parser = Parser::new(Lexer::new(line));
-        let def_id = match parser.literal()? {
+        let def_id = match Parse::parse(&mut parser)? {
             cl_ast::Literal::Int(int) => int as _,
             other => Err(format!("Expected integer, got {other}"))?,
         };
-        let mut path = parser.path().unwrap_or_default();
+        let mut path = parser.parse::<cl_ast::Path>().unwrap_or_default();
         path.absolute = false;
 
         let handle = Handle::from_usize(def_id).to_entry(prj);
@@ -212,7 +214,7 @@ fn import_files(table: &mut Table) -> Result<(), RlError> {
         };
 
         let mut parser = Parser::new(Lexer::new(&file));
-        let code = match parser.file() {
+        let code = match parser.parse() {
             Ok(code) => inline_modules(code, PathBuf::from(line).parent().unwrap_or("".as_ref())),
             Err(e) => {
                 eprintln!("{C_ERROR}{line}:{e}\x1b[0m");

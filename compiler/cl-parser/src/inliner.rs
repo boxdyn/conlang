@@ -85,7 +85,7 @@ impl Fold for ModuleInliner {
             Ok(file) => file,
         };
 
-        let kind = match Parser::new(Lexer::new(&file)).file() {
+        let kind = match Parser::new(Lexer::new(&file)).parse() {
             Err(e) => return self.handle_parse_error(e),
             Ok(file) => ModuleKind::Inline(file),
         };
