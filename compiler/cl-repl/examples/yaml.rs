@@ -371,13 +371,12 @@ pub mod yamlify {
     }
     impl Yamlify for Let {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { mutable, name, ty, init, tail } = self;
+            let Self { mutable, name, ty, init } = self;
             y.key("Let")
                 .pair("name", name)
                 .yaml(mutable)
                 .pair("ty", ty)
-                .pair("init", init)
-                .pair("tail", tail);
+                .pair("init", init);
         }
     }
     impl Yamlify for Expr {

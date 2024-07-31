@@ -402,7 +402,6 @@ pub struct Let {
     pub name: Sym,
     pub ty: Option<Box<Ty>>,
     pub init: Option<Box<Expr>>,
-    pub tail: Option<Box<Expr>>,
 }
 
 /// An [Assign]ment expression: [`Expr`] ([`ModifyKind`] [`Expr`])\+

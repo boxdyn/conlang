@@ -192,7 +192,7 @@ pub trait Visit<'a>: Sized {
     }
     fn visit_semi(&mut self, _s: &'a Semi) {}
     fn visit_let(&mut self, l: &'a Let) {
-        let Let { mutable, name, ty, init, tail } = l;
+        let Let { mutable, name, ty, init } = l;
         self.visit_mutability(mutable);
         self.visit_sym(name);
         if let Some(ty) = ty {
@@ -200,9 +200,6 @@ pub trait Visit<'a>: Sized {
         }
         if let Some(init) = init {
             self.visit_expr(init)
-        }
-        if let Some(tail) = tail {
-            self.visit_expr(tail)
         }
     }
     fn visit_expr(&mut self, e: &'a Expr) {

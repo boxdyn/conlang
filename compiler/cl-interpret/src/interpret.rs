@@ -116,10 +116,9 @@ impl Interpret for Stmt {
 }
 impl Interpret for Let {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Let { mutable: _, name, ty: _, init, tail } = self;
+        let Let { mutable: _, name, ty: _, init } = self;
         let init = init.as_ref().map(|i| i.interpret(env)).transpose()?;
         env.insert(*name, init);
-        tail.as_ref().map(|e| e.interpret(env)).transpose()?;
         Ok(ConValue::Empty)
     }
 }

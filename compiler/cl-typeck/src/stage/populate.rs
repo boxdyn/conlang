@@ -146,7 +146,7 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
     }
 
     fn visit_let(&mut self, l: &'a cl_ast::Let) {
-        let cl_ast::Let { mutable, name, ty, init, tail } = l;
+        let cl_ast::Let { mutable, name, ty, init } = l;
         let mut entry = self.new_entry(NodeKind::Local);
 
         entry.inner.set_source(Source::Local(l));
@@ -158,9 +158,6 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         }
         if let Some(init) = init {
             entry.visit_expr(init)
-        }
-        if let Some(tail) = tail {
-            entry.visit_expr(tail)
         }
 
         let child = entry.inner.id();

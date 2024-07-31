@@ -916,11 +916,6 @@ impl Parse<'_> for Let {
             } else {
                 None
             },
-            tail: if p.match_type(TokenKind::Semi, Parsing::Let).is_ok() {
-                Some(Expr::parse(p)?.into())
-            } else {
-                None
-            },
         })
     }
 }

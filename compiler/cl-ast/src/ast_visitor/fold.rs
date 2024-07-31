@@ -227,13 +227,12 @@ pub trait Fold {
         s
     }
     fn fold_let(&mut self, l: Let) -> Let {
-        let Let { mutable, name, ty, init, tail } = l;
+        let Let { mutable, name, ty, init } = l;
         Let {
             mutable: self.fold_mutability(mutable),
             name: self.fold_sym(name),
             ty: ty.map(|t| Box::new(self.fold_ty(*t))),
             init: init.map(|e| Box::new(self.fold_expr(*e))),
-            tail: tail.map(|e| Box::new(self.fold_expr(*e))),
         }
     }
     fn fold_expr(&mut self, e: Expr) -> Expr {
