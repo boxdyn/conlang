@@ -850,7 +850,7 @@ impl<'t> Parser<'t> {
             TokenKind::Return => ExprKind::Return(self.parse_return()?),
             TokenKind::Continue => {
                 self.consume_peeked();
-                Continue.into()
+                ExprKind::Continue
             }
 
             op => {

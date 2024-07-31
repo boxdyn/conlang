@@ -334,9 +334,7 @@ pub trait Visit<'a>: Sized {
             self.visit_expr(body)
         }
     }
-    fn visit_continue(&mut self, c: &'a Continue) {
-        let Continue = c;
-    }
+    fn visit_continue(&mut self) {}
 }
 
 pub fn or_visit_literal<'a, V: Visit<'a>>(visitor: &mut V, l: &'a Literal) {
@@ -477,7 +475,7 @@ pub fn or_visit_expr_kind<'a, V: Visit<'a>>(visitor: &mut V, e: &'a ExprKind) {
         ExprKind::For(f) => visitor.visit_for(f),
         ExprKind::Break(b) => visitor.visit_break(b),
         ExprKind::Return(r) => visitor.visit_return(r),
-        ExprKind::Continue(c) => visitor.visit_continue(c),
+        ExprKind::Continue => visitor.visit_continue(),
     }
 }
 pub fn or_visit_member_kind<'a, V: Visit<'a>>(visitor: &mut V, kind: &'a MemberKind) {

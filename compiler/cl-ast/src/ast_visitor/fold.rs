@@ -376,10 +376,6 @@ pub trait Fold {
         let Return { body } = r;
         Return { body: body.map(|e| Box::new(self.fold_expr(*e))) }
     }
-    fn fold_continue(&mut self, c: Continue) -> Continue {
-        let Continue = c;
-        Continue
-    }
 }
 
 #[inline]
@@ -553,7 +549,7 @@ pub fn or_fold_expr_kind<F: Fold + ?Sized>(folder: &mut F, kind: ExprKind) -> Ex
         ExprKind::For(f) => ExprKind::For(folder.fold_for(f)),
         ExprKind::Break(b) => ExprKind::Break(folder.fold_break(b)),
         ExprKind::Return(r) => ExprKind::Return(folder.fold_return(r)),
-        ExprKind::Continue(c) => ExprKind::Continue(folder.fold_continue(c)),
+        ExprKind::Continue => ExprKind::Continue,
     }
 }
 pub fn or_fold_member_kind<F: Fold + ?Sized>(folder: &mut F, kind: MemberKind) -> MemberKind {

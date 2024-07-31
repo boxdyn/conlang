@@ -403,7 +403,7 @@ pub enum ExprKind {
     /// A [Return] expression `return` [`Expr`]?
     Return(Return),
     /// A continue expression: `continue`
-    Continue(Continue),
+    Continue,
 }
 
 /// An [Assign]ment expression: [`Expr`] ([`ModifyKind`] [`Expr`])\+
@@ -612,7 +612,3 @@ pub struct Break {
 pub struct Return {
     pub body: Option<Box<Expr>>,
 }
-
-/// A continue expression: `continue`
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct Continue;

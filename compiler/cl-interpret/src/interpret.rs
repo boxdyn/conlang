@@ -156,7 +156,7 @@ impl Interpret for ExprKind {
             ExprKind::For(v) => v.interpret(env),
             ExprKind::Break(v) => v.interpret(env),
             ExprKind::Return(v) => v.interpret(env),
-            ExprKind::Continue(v) => v.interpret(env),
+            ExprKind::Continue => Err(Error::Continue),
         }
     }
 }
@@ -577,11 +577,6 @@ impl Interpret for Else {
             Some(body) => body.interpret(env),
             None => Ok(ConValue::Empty),
         }
-    }
-}
-impl Interpret for Continue {
-    fn interpret(&self, _env: &mut Environment) -> IResult<ConValue> {
-        Err(Error::Continue)
     }
 }
 impl Interpret for Return {

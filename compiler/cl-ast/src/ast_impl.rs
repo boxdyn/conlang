@@ -453,7 +453,7 @@ mod display {
                 ExprKind::For(v) => v.fmt(f),
                 ExprKind::Break(v) => v.fmt(f),
                 ExprKind::Return(v) => v.fmt(f),
-                ExprKind::Continue(_) => "continue".fmt(f),
+                ExprKind::Continue => "continue".fmt(f),
             }
         }
     }
@@ -693,12 +693,6 @@ mod display {
             }
         }
     }
-
-    impl Display for Continue {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            "continue".fmt(f)
-        }
-    }
 }
 
 mod convert {
@@ -784,7 +778,6 @@ mod convert {
             For => ExprKind::For,
             Break => ExprKind::Break,
             Return => ExprKind::Return,
-            Continue => ExprKind::Continue,
         }
         impl From for Literal {
             bool => Literal::Bool,

@@ -411,7 +411,9 @@ pub mod yamlify {
                 ExprKind::For(k) => k.yaml(y),
                 ExprKind::Break(k) => k.yaml(y),
                 ExprKind::Return(k) => k.yaml(y),
-                ExprKind::Continue(k) => k.yaml(y),
+                ExprKind::Continue => {
+                    y.key("Continue");
+                }
             }
         }
     }
@@ -577,11 +579,6 @@ pub mod yamlify {
         fn yaml(&self, y: &mut Yamler) {
             let Self { body } = self;
             y.key("Return").yaml(body);
-        }
-    }
-    impl Yamlify for Continue {
-        fn yaml(&self, y: &mut Yamler) {
-            y.key("Continue");
         }
     }
     impl Yamlify for Literal {
