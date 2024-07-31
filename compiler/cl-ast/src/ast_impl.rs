@@ -628,7 +628,12 @@ mod display {
 
     impl Display for Block {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            separate(&self.stmts, "\n")(f.delimit(BRACES))
+            let Self { stmts } = self;
+
+            match stmts.as_slice() {
+                [] => "{}".fmt(f),
+                stmts => separate(stmts, "\n")(f.delimit(BRACES)),
+            }
         }
     }
 
@@ -640,7 +645,13 @@ mod display {
 
     impl Display for Tuple {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            separate(&self.exprs, ", ")(f.delimit(INLINE_PARENS))
+            let Self { exprs } = self;
+
+            match exprs.as_slice() {
+                [] => write!(f, "()"),
+                [expr] => write!(f, "({expr},)"),
+                exprs => separate(exprs, ", ")(f.delimit(INLINE_PARENS)),
+            }
         }
     }
 
