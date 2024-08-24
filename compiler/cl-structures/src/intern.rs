@@ -119,6 +119,7 @@ pub mod string_interner {
     };
 
     /// A string interner hands out [Interned] copies of each unique string given to it.
+    #[derive(Default)]
     pub struct StringInterner<'a> {
         arena: DroplessArena<'a>,
         keys: RwLock<HashSet<&'a str>>,
@@ -258,6 +259,7 @@ pub mod typed_interner {
     /// A [TypedInterner] hands out [Interned] references for arbitrary types.
     ///
     /// See the [module-level documentation](self) for more information.
+    #[derive(Default)]
     pub struct TypedInterner<'a, T: Eq + Hash> {
         arena: TypedArena<'a, T>,
         keys: RwLock<HashSet<&'a T>>,
