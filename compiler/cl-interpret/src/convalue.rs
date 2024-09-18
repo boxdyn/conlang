@@ -20,6 +20,8 @@ pub enum ConValue {
     Empty,
     /// An integer
     Int(Integer),
+    /// A floating point number
+    Float(f64),
     /// A boolean
     Bool(bool),
     /// A unicode character
@@ -124,6 +126,7 @@ macro cmp ($($fn:ident: $empty:literal, $op:tt);*$(;)?) {$(
         match (self, other) {
             (Self::Empty, Self::Empty) => Ok(Self::Bool($empty)),
             (Self::Int(a), Self::Int(b)) => Ok(Self::Bool(a $op b)),
+            (Self::Float(a), Self::Float(b)) => Ok(Self::Bool(a $op b)),
             (Self::Bool(a), Self::Bool(b)) => Ok(Self::Bool(a $op b)),
             (Self::Char(a), Self::Char(b)) => Ok(Self::Bool(a $op b)),
             (Self::String(a), Self::String(b)) => Ok(Self::Bool(&**a $op &**b)),
@@ -150,6 +153,7 @@ impl From<&Sym> for ConValue {
 }
 from! {
     Integer => ConValue::Int,
+    f64 => ConValue::Float,
     bool => ConValue::Bool,
     char => ConValue::Char,
     Sym => ConValue::String,
@@ -189,7 +193,8 @@ ops! {
     Add: add = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_add(b)),
-        (ConValue::String(a), ConValue::String(b)) => (a.to_string() + &b.to_string()).into(),
+        (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a + b),
+        (ConValue::String(a), ConValue::String(b)) => (a.to_string() + &*b).into(),
         (ConValue::String(s), ConValue::Char(c)) => { let mut s = s.to_string(); s.push(c); s.into() }
         (ConValue::Char(a), ConValue::Char(b)) => {
             ConValue::String([a, b].into_iter().collect::<String>().into())
@@ -219,18 +224,21 @@ ops! {
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.checked_div(b).unwrap_or_else(|| {
             eprintln!("Warning: Divide by zero in {a} / {b}"); a
         })),
+        (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a / b),
         _ => Err(Error::TypeError)?
     ]
     Mul: mul = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_mul(b)),
+        (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a * b),
         _ => Err(Error::TypeError)?
     ]
     Rem: rem = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.checked_rem(b).unwrap_or_else(|| {
-            eprintln!("Warning: Divide by zero in {a} % {b}"); a
+            println!("Warning: Divide by zero in {a} % {b}"); a
         })),
+        (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a % b),
         _ => Err(Error::TypeError)?
     ]
     Shl: shl = [
@@ -246,6 +254,7 @@ ops! {
     Sub: sub = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_sub(b)),
+        (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a - b),
         _ => Err(Error::TypeError)?
     ]
 }
@@ -254,6 +263,7 @@ impl std::fmt::Display for ConValue {
         match self {
             ConValue::Empty => "Empty".fmt(f),
             ConValue::Int(v) => v.fmt(f),
+            ConValue::Float(v) => v.fmt(f),
             ConValue::Bool(v) => v.fmt(f),
             ConValue::Char(v) => v.fmt(f),
             ConValue::String(v) => v.fmt(f),

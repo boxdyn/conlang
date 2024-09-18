@@ -223,6 +223,7 @@ builtins! {
         Ok(match tail {
             ConValue::Empty => ConValue::Empty,
             ConValue::Int(v) => ConValue::Int(v.wrapping_neg()),
+            ConValue::Float(v) => ConValue::Float(-v),
             _ => Err(Error::TypeError)?,
         })
     }
