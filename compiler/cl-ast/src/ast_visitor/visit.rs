@@ -23,6 +23,7 @@ pub trait Visit<'a>: Sized {
     fn visit_bool(&mut self, _b: &'a bool) {}
     fn visit_char(&mut self, _c: &'a char) {}
     fn visit_int(&mut self, _i: &'a u128) {}
+    fn visit_smuggled_float(&mut self, _f: &'a u64) {}
     fn visit_string(&mut self, _s: &'a str) {}
     fn visit_file(&mut self, f: &'a File) {
         let File { items } = f;
@@ -339,6 +340,7 @@ pub fn or_visit_literal<'a, V: Visit<'a>>(visitor: &mut V, l: &'a Literal) {
         Literal::Bool(b) => visitor.visit_bool(b),
         Literal::Char(c) => visitor.visit_char(c),
         Literal::Int(i) => visitor.visit_int(i),
+        Literal::Float(f) => visitor.visit_smuggled_float(f),
         Literal::String(s) => visitor.visit_string(s),
     }
 }

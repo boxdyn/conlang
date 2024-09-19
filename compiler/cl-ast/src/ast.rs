@@ -36,6 +36,7 @@ pub enum Literal {
     Bool(bool),
     Char(char),
     Int(u128),
+    Float(u64),
     String(String),
 }
 

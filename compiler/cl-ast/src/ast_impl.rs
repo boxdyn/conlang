@@ -50,6 +50,7 @@ mod display {
                 Literal::Bool(v) => v.fmt(f),
                 Literal::Char(v) => write!(f, "'{}'", v.escape_debug()),
                 Literal::Int(v) => v.fmt(f),
+                Literal::Float(v) => f64::from_bits(*v).fmt(f),
                 Literal::String(v) => write!(f, "\"{}\"", v.escape_debug()),
             }
         }

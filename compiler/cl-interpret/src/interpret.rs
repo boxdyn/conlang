@@ -453,7 +453,7 @@ impl Interpret for Literal {
             Literal::String(value) => ConValue::from(value.as_str()),
             Literal::Char(value) => ConValue::Char(*value),
             Literal::Bool(value) => ConValue::Bool(*value),
-            // Literal::Float(value) => todo!("Float values in interpreter: {value:?}"),
+            Literal::Float(value) => ConValue::Float(f64::from_bits(*value)),
             Literal::Int(value) => ConValue::Int(*value as _),
         })
     }
