@@ -387,7 +387,19 @@ impl<'t> Lexer<'t> {
         while let Ok(true) = self.peek().as_ref().map(char::is_ascii_alphanumeric) {
             value = value * B as u128 + self.digit::<B>()? as u128;
         }
-        self.produce(Kind::Literal, value)
+        // TODO: find a better way to handle floats in the tokenizer
+        match self.peek() {
+            Ok('.') => {
+                let mut float = format!("{value}.");
+                self.consume()?;
+                while let Ok(true) = self.peek().as_ref().map(char::is_ascii_digit) {
+                    float.push(self.iter.next().unwrap_or_default());
+                }
+                let float = f64::from_str(&float).expect("must be parsable as float");
+                self.produce(Kind::Literal, float)
+            }
+            _ => self.produce(Kind::Literal, value),
+        }
     }
     fn digit<const B: u32>(&mut self) -> LResult<u32> {
         let digit = self.peek()?;
