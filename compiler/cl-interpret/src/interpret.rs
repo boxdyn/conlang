@@ -358,6 +358,9 @@ fn cast(value: ConValue, ty: Sym) -> IResult<ConValue> {
         ConValue::Bool(b) => b as _,
         ConValue::Char(c) => c as _,
         ConValue::Ref(v) => return cast((*v).clone(), ty),
+        // TODO: This, better
+        ConValue::Float(_) if ty.starts_with('f') => return Ok(value),
+        ConValue::Float(f) => f as _,
         _ => Err(Error::TypeError)?,
     };
     Ok(match &*ty {
@@ -369,6 +372,8 @@ fn cast(value: ConValue, ty: Sym) -> IResult<ConValue> {
         "i32" => ConValue::Int(value as i32 as _),
         "u64" => ConValue::Int(value),
         "i64" => ConValue::Int(value),
+        "f32" => ConValue::Float(value as f32 as _),
+        "f64" => ConValue::Float(value as f64 as _),
         "char" => ConValue::Char(char::from_u32(value as _).unwrap_or('\u{fffd}')),
         "bool" => ConValue::Bool(value < 0),
         _ => Err(Error::NotDefined(ty))?,
@@ -448,7 +453,7 @@ impl Interpret for Literal {
             Literal::String(value) => ConValue::from(value.as_str()),
             Literal::Char(value) => ConValue::Char(*value),
             Literal::Bool(value) => ConValue::Bool(*value),
-            // Literal::Float(value) => todo!("Float values in interpreter: {value:?}"),
+            Literal::Float(value) => ConValue::Float(f64::from_bits(*value)),
             Literal::Int(value) => ConValue::Int(*value as _),
         })
     }

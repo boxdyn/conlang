@@ -247,9 +247,9 @@ fn structor_body(p: &mut Parser, to: Path) -> PResult<Structor> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Precedence {
     Assign,
+    Logic,
     Compare,
     Range,
-    Logic,
     Bitwise,
     Shift,
     Factor,

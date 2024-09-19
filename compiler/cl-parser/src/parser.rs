@@ -245,7 +245,7 @@ impl Parse<'_> for Literal {
             TokenData::String(v) => Literal::String(v),
             TokenData::Character(v) => Literal::Char(v),
             TokenData::Integer(v) => Literal::Int(v),
-            TokenData::Float(v) => todo!("Literal::Float({v})"),
+            TokenData::Float(v) => Literal::Float(v.to_bits()),
             _ => panic!("Expected token data for {ty:?}"),
         })
     }

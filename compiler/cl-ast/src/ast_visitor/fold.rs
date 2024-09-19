@@ -37,6 +37,9 @@ pub trait Fold {
     fn fold_int(&mut self, i: u128) -> u128 {
         i
     }
+    fn fold_smuggled_float(&mut self, f: u64) -> u64 {
+        f
+    }
     fn fold_string(&mut self, s: String) -> String {
         s
     }
@@ -384,6 +387,7 @@ pub fn or_fold_literal<F: Fold + ?Sized>(folder: &mut F, lit: Literal) -> Litera
         Literal::Bool(b) => Literal::Bool(folder.fold_bool(b)),
         Literal::Char(c) => Literal::Char(folder.fold_char(c)),
         Literal::Int(i) => Literal::Int(folder.fold_int(i)),
+        Literal::Float(f) => Literal::Float(folder.fold_smuggled_float(f)),
         Literal::String(s) => Literal::String(folder.fold_string(s)),
     }
 }
