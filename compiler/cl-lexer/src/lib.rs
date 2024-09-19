@@ -378,18 +378,22 @@ impl<'t> Lexer<'t> {
             Ok('d') => self.consume()?.digits::<10>(),
             Ok('o') => self.consume()?.digits::<8>(),
             Ok('b') => self.consume()?.digits::<2>(),
-            Ok('0'..='9') => self.digits::<10>(),
+            Ok('0'..='9' | '.') => self.digits::<10>(),
             _ => self.produce(Kind::Literal, 0),
         }
     }
     fn digits<const B: u32>(&mut self) -> LResult<Token> {
-        let mut value = self.digit::<B>()? as u128;
+        let mut value = 0;
         while let Ok(true) = self.peek().as_ref().map(char::is_ascii_alphanumeric) {
             value = value * B as u128 + self.digit::<B>()? as u128;
         }
         // TODO: find a better way to handle floats in the tokenizer
         match self.peek() {
             Ok('.') => {
+                // FIXME: hack: 0.. is not [0.0, '.']
+                if let Ok('.') = self.clone().consume()?.next() {
+                    return self.produce(Kind::Literal, value);
+                }
                 let mut float = format!("{value}.");
                 self.consume()?;
                 while let Ok(true) = self.peek().as_ref().map(char::is_ascii_digit) {
