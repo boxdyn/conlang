@@ -52,5 +52,5 @@ fn main() {
     println("Hypotenuse of ⊿(5, 12): ", pythag(5.0, 12.0))
 
     println("\nQuadratic formula")
-    println("Roots of 10x² + 4x - 1: ", quadratic(10.0, 44.0, -1.0))
+    println("Roots of 10x² + 4x - 1: ", quadratic(10.0, 40, -1.0))
 }
