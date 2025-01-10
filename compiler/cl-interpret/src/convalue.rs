@@ -1,14 +1,14 @@
 //! Values in the dynamically typed AST interpreter.
 //!
 //! The most permanent fix is a temporary one.
-use cl_ast::Sym;
+use cl_ast::{format::FmtAdapter, Sym};
 
 use super::{
     error::{Error, IResult},
     function::Function,
     BuiltIn, Callable, Environment,
 };
-use std::{ops::*, rc::Rc};
+use std::{collections::HashMap, ops::*, rc::Rc};
 
 type Integer = isize;
 
@@ -38,8 +38,10 @@ pub enum ConValue {
     RangeExc(Integer, Integer),
     /// An inclusive range
     RangeInc(Integer, Integer),
+    /// A value of a product type
+    Struct(Rc<(Sym, HashMap<Sym, ConValue>)>),
     /// A callable thing
-    Function(Function),
+    Function(Rc<Function>),
     /// A built-in function
     BuiltIn(&'static dyn BuiltIn),
 }
@@ -289,6 +291,18 @@ impl std::fmt::Display for ConValue {
                     element.fmt(f)?
                 }
                 ')'.fmt(f)
+            }
+            ConValue::Struct(parts) => {
+                let (name, map) = parts.as_ref();
+                use std::fmt::Write;
+                if !name.is_empty() {
+                    write!(f, "{name}: ")?;
+                }
+                let mut f = f.delimit_with("{", "\n}");
+                for (k, v) in map.iter() {
+                    write!(f, "\n{k}: {v},")?;
+                }
+                Ok(())
             }
             ConValue::Function(func) => {
                 write!(f, "{}", func.decl())

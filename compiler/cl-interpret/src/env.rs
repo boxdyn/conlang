@@ -1,4 +1,5 @@
 //! Lexical and non-lexical scoping for variables
+
 use super::{
     builtin::{BINARY, MISC, RANGE, UNARY},
     convalue::ConValue,
@@ -11,6 +12,7 @@ use std::{
     collections::HashMap,
     fmt::Display,
     ops::{Deref, DerefMut},
+    rc::Rc,
 };
 
 type StackFrame = HashMap<Sym, Option<ConValue>>;
@@ -18,12 +20,20 @@ type StackFrame = HashMap<Sym, Option<ConValue>>;
 /// Implements a nested lexical scope
 #[derive(Clone, Debug)]
 pub struct Environment {
+    global: Vec<(StackFrame, &'static str)>,
     frames: Vec<(StackFrame, &'static str)>,
 }
 
 impl Display for Environment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (frame, name) in self.frames.iter().rev() {
+        for (frame, name) in self
+            .global
+            .iter()
+            .rev()
+            .take(2)
+            .rev()
+            .chain(self.frames.iter())
+        {
             writeln!(f, "--- {name} ---")?;
             for (var, val) in frame {
                 write!(f, "{var}: ")?;
@@ -39,13 +49,14 @@ impl Display for Environment {
 impl Default for Environment {
     fn default() -> Self {
         Self {
-            frames: vec![
+            global: vec![
                 (to_hashmap(RANGE), "range ops"),
                 (to_hashmap(UNARY), "unary ops"),
                 (to_hashmap(BINARY), "binary ops"),
                 (to_hashmap(MISC), "builtins"),
                 (HashMap::new(), "globals"),
             ],
+            frames: vec![],
         }
     }
 }
@@ -58,8 +69,16 @@ impl Environment {
         Self::default()
     }
     /// Creates an [Environment] with no [builtins](super::builtin)
-    pub fn no_builtins(name: &'static str) -> Self {
-        Self { frames: vec![(Default::default(), name)] }
+    pub fn no_builtins() -> Self {
+        Self { global: vec![(Default::default(), "globals")], frames: vec![] }
+    }
+
+    pub fn push_frame(&mut self, name: &'static str, frame: StackFrame) {
+        self.frames.push((frame, name));
+    }
+
+    pub fn pop_frame(&mut self) -> Option<StackFrame> {
+        self.frames.pop().map(|f| f.0)
     }
 
     pub fn eval(&mut self, node: &impl Interpret) -> IResult<ConValue> {
@@ -88,6 +107,11 @@ impl Environment {
                 return Ok(var);
             }
         }
+        for (frame, _) in self.global.iter_mut().rev() {
+            if let Some(var) = frame.get_mut(&id) {
+                return Ok(var);
+            }
+        }
         Err(Error::NotDefined(id))
     }
     /// Resolves a variable immutably.
@@ -101,21 +125,34 @@ impl Environment {
                 _ => (),
             }
         }
+        for (frame, _) in self.global.iter().rev() {
+            match frame.get(&id) {
+                Some(Some(var)) => return Ok(var.clone()),
+                Some(None) => return Err(Error::NotInitialized(id)),
+                _ => (),
+            }
+        }
         Err(Error::NotDefined(id))
     }
     /// Inserts a new [ConValue] into this [Environment]
     pub fn insert(&mut self, id: Sym, value: Option<ConValue>) {
         if let Some((frame, _)) = self.frames.last_mut() {
             frame.insert(id, value);
+        } else if let Some((frame, _)) = self.global.last_mut() {
+            frame.insert(id, value);
         }
     }
     /// A convenience function for registering a [FnDecl] as a [Function]
     pub fn insert_fn(&mut self, decl: &FnDecl) {
         let FnDecl { name, .. } = decl;
-        let (name, function) = (name, Some(Function::new(decl).into()));
+        let (name, function) = (name, Rc::new(Function::new(decl)));
         if let Some((frame, _)) = self.frames.last_mut() {
-            frame.insert(*name, function);
+            frame.insert(*name, Some(ConValue::Function(function.clone())));
+        } else if let Some((frame, _)) = self.global.last_mut() {
+            frame.insert(*name, Some(ConValue::Function(function.clone())));
         }
+        // Tell the function to lift its upvars now, after it's been declared
+        function.lift_upvars(self);
     }
 }
 
@@ -130,9 +167,7 @@ impl Environment {
     /// Exits the scope, destroying all local variables and
     /// returning the outer scope, if there is one
     fn exit(&mut self) -> &mut Self {
-        if self.frames.len() > 2 {
-            self.frames.pop();
-        }
+        self.frames.pop();
         self
     }
 }

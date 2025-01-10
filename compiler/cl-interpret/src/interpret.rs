@@ -406,6 +406,20 @@ impl Interpret for Member {
                 .get(*id as usize)
                 .cloned()
                 .ok_or(Error::OobIndex(*id as usize, v.len())),
+            (ConValue::Struct(parts), MemberKind::Struct(name)) => {
+                parts.1.get(name).cloned().ok_or(Error::NotDefined(*name))
+            }
+            (ConValue::Struct(parts), MemberKind::Call(name, args)) => {
+                let mut values = vec![];
+                for arg in &args.exprs {
+                    values.push(arg.interpret(env)?);
+                }
+                (parts.1)
+                    .get(name)
+                    .cloned()
+                    .ok_or(Error::NotDefined(*name))?
+                    .call(env, &values)
+            }
             (head, MemberKind::Call(name, args)) => {
                 let mut values = vec![head];
                 for arg in &args.exprs {
@@ -429,9 +443,29 @@ impl Interpret for Index {
 }
 impl Interpret for Structor {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        todo!("struct construction in {env}")
+        let Self { to: Path { absolute: _, parts }, init } = self;
+        use std::collections::HashMap;
+
+        let name = match parts.last() {
+            Some(PathPart::Ident(name)) => *name,
+            Some(PathPart::SelfKw) => "self".into(),
+            Some(PathPart::SelfTy) => "Self".into(),
+            Some(PathPart::SuperKw) => "super".into(),
+            None => "".into(),
+        };
+
+        let mut map = HashMap::new();
+        for Fielder { name, init } in init {
+            let value = match init {
+                Some(init) => init.interpret(env)?,
+                None => env.get(*name)?,
+            };
+            map.insert(*name, value);
+        }
+        Ok(ConValue::Struct(Rc::new((name, map))))
     }
 }
+
 impl Interpret for Path {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self { absolute: _, parts } = self;

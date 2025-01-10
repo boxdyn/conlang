@@ -71,6 +71,29 @@ builtins! {
             _ => Err(Error::TypeError)?,
         }))
     }
+    /// Lists the potential "upvars" (lifted environment) of a function
+    pub fn collect_upvars<env, _>(ConValue::Function(f)) -> IResult<ConValue> {
+        use crate::function::collect_upvars::collect_upvars;
+        for (name, bind) in collect_upvars(f.decl(), env) {
+            match bind {
+                Some(bind) =>println!("{name}: {bind}"),
+                None => println!("{name}: _"),
+            }
+        }
+        Ok(ConValue::Empty)
+    }
+
+    /// Lists the collected environment of a function.
+    pub fn upvars(ConValue::Function(f)) -> IResult<ConValue> {
+        let uv = f.upvars();
+        for (name, bind) in uv.iter() {
+            match bind {
+                Some(bind) =>println!("{name}: {bind}"),
+                None => println!("{name}: _"),
+            }
+        }
+        Ok(ConValue::Empty)
+    }
 }
 builtins! {
     const BINARY;
@@ -257,7 +280,7 @@ macro builtins (
     $(prefix = $prefix:literal)?
     const $defaults:ident $( = [$($additional_builtins:expr),*$(,)?])?;
     $(
-        $(#[$meta:meta])*$vis:vis fn $name:ident$(<$env:tt, $args:tt>)? ( $($($arg:tt),+$(,)?)? ) $(-> $rety:ty)?
+        $(#[$meta:meta])*$vis:vis fn $name:ident$(<$env:tt, $args:tt>)? ( $($($arg:pat),+$(,)?)? ) $(-> $rety:ty)?
             $body:block
     )*
 ) {
@@ -273,12 +296,13 @@ macro builtins (
             fn description(&self) -> &str { concat!("builtin ", stringify!($name), stringify!(($($($arg),*)?) )) }
         }
         impl Callable for $name {
-            #[allow(unused)]
+            #[allow(unused, irrefutable_let_patterns)]
             fn call(&self, env: &mut Environment, args: &[ConValue]) $(-> $rety)? {
-                // println!("{}", stringify!($name), );
                 $(let $env = env;
                 let $args = args;)?
-                $(let [$($arg),*] = to_args(args)?;)?
+                $(let [$($arg),*] = to_args(args)? else {
+                    Err(Error::TypeError)?
+                };)?
                 $body
             }
             fn name(&self) -> Sym { stringify!($name).into() }
