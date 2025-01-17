@@ -302,7 +302,7 @@ impl<'a> Editor<'a> {
     }
 }
 
-impl<'a, 'e> IntoIterator for &'e Editor<'a> {
+impl<'e> IntoIterator for &'e Editor<'_> {
     type Item = &'e char;
     type IntoIter = std::iter::Chain<
         std::collections::vec_deque::Iter<'e, char>,
@@ -313,7 +313,7 @@ impl<'a, 'e> IntoIterator for &'e Editor<'a> {
     }
 }
 
-impl<'a> Display for Editor<'a> {
+impl Display for Editor<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use std::fmt::Write;
         for c in self.iter() {

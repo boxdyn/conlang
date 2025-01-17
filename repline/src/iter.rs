@@ -39,7 +39,7 @@ pub mod chars {
                 if cont & 0xc0 != 0x80 {
                     return None;
                 }
-                out = out << 6 | (cont & 0x3f);
+                out = (out << 6) | (cont & 0x3f);
             }
             Some(char::from_u32(out).ok_or(BadUnicode(out)))
         }
