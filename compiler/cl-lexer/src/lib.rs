@@ -23,7 +23,7 @@ pub mod lexer_iter {
     pub struct LexerIter<'t> {
         lexer: Lexer<'t>,
     }
-    impl<'t> Iterator for LexerIter<'t> {
+    impl Iterator for LexerIter<'_> {
         type Item = LResult<Token>;
         fn next(&mut self) -> Option<Self::Item> {
             match self.lexer.scan() {
@@ -192,7 +192,7 @@ impl<'t> Lexer<'t> {
     }
 }
 /// Digraphs and trigraphs
-impl<'t> Lexer<'t> {
+impl Lexer<'_> {
     fn amp(&mut self) -> LResult<Token> {
         match self.peek() {
             Ok('&') => self.consume()?.produce_op(Kind::AmpAmp),
@@ -319,7 +319,7 @@ impl<'t> Lexer<'t> {
     }
 }
 /// Comments
-impl<'t> Lexer<'t> {
+impl Lexer<'_> {
     fn line_comment(&mut self) -> LResult<Token> {
         let mut comment = String::new();
         while Ok('\n') != self.peek() {
@@ -339,7 +339,7 @@ impl<'t> Lexer<'t> {
     }
 }
 /// Identifiers
-impl<'t> Lexer<'t> {
+impl Lexer<'_> {
     fn identifier(&mut self) -> LResult<Token> {
         let mut out = String::from(self.xid_start()?);
         while let Ok(c) = self.xid_continue() {
@@ -371,7 +371,7 @@ impl<'t> Lexer<'t> {
     }
 }
 /// Integers
-impl<'t> Lexer<'t> {
+impl Lexer<'_> {
     fn int_with_base(&mut self) -> LResult<Token> {
         match self.peek() {
             Ok('x') => self.consume()?.digits::<16>(),
@@ -414,7 +414,7 @@ impl<'t> Lexer<'t> {
     }
 }
 /// Strings and characters
-impl<'t> Lexer<'t> {
+impl Lexer<'_> {
     fn string(&mut self) -> LResult<Token> {
         let mut value = String::new();
         while '"'

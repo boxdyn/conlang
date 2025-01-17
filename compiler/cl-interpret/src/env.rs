@@ -147,18 +147,18 @@ impl<'scope> Frame<'scope> {
         Self { scope: scope.enter(name) }
     }
 }
-impl<'scope> Deref for Frame<'scope> {
+impl Deref for Frame<'_> {
     type Target = Environment;
     fn deref(&self) -> &Self::Target {
         self.scope
     }
 }
-impl<'scope> DerefMut for Frame<'scope> {
+impl DerefMut for Frame<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.scope
     }
 }
-impl<'scope> Drop for Frame<'scope> {
+impl Drop for Frame<'_> {
     fn drop(&mut self) {
         self.scope.exit();
     }

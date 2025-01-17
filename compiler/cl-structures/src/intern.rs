@@ -37,7 +37,7 @@ pub mod interned {
         }
     }
 
-    impl<'a, T: ?Sized + Debug> Debug for Interned<'a, T> {
+    impl<T: ?Sized + Debug> Debug for Interned<'_, T> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.debug_struct("Interned")
                 .field("value", &self.value)
@@ -49,14 +49,14 @@ pub mod interned {
             Self { value }
         }
     }
-    impl<'a, T: ?Sized> Deref for Interned<'a, T> {
+    impl<T: ?Sized> Deref for Interned<'_, T> {
         type Target = T;
         fn deref(&self) -> &Self::Target {
             self.value
         }
     }
-    impl<'a, T: ?Sized> Copy for Interned<'a, T> {}
-    impl<'a, T: ?Sized> Clone for Interned<'a, T> {
+    impl<T: ?Sized> Copy for Interned<'_, T> {}
+    impl<T: ?Sized> Clone for Interned<'_, T> {
         fn clone(&self) -> Self {
             *self
         }
@@ -79,13 +79,13 @@ pub mod interned {
     //     }
     // }
 
-    impl<'a, T: ?Sized> Eq for Interned<'a, T> {}
-    impl<'a, T: ?Sized> PartialEq for Interned<'a, T> {
+    impl<T: ?Sized> Eq for Interned<'_, T> {}
+    impl<T: ?Sized> PartialEq for Interned<'_, T> {
         fn eq(&self, other: &Self) -> bool {
             std::ptr::eq(self.value, other.value)
         }
     }
-    impl<'a, T: ?Sized> Hash for Interned<'a, T> {
+    impl<T: ?Sized> Hash for Interned<'_, T> {
         fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
             Self::as_ptr(self).hash(state)
         }
@@ -208,8 +208,8 @@ pub mod string_interner {
     // This is fine because StringInterner::get_or_insert(v) holds a RwLock
     // for its entire duration, and doesn't touch the non-(Send+Sync) arena
     // unless the lock is held by a write guard.
-    unsafe impl<'a> Send for StringInterner<'a> {}
-    unsafe impl<'a> Sync for StringInterner<'a> {}
+    unsafe impl Send for StringInterner<'_> {}
+    unsafe impl Sync for StringInterner<'_> {}
 
     #[cfg(test)]
     mod tests {
@@ -306,5 +306,5 @@ pub mod typed_interner {
     /// [get_or_insert](TypedInterner::get_or_insert) are unique, and the function uses
     /// the [RwLock] around the [HashSet] to ensure mutual exclusion
     unsafe impl<'a, T: Eq + Hash + Send> Send for TypedInterner<'a, T> where &'a T: Send {}
-    unsafe impl<'a, T: Eq + Hash + Send + Sync> Sync for TypedInterner<'a, T> {}
+    unsafe impl<T: Eq + Hash + Send + Sync> Sync for TypedInterner<'_, T> {}
 }

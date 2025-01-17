@@ -21,7 +21,7 @@ pub struct Indent<'f, F: Write + ?Sized> {
     f: &'f mut F,
 }
 
-impl<'f, F: Write + ?Sized> Write for Indent<'f, F> {
+impl<F: Write + ?Sized> Write for Indent<'_, F> {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         for s in s.split_inclusive('\n') {
             self.f.write_str(s)?;
@@ -45,14 +45,14 @@ impl<'f, F: Write + ?Sized> Delimit<'f, F> {
         Self { f, delim }
     }
 }
-impl<'f, F: Write + ?Sized> Drop for Delimit<'f, F> {
+impl<F: Write + ?Sized> Drop for Delimit<'_, F> {
     fn drop(&mut self) {
         let Self { f: Indent { f, .. }, delim } = self;
         let _ = f.write_str(delim.close);
     }
 }
 
-impl<'f, F: Write + ?Sized> Write for Delimit<'f, F> {
+impl<F: Write + ?Sized> Write for Delimit<'_, F> {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         self.f.write_str(s)
     }

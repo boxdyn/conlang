@@ -120,19 +120,19 @@ pub mod yamler {
         }
     }
 
-    impl<'y> Deref for Section<'y> {
+    impl Deref for Section<'_> {
         type Target = Yamler;
         fn deref(&self) -> &Self::Target {
             self.yamler
         }
     }
-    impl<'y> DerefMut for Section<'y> {
+    impl DerefMut for Section<'_> {
         fn deref_mut(&mut self) -> &mut Self::Target {
             self.yamler
         }
     }
 
-    impl<'y> Drop for Section<'y> {
+    impl Drop for Section<'_> {
         fn drop(&mut self) {
             let Self { yamler } = self;
             yamler.decrease();

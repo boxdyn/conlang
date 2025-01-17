@@ -20,7 +20,7 @@ pub enum Source<'a> {
     Ty(&'a TyKind),
 }
 
-impl<'a> Source<'a> {
+impl Source<'_> {
     pub fn name(&self) -> Option<Sym> {
         match self {
             Source::Root => None,
