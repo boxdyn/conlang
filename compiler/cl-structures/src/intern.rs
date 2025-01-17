@@ -35,6 +35,11 @@ pub mod interned {
         pub fn as_ptr(interned: &Self) -> *const T {
             interned.value
         }
+
+        /// Gets the internal value as a reference with the interner's lifetime
+        pub fn to_ref(interned: &Self) -> &'a T {
+            interned.value
+        }
     }
 
     impl<T: ?Sized + Debug> Debug for Interned<'_, T> {
