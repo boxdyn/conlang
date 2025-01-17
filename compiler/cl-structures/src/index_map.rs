@@ -106,7 +106,7 @@ impl<V, K: MapIndex> IndexMap<K, V> {
     pub fn get_many_mut<const N: usize>(
         &mut self,
         indices: [K; N],
-    ) -> Result<[&mut V; N], GetManyMutError<N>> {
+    ) -> Result<[&mut V; N], GetManyMutError> {
         self.map.get_many_mut(indices.map(|id| id.get()))
     }
 
