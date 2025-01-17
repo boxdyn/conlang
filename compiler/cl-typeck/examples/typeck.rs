@@ -1,4 +1,3 @@
-use cl_structures::intern::string_interner::StringInterner;
 use cl_typeck::{entry::Entry, stage::*, table::Table, type_expression::TypeExpression};
 
 use cl_ast::{
@@ -8,10 +7,12 @@ use cl_ast::{
 };
 use cl_lexer::Lexer;
 use cl_parser::{inliner::ModuleInliner, Parser};
+use cl_structures::intern::string_interner::StringInterner;
 use repline::{error::Error as RlError, prebaked::*};
 use std::{
     error::Error,
     path::{self, PathBuf},
+    sync::LazyLock,
 };
 
 // Path to display in standard library errors
@@ -30,11 +31,6 @@ const C_BYID: &str = "\x1b[95m";
 const C_ERROR: &str = "\x1b[31m";
 const C_LISTING: &str = "\x1b[38;5;117m";
 
-/// A home for immutable intermediate ASTs
-///
-/// TODO: remove this.
-static mut TREES: TreeManager = TreeManager::new();
-
 fn main() -> Result<(), Box<dyn Error>> {
     let mut prj = Table::default();
 
@@ -48,7 +44,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     // This code is special - it gets loaded from a hard-coded project directory (for now)
     let code = inline_modules(code, concat!(env!("CARGO_MANIFEST_DIR"), "/../../stdlib"));
-    Populator::new(&mut prj).visit_file(unsafe { TREES.push(code) });
+    Populator::new(&mut prj).visit_file(interned(code));
 
     main_menu(&mut prj)?;
     Ok(())
@@ -98,8 +94,8 @@ fn enter_code(prj: &mut Table) -> Result<(), RlError> {
         let code = Parser::new(Lexer::new(line)).parse()?;
         let code = inline_modules(code, "");
         let code = WhileElseDesugar.fold_file(code);
-        // Safety: this is totally unsafe
-        Populator::new(prj).visit_file(unsafe { TREES.push(code) });
+
+        Populator::new(prj).visit_file(interned(code));
         Ok(Response::Accept)
     })
 }
@@ -222,7 +218,7 @@ fn import_files(table: &mut Table) -> Result<(), RlError> {
             }
         };
 
-        Populator::new(table).visit_file(unsafe { TREES.push(code) });
+        Populator::new(table).visit_file(interned(code));
 
         println!("...Imported!");
         Ok(Response::Accept)
@@ -322,18 +318,11 @@ fn banner() {
     );
 }
 
-/// Keeps leaked references to past ASTs, for posterity:tm:
-struct TreeManager {
-    trees: Vec<&'static cl_ast::File>,
-}
+/// Interns a [File](cl_ast::File), returning a static reference to it.
+fn interned(file: cl_ast::File) -> &'static cl_ast::File {
+    use cl_structures::intern::{interned::Interned, typed_interner::TypedInterner};
+    static INTERNER: LazyLock<TypedInterner<'static, cl_ast::File>> =
+        LazyLock::new(Default::default);
 
-impl TreeManager {
-    const fn new() -> Self {
-        Self { trees: vec![] }
-    }
-    fn push(&mut self, tree: cl_ast::File) -> &'static cl_ast::File {
-        let ptr = Box::leak(Box::new(tree));
-        self.trees.push(ptr);
-        ptr
-    }
+    Interned::to_ref(&INTERNER.get_or_insert(file))
 }
