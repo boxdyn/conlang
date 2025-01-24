@@ -38,7 +38,7 @@ impl<'env> CollectUpvars<'env> {
     }
 }
 
-impl<'env, 'a> Visit<'a> for CollectUpvars<'env> {
+impl<'a> Visit<'a> for CollectUpvars<'_> {
     fn visit_block(&mut self, b: &'a cl_ast::Block) {
         let blacklist = self.blacklist.clone();
 
