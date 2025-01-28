@@ -134,6 +134,18 @@ impl Environment {
         }
         Err(Error::NotDefined(id))
     }
+
+    pub(crate) fn get_local(&self, id: Sym) -> IResult<ConValue> {
+        for (frame, _) in self.frames.iter().rev() {
+            match frame.get(&id) {
+                Some(Some(var)) => return Ok(var.clone()),
+                Some(None) => return Err(Error::NotInitialized(id)),
+                _ => (),
+            }
+        }
+        Err(Error::NotInitialized(id))
+    }
+    
     /// Inserts a new [ConValue] into this [Environment]
     pub fn insert(&mut self, id: Sym, value: Option<ConValue>) {
         if let Some((frame, _)) = self.frames.last_mut() {

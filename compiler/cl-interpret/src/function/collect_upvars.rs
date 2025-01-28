@@ -28,7 +28,7 @@ impl<'env> CollectUpvars<'env> {
         if blacklist.contains(name) || upvars.contains_key(name) {
             return;
         }
-        if let Ok(upvar) = env.get(*name) {
+        if let Ok(upvar) = env.get_local(*name) {
             upvars.insert(*name, Some(upvar));
         }
     }
@@ -61,7 +61,7 @@ impl<'a> Visit<'a> for CollectUpvars<'_> {
             self.visit_expr(init)
         }
         // a bound name can never be an upvar
-        self.blacklist.insert(*name);
+        self.bind_name(name);
     }
 
     fn visit_function(&mut self, f: &'a cl_ast::Function) {

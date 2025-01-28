@@ -34,7 +34,7 @@ impl Function {
     pub fn upvars(&self) -> Ref<Upvars> {
         self.upvars.borrow()
     }
-    pub fn lift_upvars(&self, env: &mut Environment) {
+    pub fn lift_upvars(&self, env: &Environment) {
         let upvars = collect_upvars(&self.decl, env);
         if let Ok(mut self_upvars) = self.upvars.try_borrow_mut() {
             *self_upvars = upvars;
