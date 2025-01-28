@@ -753,16 +753,19 @@ impl Interpret for If {
 impl Interpret for For {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self { bind: name, cond, pass, fail } = self;
+        let cond = cond.interpret(env)?;
         // TODO: A better iterator model
-        let mut bounds = match cond.interpret(env)? {
-            ConValue::RangeExc(a, b) => a..=b,
-            ConValue::RangeInc(a, b) => a..=b,
+        let mut bounds: Box<dyn Iterator<Item = ConValue>> = match &cond {
+            &ConValue::RangeExc(a, b) => Box::new((a..b).map(ConValue::Int)),
+            &ConValue::RangeInc(a, b) => Box::new((a..=b).map(ConValue::Int)),
+            ConValue::Array(a) => Box::new(a.iter().cloned()),
+            ConValue::String(s) => Box::new(s.chars().map(ConValue::Char)),
             _ => Err(Error::TypeError)?,
         };
         loop {
             let mut env = env.frame("loop variable");
             if let Some(loop_var) = bounds.next() {
-                env.insert(*name, Some(loop_var.into()));
+                env.insert(*name, Some(loop_var));
                 match pass.interpret(&mut env) {
                     Err(Error::Break(value)) => return Ok(value),
                     Err(Error::Continue) => continue,
