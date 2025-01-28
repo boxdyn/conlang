@@ -437,16 +437,17 @@ mod operators {
         env_eq!(env.y, 10);
         env_eq!(env.z, 10);
     }
-    #[test]
-    #[should_panic]
-    fn assignment_accounts_for_type() {
-        let mut env = Default::default();
-        assert_eval!(env,
-            let x = "a string";
-            let y = 0xdeadbeef;
-            y = x; // should crash: type error
-        );
-    }
+    // Test is disabled, since new assignment system intentionally does not care.
+    // #[test]
+    // #[should_panic]
+    // fn assignment_accounts_for_type() {
+    //     let mut env = Default::default();
+    //     assert_eval!(env,
+    //         let x = "a string";
+    //         let y = 0xdeadbeef;
+    //         y = x; // should crash: type error
+    //     );
+    // }
     #[test]
     fn precedence() {
         let mut env = Default::default();

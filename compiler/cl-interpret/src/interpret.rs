@@ -9,6 +9,7 @@ use std::{borrow::Borrow, rc::Rc};
 
 use super::*;
 use cl_ast::*;
+use cl_structures::intern::interned::Interned;
 /// A work-in-progress tree walk interpreter for Conlang
 pub trait Interpret {
     /// Interprets this thing in the given [`Environment`].
@@ -36,7 +37,10 @@ impl Interpret for Item {
             ItemKind::Struct(item) => item.interpret(env),
             ItemKind::Enum(item) => item.interpret(env),
             ItemKind::Impl(item) => item.interpret(env),
-            ItemKind::Use(_) => todo!("namespaces and imports in the interpreter"),
+            ItemKind::Use(item) => {
+                eprintln!("TODO: namespaces and imports in the interpreter!\n{item}\n");
+                Ok(ConValue::Empty)
+            }
         }
     }
 }
@@ -75,7 +79,7 @@ impl Interpret for Module {
                 Ok(ConValue::Empty)
             }
         };
-
+        
         let frame = env
             .pop_frame()
             .expect("Environment frames must be balanced");
@@ -170,25 +174,195 @@ impl Interpret for ExprKind {
     }
 }
 
-fn evaluate_place_expr<'e>(
-    env: &'e mut Environment,
-    expr: &ExprKind,
-) -> IResult<(&'e mut Option<ConValue>, Sym)> {
-    match expr {
-        ExprKind::Path(Path { parts, .. }) if parts.len() == 1 => {
-            match parts.last().expect("parts should not be empty") {
-                PathPart::SuperKw => Err(Error::NotAssignable),
-                PathPart::SelfKw => todo!("Assignment to `self`"),
-                PathPart::SelfTy => todo!("What does it mean to assign to capital-S Self?"),
-                PathPart::Ident(s) => env.get_mut(*s).map(|v| (v, *s)),
+mod assignment {
+    /// Pattern matching engine for assignment
+    use super::*;
+    use std::collections::HashMap;
+    type Namespace = HashMap<Sym, Option<ConValue>>;
+
+    pub(super) fn assign(env: &mut Environment, pat: &ExprKind, value: ConValue) -> IResult<()> {
+        match (pat, value) {
+            (ExprKind::Empty, ConValue::Empty) => Ok(()),
+            (ExprKind::Path(path), value) => assign_path(env, path, value),
+            (ExprKind::Group(Group { expr }), value) => assign(env, expr, value),
+            (ExprKind::Tuple(tuple), value) => assign_destructure_tuple(env, tuple, value),
+            (ExprKind::Array(array), value) => assign_destructure_array(env, array, value),
+            (ExprKind::Index(index), value) => assign_index(env, index, value),
+            (ExprKind::Member(member), value) => assign_member(env, member, value),
+            (ExprKind::Structor(structor), value) => {
+                assign_destructure_struct(env, structor, value)
+            }
+            _ => {
+                eprintln!("{pat} is not a valid pattern expression");
+                Err(Error::NotAssignable)
             }
         }
-        ExprKind::Index(_) => todo!("Assignment to an index operation"),
-        ExprKind::Path(_) => todo!("Path expression resolution (IMPORTANT)"),
-        ExprKind::Empty | ExprKind::Group(_) | ExprKind::Tuple(_) => {
-            todo!("Pattern Destructuring?")
+    }
+
+    fn assign_member(env: &mut Environment, member: &Member, value: ConValue) -> IResult<()> {
+        *addrof_member(env, member)? = value;
+        Ok(())
+    }
+
+    fn assign_index(env: &mut Environment, index: &Index, value: ConValue) -> IResult<()> {
+        *addrof_index(env, index)? = value;
+        Ok(())
+    }
+
+    fn assign_path(env: &mut Environment, path: &Path, value: ConValue) -> IResult<()> {
+        let Ok(addr) = addrof_path(env, &path.parts) else {
+            eprintln!("Cannot assign {value} to path {path}");
+            return Err(Error::NotAssignable);
+        };
+        *addr = Some(value);
+        Ok(())
+    }
+
+    fn assign_destructure_array(
+        env: &mut Environment,
+        array: &Array,
+        value: ConValue,
+    ) -> IResult<()> {
+        let Array { values } = array;
+        let ConValue::Array(inits) = &value else {
+            eprintln!("{value} does not match pattern {array}");
+            return Err(Error::TypeError);
+        };
+        if values.len() != inits.len() {
+            return Err(Error::TypeError);
         }
-        _ => Err(Error::NotAssignable),
+
+        for (init, expr) in inits.iter().zip(values) {
+            assign(env, &expr.kind, init.clone())?;
+        }
+        Ok(())
+    }
+
+    fn assign_destructure_tuple(
+        env: &mut Environment,
+        tuple: &Tuple,
+        value: ConValue,
+    ) -> IResult<()> {
+        let Tuple { exprs } = tuple;
+        let ConValue::Tuple(inits) = &value else {
+            eprintln!("{value} does not match pattern {tuple}");
+            return Err(Error::TypeError);
+        };
+        if exprs.len() != inits.len() {
+            return Err(Error::TypeError);
+        }
+
+        for (init, expr) in inits.iter().zip(exprs) {
+            assign(env, &expr.kind, init.clone())?;
+        }
+        Ok(())
+    }
+
+    fn assign_destructure_struct(
+        env: &mut Environment,
+        pat: &Structor,
+        value: ConValue,
+    ) -> IResult<()> {
+        let Structor { to: _, init: pat } = pat;
+        let ConValue::Struct(parts) = value else {
+            return Err(Error::TypeError);
+        };
+        let (_, members) = *parts;
+        for Fielder { name, init: pat } in pat {
+            let value = members.get(name).ok_or(Error::NotDefined(*name))?;
+            match pat {
+                Some(pat) => assign(env, &pat.kind, value.clone())?,
+                None => *env.get_mut(*name)? = Some(value.clone()),
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn addrof<'e>(
+        env: &'e mut Environment,
+        pat: &ExprKind,
+    ) -> IResult<&'e mut ConValue> {
+        match pat {
+            ExprKind::Path(path) => addrof_path(env, &path.parts)?
+                .as_mut()
+                .ok_or(Error::NotInitialized("".into())),
+            ExprKind::Member(member) => addrof_member(env, member),
+            ExprKind::Index(index) => addrof_index(env, index),
+            ExprKind::Group(Group { expr }) => addrof(env, expr),
+            _ => Err(Error::TypeError),
+        }
+    }
+
+    pub fn addrof_path<'e>(
+        env: &'e mut Environment,
+        path: &[PathPart],
+    ) -> IResult<&'e mut Option<ConValue>> {
+        match path {
+            [PathPart::Ident(name)] => env.get_mut(*name),
+            [PathPart::Ident(name), rest @ ..] => match env.get_mut(*name)? {
+                Some(ConValue::Module(env)) => addrof_path_within_namespace(env, rest),
+                _ => Err(Error::NotIndexable),
+            },
+            _ => Err(Error::NotAssignable),
+        }
+    }
+
+    fn addrof_member<'e>(env: &'e mut Environment, member: &Member) -> IResult<&'e mut ConValue> {
+        let Member { head, kind } = member;
+        let ExprKind::Path(path) = head.as_ref() else {
+            return Err(Error::TypeError);
+        };
+        let slot = addrof_path(env, &path.parts)?
+            .as_mut()
+            .ok_or(Error::NotAssignable)?;
+        Ok(match (slot, kind) {
+            (ConValue::Struct(s), MemberKind::Struct(id)) => {
+                s.1.get_mut(id).ok_or(Error::NotDefined(*id))?
+            }
+            (ConValue::Tuple(t), MemberKind::Tuple(Literal::Int(id))) => t
+                .get_mut(*id as usize)
+                .ok_or_else(|| Error::NotDefined(id.to_string().into()))?,
+            _ => Err(Error::TypeError)?,
+        })
+    }
+
+    fn addrof_index<'e>(env: &'e mut Environment, index: &Index) -> IResult<&'e mut ConValue> {
+        let Index { head, indices } = index;
+        let indices = indices
+            .iter()
+            .map(|index| index.interpret(env))
+            .collect::<IResult<Vec<_>>>()?;
+        let mut head = addrof(env, head)?;
+        for index in indices {
+            head = match (head, index) {
+                (ConValue::Array(a), ConValue::Int(i)) => {
+                    let a_len = a.len();
+                    a.get_mut(i as usize)
+                        .ok_or(Error::OobIndex(i as usize, a_len))?
+                }
+                _ => Err(Error::NotIndexable)?,
+            }
+        }
+        Ok(head)
+    }
+
+    pub fn addrof_path_within_namespace<'e>(
+        env: &'e mut Namespace,
+        path: &[PathPart],
+    ) -> IResult<&'e mut Option<ConValue>> {
+        match path {
+            [] => Err(Error::NotAssignable),
+            [PathPart::Ident(name)] => env.get_mut(name).ok_or(Error::NotDefined(*name)),
+            [PathPart::Ident(name), rest @ ..] => {
+                match env.get_mut(name).ok_or(Error::NotDefined(*name))? {
+                    Some(ConValue::Module(env)) => addrof_path_within_namespace(env, rest),
+                    _ => Err(Error::NotIndexable),
+                }
+            }
+            [PathPart::SelfKw, rest @ ..] => addrof_path_within_namespace(env, rest),
+            [PathPart::SelfTy, ..] => todo!("calc_address for `Self`"),
+            [PathPart::SuperKw, ..] => todo!("calc_address for `super`"),
+        }
     }
 }
 
@@ -198,17 +372,7 @@ impl Interpret for Assign {
         let (head, tail) = parts.borrow();
         let init = tail.interpret(env)?;
         // Resolve the head pattern
-        let target = evaluate_place_expr(env, head)?;
-        use std::mem::discriminant as variant;
-        // runtime typecheck
-        match target.0 {
-            Some(value) if variant(value) == variant(&init) => {
-                *value = init;
-            }
-            value @ None => *value = Some(init),
-            _ => Err(Error::TypeError)?,
-        }
-        Ok(ConValue::Empty)
+        assignment::assign(env, head, init).map(|_| ConValue::Empty)
     }
 }
 impl Interpret for Modify {
@@ -218,10 +382,7 @@ impl Interpret for Modify {
         // Get the initializer and the tail
         let init = tail.interpret(env)?;
         // Resolve the head pattern
-        let target = evaluate_place_expr(env, head)?;
-        let (Some(target), _) = target else {
-            return Err(Error::NotInitialized(target.1));
-        };
+        let target = assignment::addrof(env, head)?;
 
         match op {
             ModifyKind::Add => target.add_assign(init),
@@ -472,7 +633,7 @@ impl Interpret for Structor {
             };
             map.insert(*name, value);
         }
-        Ok(ConValue::Struct(Rc::new((name, map))))
+        Ok(ConValue::Struct(Box::new((name, map))))
     }
 }
 
@@ -480,15 +641,10 @@ impl Interpret for Path {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self { absolute: _, parts } = self;
 
-        if parts.len() == 1 {
-            match parts.last().expect("parts should not be empty") {
-                PathPart::SuperKw | PathPart::SelfKw => todo!("Path navigation"),
-                PathPart::SelfTy => todo!("Path navigation to Self"),
-                PathPart::Ident(name) => env.get(*name),
-            }
-        } else {
-            todo!("Path navigation!")
-        }
+        assignment::addrof_path(env, parts)
+            .cloned()
+            .transpose()
+            .ok_or_else(|| Error::NotInitialized(format!("{self}").into()))?
     }
 }
 impl Interpret for Literal {
