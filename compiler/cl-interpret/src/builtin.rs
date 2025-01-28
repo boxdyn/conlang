@@ -59,6 +59,7 @@ builtins! {
         Ok(ConValue::Empty)
     }
 
+    /// Gets the length of a container or range
     pub fn len<env, _>(list) -> IResult<ConValue> {
         Ok(ConValue::Int(match list {
             ConValue::Empty => 0,
@@ -71,6 +72,14 @@ builtins! {
             _ => Err(Error::TypeError)?,
         }))
     }
+
+    /// Gets a line of text from stdin
+    pub fn get_line() -> IResult<ConValue> {
+        let mut line = String::new();
+        let _ = std::io::stdin().read_line(&mut line);
+        Ok(ConValue::String(line.into()))
+    }
+
     /// Lists the potential "upvars" (lifted environment) of a function
     pub fn collect_upvars<env, _>(ConValue::Function(f)) -> IResult<ConValue> {
         use crate::function::collect_upvars::collect_upvars;
