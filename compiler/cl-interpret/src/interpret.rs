@@ -67,11 +67,21 @@ impl Interpret for Static {
 impl Interpret for Module {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self { name, kind } = self;
-        // TODO: Enter this module's namespace
-        match kind {
+        env.push_frame(Interned::to_ref(name), Default::default());
+        let out = match kind {
             ModuleKind::Inline(file) => file.interpret(env),
-            ModuleKind::Outline => Err(Error::Outlined(*name)),
-        }
+            ModuleKind::Outline => {
+                eprintln!("{}", Error::Outlined(*name));
+                Ok(ConValue::Empty)
+            }
+        };
+
+        let frame = env
+            .pop_frame()
+            .expect("Environment frames must be balanced");
+        env.insert(*name, Some(ConValue::Module(frame.into())));
+
+        out
     }
 }
 impl Interpret for Function {

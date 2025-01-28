@@ -31,20 +31,23 @@ pub enum ConValue {
     /// A reference
     Ref(Rc<ConValue>),
     /// An Array
-    Array(Rc<[ConValue]>),
+    Array(Box<[ConValue]>),
     /// A tuple
-    Tuple(Rc<[ConValue]>),
+    Tuple(Box<[ConValue]>),
     /// An exclusive range
     RangeExc(Integer, Integer),
     /// An inclusive range
     RangeInc(Integer, Integer),
     /// A value of a product type
-    Struct(Rc<(Sym, HashMap<Sym, ConValue>)>),
+    Struct(Box<(Sym, HashMap<Sym, ConValue>)>),
+    /// An entire namespace
+    Module(Box<HashMap<Sym, Option<ConValue>>>),
     /// A callable thing
     Function(Rc<Function>),
     /// A built-in function
     BuiltIn(&'static dyn BuiltIn),
 }
+
 impl ConValue {
     /// Gets whether the current value is true or false
     pub fn truthy(&self) -> IResult<bool> {
@@ -57,7 +60,7 @@ impl ConValue {
         let (Self::Int(a), Self::Int(b)) = (self, other) else {
             Err(Error::TypeError)?
         };
-        Ok(Self::RangeExc(a, b.saturating_sub(1)))
+        Ok(Self::RangeExc(a, b))
     }
     pub fn range_inc(self, other: Self) -> IResult<Self> {
         let (Self::Int(a), Self::Int(b)) = (self, other) else {
@@ -301,6 +304,18 @@ impl std::fmt::Display for ConValue {
                 let mut f = f.delimit_with("{", "\n}");
                 for (k, v) in map.iter() {
                     write!(f, "\n{k}: {v},")?;
+                }
+                Ok(())
+            }
+            ConValue::Module(module) => {
+                use std::fmt::Write;
+                let mut f = f.delimit_with("{", "\n}");
+                for (k, v) in module.iter() {
+                    write!(f, "\n{k}: ")?;
+                    match v {
+                        Some(v) => write!(f, "{v},"),
+                        None => write!(f, "_,"),
+                    }?
                 }
                 Ok(())
             }
