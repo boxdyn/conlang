@@ -1,5 +1,6 @@
 use crate::{ansi, ctx};
 use cl_ast::Stmt;
+use cl_interpret::convalue::ConValue;
 use cl_lexer::Lexer;
 use cl_parser::Parser;
 use repline::{error::ReplResult, prebaked::*};
@@ -48,6 +49,7 @@ pub fn run(ctx: &mut ctx::Context) -> ReplResult<()> {
 
         print!("{}", ansi::OUTPUT);
         match ctx.run(&code) {
+            Ok(ConValue::Empty) => print!("{}", ansi::RESET),
             Ok(v) => println!("{}{v}", ansi::RESET),
             Err(e) => println!("{}! > {e}{}", ansi::RED, ansi::RESET),
         }
