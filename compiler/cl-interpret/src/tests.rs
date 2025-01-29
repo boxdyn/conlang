@@ -178,6 +178,45 @@ mod let_declarations {
         env_eq!(env.x, 10);
         env_eq!(env.y, 10);
     }
+
+    #[test]
+    fn let_destructuring_tuple() {
+        let mut env = Environment::new();
+        assert_eval!(env,
+            let (x, y) = (10, 20);
+        );
+
+        env_eq!(env.x, 10);
+        env_eq!(env.y, 20);
+    }
+
+    #[test]
+    fn let_destructuring_array() {
+        let mut env = Environment::new();
+        assert_eval!(env,
+            let [x, y] = [10, 20];
+        );
+
+        env_eq!(env.x, 10);
+        env_eq!(env.y, 20);
+    }
+
+    #[test]
+    fn let_destructuring_nested() {
+        let mut env = Environment::new();
+        assert_eval!(env,
+            let (x, [one, two, three], (a, b, c))
+              = ('x', [1, 2, 3], ('a', 'b', 'c'));
+        );
+
+        env_eq!(env.x, 'x');
+        env_eq!(env.one, 1);
+        env_eq!(env.two, 2);
+        env_eq!(env.three, 3);
+        env_eq!(env.a, 'a');
+        env_eq!(env.b, 'b');
+        env_eq!(env.c, 'c');
+    }
 }
 
 mod fn_declarations {
@@ -468,6 +507,56 @@ mod operators {
         env_eq!(env.d, 16384);
         env_eq!(env.e, 28);
     }
+}
+
+mod control_flow {
+    use super::*;
+
+    #[test]
+    fn if_evaluates_pass_block_on_true() {
+        let mut env = Default::default();
+        assert_eval!(env,
+            let evaluated = if true { "pass" } else { "fail" }
+        );
+        env_eq!(env.evaluated, "pass");
+    }
+
+    #[test]
+    fn if_evaluates_fail_block_on_false() {
+        let mut env = Default::default();
+        assert_eval!(env,
+            let evaluated = if false { "pass" } else { "fail" }
+        );
+        env_eq!(env.evaluated, "fail");
+    }
+
+    #[test]
+    fn match_evaluates_in_order() {
+        let mut env = Default::default();
+        assert_eval!(env,
+            let x = '\u{1f988}';
+            let passed = match x {
+                '\u{1f988}' => true,
+                _ => false,
+            };
+        );
+        env_eq!(env.passed, true);
+    }
+
+    #[test]
+    fn match_sinkoles_underscore_patterns() {
+        let mut env = Default::default();
+        assert_eval!(env,
+            let x = '\u{1f988}';
+            let passed = match x {
+                _ => true,
+                '\u{1f988}' => false,
+            };
+        );
+        env_eq!(env.passed, true);
+    }
+
+    //TODO: test other control flow constructs like loops, while-else, etc.
 }
 
 #[allow(dead_code)]
