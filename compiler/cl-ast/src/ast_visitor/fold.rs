@@ -229,6 +229,13 @@ pub trait Fold {
     fn fold_semi(&mut self, s: Semi) -> Semi {
         s
     }
+    fn fold_expr(&mut self, e: Expr) -> Expr {
+        let Expr { extents, kind } = e;
+        Expr { extents: self.fold_span(extents), kind: self.fold_expr_kind(kind) }
+    }
+    fn fold_expr_kind(&mut self, kind: ExprKind) -> ExprKind {
+        or_fold_expr_kind(self, kind)
+    }
     fn fold_let(&mut self, l: Let) -> Let {
         let Let { mutable, name, ty, init } = l;
         Let {
@@ -238,13 +245,47 @@ pub trait Fold {
             init: init.map(|e| Box::new(self.fold_expr(*e))),
         }
     }
-    fn fold_expr(&mut self, e: Expr) -> Expr {
-        let Expr { extents, kind } = e;
-        Expr { extents: self.fold_span(extents), kind: self.fold_expr_kind(kind) }
+
+    fn fold_pattern(&mut self, p: Pattern) -> Pattern {
+        match p {
+            Pattern::Path(path) => Pattern::Path(self.fold_path(path)),
+            Pattern::Literal(literal) => Pattern::Literal(self.fold_literal(literal)),
+            Pattern::Ref(mutability, pattern) => Pattern::Ref(
+                self.fold_mutability(mutability),
+                Box::new(self.fold_pattern(*pattern)),
+            ),
+            Pattern::Tuple(patterns) => {
+                Pattern::Tuple(patterns.into_iter().map(|p| self.fold_pattern(p)).collect())
+            }
+            Pattern::Array(patterns) => {
+                Pattern::Array(patterns.into_iter().map(|p| self.fold_pattern(p)).collect())
+            }
+            Pattern::Struct(path, items) => Pattern::Struct(
+                self.fold_path(path),
+                items
+                    .into_iter()
+                    .map(|(name, bind)| (name, bind.map(|p| self.fold_pattern(p))))
+                    .collect(),
+            ),
+        }
     }
-    fn fold_expr_kind(&mut self, kind: ExprKind) -> ExprKind {
-        or_fold_expr_kind(self, kind)
+
+    fn fold_match(&mut self, m: Match) -> Match {
+        let Match { scrutinee, arms } = m;
+        Match {
+            scrutinee: self.fold_expr(*scrutinee).into(),
+            arms: arms
+                .into_iter()
+                .map(|arm| self.fold_match_arm(arm))
+                .collect(),
+        }
     }
+
+    fn fold_match_arm(&mut self, a: MatchArm) -> MatchArm {
+        let MatchArm(pat, expr) = a;
+        MatchArm(self.fold_pattern(pat), self.fold_expr(expr))
+    }
+    
     fn fold_assign(&mut self, a: Assign) -> Assign {
         let Assign { parts } = a;
         let (head, tail) = *parts;

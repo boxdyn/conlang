@@ -413,6 +413,27 @@ pub struct Let {
     pub init: Option<Box<Expr>>,
 }
 
+/// A [Pattern] meta-expression (any [`ExprKind`] that fits pattern rules)
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Pattern {
+    Path(Path),
+    Literal(Literal),
+    Ref(Mutability, Box<Pattern>),
+    Tuple(Vec<Pattern>),
+    Array(Vec<Pattern>),
+    Struct(Path, Vec<(Path, Option<Pattern>)>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Match {
+    pub scrutinee: Box<Expr>,
+    pub arms: Vec<MatchArm>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct MatchArm(pub Pattern, pub Expr);
+
+
 /// An [Assign]ment expression: [`Expr`] ([`ModifyKind`] [`Expr`])\+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Assign {

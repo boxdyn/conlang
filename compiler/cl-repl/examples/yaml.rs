@@ -369,16 +369,6 @@ pub mod yamlify {
             };
         }
     }
-    impl Yamlify for Let {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { mutable, name, ty, init } = self;
-            y.key("Let")
-                .pair("name", name)
-                .yaml(mutable)
-                .pair("ty", ty)
-                .pair("init", init);
-        }
-    }
     impl Yamlify for Expr {
         fn yaml(&self, y: &mut Yamler) {
             let Self { extents: _, kind } = self;
@@ -421,6 +411,55 @@ pub mod yamlify {
     impl Yamlify for Quote {
         fn yaml(&self, y: &mut Yamler) {
             y.key("Quote").value(self);
+        }
+    }
+    impl Yamlify for Let {
+        fn yaml(&self, y: &mut Yamler) {
+            let Self { mutable, name, ty, init } = self;
+            y.key("Let")
+                .pair("name", name)
+                .yaml(mutable)
+                .pair("ty", ty)
+                .pair("init", init);
+        }
+    }
+
+    impl Yamlify for Pattern {
+        fn yaml(&self, y: &mut Yamler) {
+            match self {
+                Pattern::Path(path) => y.value(path),
+                Pattern::Literal(literal) => y.value(literal),
+                Pattern::Ref(mutability, pattern) => {
+                    y.pair("mutability", mutability).pair("subpattern", pattern)
+                }
+                Pattern::Tuple(patterns) => y.key("Tuple").yaml(patterns),
+                Pattern::Array(patterns) => y.key("Array").yaml(patterns),
+                Pattern::Struct(path, items) => {
+                    {
+                        let mut y = y.key("Struct");
+                        y.pair("name", path);
+                        for (name, item) in items {
+                            y.pair(name, item);
+                        }
+                    }
+                    y
+                }
+            };
+        }
+    }
+    impl Yamlify for Match {
+        fn yaml(&self, y: &mut Yamler) {
+            let Self { scrutinee, arms } = self;
+            y.key("Match")
+                .pair("scrutinee", scrutinee)
+                .pair("arms", arms);
+        }
+    }
+
+    impl Yamlify for MatchArm {
+        fn yaml(&self, y: &mut Yamler) {
+            let Self(pat, expr) = self;
+            y.pair("pat", pat).pair("expr", expr);
         }
     }
     impl Yamlify for Assign {

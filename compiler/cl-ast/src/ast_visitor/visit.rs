@@ -192,6 +192,14 @@ pub trait Visit<'a>: Sized {
         or_visit_stmt_kind(self, kind)
     }
     fn visit_semi(&mut self, _s: &'a Semi) {}
+    fn visit_expr(&mut self, e: &'a Expr) {
+        let Expr { extents, kind } = e;
+        self.visit_span(extents);
+        self.visit_expr_kind(kind)
+    }
+    fn visit_expr_kind(&mut self, e: &'a ExprKind) {
+        or_visit_expr_kind(self, e)
+    }
     fn visit_let(&mut self, l: &'a Let) {
         let Let { mutable, name, ty, init } = l;
         self.visit_mutability(mutable);
@@ -203,14 +211,44 @@ pub trait Visit<'a>: Sized {
             self.visit_expr(init)
         }
     }
-    fn visit_expr(&mut self, e: &'a Expr) {
-        let Expr { extents, kind } = e;
-        self.visit_span(extents);
-        self.visit_expr_kind(kind)
+
+    fn visit_pattern(&mut self, p: &'a Pattern) {
+        match p {
+            Pattern::Path(path) => self.visit_path(path),
+            Pattern::Literal(literal) => self.visit_literal(literal),
+            Pattern::Ref(mutability, pattern) => {
+                self.visit_mutability(mutability);
+                self.visit_pattern(pattern);
+            }
+            Pattern::Tuple(patterns) => {
+                patterns.iter().for_each(|p| self.visit_pattern(p));
+            }
+            Pattern::Array(patterns) => {
+                patterns.iter().for_each(|p| self.visit_pattern(p));
+            }
+            Pattern::Struct(path, items) => {
+                self.visit_path(path);
+                items.iter().for_each(|(_name, bind)| {
+                    bind.as_ref().inspect(|bind| {
+                        self.visit_pattern(bind);
+                    });
+                });
+            }
+        }
     }
-    fn visit_expr_kind(&mut self, e: &'a ExprKind) {
-        or_visit_expr_kind(self, e)
+
+    fn visit_match(&mut self, m: &'a Match) {
+        let Match { scrutinee, arms } = m;
+        self.visit_expr(scrutinee);
+        arms.iter().for_each(|arm| self.visit_match_arm(arm));
     }
+
+    fn visit_match_arm(&mut self, a: &'a MatchArm) {
+        let MatchArm(pat, expr) = a;
+        self.visit_pattern(pat);
+        self.visit_expr(expr);
+    }
+    
     fn visit_assign(&mut self, a: &'a Assign) {
         let Assign { parts } = a;
         let (head, tail) = parts.as_ref();

@@ -464,6 +464,47 @@ mod display {
         }
     }
 
+    impl Display for Pattern {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Pattern::Path(path) => path.fmt(f),
+                Pattern::Literal(literal) => literal.fmt(f),
+                Pattern::Ref(mutability, pattern) => write!(f, "&{mutability}{pattern}"),
+                Pattern::Tuple(patterns) => separate(patterns, ", ")(f.delimit(INLINE_PARENS)),
+                Pattern::Array(patterns) => separate(patterns, ", ")(f.delimit(INLINE_SQUARE)),
+                Pattern::Struct(path, items) => {
+                    write!(f, "{path}: ")?;
+                    let f = &mut f.delimit(BRACES);
+                    for (idx, (name, item)) in items.iter().enumerate() {
+                        if idx != 0 {
+                            f.write_str(",\n")?;
+                        }
+                        write!(f, "{name}")?;
+                        if let Some(pattern) = item {
+                            write!(f, ": {pattern}")?
+                        }
+                    }
+                    Ok(())
+                }
+            }
+        }
+    }
+
+    impl Display for Match {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let Self { scrutinee, arms } = self;
+            write!(f, "match {scrutinee} ")?;
+            separate(arms, ",\n")(f.delimit(BRACES))
+        }
+    }
+
+    impl Display for MatchArm {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let Self(pat, expr) = self;
+            write!(f, "{pat} => {expr}")
+        }
+    }
+
     impl Display for Assign {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { parts } = self;
@@ -812,6 +853,50 @@ mod convert {
             Self { body: Some(value.into()) }
         }
     }
+
+    impl TryFrom<ExprKind> for Pattern {
+        type Error = ExprKind;
+
+        /// Performs the conversion. On failure, returns the *first* non-pattern subexpression.
+        fn try_from(value: ExprKind) -> Result<Self, Self::Error> {
+            Ok(match value {
+                ExprKind::Literal(literal) => Pattern::Literal(literal),
+                ExprKind::Path(path) => Pattern::Path(path),
+                ExprKind::Empty => Pattern::Tuple(vec![]),
+                ExprKind::Group(Group { expr }) => Pattern::Tuple(vec![Pattern::try_from(*expr)?]),
+                ExprKind::Tuple(Tuple { exprs }) => Pattern::Tuple(
+                    exprs
+                        .into_iter()
+                        .map(|e| Pattern::try_from(e.kind))
+                        .collect::<Result<_, _>>()?,
+                ),
+                ExprKind::AddrOf(AddrOf { mutable, expr }) => {
+                    Pattern::Ref(mutable, Box::new(Pattern::try_from(*expr)?))
+                }
+                ExprKind::Array(Array { values }) => Pattern::Array(
+                    values
+                        .into_iter()
+                        .map(|e| Pattern::try_from(e.kind))
+                        .collect::<Result<_, _>>()?,
+                ),
+                // ExprKind::Index(index) => todo!(),
+                // ExprKind::Member(member) => todo!(),
+                ExprKind::Structor(Structor { to, init }) => {
+                    let fields = init
+                        .into_iter()
+                        .map(|Fielder { name, init }| {
+                            Ok((
+                                name.into(),
+                                init.map(|i| Pattern::try_from(i.kind)).transpose()?,
+                            ))
+                        })
+                        .collect::<Result<_, Self::Error>>()?;
+                    Pattern::Struct(to, fields)
+                }
+                err => Err(err)?,
+            })
+        }
+    }
 }
 
 mod path {
@@ -837,10 +922,26 @@ mod path {
                 self
             }
         }
+
+        /// Checks whether this path refers to the sinkhole identifier, `_`
+        pub fn is_sinkhole(&self) -> bool {
+            if let [PathPart::Ident(id)] = self.parts.as_slice() {
+                if let "_" = Sym::to_ref(id) {
+                    return true;
+                }
+            }
+            false
+        }
     }
     impl PathPart {
         pub fn from_sym(ident: Sym) -> Self {
             Self::Ident(ident)
+        }
+    }
+
+    impl From<Sym> for Path {
+        fn from(value: Sym) -> Self {
+            Self { parts: vec![PathPart::Ident(value)], absolute: false }
         }
     }
 }
