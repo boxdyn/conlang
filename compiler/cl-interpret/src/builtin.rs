@@ -53,6 +53,14 @@ builtins! {
         Ok(args.into())
     }
 
+    pub fn dbgp<_, args> () -> IResult<ConValue> {
+        let mut out = stdout().lock();
+        for arg in args {
+            writeln!(out, "{arg:#?}").ok();
+        }
+        Ok(ConValue::Empty)
+    }
+
     /// Dumps info from the environment
     pub fn dump<env, _>() -> IResult<ConValue> {
         println!("{}", *env);
@@ -104,6 +112,7 @@ builtins! {
         Ok(ConValue::Empty)
     }
 }
+
 builtins! {
     const BINARY;
     /// Multiplication `a * b`
