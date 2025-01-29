@@ -351,6 +351,8 @@ pub enum ExprKind {
     Quote(Quote),
     /// A local bind instruction, `let` [`Sym`] `=` [`Expr`]
     Let(Let),
+    /// A [Match] expression, `match` [Expr] `{` ([MatchArm] `,`)* [MatchArm]? `}`
+    Match(Match),
     /// An [Assign]ment expression: [`Expr`] (`=` [`Expr`])\+
     Assign(Assign),
     /// A [Modify]-assignment expression: [`Expr`] ([`ModifyKind`] [`Expr`])\+
@@ -408,7 +410,7 @@ pub struct Quote {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Let {
     pub mutable: Mutability,
-    pub name: Sym,
+    pub name: Pattern,
     pub ty: Option<Box<Ty>>,
     pub init: Option<Box<Expr>>,
 }

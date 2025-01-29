@@ -75,11 +75,11 @@ impl Interpret for Module {
         let out = match kind {
             ModuleKind::Inline(file) => file.interpret(env),
             ModuleKind::Outline => {
-                eprintln!("{}", Error::Outlined(*name));
+                eprintln!("Module {name} specified, but not imported.");
                 Ok(ConValue::Empty)
             }
         };
-        
+
         let frame = env
             .pop_frame()
             .expect("Environment frames must be balanced");
@@ -128,14 +128,7 @@ impl Interpret for Stmt {
         })
     }
 }
-impl Interpret for Let {
-    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Let { mutable: _, name, ty: _, init } = self;
-        let init = init.as_ref().map(|i| i.interpret(env)).transpose()?;
-        env.insert(*name, init);
-        Ok(ConValue::Empty)
-    }
-}
+
 impl Interpret for Expr {
     #[inline]
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
@@ -143,12 +136,14 @@ impl Interpret for Expr {
         kind.interpret(env)
     }
 }
+
 impl Interpret for ExprKind {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         match self {
             ExprKind::Empty => Ok(ConValue::Empty),
             ExprKind::Quote(q) => q.interpret(env),
             ExprKind::Let(v) => v.interpret(env),
+            ExprKind::Match(v) => v.interpret(env),
             ExprKind::Assign(v) => v.interpret(env),
             ExprKind::Modify(v) => v.interpret(env),
             ExprKind::Binary(v) => v.interpret(env),
@@ -182,38 +177,190 @@ impl Interpret for Quote {
     }
 }
 
+impl Interpret for Let {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let Let { mutable: _, name, ty: _, init } = self;
+        match init.as_ref().map(|i| i.interpret(env)).transpose()? {
+            Some(value) => {
+                for (path, value) in assignment::pattern_substitution(name, value)? {
+                    match path.parts.as_slice() {
+                        [PathPart::Ident(name)] => env.insert(*name, Some(value)),
+                        _ => eprintln!("Bad assignment: {path} = {value}"),
+                    }
+                }
+            }
+            None => {
+                for path in assignment::pattern_variables(name) {
+                    match path.parts.as_slice() {
+                        [PathPart::Ident(name)] => env.insert(*name, None),
+                        _ => eprintln!("Bad assignment: {path}"),
+                    }
+                }
+            }
+        }
+        Ok(ConValue::Empty)
+    }
+}
+
+impl Interpret for Match {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let Self { scrutinee, arms } = self;
+        let scrutinee = scrutinee.interpret(env)?;
+        'arm: for MatchArm(pat, expr) in arms {
+            if let Ok(substitution) = assignment::pattern_substitution(pat, scrutinee.clone()) {
+                let mut env = env.frame("match");
+                for (path, value) in substitution {
+                    let [PathPart::Ident(name)] = path.parts.as_slice() else {
+                        continue 'arm;
+                    };
+                    env.insert(*name, Some(value));
+                }
+                return expr.interpret(&mut env);
+            }
+        }
+        Err(Error::MatchNonexhaustive)
+    }
+}
+
 mod assignment {
     /// Pattern matching engine for assignment
     use super::*;
     use std::collections::HashMap;
     type Namespace = HashMap<Sym, Option<ConValue>>;
 
-    pub(super) fn assign(env: &mut Environment, pat: &ExprKind, value: ConValue) -> IResult<()> {
-        match (pat, value) {
-            (ExprKind::Empty, ConValue::Empty) => Ok(()),
-            (ExprKind::Path(path), value) => assign_path(env, path, value),
-            (ExprKind::Group(Group { expr }), value) => assign(env, expr, value),
-            (ExprKind::Tuple(tuple), value) => assign_destructure_tuple(env, tuple, value),
-            (ExprKind::Array(array), value) => assign_destructure_array(env, array, value),
-            (ExprKind::Index(index), value) => assign_index(env, index, value),
-            (ExprKind::Member(member), value) => assign_member(env, member, value),
-            (ExprKind::Structor(structor), value) => {
-                assign_destructure_struct(env, structor, value)
+    /// Gets the path variables in the given Pattern
+    pub fn pattern_variables(pat: &Pattern) -> Vec<&Path> {
+        fn patvars<'p>(set: &mut Vec<&'p Path>, pat: &'p Pattern) {
+            match pat {
+                Pattern::Path(path) if path.is_sinkhole() => {}
+                Pattern::Path(path) => set.push(path),
+                Pattern::Literal(_) => {}
+                Pattern::Ref(_, pattern) => patvars(set, pattern),
+                Pattern::Tuple(patterns) | Pattern::Array(patterns) => {
+                    patterns.iter().for_each(|pat| patvars(set, pat))
+                }
+                Pattern::Struct(_path, items) => {
+                    items.iter().for_each(|(name, pat)| match pat {
+                        Some(pat) => patvars(set, pat),
+                        None => set.push(name),
+                    });
+                }
             }
-            _ => {
-                eprintln!("{pat} is not a valid pattern expression");
-                Err(Error::NotAssignable)
+        }
+        let mut set = Vec::new();
+        patvars(&mut set, pat);
+        set
+    }
+
+    /// Appends a substitution to the provided table
+    pub fn append_sub<'pat>(
+        env: &mut HashMap<&'pat Path, ConValue>,
+        pat: &'pat Pattern,
+        value: ConValue,
+    ) -> IResult<()> {
+        match pat {
+            Pattern::Path(path) if path.is_sinkhole() => Ok(()),
+            Pattern::Path(path) => {
+                env.insert(path, value);
+                Ok(())
+            }
+
+            Pattern::Literal(literal) => match (literal, value) {
+                (Literal::Bool(a), ConValue::Bool(b)) => *a == b,
+                (Literal::Char(a), ConValue::Char(b)) => *a == b,
+                (Literal::Int(a), ConValue::Int(b)) => *a as isize == b,
+                (Literal::Float(a), ConValue::Float(b)) => f64::from_bits(*a) == b,
+                (Literal::String(a), ConValue::String(b)) => *a == *b,
+                _ => false,
+            }
+            .then_some(())
+            .ok_or(Error::NotAssignable),
+
+            Pattern::Ref(_, pattern) => match value {
+                ConValue::Ref(value) => append_sub(env, pattern, Rc::unwrap_or_clone(value)),
+                _ => Err(Error::NotAssignable),
+            },
+
+            Pattern::Tuple(patterns) => match value {
+                ConValue::Tuple(values) => {
+                    if patterns.len() != values.len() {
+                        return Err(Error::OobIndex(patterns.len(), values.len()));
+                    };
+                    for (pat, value) in patterns.iter().zip(Vec::from(values).into_iter()) {
+                        append_sub(env, pat, value)?;
+                    }
+                    Ok(())
+                }
+                _ => Err(Error::NotAssignable),
+            },
+
+            Pattern::Array(patterns) => match value {
+                ConValue::Array(values) => {
+                    if patterns.len() != values.len() {
+                        return Err(Error::OobIndex(patterns.len(), values.len()));
+                    };
+                    for (pat, value) in patterns.iter().zip(Vec::from(values).into_iter()) {
+                        append_sub(env, pat, value)?;
+                    }
+                    Ok(())
+                }
+                _ => Err(Error::NotAssignable),
+            },
+
+            Pattern::Struct(_path, patterns) => {
+                let ConValue::Struct(parts) = value else {
+                    return Err(Error::TypeError);
+                };
+                let (_, mut values) = *parts;
+                if values.len() != patterns.len() {
+                    return Err(Error::TypeError);
+                }
+                for (name, pat) in patterns {
+                    let [.., PathPart::Ident(index)] = name.parts.as_slice() else {
+                        Err(Error::TypeError)?
+                    };
+                    let value = values.remove(index).ok_or(Error::TypeError)?;
+                    match pat {
+                        Some(pat) => append_sub(env, pat, value)?,
+                        None => {
+                            env.insert(name, value);
+                        }
+                    }
+                }
+
+                Ok(())
             }
         }
     }
 
-    fn assign_member(env: &mut Environment, member: &Member, value: ConValue) -> IResult<()> {
-        *addrof_member(env, member)? = value;
+    /// Constructs a substitution from a pattern and a value
+    pub fn pattern_substitution(
+        pat: &Pattern,
+        value: ConValue,
+    ) -> IResult<HashMap<&Path, ConValue>> {
+        let mut substitution = HashMap::new();
+        append_sub(&mut substitution, pat, value)?;
+        Ok(substitution)
+    }
+
+    pub(super) fn pat_assign(env: &mut Environment, pat: &Pattern, value: ConValue) -> IResult<()> {
+        let mut substitution = HashMap::new();
+        append_sub(&mut substitution, pat, value).map_err(|_| Error::PatFailed(pat.clone()))?;
+        for (path, value) in substitution {
+            assign_path(env, path, value)?;
+        }
         Ok(())
     }
 
-    fn assign_index(env: &mut Environment, index: &Index, value: ConValue) -> IResult<()> {
-        *addrof_index(env, index)? = value;
+    pub(super) fn assign(env: &mut Environment, pat: &ExprKind, value: ConValue) -> IResult<()> {
+        if let Ok(pat) = Pattern::try_from(pat.clone()) {
+            return pat_assign(env, &pat, value);
+        }
+        match pat {
+            ExprKind::Member(member) => *addrof_member(env, member)? = value,
+            ExprKind::Index(index) => *addrof_index(env, index)? = value,
+            _ => Err(Error::NotAssignable)?,
+        }
         Ok(())
     }
 
@@ -223,66 +370,6 @@ mod assignment {
             return Err(Error::NotAssignable);
         };
         *addr = Some(value);
-        Ok(())
-    }
-
-    fn assign_destructure_array(
-        env: &mut Environment,
-        array: &Array,
-        value: ConValue,
-    ) -> IResult<()> {
-        let Array { values } = array;
-        let ConValue::Array(inits) = &value else {
-            eprintln!("{value} does not match pattern {array}");
-            return Err(Error::TypeError);
-        };
-        if values.len() != inits.len() {
-            return Err(Error::TypeError);
-        }
-
-        for (init, expr) in inits.iter().zip(values) {
-            assign(env, &expr.kind, init.clone())?;
-        }
-        Ok(())
-    }
-
-    fn assign_destructure_tuple(
-        env: &mut Environment,
-        tuple: &Tuple,
-        value: ConValue,
-    ) -> IResult<()> {
-        let Tuple { exprs } = tuple;
-        let ConValue::Tuple(inits) = &value else {
-            eprintln!("{value} does not match pattern {tuple}");
-            return Err(Error::TypeError);
-        };
-        if exprs.len() != inits.len() {
-            return Err(Error::TypeError);
-        }
-
-        for (init, expr) in inits.iter().zip(exprs) {
-            assign(env, &expr.kind, init.clone())?;
-        }
-        Ok(())
-    }
-
-    fn assign_destructure_struct(
-        env: &mut Environment,
-        pat: &Structor,
-        value: ConValue,
-    ) -> IResult<()> {
-        let Structor { to: _, init: pat } = pat;
-        let ConValue::Struct(parts) = value else {
-            return Err(Error::TypeError);
-        };
-        let (_, members) = *parts;
-        for Fielder { name, init: pat } in pat {
-            let value = members.get(name).ok_or(Error::NotDefined(*name))?;
-            match pat {
-                Some(pat) => assign(env, &pat.kind, value.clone())?,
-                None => *env.get_mut(*name)? = Some(value.clone()),
-            }
-        }
         Ok(())
     }
 
@@ -297,6 +384,7 @@ mod assignment {
             ExprKind::Member(member) => addrof_member(env, member),
             ExprKind::Index(index) => addrof_index(env, index),
             ExprKind::Group(Group { expr }) => addrof(env, expr),
+            ExprKind::AddrOf(AddrOf { mutable: Mutability::Mut, expr }) => addrof(env, expr),
             _ => Err(Error::TypeError),
         }
     }

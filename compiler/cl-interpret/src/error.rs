@@ -1,6 +1,6 @@
 //! The [Error] type represents any error thrown by the [Environment](super::Environment)
 
-use cl_ast::Sym;
+use cl_ast::{Pattern, Sym};
 
 use super::convalue::ConValue;
 
@@ -39,11 +39,11 @@ pub enum Error {
     /// A value was called, but is not callable
     NotCallable(ConValue),
     /// A function was called with the wrong number of arguments
-    ArgNumber {
-        want: usize,
-        got: usize,
-    },
-    Outlined(Sym),
+    ArgNumber { want: usize, got: usize },
+    /// A pattern failed to match
+    PatFailed(Pattern),
+    /// Fell through a non-exhaustive match
+    MatchNonexhaustive,
 }
 
 impl std::error::Error for Error {}
@@ -83,8 +83,11 @@ impl std::fmt::Display for Error {
                     if *want == 1 { "" } else { "s" }
                 )
             }
-            Error::Outlined(name) => {
-                write!(f, "Module {name} specified, but not imported.")
+            Error::PatFailed(pattern) => {
+                write!(f, "Failed to match pattern {pattern}")
+            }
+            Error::MatchNonexhaustive => {
+                write!(f, "Fell through a non-exhaustive match expression!")
             }
         }
     }

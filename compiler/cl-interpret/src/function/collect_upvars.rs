@@ -1,6 +1,6 @@
 //! Collects the "Upvars" of a function at the point of its creation, allowing variable capture
 use crate::{convalue::ConValue, env::Environment};
-use cl_ast::{ast_visitor::visit::*, Function, Let, Param, Path, PathPart, Sym};
+use cl_ast::{ast_visitor::visit::*, Function, Let, Param, Path, PathPart, Pattern, Sym};
 use std::collections::{HashMap, HashSet};
 
 pub fn collect_upvars(f: &Function, env: &Environment) -> super::Upvars {
@@ -61,7 +61,7 @@ impl<'a> Visit<'a> for CollectUpvars<'_> {
             self.visit_expr(init)
         }
         // a bound name can never be an upvar
-        self.bind_name(name);
+        self.visit_pattern(name);
     }
 
     fn visit_function(&mut self, f: &'a cl_ast::Function) {
@@ -100,6 +100,35 @@ impl<'a> Visit<'a> for CollectUpvars<'_> {
             self.visit_expr(init);
         } else {
             self.add_upvar(name); // fielder without init grabs from env
+        }
+    }
+
+    fn visit_pattern(&mut self, p: &'a cl_ast::Pattern) {
+        match p {
+            Pattern::Path(path) => {
+                if let [PathPart::Ident(name)] = path.parts.as_slice() {
+                    self.bind_name(name)
+                }
+            }
+            Pattern::Literal(literal) => self.visit_literal(literal),
+            Pattern::Ref(mutability, pattern) => {
+                self.visit_mutability(mutability);
+                self.visit_pattern(pattern);
+            }
+            Pattern::Tuple(patterns) => {
+                patterns.iter().for_each(|p| self.visit_pattern(p));
+            }
+            Pattern::Array(patterns) => {
+                patterns.iter().for_each(|p| self.visit_pattern(p));
+            }
+            Pattern::Struct(path, items) => {
+                self.visit_path(path);
+                items.iter().for_each(|(_name, bind)| {
+                    bind.as_ref().inspect(|bind| {
+                        self.visit_pattern(bind);
+                    });
+                });
+            }
         }
     }
 }

@@ -119,6 +119,10 @@ pub enum Parsing {
     Break,
     Return,
     Continue,
+
+    Pattern,
+    Match,
+    MatchArm,
 }
 
 impl Display for Error {
@@ -225,6 +229,10 @@ impl Display for Parsing {
             Parsing::Break => "a break expression",
             Parsing::Return => "a return expression",
             Parsing::Continue => "a continue expression",
+
+            Parsing::Pattern => "a pattern",
+            Parsing::Match => "a match expression",
+            Parsing::MatchArm => "a match arm",
         }
         .fmt(f)
     }

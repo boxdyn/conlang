@@ -146,11 +146,11 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
     }
 
     fn visit_let(&mut self, l: &'a cl_ast::Let) {
-        let cl_ast::Let { mutable, name, ty, init } = l;
+        let cl_ast::Let { mutable, name: _, ty, init } = l;
         let mut entry = self.new_entry(NodeKind::Local);
 
         entry.inner.set_source(Source::Local(l));
-        entry.set_name(*name);
+        // entry.set_name(*name);
 
         entry.visit_mutability(mutable);
         if let Some(ty) = ty {
@@ -160,7 +160,8 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
             entry.visit_expr(init)
         }
 
-        let child = entry.inner.id();
-        self.inner.add_child(*name, child);
+        // let child = entry.inner.id();
+        // self.inner.add_child(*name, child);
+        todo!("Pattern destructuring in cl-typeck")
     }
 }

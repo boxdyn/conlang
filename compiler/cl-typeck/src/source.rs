@@ -32,7 +32,7 @@ impl Source<'_> {
             Source::Const(v) => Some(v.name),
             Source::Static(v) => Some(v.name),
             Source::Function(v) => Some(v.name),
-            Source::Local(l) => Some(l.name),
+            Source::Local(_) => None,
             Source::Impl(_) | Source::Use(_) | Source::Ty(_) => None,
         }
     }

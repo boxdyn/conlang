@@ -380,6 +380,7 @@ pub mod yamlify {
             match self {
                 ExprKind::Quote(k) => k.yaml(y),
                 ExprKind::Let(k) => k.yaml(y),
+                ExprKind::Match(k) => k.yaml(y),
                 ExprKind::Assign(k) => k.yaml(y),
                 ExprKind::Modify(k) => k.yaml(y),
                 ExprKind::Binary(k) => k.yaml(y),

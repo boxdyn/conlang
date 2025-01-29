@@ -203,7 +203,7 @@ pub trait Visit<'a>: Sized {
     fn visit_let(&mut self, l: &'a Let) {
         let Let { mutable, name, ty, init } = l;
         self.visit_mutability(mutable);
-        self.visit_sym(name);
+        self.visit_pattern(name);
         if let Some(ty) = ty {
             self.visit_ty(ty);
         }
@@ -492,6 +492,7 @@ pub fn or_visit_expr_kind<'a, V: Visit<'a>>(visitor: &mut V, e: &'a ExprKind) {
         ExprKind::Empty => {}
         ExprKind::Quote(_q) => {} // Quoted expressions are left unvisited
         ExprKind::Let(l) => visitor.visit_let(l),
+        ExprKind::Match(m) => visitor.visit_match(m),
         ExprKind::Assign(a) => visitor.visit_assign(a),
         ExprKind::Modify(m) => visitor.visit_modify(m),
         ExprKind::Binary(b) => visitor.visit_binary(b),

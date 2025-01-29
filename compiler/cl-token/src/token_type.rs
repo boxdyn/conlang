@@ -28,6 +28,7 @@ pub enum TokenKind {
     In,       // "in"
     Let,      // "let"
     Loop,     // "loop"
+    Match,    // "match"
     Mod,      // "mod"
     Mut,      // "mut"
     Pub,      // "pub"
@@ -121,6 +122,7 @@ impl Display for TokenKind {
             TokenKind::In => "in".fmt(f),
             TokenKind::Let => "let".fmt(f),
             TokenKind::Loop => "loop".fmt(f),
+            TokenKind::Match => "match".fmt(f),
             TokenKind::Mod => "mod".fmt(f),
             TokenKind::Mut => "mut".fmt(f),
             TokenKind::Pub => "pub".fmt(f),
@@ -213,6 +215,7 @@ impl FromStr for TokenKind {
             "in" => Self::In,
             "let" => Self::Let,
             "loop" => Self::Loop,
+            "match" => Self::Match,
             "mod" => Self::Mod,
             "mut" => Self::Mut,
             "pub" => Self::Pub,

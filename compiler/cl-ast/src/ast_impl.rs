@@ -417,6 +417,7 @@ mod display {
                 ExprKind::Empty => "()".fmt(f),
                 ExprKind::Quote(v) => v.fmt(f),
                 ExprKind::Let(v) => v.fmt(f),
+                ExprKind::Match(v) => v.fmt(f),
                 ExprKind::Assign(v) => v.fmt(f),
                 ExprKind::Modify(v) => v.fmt(f),
                 ExprKind::Binary(v) => v.fmt(f),
@@ -814,6 +815,7 @@ mod convert {
         impl From for ExprKind {
             Let => ExprKind::Let,
             Quote => ExprKind::Quote,
+            Match => ExprKind::Match,
             Assign => ExprKind::Assign,
             Modify => ExprKind::Modify,
             Binary => ExprKind::Binary,

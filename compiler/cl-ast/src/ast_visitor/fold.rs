@@ -240,7 +240,7 @@ pub trait Fold {
         let Let { mutable, name, ty, init } = l;
         Let {
             mutable: self.fold_mutability(mutable),
-            name: self.fold_sym(name),
+            name: self.fold_pattern(name),
             ty: ty.map(|t| Box::new(self.fold_ty(*t))),
             init: init.map(|e| Box::new(self.fold_expr(*e))),
         }
@@ -572,6 +572,7 @@ pub fn or_fold_expr_kind<F: Fold + ?Sized>(folder: &mut F, kind: ExprKind) -> Ex
         ExprKind::Empty => ExprKind::Empty,
         ExprKind::Quote(q) => ExprKind::Quote(q), // quoted expressions are left unmodified
         ExprKind::Let(l) => ExprKind::Let(folder.fold_let(l)),
+        ExprKind::Match(m) => ExprKind::Match(folder.fold_match(m)),
         ExprKind::Assign(a) => ExprKind::Assign(folder.fold_assign(a)),
         ExprKind::Modify(m) => ExprKind::Modify(folder.fold_modify(m)),
         ExprKind::Binary(b) => ExprKind::Binary(folder.fold_binary(b)),

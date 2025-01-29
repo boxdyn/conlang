@@ -21,6 +21,7 @@ pub fn exprkind(p: &mut Parser, power: u8) -> PResult<ExprKind> {
         TokenKind::LBrack => exprkind_arraylike(p)?,
         TokenKind::LParen => exprkind_tuplelike(p)?,
         TokenKind::Let => Let::parse(p)?.into(),
+        TokenKind::Match => Match::parse(p)?.into(),
         TokenKind::While => ExprKind::While(While::parse(p)?),
         TokenKind::If => ExprKind::If(If::parse(p)?),
         TokenKind::For => ExprKind::For(For::parse(p)?),
@@ -32,8 +33,7 @@ pub fn exprkind(p: &mut Parser, power: u8) -> PResult<ExprKind> {
         }
 
         op => {
-            let (kind, prec) =
-                from_prefix(op).ok_or_else(|| p.error(Unexpected(op), parsing))?;
+            let (kind, prec) = from_prefix(op).ok_or_else(|| p.error(Unexpected(op), parsing))?;
             let ((), after) = prec.prefix().expect("should have a precedence");
             p.consume_peeked();
             Unary { kind, tail: exprkind(p, after)?.into() }.into()
@@ -65,14 +65,10 @@ pub fn exprkind(p: &mut Parser, power: u8) -> PResult<ExprKind> {
                     ExprKind::Index(Index { head: head.into(), indices })
                 }
                 TokenKind::LParen => {
-                    let exprs =
-                        sep(Expr::parse, TokenKind::Comma, TokenKind::RParen, parsing)(p)?;
+                    let exprs = sep(Expr::parse, TokenKind::Comma, TokenKind::RParen, parsing)(p)?;
                     p.match_type(TokenKind::RParen, parsing)?;
-                    Binary {
-                        kind: BinaryKind::Call,
-                        parts: (head, Tuple { exprs }.into()).into(),
-                    }
-                    .into()
+                    Binary { kind: BinaryKind::Call, parts: (head, Tuple { exprs }.into()).into() }
+                        .into()
                 }
                 TokenKind::Dot => {
                     let kind = MemberKind::parse(p)?;
@@ -260,6 +256,7 @@ pub enum Precedence {
     Cast,
     Member, // left-associative
     Call,
+    Highest,
 }
 
 impl Precedence {
@@ -310,9 +307,7 @@ impl From<BinaryKind> for Precedence {
             Op::BitAnd | Op::BitOr | Op::BitXor => Precedence::Bitwise,
             Op::LogAnd | Op::LogOr | Op::LogXor => Precedence::Logic,
             Op::RangeExc | Op::RangeInc => Precedence::Range,
-            Op::Lt | Op::LtEq | Op::Equal | Op::NotEq | Op::GtEq | Op::Gt => {
-                Precedence::Compare
-            }
+            Op::Lt | Op::LtEq | Op::Equal | Op::NotEq | Op::GtEq | Op::Gt => Precedence::Compare,
         }
     }
 }

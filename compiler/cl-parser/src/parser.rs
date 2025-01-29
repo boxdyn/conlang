@@ -917,7 +917,7 @@ impl Parse<'_> for Let {
         p.consume_peeked();
         Ok(Let {
             mutable: Mutability::parse(p)?,
-            name: Sym::parse(p)?,
+            name: Pattern::parse(p)?,
             ty: if p.match_type(TokenKind::Colon, Parsing::Let).is_ok() {
                 Some(Ty::parse(p)?.into())
             } else {
@@ -1072,6 +1072,38 @@ impl Parse<'_> for Return {
     fn parse(p: &mut Parser) -> PResult<Return> {
         p.match_type(TokenKind::Return, Parsing::Return)?;
         Ok(Return { body: ret_body(p, Parsing::Return)? })
+    }
+}
+
+impl Parse<'_> for Pattern {
+    fn parse(p: &mut Parser<'_>) -> PResult<Self> {
+        let value = prec::exprkind(p, prec::Precedence::Highest.level())?;
+        Pattern::try_from(value)
+            .map_err(|_| p.error(ExpectedParsing { want: Parsing::Pattern }, Parsing::Pattern))
+    }
+}
+
+impl Parse<'_> for Match {
+    /// [Match] = `match` [Expr] `{` [MatchArm],* `}`
+    fn parse(p: &mut Parser<'_>) -> PResult<Self> {
+        p.match_type(TokenKind::Match, Parsing::Match)?;
+        let scrutinee = Expr::parse(p)?.into();
+        let arms = delim(
+            sep(MatchArm::parse, TokenKind::Comma, CURLIES.1, Parsing::Match),
+            CURLIES,
+            Parsing::Match,
+        )(p)?;
+        Ok(Match { scrutinee, arms })
+    }
+}
+
+impl Parse<'_> for MatchArm {
+    /// [MatchArm] = [Pattern] `=>` [Expr]
+    fn parse(p: &mut Parser<'_>) -> PResult<Self> {
+        let pat = Pattern::parse(p)?;
+        p.match_type(TokenKind::FatArrow, Parsing::MatchArm)?;
+        let expr = Expr::parse(p)?;
+        Ok(MatchArm(pat, expr))
     }
 }
 
