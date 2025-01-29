@@ -347,6 +347,8 @@ pub enum ExprKind {
     /// An empty expression: `(` `)`
     #[default]
     Empty,
+    /// A backtick-quoted expression
+    Quote(Quote),
     /// A local bind instruction, `let` [`Sym`] `=` [`Expr`]
     Let(Let),
     /// An [Assign]ment expression: [`Expr`] (`=` [`Expr`])\+
@@ -394,6 +396,12 @@ pub enum ExprKind {
     Return(Return),
     /// A continue expression: `continue`
     Continue,
+}
+
+/// A backtick-quoted subexpression-literal
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Quote {
+    pub quote: Box<ExprKind>,
 }
 
 /// A local variable declaration [Stmt]

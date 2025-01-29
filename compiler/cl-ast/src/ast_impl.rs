@@ -415,6 +415,7 @@ mod display {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 ExprKind::Empty => "()".fmt(f),
+                ExprKind::Quote(v) => v.fmt(f),
                 ExprKind::Let(v) => v.fmt(f),
                 ExprKind::Assign(v) => v.fmt(f),
                 ExprKind::Modify(v) => v.fmt(f),
@@ -439,6 +440,13 @@ mod display {
                 ExprKind::Return(v) => v.fmt(f),
                 ExprKind::Continue => "continue".fmt(f),
             }
+        }
+    }
+
+    impl Display for Quote {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let Self { quote } = self;
+            write!(f, "`{quote}`")
         }
     }
 
@@ -764,6 +772,7 @@ mod convert {
         }
         impl From for ExprKind {
             Let => ExprKind::Let,
+            Quote => ExprKind::Quote,
             Assign => ExprKind::Assign,
             Modify => ExprKind::Modify,
             Binary => ExprKind::Binary,

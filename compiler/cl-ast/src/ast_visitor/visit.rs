@@ -452,6 +452,7 @@ pub fn or_visit_stmt_kind<'a, V: Visit<'a>>(visitor: &mut V, kind: &'a StmtKind)
 pub fn or_visit_expr_kind<'a, V: Visit<'a>>(visitor: &mut V, e: &'a ExprKind) {
     match e {
         ExprKind::Empty => {}
+        ExprKind::Quote(_q) => {} // Quoted expressions are left unvisited
         ExprKind::Let(l) => visitor.visit_let(l),
         ExprKind::Assign(a) => visitor.visit_assign(a),
         ExprKind::Modify(m) => visitor.visit_modify(m),

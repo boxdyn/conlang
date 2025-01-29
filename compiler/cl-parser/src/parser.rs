@@ -900,6 +900,18 @@ impl Parse<'_> for ExprKind {
     }
 }
 
+impl Parse<'_> for Quote {
+    fn parse(p: &mut Parser<'_>) -> PResult<Self> {
+        let quote = delim(
+            ExprKind::parse,
+            (TokenKind::Grave, TokenKind::Grave),
+            Parsing::ExprKind,
+        )(p)?
+        .into();
+        Ok(Quote { quote })
+    }
+}
+
 impl Parse<'_> for Let {
     fn parse(p: &mut Parser) -> PResult<Let> {
         p.consume_peeked();

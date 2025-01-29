@@ -1,7 +1,7 @@
 //! Values in the dynamically typed AST interpreter.
 //!
 //! The most permanent fix is a temporary one.
-use cl_ast::{format::FmtAdapter, Sym};
+use cl_ast::{format::FmtAdapter, ExprKind, Sym};
 
 use super::{
     error::{Error, IResult},
@@ -42,6 +42,8 @@ pub enum ConValue {
     Struct(Box<(Sym, HashMap<Sym, ConValue>)>),
     /// An entire namespace
     Module(Box<HashMap<Sym, Option<ConValue>>>),
+    /// A quoted expression
+    Quote(Box<ExprKind>),
     /// A callable thing
     Function(Rc<Function>),
     /// A built-in function
@@ -165,6 +167,7 @@ from! {
     &str => ConValue::String,
     String => ConValue::String,
     Rc<str> => ConValue::String,
+    ExprKind => ConValue::Quote,
     Function => ConValue::Function,
     Vec<ConValue> => ConValue::Tuple,
     &'static dyn BuiltIn => ConValue::BuiltIn,
@@ -318,6 +321,9 @@ impl std::fmt::Display for ConValue {
                     }?
                 }
                 Ok(())
+            }
+            ConValue::Quote(q) => {
+                write!(f, "`{q}`")
             }
             ConValue::Function(func) => {
                 write!(f, "{}", func.decl())

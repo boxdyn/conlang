@@ -388,6 +388,7 @@ pub mod yamlify {
     impl Yamlify for ExprKind {
         fn yaml(&self, y: &mut Yamler) {
             match self {
+                ExprKind::Quote(k) => k.yaml(y),
                 ExprKind::Let(k) => k.yaml(y),
                 ExprKind::Assign(k) => k.yaml(y),
                 ExprKind::Modify(k) => k.yaml(y),
@@ -415,6 +416,11 @@ pub mod yamlify {
                     y.key("Continue");
                 }
             }
+        }
+    }
+    impl Yamlify for Quote {
+        fn yaml(&self, y: &mut Yamler) {
+            y.key("Quote").value(self);
         }
     }
     impl Yamlify for Assign {

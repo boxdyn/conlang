@@ -16,6 +16,7 @@ pub fn exprkind(p: &mut Parser, power: u8) -> PResult<ExprKind> {
         literal_like!() => Literal::parse(p)?.into(),
         path_like!() => exprkind_pathlike(p)?,
         TokenKind::Amp | TokenKind::AmpAmp => AddrOf::parse(p)?.into(),
+        TokenKind::Grave => Quote::parse(p)?.into(),
         TokenKind::LCurly => Block::parse(p)?.into(),
         TokenKind::LBrack => exprkind_arraylike(p)?,
         TokenKind::LParen => exprkind_tuplelike(p)?,

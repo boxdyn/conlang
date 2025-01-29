@@ -147,6 +147,7 @@ impl Interpret for ExprKind {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         match self {
             ExprKind::Empty => Ok(ConValue::Empty),
+            ExprKind::Quote(q) => q.interpret(env),
             ExprKind::Let(v) => v.interpret(env),
             ExprKind::Assign(v) => v.interpret(env),
             ExprKind::Modify(v) => v.interpret(env),
@@ -171,6 +172,13 @@ impl Interpret for ExprKind {
             ExprKind::Return(v) => v.interpret(env),
             ExprKind::Continue => Err(Error::Continue),
         }
+    }
+}
+
+impl Interpret for Quote {
+    fn interpret(&self, _env: &mut Environment) -> IResult<ConValue> {
+        // TODO: squoosh down into a ConValue?
+        Ok(ConValue::Quote(self.quote.clone()))
     }
 }
 

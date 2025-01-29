@@ -529,6 +529,7 @@ pub fn or_fold_stmt_kind<F: Fold + ?Sized>(folder: &mut F, kind: StmtKind) -> St
 pub fn or_fold_expr_kind<F: Fold + ?Sized>(folder: &mut F, kind: ExprKind) -> ExprKind {
     match kind {
         ExprKind::Empty => ExprKind::Empty,
+        ExprKind::Quote(q) => ExprKind::Quote(q), // quoted expressions are left unmodified
         ExprKind::Let(l) => ExprKind::Let(folder.fold_let(l)),
         ExprKind::Assign(a) => ExprKind::Assign(folder.fold_assign(a)),
         ExprKind::Modify(m) => ExprKind::Modify(folder.fold_modify(m)),
