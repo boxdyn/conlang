@@ -8,6 +8,7 @@
 //!   - [Assign], [Binary], and [Unary] expressions
 //!   - [ModifyKind], [BinaryKind], and [UnaryKind] operators
 //! - [Ty] and [TyKind]: Type qualifiers
+//! - [Pattern]: Pattern matching operators
 //! - [Path]: Path expressions
 #![warn(clippy::all)]
 #![feature(decl_macro)]

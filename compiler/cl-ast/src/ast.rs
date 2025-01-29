@@ -8,6 +8,7 @@
 //!   - [Assign], [Modify], [Binary], and [Unary] expressions
 //!   - [ModifyKind], [BinaryKind], and [UnaryKind] operators
 //! - [Ty] and [TyKind]: Type qualifiers
+//! - [Pattern]: Pattern matching operators
 //! - [Path]: Path expressions
 use cl_structures::{intern::interned::Interned, span::*};
 
@@ -351,7 +352,7 @@ pub enum ExprKind {
     Quote(Quote),
     /// A local bind instruction, `let` [`Sym`] `=` [`Expr`]
     Let(Let),
-    /// A [Match] expression, `match` [Expr] `{` ([MatchArm] `,`)* [MatchArm]? `}`
+    /// A [Match] expression: `match` [Expr] `{` ([MatchArm] `,`)* [MatchArm]? `}`
     Match(Match),
     /// An [Assign]ment expression: [`Expr`] (`=` [`Expr`])\+
     Assign(Assign),
@@ -426,15 +427,16 @@ pub enum Pattern {
     Struct(Path, Vec<(Path, Option<Pattern>)>),
 }
 
+/// A `match` expression: `match` `{` ([MatchArm] `,`)* [MatchArm]? `}`
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Match {
     pub scrutinee: Box<Expr>,
     pub arms: Vec<MatchArm>,
 }
 
+/// A single arm of a [Match] expression: [`Pattern`] `=>` [`Expr`]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MatchArm(pub Pattern, pub Expr);
-
 
 /// An [Assign]ment expression: [`Expr`] ([`ModifyKind`] [`Expr`])\+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -518,6 +520,7 @@ pub enum UnaryKind {
     Tilde,
 }
 
+/// A cast expression: [`Expr`] `as` [`Ty`]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Cast {
     pub head: Box<ExprKind>,

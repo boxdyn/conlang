@@ -44,7 +44,8 @@ builtins! {
         Ok(ConValue::Empty)
     }
 
-    /// Prints the [Debug](std::fmt::Debug) version of the input values
+    /// Prints the [Debug](std::fmt::Debug) version of the input values,
+    /// and passes them back as a tuple.
     pub fn dbg<_, args> () -> IResult<ConValue> {
         let mut out = stdout().lock();
         for arg in args {
@@ -53,6 +54,7 @@ builtins! {
         Ok(args.into())
     }
 
+    /// Prints the pretty [Debug](std::fmt::Debug) version of the input values.
     pub fn dbgp<_, args> () -> IResult<ConValue> {
         let mut out = stdout().lock();
         for arg in args {
@@ -279,6 +281,7 @@ builtins! {
         })
     }
 
+    /// Does the opposite of `&`
     pub fn deref(tail) -> IResult<ConValue> {
         Ok(match tail {
             ConValue::Ref(v) => Rc::as_ref(v).clone(),
