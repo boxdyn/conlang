@@ -322,9 +322,8 @@ pub trait Fold {
         }
     }
     fn fold_addrof(&mut self, a: AddrOf) -> AddrOf {
-        let AddrOf { count, mutable, expr } = a;
+        let AddrOf { mutable, expr } = a;
         AddrOf {
-            count,
             mutable: self.fold_mutability(mutable),
             expr: Box::new(self.fold_expr_kind(*expr)),
         }

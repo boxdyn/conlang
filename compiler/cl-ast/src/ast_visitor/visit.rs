@@ -279,7 +279,7 @@ pub trait Visit<'a>: Sized {
         self.visit_expr_kind(repeat);
     }
     fn visit_addrof(&mut self, a: &'a AddrOf) {
-        let AddrOf { count: _, mutable, expr } = a;
+        let AddrOf { mutable, expr } = a;
         self.visit_mutability(mutable);
         self.visit_expr_kind(expr);
     }

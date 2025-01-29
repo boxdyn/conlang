@@ -546,7 +546,6 @@ pub struct ArrayRep {
 /// An address-of expression: `&` `mut`? [`Expr`]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct AddrOf {
-    pub count: usize,
     pub mutable: Mutability,
     pub expr: Box<ExprKind>,
 }

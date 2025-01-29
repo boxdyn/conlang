@@ -616,11 +616,8 @@ mod display {
 
     impl Display for AddrOf {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { count, mutable, expr } = self;
-            for _ in 0..*count {
-                f.write_char('&')?;
-            }
-            write!(f, "{mutable}{expr}")
+            let Self { mutable, expr } = self;
+            write!(f, "&{mutable}{expr}")
         }
     }
 

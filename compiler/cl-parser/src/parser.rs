@@ -962,16 +962,24 @@ impl Parse<'_> for AddrOf {
     /// [AddrOf] = (`&`|`&&`)* [Expr]
     fn parse(p: &mut Parser) -> PResult<AddrOf> {
         const P: Parsing = Parsing::AddrOf;
-        let mut count = 0;
-        loop {
-            count += match p.peek_kind(P)? {
-                TokenKind::Amp => 1,
-                TokenKind::AmpAmp => 2,
-                _ => break,
-            };
-            p.consume_peeked();
+        match p.peek_kind(P)? {
+            TokenKind::Amp => {
+                p.consume_peeked();
+                Ok(AddrOf { mutable: Mutability::parse(p)?, expr: ExprKind::parse(p)?.into() })
+            }
+            TokenKind::AmpAmp => {
+                p.consume_peeked();
+                Ok(AddrOf {
+                    mutable: Mutability::Not,
+                    expr: ExprKind::AddrOf(AddrOf {
+                        mutable: Mutability::parse(p)?,
+                        expr: ExprKind::parse(p)?.into(),
+                    })
+                    .into(),
+                })
+            }
+            got => Err(p.error(ExpectedToken { want: TokenKind::Amp, got }, P)),
         }
-        Ok(AddrOf { count, mutable: Mutability::parse(p)?, expr: ExprKind::parse(p)?.into() })
     }
 }
 

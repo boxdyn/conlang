@@ -681,13 +681,9 @@ impl Interpret for ArrayRep {
 }
 impl Interpret for AddrOf {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { count: _, mutable: _, expr } = self;
+        let Self { mutable: _, expr } = self;
         match expr.as_ref() {
             ExprKind::Index(_) => todo!("AddrOf array index"),
-            // ExprKind::Path(Path { absolute: false, parts }) => match parts.as_slice() {
-            //     [PathPart::Ident(id)] => env.get_ref(id),
-            //     _ => todo!("Path traversal in addrof"),
-            // },
             ExprKind::Path(_) => todo!("Path traversal in addrof"),
             _ => Ok(ConValue::Ref(Rc::new(expr.interpret(env)?))),
         }

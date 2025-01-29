@@ -525,11 +525,8 @@ pub mod yamlify {
     }
     impl Yamlify for AddrOf {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { count, mutable, expr } = self;
-            y.key("AddrOf")
-                .pair("count", count)
-                .yaml(mutable)
-                .pair("expr", expr);
+            let Self { mutable, expr } = self;
+            y.key("AddrOf").yaml(mutable).pair("expr", expr);
         }
     }
     impl Yamlify for Group {
