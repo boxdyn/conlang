@@ -17,11 +17,6 @@ pub trait Callable: std::fmt::Debug {
     fn name(&self) -> Sym;
 }
 
-/// [BuiltIn]s are [Callable]s with bespoke definitions
-pub trait BuiltIn: std::fmt::Debug + Callable {
-    fn description(&self) -> &str;
-}
-
 pub mod convalue;
 
 pub mod interpret;

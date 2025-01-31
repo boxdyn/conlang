@@ -345,7 +345,8 @@ mod assignment {
 
     pub(super) fn pat_assign(env: &mut Environment, pat: &Pattern, value: ConValue) -> IResult<()> {
         let mut substitution = HashMap::new();
-        append_sub(&mut substitution, pat, value).map_err(|_| Error::PatFailed(pat.clone()))?;
+        append_sub(&mut substitution, pat, value)
+            .map_err(|_| Error::PatFailed(pat.clone().into()))?;
         for (path, value) in substitution {
             assign_path(env, path, value)?;
         }

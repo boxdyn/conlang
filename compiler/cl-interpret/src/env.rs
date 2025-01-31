@@ -1,11 +1,13 @@
 //! Lexical and non-lexical scoping for variables
 
+use crate::builtin::Builtin;
+
 use super::{
-    builtin::{BINARY, MISC, RANGE, UNARY},
+    builtin::{Builtins, Math},
     convalue::ConValue,
     error::{Error, IResult},
     function::Function,
-    BuiltIn, Callable, Interpret,
+    Callable, Interpret,
 };
 use cl_ast::{Function as FnDecl, Sym};
 use std::{
@@ -20,6 +22,7 @@ type StackFrame = HashMap<Sym, Option<ConValue>>;
 /// Implements a nested lexical scope
 #[derive(Clone, Debug)]
 pub struct Environment {
+    builtin: StackFrame,
     global: Vec<(StackFrame, &'static str)>,
     frames: Vec<(StackFrame, &'static str)>,
 }
@@ -49,19 +52,19 @@ impl Display for Environment {
 impl Default for Environment {
     fn default() -> Self {
         Self {
-            global: vec![
-                (to_hashmap(RANGE), "range ops"),
-                (to_hashmap(UNARY), "unary ops"),
-                (to_hashmap(BINARY), "binary ops"),
-                (to_hashmap(MISC), "builtins"),
-                (HashMap::new(), "globals"),
-            ],
+            builtin: to_hashmap2(Builtins.iter().chain(Math.iter())),
+            global: vec![(HashMap::new(), "globals")],
             frames: vec![],
         }
     }
 }
-fn to_hashmap(from: &[&'static dyn BuiltIn]) -> HashMap<Sym, Option<ConValue>> {
-    from.iter().map(|&v| (v.name(), Some(v.into()))).collect()
+// fn to_hashmap(from: &[&'static dyn BuiltIn]) -> HashMap<Sym, Option<ConValue>> {
+//     from.iter().map(|&v| (v.name(), Some(v.into()))).collect()
+// }
+fn to_hashmap2(from: impl IntoIterator<Item = &'static Builtin>) -> HashMap<Sym, Option<ConValue>> {
+    from.into_iter()
+        .map(|v| (v.name(), Some(v.into())))
+        .collect()
 }
 
 impl Environment {
@@ -70,7 +73,19 @@ impl Environment {
     }
     /// Creates an [Environment] with no [builtins](super::builtin)
     pub fn no_builtins() -> Self {
-        Self { global: vec![(Default::default(), "globals")], frames: vec![] }
+        Self {
+            builtin: HashMap::new(),
+            global: vec![(Default::default(), "globals")],
+            frames: vec![],
+        }
+    }
+
+    pub fn builtins(&self) -> &StackFrame {
+        &self.builtin
+    }
+
+    pub fn add_builtin(&mut self, builtin: &'static Builtin) {
+        self.builtin.insert(builtin.name(), Some(builtin.into()));
     }
 
     pub fn push_frame(&mut self, name: &'static str, frame: StackFrame) {
@@ -112,7 +127,7 @@ impl Environment {
                 return Ok(var);
             }
         }
-        Err(Error::NotDefined(id))
+        self.builtin.get_mut(&id).ok_or(Error::NotDefined(id))
     }
     /// Resolves a variable immutably.
     ///
@@ -132,7 +147,11 @@ impl Environment {
                 _ => (),
             }
         }
-        Err(Error::NotDefined(id))
+        self.builtin
+            .get(&id)
+            .cloned()
+            .flatten()
+            .ok_or(Error::NotDefined(id))
     }
 
     pub(crate) fn get_local(&self, id: Sym) -> IResult<ConValue> {
@@ -145,7 +164,7 @@ impl Environment {
         }
         Err(Error::NotInitialized(id))
     }
-    
+
     /// Inserts a new [ConValue] into this [Environment]
     pub fn insert(&mut self, id: Sym, value: Option<ConValue>) {
         if let Some((frame, _)) = self.frames.last_mut() {

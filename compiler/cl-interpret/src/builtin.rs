@@ -1,124 +1,200 @@
-//! Implementations of built-in functions
+#![allow(non_upper_case_globals)]
 
-use super::{
+use crate::{
     convalue::ConValue,
     env::Environment,
     error::{Error, IResult},
-    BuiltIn, Callable,
 };
-use cl_ast::Sym;
 use std::{
     io::{stdout, Write},
-    rc::Rc,
     slice,
 };
 
-builtins! {
-    const MISC;
+/// A function built into the interpreter.
+#[derive(Clone, Copy)]
+pub struct Builtin {
+    /// An identifier to be used during registration
+    name: &'static str,
+    /// The signature, displayed when the builtin is printed
+    desc: &'static str,
+    /// The function to be run when called
+    func: &'static dyn Fn(&mut Environment, &[ConValue]) -> IResult<ConValue>,
+}
+
+impl Builtin {
+    /// Constructs a new Builtin
+    pub const fn new(
+        name: &'static str,
+        desc: &'static str,
+        func: &'static impl Fn(&mut Environment, &[ConValue]) -> IResult<ConValue>,
+    ) -> Builtin {
+        Builtin { name, desc, func }
+    }
+
+    pub const fn description(&self) -> &'static str {
+        self.desc
+    }
+}
+
+impl std::fmt::Debug for Builtin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Builtin")
+            .field("description", &self.desc)
+            .finish_non_exhaustive()
+    }
+}
+
+impl super::Callable for Builtin {
+    fn call(&self, interpreter: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
+        (self.func)(interpreter, args)
+    }
+
+    fn name(&self) -> cl_ast::Sym {
+        self.name.into()
+    }
+}
+
+/// Turns a function definition into a [Builtin].
+///
+/// ```rust
+/// # use cl_interpret::{builtin2::builtin, convalue::ConValue};
+/// let my_builtin = builtin! {
+///     /// Use the `@env` suffix to bind the environment!
+///     /// (needed for recursive calls)
+///     fn my_builtin(ConValue::Bool(b), rest @ ..) @env {
+///         // This is all Rust code!
+///         eprintln!("my_builtin({b}, ..)");
+///         match rest {
+///             [] => Ok(ConValue::Empty),
+///             _ => my_builtin(env, rest), // Can be called as a normal function!
+///         }
+///     }
+/// };
+/// ```
+pub macro builtin(
+    $(#[$($meta:tt)*])*
+    fn $name:ident ($($arg:pat),*$(,)?) $(@$env:tt)? $body:block
+) {{
+    $(#[$($meta)*])*
+    fn $name(_env: &mut Environment, _args: &[ConValue]) -> IResult<ConValue> {
+        // Set up the builtin! environment
+        $(let $env = _env;)?
+        // Allow for single argument `fn foo(args @ ..)` pattern
+        #[allow(clippy::redundant_at_rest_pattern, irrefutable_let_patterns)]
+        let [$($arg),*] = _args else {
+            Err($crate::error::Error::TypeError)?
+        };
+        $body.map(Into::into)
+    }
+    Builtin {
+        name: stringify!($name),
+        desc: stringify![builtin fn $name($($arg),*)],
+        func: &$name,
+    }
+}}
+
+/// Constructs an array of [Builtin]s from pseudo-function definitions
+pub macro builtins($(
+    $(#[$($meta:tt)*])*
+    fn $name:ident ($($args:tt)*) $(@$env:tt)? $body:block
+)*) {
+    [$(builtin!($(#[$($meta)*])* fn $name ($($args)*) $(@$env)? $body)),*]
+}
+
+/// Creates an [Error::BuiltinDebug] using interpolation of runtime expressions.
+/// See [std::format].
+pub macro error_format ($($t:tt)*) {
+    $crate::error::Error::BuiltinDebug(format!($($t)*))
+}
+
+pub const Builtins: &[Builtin] = &builtins![
     /// Unstable variadic format function
-    pub fn format<_, args> () -> IResult<ConValue> {
+    fn fmt(args @ ..) {
         use std::fmt::Write;
         let mut out = String::new();
-        for arg in args {
-            write!(out, "{arg}").ok();
+        if let Err(e) = args.iter().try_for_each(|arg| write!(out, "{arg}")) {
+            eprintln!("{e}");
         }
-        Ok(ConValue::String(out.into()))
+        Ok(out)
     }
 
-    /// Unstable variadic print function
-    pub fn print<_, args> () -> IResult<ConValue> {
+    /// Prints the arguments in-order, with no separators
+    fn print(args @ ..) {
         let mut out = stdout().lock();
-        for arg in args {
-            write!(out, "{arg}").ok();
-        }
-        Ok(ConValue::Empty)
+        args.iter().try_for_each(|arg| write!(out, "{arg}") ).ok();
+        Ok(())
     }
 
-    /// Unstable variadic println function
-    pub fn println<_, args> () -> IResult<ConValue> {
+    /// Prints the arguments in-order, followed by a newline
+    fn println(args @ ..) {
         let mut out = stdout().lock();
-        for arg in args {
-            write!(out, "{arg}").ok();
-        }
+        args.iter().try_for_each(|arg| write!(out, "{arg}") ).ok();
         writeln!(out).ok();
-        Ok(ConValue::Empty)
+        Ok(())
     }
 
-    /// Prints the [Debug](std::fmt::Debug) version of the input values,
-    /// and passes them back as a tuple.
-    pub fn dbg<_, args> () -> IResult<ConValue> {
+    /// Debug-prints the argument, returning a copy
+    fn dbg(arg) {
+        println!("{arg:?}");
+        Ok(arg.clone())
+    }
+
+    /// Debug-prints the argument
+    fn dbgp(args @ ..) {
         let mut out = stdout().lock();
-        for arg in args {
-            writeln!(out, "{arg:?}").ok();
+        args.iter().try_for_each(|arg| writeln!(out, "{arg:#?}") ).ok();
+        Ok(())
+    }
+
+    /// Dumps the environment
+    fn dump() @env {
+        println!("{env}");
+        Ok(())
+    }
+
+    fn builtins() @env {
+        for builtin in env.builtins().values().flatten() {
+            println!("{builtin}");
         }
-        Ok(args.into())
+        Ok(())
     }
 
-    /// Prints the pretty [Debug](std::fmt::Debug) version of the input values.
-    pub fn dbgp<_, args> () -> IResult<ConValue> {
-        let mut out = stdout().lock();
-        for arg in args {
-            writeln!(out, "{arg:#?}").ok();
-        }
-        Ok(ConValue::Empty)
-    }
-
-    /// Dumps info from the environment
-    pub fn dump<env, _>() -> IResult<ConValue> {
-        println!("{}", *env);
-        Ok(ConValue::Empty)
-    }
-
-    /// Gets the length of a container or range
-    pub fn len<env, _>(list) -> IResult<ConValue> {
-        Ok(ConValue::Int(match list {
+    /// Returns the length of the input list as a [ConValue::Int]
+    fn len(list) @env {
+        Ok(match list {
             ConValue::Empty => 0,
             ConValue::String(s) => s.chars().count() as _,
-            ConValue::Ref(r) => return len.call(env, slice::from_ref(r.as_ref())),
+            ConValue::Ref(r) => return len(env, slice::from_ref(r.as_ref())),
             ConValue::Array(t) => t.len() as _,
             ConValue::Tuple(t) => t.len() as _,
             ConValue::RangeExc(start, end) => (end - start) as _,
             ConValue::RangeInc(start, end) => (end - start + 1) as _,
             _ => Err(Error::TypeError)?,
-        }))
+        })
     }
 
-    /// Gets a line of text from stdin
-    pub fn get_line() -> IResult<ConValue> {
+    /// Gets a line of input from stdin
+    fn get_line() {
         let mut line = String::new();
         let _ = std::io::stdin().read_line(&mut line);
-        Ok(ConValue::String(line.into()))
+        Ok(line)
     }
 
-    /// Lists the potential "upvars" (lifted environment) of a function
-    pub fn collect_upvars<env, _>(ConValue::Function(f)) -> IResult<ConValue> {
-        use crate::function::collect_upvars::collect_upvars;
-        for (name, bind) in collect_upvars(f.decl(), env) {
-            match bind {
-                Some(bind) =>println!("{name}: {bind}"),
-                None => println!("{name}: _"),
-            }
-        }
-        Ok(ConValue::Empty)
+    /// Returns a shark
+    fn shark() {
+        Ok('\u{1f988}')
     }
 
-    /// Lists the collected environment of a function.
-    pub fn upvars(ConValue::Function(f)) -> IResult<ConValue> {
-        let uv = f.upvars();
-        for (name, bind) in uv.iter() {
-            match bind {
-                Some(bind) =>println!("{name}: {bind}"),
-                None => println!("{name}: _"),
-            }
-        }
-        Ok(ConValue::Empty)
+    /// Clears the screen
+    fn clear() {
+        println!("\x1b[G");
+        Ok(())
     }
-}
+];
 
-builtins! {
-    const BINARY;
+pub const Math: &[Builtin] = &builtins![
     /// Multiplication `a * b`
-    pub fn mul(lhs, rhs) -> IResult<ConValue> {
+    fn mul(lhs, rhs) {
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a * b),
@@ -127,7 +203,7 @@ builtins! {
     }
 
     /// Division `a / b`
-    pub fn div(lhs, rhs) -> IResult<ConValue> {
+    fn div(lhs, rhs) {
         Ok(match (lhs, rhs){
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a / b),
@@ -136,7 +212,7 @@ builtins! {
     }
 
     /// Remainder `a % b`
-    pub fn rem(lhs, rhs) -> IResult<ConValue> {
+    fn rem(lhs, rhs) {
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a % b),
@@ -145,7 +221,7 @@ builtins! {
     }
 
     /// Addition `a + b`
-    pub fn add(lhs, rhs) -> IResult<ConValue> {
+    fn add(lhs, rhs) {
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a + b),
@@ -155,7 +231,7 @@ builtins! {
     }
 
     /// Subtraction `a - b`
-    pub fn sub(lhs, rhs) -> IResult<ConValue> {
+    fn sub(lhs, rhs) {
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a - b),
@@ -164,7 +240,7 @@ builtins! {
     }
 
     /// Shift Left `a << b`
-    pub fn shl(lhs, rhs) -> IResult<ConValue> {
+    fn shl(lhs, rhs) {
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a << b),
@@ -173,7 +249,7 @@ builtins! {
     }
 
     /// Shift Right `a >> b`
-    pub fn shr(lhs, rhs) -> IResult<ConValue> {
+    fn shr(lhs, rhs) {
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a >> b),
@@ -182,7 +258,7 @@ builtins! {
     }
 
     /// Bitwise And `a & b`
-    pub fn and(lhs, rhs) -> IResult<ConValue> {
+    fn and(lhs, rhs) {
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a & b),
@@ -192,7 +268,7 @@ builtins! {
     }
 
     /// Bitwise Or `a | b`
-    pub fn or(lhs, rhs) -> IResult<ConValue> {
+    fn or(lhs, rhs) {
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a | b),
@@ -202,7 +278,7 @@ builtins! {
     }
 
     /// Bitwise Exclusive Or `a ^ b`
-    pub fn xor(lhs, rhs) -> IResult<ConValue> {
+    fn xor(lhs, rhs) {
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a ^ b),
@@ -211,58 +287,24 @@ builtins! {
         })
     }
 
-    /// Tests whether `a < b`
-    pub fn lt(lhs, rhs) -> IResult<ConValue> {
-        cmp!(lhs, rhs, false, <)
-    }
-
-    /// Tests whether `a <= b`
-    pub fn lt_eq(lhs, rhs) -> IResult<ConValue> {
-        cmp!(lhs, rhs, true, <=)
-    }
-
-    /// Tests whether `a == b`
-    pub fn eq(lhs, rhs) -> IResult<ConValue> {
-        cmp!(lhs, rhs, true, ==)
-    }
-
-    /// Tests whether `a != b`
-    pub fn neq(lhs, rhs) -> IResult<ConValue> {
-        cmp!(lhs, rhs, false, !=)
-    }
-
-    /// Tests whether `a <= b`
-    pub fn gt_eq(lhs, rhs) -> IResult<ConValue> {
-        cmp!(lhs, rhs, true, >=)
-    }
-
-    /// Tests whether `a < b`
-    pub fn gt(lhs, rhs) -> IResult<ConValue> {
-        cmp!(lhs, rhs, false, >)
-    }
-}
-builtins! {
-    const RANGE;
     /// Exclusive Range `a..b`
-    pub fn range_exc(lhs, rhs) -> IResult<ConValue> {
-        let (&ConValue::Int(lhs), &ConValue::Int(rhs)) = (lhs, rhs) else {
+    fn range_exc(from, to) {
+        let (&ConValue::Int(from), &ConValue::Int(to)) = (from, to) else {
             Err(Error::TypeError)?
         };
-        Ok(ConValue::RangeExc(lhs, rhs.saturating_sub(1)))
+        Ok(ConValue::RangeExc(from, to))
     }
 
     /// Inclusive Range `a..=b`
-    pub fn range_inc(lhs, rhs) -> IResult<ConValue> {
-        let (&ConValue::Int(lhs), &ConValue::Int(rhs)) = (lhs, rhs) else {
+    fn range_inc(from, to) {
+        let (&ConValue::Int(from), &ConValue::Int(to)) = (from, to) else {
             Err(Error::TypeError)?
         };
-        Ok(ConValue::RangeInc(lhs, rhs))
+        Ok(ConValue::RangeInc(from, to))
     }
-}
-builtins! {
-    const UNARY;
+
     /// Negates the ConValue
-    pub fn neg(tail) -> IResult<ConValue> {
+    fn neg(tail) {
         Ok(match tail {
             ConValue::Empty => ConValue::Empty,
             ConValue::Int(v) => ConValue::Int(v.wrapping_neg()),
@@ -272,7 +314,7 @@ builtins! {
     }
 
     /// Inverts the ConValue
-    pub fn not(tail) -> IResult<ConValue> {
+    fn not(tail) {
         Ok(match tail {
             ConValue::Empty => ConValue::Empty,
             ConValue::Int(v) => ConValue::Int(!v),
@@ -281,64 +323,23 @@ builtins! {
         })
     }
 
+    /// Compares two values
+    fn cmp(head, tail) {
+        Ok(ConValue::Int(match (head, tail) {
+            (ConValue::Int(a), ConValue::Int(b)) => a.cmp(b) as _,
+            (ConValue::Bool(a), ConValue::Bool(b)) => a.cmp(b) as _,
+            (ConValue::Char(a), ConValue::Char(b)) => a.cmp(b) as _,
+            (ConValue::String(a), ConValue::String(b)) => a.cmp(b) as _,
+            _ => Err(error_format!("Incomparable values: {head}, {tail}"))?
+        }))
+    }
+
     /// Does the opposite of `&`
-    pub fn deref(tail) -> IResult<ConValue> {
+    fn deref(tail) {
+        use std::rc::Rc;
         Ok(match tail {
             ConValue::Ref(v) => Rc::as_ref(v).clone(),
             _ => tail.clone(),
         })
     }
-}
-
-/// Turns an argument slice into an array with the (inferred) correct number of elements
-pub fn to_args<const N: usize>(args: &[ConValue]) -> IResult<&[ConValue; N]> {
-    args.try_into()
-        .map_err(|_| Error::ArgNumber { want: N, got: args.len() })
-}
-
-/// Turns function definitions into ZSTs which implement [Callable] and [BuiltIn]
-macro builtins (
-    $(prefix = $prefix:literal)?
-    const $defaults:ident $( = [$($additional_builtins:expr),*$(,)?])?;
-    $(
-        $(#[$meta:meta])*$vis:vis fn $name:ident$(<$env:tt, $args:tt>)? ( $($($arg:pat),+$(,)?)? ) $(-> $rety:ty)?
-            $body:block
-    )*
-) {
-    /// Builtins to load when a new interpreter is created
-    pub const $defaults: &[&dyn BuiltIn] = &[$(&$name,)* $($additional_builtins)*];
-    $(
-        $(#[$meta])* #[allow(non_camel_case_types)] #[derive(Clone, Debug)]
-        /// ```rust,ignore
-        #[doc = stringify!(builtin! fn $name($($($arg),*)?) $(-> $rety)? $body)]
-        /// ```
-        $vis struct $name;
-        impl BuiltIn for $name {
-            fn description(&self) -> &str { concat!("builtin ", stringify!($name), stringify!(($($($arg),*)?) )) }
-        }
-        impl Callable for $name {
-            #[allow(unused, irrefutable_let_patterns)]
-            fn call(&self, env: &mut Environment, args: &[ConValue]) $(-> $rety)? {
-                $(let $env = env;
-                let $args = args;)?
-                $(let [$($arg),*] = to_args(args)? else {
-                    Err(Error::TypeError)?
-                };)?
-                $body
-            }
-            fn name(&self) -> Sym { stringify!($name).into() }
-        }
-    )*
-}
-
-/// Templates comparison functions for [ConValue]
-macro cmp ($a:expr, $b:expr, $empty:literal, $op:tt) {
-    match ($a, $b) {
-        (ConValue::Empty, ConValue::Empty) => Ok(ConValue::Bool($empty)),
-        (ConValue::Int(a), ConValue::Int(b)) => Ok(ConValue::Bool(a $op b)),
-        (ConValue::Bool(a), ConValue::Bool(b)) => Ok(ConValue::Bool(a $op b)),
-        (ConValue::Char(a), ConValue::Char(b)) => Ok(ConValue::Bool(a $op b)),
-        (ConValue::String(a), ConValue::String(b)) => Ok(ConValue::Bool(&**a $op &**b)),
-        _ => Err(Error::TypeError)
-    }
-}
+];

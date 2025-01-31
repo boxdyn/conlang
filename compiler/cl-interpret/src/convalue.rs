@@ -4,9 +4,9 @@
 use cl_ast::{format::FmtAdapter, ExprKind, Sym};
 
 use super::{
+    builtin::Builtin,
     error::{Error, IResult},
-    function::Function,
-    BuiltIn, Callable, Environment,
+    function::Function, Callable, Environment,
 };
 use std::{collections::HashMap, ops::*, rc::Rc};
 
@@ -47,7 +47,7 @@ pub enum ConValue {
     /// A callable thing
     Function(Rc<Function>),
     /// A built-in function
-    BuiltIn(&'static dyn BuiltIn),
+    Builtin(&'static Builtin),
 }
 
 impl ConValue {
@@ -113,14 +113,14 @@ impl Callable for ConValue {
     fn name(&self) -> Sym {
         match self {
             ConValue::Function(func) => func.name(),
-            ConValue::BuiltIn(func) => func.name(),
+            ConValue::Builtin(func) => func.name(),
             _ => "".into(),
         }
     }
     fn call(&self, interpreter: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
         match self {
             Self::Function(func) => func.call(interpreter, args),
-            Self::BuiltIn(func) => func.call(interpreter, args),
+            Self::Builtin(func) => func.call(interpreter, args),
             _ => Err(Error::NotCallable(self.clone())),
         }
     }
@@ -170,7 +170,7 @@ from! {
     ExprKind => ConValue::Quote,
     Function => ConValue::Function,
     Vec<ConValue> => ConValue::Tuple,
-    &'static dyn BuiltIn => ConValue::BuiltIn,
+    &'static Builtin => ConValue::Builtin,
 }
 impl From<()> for ConValue {
     fn from(_: ()) -> Self {
@@ -328,7 +328,7 @@ impl std::fmt::Display for ConValue {
             ConValue::Function(func) => {
                 write!(f, "{}", func.decl())
             }
-            ConValue::BuiltIn(func) => {
+            ConValue::Builtin(func) => {
                 write!(f, "{}", func.description())
             }
         }

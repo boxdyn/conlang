@@ -44,6 +44,8 @@ pub enum Error {
     PatFailed(Pattern),
     /// Fell through a non-exhaustive match
     MatchNonexhaustive,
+    /// Error produced by a Builtin
+    BuiltinDebug(String),
 }
 
 impl std::error::Error for Error {}
@@ -89,6 +91,7 @@ impl std::fmt::Display for Error {
             Error::MatchNonexhaustive => {
                 write!(f, "Fell through a non-exhaustive match expression!")
             }
+            Error::BuiltinDebug(s) => write!(f, "DEBUG: {s}"),
         }
     }
 }
