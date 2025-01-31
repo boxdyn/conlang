@@ -41,7 +41,7 @@ pub enum Error {
     /// A function was called with the wrong number of arguments
     ArgNumber { want: usize, got: usize },
     /// A pattern failed to match
-    PatFailed(Pattern),
+    PatFailed(Box<Pattern>),
     /// Fell through a non-exhaustive match
     MatchNonexhaustive,
     /// Error produced by a Builtin
