@@ -52,16 +52,14 @@ impl Display for Environment {
 impl Default for Environment {
     fn default() -> Self {
         Self {
-            builtin: to_hashmap2(Builtins.iter().chain(Math.iter())),
+            builtin: to_hashmap(Builtins.iter().chain(Math.iter())),
             global: vec![(HashMap::new(), "globals")],
             frames: vec![],
         }
     }
 }
-// fn to_hashmap(from: &[&'static dyn BuiltIn]) -> HashMap<Sym, Option<ConValue>> {
-//     from.iter().map(|&v| (v.name(), Some(v.into()))).collect()
-// }
-fn to_hashmap2(from: impl IntoIterator<Item = &'static Builtin>) -> HashMap<Sym, Option<ConValue>> {
+
+fn to_hashmap(from: impl IntoIterator<Item = &'static Builtin>) -> HashMap<Sym, Option<ConValue>> {
     from.into_iter()
         .map(|v| (v.name(), Some(v.into())))
         .collect()
@@ -84,8 +82,15 @@ impl Environment {
         &self.builtin
     }
 
-    pub fn add_builtin(&mut self, builtin: &'static Builtin) {
+    pub fn add_builtin(&mut self, builtin: &'static Builtin) -> &mut Self {
         self.builtin.insert(builtin.name(), Some(builtin.into()));
+        self
+    }
+
+    pub fn add_builtins(&mut self, builtins: &'static [Builtin]) {
+        for builtin in builtins {
+            self.add_builtin(builtin);
+        }
     }
 
     pub fn push_frame(&mut self, name: &'static str, frame: StackFrame) {

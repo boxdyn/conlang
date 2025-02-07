@@ -14,11 +14,11 @@ use std::{
 #[derive(Clone, Copy)]
 pub struct Builtin {
     /// An identifier to be used during registration
-    name: &'static str,
+    pub name: &'static str,
     /// The signature, displayed when the builtin is printed
-    desc: &'static str,
+    pub desc: &'static str,
     /// The function to be run when called
-    func: &'static dyn Fn(&mut Environment, &[ConValue]) -> IResult<ConValue>,
+    pub func: &'static dyn Fn(&mut Environment, &[ConValue]) -> IResult<ConValue>,
 }
 
 impl Builtin {
@@ -173,22 +173,9 @@ pub const Builtins: &[Builtin] = &builtins![
         })
     }
 
-    /// Gets a line of input from stdin
-    fn get_line() {
-        let mut line = String::new();
-        let _ = std::io::stdin().read_line(&mut line);
-        Ok(line)
-    }
-
     /// Returns a shark
     fn shark() {
         Ok('\u{1f988}')
-    }
-
-    /// Clears the screen
-    fn clear() {
-        println!("\x1b[G");
-        Ok(())
     }
 ];
 

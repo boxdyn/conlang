@@ -5,7 +5,7 @@ use cl_lexer::Lexer;
 use cl_parser::Parser;
 use repline::{error::ReplResult, prebaked::*};
 
-fn clear() {
+pub fn clear() {
     println!("{}", ansi::CLEAR_ALL);
     banner()
 }

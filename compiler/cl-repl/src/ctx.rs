@@ -1,6 +1,4 @@
-use cl_interpret::{
-    env::Environment, error::IResult, interpret::Interpret, convalue::ConValue,
-};
+use cl_interpret::{convalue::ConValue, env::Environment, error::IResult, interpret::Interpret};
 
 #[derive(Clone, Debug)]
 pub struct Context {

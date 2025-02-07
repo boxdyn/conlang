@@ -6,7 +6,7 @@ use crate::{
     tools::print_token,
 };
 use cl_ast::File;
-use cl_interpret::{convalue::ConValue, env::Environment, interpret::Interpret};
+use cl_interpret::{builtin::builtins, convalue::ConValue, env::Environment, interpret::Interpret};
 use cl_lexer::Lexer;
 use cl_parser::Parser;
 use std::{error::Error, path::Path};
@@ -16,6 +16,31 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
     let Args { file, include, mode, repl } = args;
 
     let mut env = Environment::new();
+
+    env.add_builtins(&builtins! {
+        /// Clears the screen
+        fn clear() {
+            menu::clear();
+            Ok(ConValue::Empty)
+        }
+        /// Evaluates a quoted expression
+        fn eval(ConValue::Quote(quote)) @env {
+            env.eval(quote.as_ref())
+        }
+        /// Executes a file
+        fn import(ConValue::String(path)) @env {
+            load_file(env, &**path).or(Ok(ConValue::Empty))
+        }
+
+        /// Gets a line of input from stdin
+        fn get_line() {
+            match repline::Repline::new("", "", "").read() {
+                Ok(line) => Ok(ConValue::String(line.into())),
+                Err(e) => Ok(ConValue::String(e.to_string().into())),
+            }
+        }
+    });
+
     for path in include {
         load_file(&mut env, path)?;
     }
