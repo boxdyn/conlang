@@ -173,6 +173,11 @@ pub const Builtins: &[Builtin] = &builtins![
         })
     }
 
+    fn dump_symbols() {
+        println!("{}", cl_structures::intern::string_interner::StringInterner::global());
+        Ok(ConValue::Empty)
+    }
+
     /// Returns a shark
     fn shark() {
         Ok('\u{1f988}')
