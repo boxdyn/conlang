@@ -6,7 +6,7 @@ use cl_parser::Parser;
 use repline::{error::ReplResult, prebaked::*};
 
 pub fn clear() {
-    println!("{}", ansi::CLEAR_ALL);
+    print!("{}", ansi::CLEAR_ALL);
     banner()
 }
 
@@ -44,6 +44,9 @@ pub fn run(ctx: &mut ctx::Context) -> ReplResult<()> {
     use cl_parser::inliner::ModuleInliner;
 
     read_and(ansi::CYAN, "cl>", " ?>", |line| {
+        if line.trim().is_empty() {
+            return Ok(Response::Deny);
+        }
         let code = Parser::new(Lexer::new(line)).parse::<Stmt>()?;
         let code = ModuleInliner::new(".").fold_stmt(code);
 
