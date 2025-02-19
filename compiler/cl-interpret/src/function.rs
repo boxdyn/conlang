@@ -68,7 +68,7 @@ impl Callable for Function {
         }
         let res = body.interpret(&mut frame);
         drop(frame);
-        if let Some(upvars) = env.pop_frame() {
+        if let Some((upvars, _)) = env.pop_frame() {
             self.upvars.replace(upvars);
         }
         match res {

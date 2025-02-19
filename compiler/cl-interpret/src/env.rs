@@ -97,8 +97,8 @@ impl Environment {
         self.frames.push((frame, name));
     }
 
-    pub fn pop_frame(&mut self) -> Option<StackFrame> {
-        self.frames.pop().map(|f| f.0)
+    pub fn pop_frame(&mut self) -> Option<(StackFrame, &'static str)> {
+        self.frames.pop()
     }
 
     pub fn eval(&mut self, node: &impl Interpret) -> IResult<ConValue> {

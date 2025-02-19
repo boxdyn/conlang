@@ -81,7 +81,6 @@ pub struct Item {
 /// What kind of [Item] is this?
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ItemKind {
-    // TODO: Import declaration ("use") item
     // TODO: Trait declaration ("trait") item?
     /// A [module](Module)
     Module(Module),

@@ -37,10 +37,7 @@ impl Interpret for Item {
             ItemKind::Struct(item) => item.interpret(env),
             ItemKind::Enum(item) => item.interpret(env),
             ItemKind::Impl(item) => item.interpret(env),
-            ItemKind::Use(item) => {
-                eprintln!("TODO: namespaces and imports in the interpreter!\n{item}\n");
-                Ok(ConValue::Empty)
-            }
+            ItemKind::Use(item) => item.interpret(env),
         }
     }
 }
@@ -80,7 +77,7 @@ impl Interpret for Module {
             }
         };
 
-        let frame = env
+        let (frame, _) = env
             .pop_frame()
             .expect("Environment frames must be balanced");
         env.insert(*name, Some(ConValue::Module(frame.into())));
@@ -114,6 +111,73 @@ impl Interpret for Impl {
         body.interpret(env)
     }
 }
+
+impl Interpret for Use {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let Self { absolute: _, tree } = self;
+        tree.interpret(env)
+    }
+}
+
+impl Interpret for UseTree {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        type Bindings = HashMap<Sym, ConValue>;
+        use std::collections::HashMap;
+
+        fn get_bindings(
+            tree: &UseTree,
+            env: &mut Environment,
+            bindings: &mut Bindings,
+        ) -> IResult<()> {
+            match tree {
+                UseTree::Tree(use_trees) => {
+                    for tree in use_trees {
+                        get_bindings(tree, env, bindings)?;
+                    }
+                }
+                UseTree::Path(PathPart::Ident(name), tree) => {
+                    let Ok(ConValue::Module(m)) = env.get(*name) else {
+                        Err(Error::TypeError)?
+                    };
+                    env.push_frame(Interned::to_ref(name), *m);
+                    let out = get_bindings(tree, env, bindings);
+                    env.pop_frame();
+                    return out;
+                }
+                UseTree::Alias(name, alias) => {
+                    bindings.insert(*alias, env.get(*name)?);
+                }
+                UseTree::Name(name) => {
+                    bindings.insert(*name, env.get(*name)?);
+                }
+                UseTree::Glob => {
+                    if let Some((frame, name)) = env.pop_frame() {
+                        for (k, v) in &frame {
+                            if let Some(v) = v {
+                                bindings.insert(*k, v.clone());
+                            }
+                        }
+                        env.push_frame(name, frame);
+                    }
+                }
+                other => {
+                    eprintln!("ERROR: Cannot use {other}");
+                }
+            }
+            Ok(())
+        }
+
+        let mut bindings = Bindings::new();
+        get_bindings(self, env, &mut bindings)?;
+
+        for (name, value) in bindings {
+            env.insert(name, Some(value));
+        }
+
+        Ok(ConValue::Empty)
+    }
+}
+
 impl Interpret for Stmt {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self { extents: _, kind, semi } = self;

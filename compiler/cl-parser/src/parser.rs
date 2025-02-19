@@ -681,7 +681,11 @@ impl Parse<'_> for UseTree {
                     let PathPart::Ident(name) = name else {
                         Err(p.error(ErrorKind::ExpectedParsing { want: Parsing::Identifier }, P))?
                     };
-                    UseTree::Name(name)
+                    if p.match_type(TokenKind::As, P).is_ok() {
+                        UseTree::Alias(name, p.parse()?)
+                    } else {
+                        UseTree::Name(name)
+                    }
                 }
             }
             t => Err(p.error(Unexpected(t), Parsing::UseTree))?,

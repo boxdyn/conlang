@@ -1,5 +1,6 @@
 //! Formats numbers in hexadecimal, octal, or binary
 mod math;
+use math::{min, count_leading_zeroes};
 
 fn as_digit(n: u32) -> char {
     (if n > 9 {
