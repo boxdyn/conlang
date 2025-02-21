@@ -107,7 +107,7 @@ pub trait Fold {
             name: self.fold_sym(name),
             sign: self.fold_ty_fn(sign),
             bind: bind.into_iter().map(|p| self.fold_param(p)).collect(),
-            body: body.map(|b| self.fold_block(b)),
+            body: body.map(|b| self.fold_expr(b)),
         }
     }
     fn fold_param(&mut self, p: Param) -> Param {

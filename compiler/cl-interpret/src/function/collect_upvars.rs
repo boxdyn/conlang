@@ -71,7 +71,7 @@ impl<'a> Visit<'a> for CollectUpvars<'_> {
             self.bind_name(name);
         }
         if let Some(body) = body {
-            self.visit_block(body);
+            self.visit_expr(body);
         }
     }
 

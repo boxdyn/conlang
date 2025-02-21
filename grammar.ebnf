@@ -26,7 +26,7 @@ Static      = "static" Mutability Identifier ':' Ty '=' Expr ';' ;
 Module      = "mod" Identifier ModuleKind ;
 ModuleKind  = '{' Item* '}' | ';' ;
 
-Function    = "fn" Identifier '(' (Param ',')* Param? ')' ('->' Ty)? Block? ;
+Function    = "fn" Identifier '(' (Param ',')* Param? ')' ('->' Ty)? (Expr | ';') ;
 Param       = Mutability Identifier ':' Ty ;
 
 Struct      = "struct" Identifier (StructTuple | StructBody)?;
@@ -126,6 +126,17 @@ Block       = '{' Stmt* '}';
 
 Group       = Empty | '(' (Expr | Tuple) ')' ;
 Tuple       = (Expr ',')* Expr? ;
+
+
+Match       = "match" { (MatchArm ',')* MatchArm? } ;
+MatchArm    = Pattern '=>' Expr ;
+Pattern     = Path
+            | Literal
+            | '&' "mut"? Pattern
+            | '(' (Pattern ',')* (Pattern | '..' )? ')'
+            | '[' (Pattern ',')* (Pattern | '..' Identifier?)? ']'
+            | StructPattern
+            ;
 
 Loop        = "loop"  Block ;
 While       = "while" Expr Block Else ;

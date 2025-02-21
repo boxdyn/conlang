@@ -85,7 +85,7 @@ pub trait Visit<'a>: Sized {
         self.visit_ty_fn(sign);
         bind.iter().for_each(|p| self.visit_param(p));
         if let Some(b) = body {
-            self.visit_block(b)
+            self.visit_expr(b)
         }
     }
     fn visit_param(&mut self, p: &'a Param) {

@@ -146,7 +146,7 @@ pub struct Function {
     pub name: Sym,
     pub sign: TyFn,
     pub bind: Vec<Param>,
-    pub body: Option<Block>,
+    pub body: Option<Expr>,
 }
 
 /// A single parameter for a [Function]

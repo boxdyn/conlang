@@ -459,12 +459,11 @@ impl Parse<'_> for Function {
             sign,
             bind,
             body: match p.peek_kind(P)? {
-                TokenKind::LCurly => Some(Block::parse(p)?),
                 TokenKind::Semi => {
                     p.consume_peeked();
                     None
                 }
-                t => Err(p.error(Unexpected(t), P))?,
+                _ => Some(Expr::parse(p)?),
             },
         })
     }
