@@ -8,7 +8,7 @@
 use std::{borrow::Borrow, rc::Rc};
 
 use super::*;
-use cl_ast::*;
+use cl_ast::{ast_visitor::Visit, *};
 use cl_structures::intern::interned::Interned;
 /// A work-in-progress tree walk interpreter for Conlang
 pub trait Interpret {
@@ -20,9 +20,29 @@ pub trait Interpret {
 
 impl Interpret for File {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        for item in &self.items {
+        /// Sorts items
+        #[derive(Debug, Default)]
+        struct ItemSorter<'ast>(pub [Vec<&'ast Item>; 6]);
+        impl<'ast> Visit<'ast> for ItemSorter<'ast> {
+            fn visit_item(&mut self, i: &'ast Item) {
+                self.0[match &i.kind {
+                    ItemKind::Module(_) => 0,
+                    ItemKind::Use(_) => 1,
+                    ItemKind::Enum(_) | ItemKind::Struct(_) | ItemKind::Alias(_) => 2,
+                    ItemKind::Function(_) => 3,
+                    ItemKind::Impl(_) => 4,
+                    ItemKind::Const(_) | ItemKind::Static(_) => 5,
+                }]
+                .push(i)
+            }
+        }
+
+        let mut items = ItemSorter::default();
+        items.visit_file(self);
+        for item in items.0.into_iter().flatten() {
             item.interpret(env)?;
         }
+
         Ok(ConValue::Empty)
     }
 }
