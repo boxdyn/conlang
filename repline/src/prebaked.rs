@@ -49,7 +49,7 @@ where F: FnMut(&str) -> Result<Response, Box<dyn Error>> {
             Ok(Response::Deny) => rl.deny(),
             Ok(Response::Break) => break,
             Ok(Response::Continue) => continue,
-            Err(e) => print!("\x1b[40G\x1b[A\x1bJ\x1b[91m{e}\x1b[0m\x1b[B"),
+            Err(e) => rl.print_inline(format_args!("\x1b[40G\x1b[91m{e}\x1b[0m"))?,
         }
     }
     Ok(())

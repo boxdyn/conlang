@@ -111,6 +111,15 @@ impl<'a, R: Read> Repline<'a, R> {
             }
         }
     }
+    /// Prints a message without moving the cursor
+    pub fn print_inline(&mut self, value: impl std::fmt::Display) -> ReplResult<()> {
+        let mut stdout = stdout().lock();
+        self.print_err(&mut stdout, value)
+    }
+    /// Prints a message (ideally an error) without moving the cursor
+    fn print_err<W: Write>(&mut self, w: &mut W, value: impl std::fmt::Display) -> ReplResult<()> {
+        self.ed.print_err(w, value)
+    }
     /// Handle ANSI Escape
     fn escape<W: Write>(&mut self, w: &mut W) -> ReplResult<()> {
         match self.input.next().ok_or(Error::EndOfInput)?? {

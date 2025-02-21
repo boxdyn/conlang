@@ -112,6 +112,17 @@ impl<'a> Editor<'a> {
         Ok(())
     }
 
+    pub fn print_err<W: Write>(&self, w: &mut W, err: impl Display) -> ReplResult<()> {
+        queue!(
+            w,
+            SavePosition,
+            Clear(ClearType::UntilNewLine),
+            Print(err),
+            RestorePosition
+        )?;
+        Ok(())
+    }
+
     /// Prints the characters after the cursor on the current line.
     pub fn print_tail<W: Write>(&self, w: &mut W) -> ReplResult<()> {
         let Self { tail, .. } = self;
