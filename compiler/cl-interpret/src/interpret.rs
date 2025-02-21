@@ -126,7 +126,7 @@ impl Interpret for Enum {
 }
 impl Interpret for Impl {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        println!("TODO: {self}");
+        println!("TODO: impl {}", self.target);
         let Self { target: _, body } = self;
         body.interpret(env)
     }
