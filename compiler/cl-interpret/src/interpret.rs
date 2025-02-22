@@ -113,8 +113,42 @@ impl Interpret for Function {
     }
 }
 impl Interpret for Struct {
-    fn interpret(&self, _env: &mut Environment) -> IResult<ConValue> {
-        println!("TODO: {self}");
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let Self { name, kind } = self;
+        match kind {
+            StructKind::Empty => {}
+            StructKind::Tuple(args) => {
+                // Constructs the AST from scratch. TODO: This, better.
+                let constructor = Function {
+                    name: *name,
+                    sign: TyFn {
+                        args: TyKind::Tuple(TyTuple {
+                            types: args.iter().map(|ty| ty.kind.clone()).collect(),
+                        })
+                        .into(),
+                        rety: Some(
+                            Ty {
+                                extents: cl_structures::span::Span::dummy(),
+                                kind: TyKind::Path(Path::from(*name)),
+                            }
+                            .into(),
+                        ),
+                    },
+                    bind: args
+                        .iter()
+                        .enumerate()
+                        .map(|(idx, _)| Param {
+                            mutability: Mutability::Not,
+                            name: idx.to_string().into(),
+                        })
+                        .collect(),
+                    body: None,
+                };
+                let constructor = crate::function::Function::new_constructor(constructor);
+                env.insert(*name, Some(constructor.into()));
+            }
+            StructKind::Struct(_) => eprintln!("TODO: {self}"),
+        }
         Ok(ConValue::Empty)
     }
 }
@@ -356,8 +390,8 @@ mod assignment {
                 (*a == b).then_some(()).ok_or(Error::NotAssignable)
             }
             (Pattern::Literal(Literal::Float(a)), ConValue::Float(b)) => (f64::from_bits(*a) == b)
-            .then_some(())
-            .ok_or(Error::NotAssignable),
+                .then_some(())
+                .ok_or(Error::NotAssignable),
             (Pattern::Literal(Literal::Int(a)), ConValue::Int(b)) => {
                 (b == *a as _).then_some(()).ok_or(Error::NotAssignable)
             }
@@ -376,10 +410,13 @@ mod assignment {
                 append_sub(sub, pat, Rc::unwrap_or_clone(r))
             }
 
-            (Pattern::Struct(_path, patterns), ConValue::Struct(parts)) => {
-                let (_name, mut values) = *parts;
+            (Pattern::Struct(path, patterns), ConValue::Struct(parts)) => {
+                let (name, mut values) = *parts;
+                if !path.ends_with(&name) {
+                    Err(Error::TypeError)?
+                }
                 if patterns.len() != values.len() {
-                    return Err(Error::TypeError);
+                    return Err(Error::ArgNumber { want: patterns.len(), got: values.len() });
                 }
                 for (name, pat) in patterns {
                     let value = values.remove(name).ok_or(Error::TypeError)?;
@@ -389,6 +426,20 @@ mod assignment {
                             sub.insert(name, value);
                         }
                     }
+                }
+                Ok(())
+            }
+
+            (Pattern::TupleStruct(path, patterns), ConValue::TupleStruct(parts)) => {
+                let (name, values) = *parts;
+                if !path.ends_with(&name) {
+                    Err(Error::TypeError)?
+                }
+                if patterns.len() != values.len() {
+                    Err(Error::ArgNumber { want: patterns.len(), got: values.len() })?
+                }
+                for (pat, value) in patterns.iter().zip(Vec::from(values).into_iter()) {
+                    append_sub(sub, pat, value)?;
                 }
                 Ok(())
             }
@@ -455,14 +506,17 @@ mod assignment {
         match path {
             [PathPart::Ident(name)] => env.get_mut(*name),
             [PathPart::Ident(name), rest @ ..] => match env.get_mut(*name)? {
-                Some(ConValue::Module(env)) => addrof_path_within_namespace(env, rest),
+                Some(ConValue::Module(env)) => project_path_in_namespace(env, rest),
                 _ => Err(Error::NotIndexable),
             },
             _ => Err(Error::NotAssignable),
         }
     }
 
-    fn addrof_member<'e>(env: &'e mut Environment, member: &Member) -> IResult<&'e mut ConValue> {
+    pub fn addrof_member<'e>(
+        env: &'e mut Environment,
+        member: &Member,
+    ) -> IResult<&'e mut ConValue> {
         let Member { head, kind } = member;
         let ExprKind::Path(path) = head.as_ref() else {
             return Err(Error::TypeError);
@@ -470,15 +524,7 @@ mod assignment {
         let slot = addrof_path(env, &path.parts)?
             .as_mut()
             .ok_or(Error::NotAssignable)?;
-        Ok(match (slot, kind) {
-            (ConValue::Struct(s), MemberKind::Struct(id)) => {
-                s.1.get_mut(id).ok_or(Error::NotDefined(*id))?
-            }
-            (ConValue::Tuple(t), MemberKind::Tuple(Literal::Int(id))) => t
-                .get_mut(*id as usize)
-                .ok_or_else(|| Error::NotDefined(id.to_string().into()))?,
-            _ => Err(Error::TypeError)?,
-        })
+        project_memberkind(slot, kind)
     }
 
     fn addrof_index<'e>(env: &'e mut Environment, index: &Index) -> IResult<&'e mut ConValue> {
@@ -489,19 +535,50 @@ mod assignment {
             .collect::<IResult<Vec<_>>>()?;
         let mut head = addrof(env, head)?;
         for index in indices {
-            head = match (head, index) {
-                (ConValue::Array(a), ConValue::Int(i)) => {
-                    let a_len = a.len();
-                    a.get_mut(i as usize)
-                        .ok_or(Error::OobIndex(i as usize, a_len))?
-                }
-                _ => Err(Error::NotIndexable)?,
-            }
+            head = project_index(head, &index)?;
         }
         Ok(head)
     }
 
-    pub fn addrof_path_within_namespace<'e>(
+    /// Performs member-access "projection" from a ConValue to a particular element
+    pub fn project_memberkind<'v>(
+        value: &'v mut ConValue,
+        kind: &MemberKind,
+    ) -> IResult<&'v mut ConValue> {
+        match (value, kind) {
+            (ConValue::Struct(s), MemberKind::Struct(id)) => {
+                s.1.get_mut(id).ok_or(Error::NotDefined(*id))
+            }
+            (ConValue::TupleStruct(s), MemberKind::Tuple(Literal::Int(id))) => {
+                let len = s.1.len();
+                s.1.get_mut(*id as usize)
+                    .ok_or(Error::OobIndex(*id as _, len))
+            }
+            (ConValue::Tuple(t), MemberKind::Tuple(Literal::Int(id))) => {
+                let len = t.len();
+                t.get_mut(*id as usize)
+                    .ok_or(Error::OobIndex(*id as _, len))
+            }
+            _ => Err(Error::TypeError),
+        }
+    }
+
+    /// Performs index "projection" from a ConValue to a particular element
+    pub fn project_index<'v>(
+        value: &'v mut ConValue,
+        index: &ConValue,
+    ) -> IResult<&'v mut ConValue> {
+        match (value, index) {
+            (ConValue::Array(a), ConValue::Int(i)) => {
+                let a_len = a.len();
+                a.get_mut(*i as usize)
+                    .ok_or(Error::OobIndex(*i as usize, a_len))
+            }
+            _ => Err(Error::NotIndexable),
+        }
+    }
+
+    pub fn project_path_in_namespace<'e>(
         env: &'e mut Namespace,
         path: &[PathPart],
     ) -> IResult<&'e mut Option<ConValue>> {
@@ -510,11 +587,11 @@ mod assignment {
             [PathPart::Ident(name)] => env.get_mut(name).ok_or(Error::NotDefined(*name)),
             [PathPart::Ident(name), rest @ ..] => {
                 match env.get_mut(name).ok_or(Error::NotDefined(*name))? {
-                    Some(ConValue::Module(env)) => addrof_path_within_namespace(env, rest),
+                    Some(ConValue::Module(env)) => project_path_in_namespace(env, rest),
                     _ => Err(Error::NotIndexable),
                 }
             }
-            [PathPart::SelfKw, rest @ ..] => addrof_path_within_namespace(env, rest),
+            [PathPart::SelfKw, rest @ ..] => project_path_in_namespace(env, rest),
             [PathPart::SelfTy, ..] => todo!("calc_address for `Self`"),
             [PathPart::SuperKw, ..] => todo!("calc_address for `super`"),
         }
@@ -726,16 +803,14 @@ impl Interpret for Cast {
 impl Interpret for Member {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Member { head, kind } = self;
+        if let ExprKind::Path(_) = head.as_ref() {
+            return assignment::addrof_member(env, self).cloned();
+        }
         let head = head.interpret(env)?;
         match (head, kind) {
-            (ConValue::Tuple(v), MemberKind::Tuple(Literal::Int(id))) => v
-                .get(*id as usize)
-                .cloned()
-                .ok_or(Error::OobIndex(*id as usize, v.len())),
-            (ConValue::Struct(parts), MemberKind::Struct(name)) => {
-                parts.1.get(name).cloned().ok_or(Error::NotDefined(*name))
-            }
-            (ConValue::Struct(parts), MemberKind::Call(name, args)) => {
+            (ConValue::Struct(parts), MemberKind::Call(name, args))
+                if parts.1.contains_key(name) =>
+            {
                 let mut values = vec![];
                 for arg in &args.exprs {
                     values.push(arg.interpret(env)?);
@@ -753,7 +828,7 @@ impl Interpret for Member {
                 }
                 env.call(*name, &values)
             }
-            _ => Err(Error::TypeError)?,
+            (mut head, kind) => assignment::project_memberkind(&mut head, kind).cloned(),
         }
     }
 }

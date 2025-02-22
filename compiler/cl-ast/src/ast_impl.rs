@@ -940,6 +940,14 @@ mod path {
             }
         }
 
+        /// Checks whether this path ends in the given [Sym]
+        pub fn ends_with(&self, name: &Sym) -> bool {
+            match self.parts.as_slice() {
+                [.., PathPart::Ident(last)] => name == last,
+                _ => false,
+            }
+        }
+
         /// Checks whether this path refers to the sinkhole identifier, `_`
         pub fn is_sinkhole(&self) -> bool {
             if let [PathPart::Ident(id)] = self.parts.as_slice() {

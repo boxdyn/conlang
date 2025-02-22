@@ -6,7 +6,8 @@ use cl_ast::{format::FmtAdapter, ExprKind, Sym};
 use super::{
     builtin::Builtin,
     error::{Error, IResult},
-    function::Function, Callable, Environment,
+    function::Function,
+    Callable, Environment,
 };
 use std::{collections::HashMap, ops::*, rc::Rc};
 
@@ -40,6 +41,8 @@ pub enum ConValue {
     RangeInc(Integer, Integer),
     /// A value of a product type
     Struct(Box<(Sym, HashMap<Sym, ConValue>)>),
+    /// A value of a product type with anonymous members
+    TupleStruct(Box<(Sym, Box<[ConValue]>)>),
     /// An entire namespace
     Module(Box<HashMap<Sym, Option<ConValue>>>),
     /// A quoted expression
@@ -289,6 +292,20 @@ impl std::fmt::Display for ConValue {
             ConValue::RangeExc(a, b) => write!(f, "{a}..{}", b + 1),
             ConValue::RangeInc(a, b) => write!(f, "{a}..={b}"),
             ConValue::Tuple(tuple) => {
+                '('.fmt(f)?;
+                for (idx, element) in tuple.iter().enumerate() {
+                    if idx > 0 {
+                        ", ".fmt(f)?
+                    }
+                    element.fmt(f)?
+                }
+                ')'.fmt(f)
+            }
+            ConValue::TupleStruct(parts) => {
+                let (name, tuple) = parts.as_ref();
+                if !name.is_empty() {
+                    write!(f, "{name}")?;
+                }
                 '('.fmt(f)?;
                 for (idx, element) in tuple.iter().enumerate() {
                     if idx > 0 {
