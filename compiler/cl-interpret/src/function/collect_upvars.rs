@@ -67,8 +67,8 @@ impl<'a> Visit<'a> for CollectUpvars<'_> {
     fn visit_function(&mut self, f: &'a cl_ast::Function) {
         let Function { name: _, sign: _, bind, body } = f;
         // parameters can never be upvars
-        for Param { mutability: _, name } in bind {
-            self.bind_name(name);
+        for Param { mutability: _, bind } in bind {
+            self.visit_pattern(bind);
         }
         if let Some(body) = body {
             self.visit_expr(body);

@@ -153,7 +153,7 @@ pub struct Function {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Param {
     pub mutability: Mutability,
-    pub name: Sym,
+    pub bind: Pattern,
 }
 
 /// A user-defined product type

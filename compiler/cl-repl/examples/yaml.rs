@@ -643,8 +643,8 @@ pub mod yamlify {
     }
     impl Yamlify for Param {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { mutability, name } = self;
-            y.key("Param").yaml(mutability).pair("name", name);
+            let Self { mutability, bind } = self;
+            y.key("Param").yaml(mutability).pair("pat", bind);
         }
     }
     impl Yamlify for Ty {

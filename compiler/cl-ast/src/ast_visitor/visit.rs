@@ -89,9 +89,9 @@ pub trait Visit<'a>: Sized {
         }
     }
     fn visit_param(&mut self, p: &'a Param) {
-        let Param { mutability, name } = p;
+        let Param { mutability, bind } = p;
         self.visit_mutability(mutability);
-        self.visit_sym(name);
+        self.visit_pattern(bind);
     }
     fn visit_struct(&mut self, s: &'a Struct) {
         let Struct { name, kind } = s;

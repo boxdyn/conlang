@@ -319,7 +319,7 @@ impl std::fmt::Display for ConValue {
                 let (name, map) = parts.as_ref();
                 use std::fmt::Write;
                 if !name.is_empty() {
-                    write!(f, "{name}: ")?;
+                    write!(f, "{name} ")?;
                 }
                 let mut f = f.delimit_with("{", "\n}");
                 for (k, v) in map.iter() {

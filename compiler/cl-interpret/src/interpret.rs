@@ -139,7 +139,7 @@ impl Interpret for Struct {
                         .enumerate()
                         .map(|(idx, _)| Param {
                             mutability: Mutability::Not,
-                            name: idx.to_string().into(),
+                            bind: Pattern::Name(idx.to_string().into()),
                         })
                         .collect(),
                     body: None,
@@ -300,12 +300,12 @@ impl Interpret for Let {
         let Let { mutable: _, name, ty: _, init } = self;
         match init.as_ref().map(|i| i.interpret(env)).transpose()? {
             Some(value) => {
-                for (name, value) in assignment::pattern_substitution(name, value)? {
+                for (name, value) in pattern::substitution(name, value)? {
                     env.insert(*name, Some(value));
                 }
             }
             None => {
-                for name in assignment::pattern_variables(name) {
+                for name in pattern::variables(name) {
                     env.insert(*name, None);
                 }
             }
@@ -319,7 +319,7 @@ impl Interpret for Match {
         let Self { scrutinee, arms } = self;
         let scrutinee = scrutinee.interpret(env)?;
         for MatchArm(pat, expr) in arms {
-            if let Ok(substitution) = assignment::pattern_substitution(pat, scrutinee.clone()) {
+            if let Ok(substitution) = pattern::substitution(pat, scrutinee.clone()) {
                 let mut env = env.frame("match");
                 for (name, value) in substitution {
                     env.insert(*name, Some(value));
@@ -337,136 +337,11 @@ mod assignment {
     use std::collections::HashMap;
     type Namespace = HashMap<Sym, Option<ConValue>>;
 
-    /// Gets the path variables in the given Pattern
-    pub fn pattern_variables(pat: &Pattern) -> Vec<&Sym> {
-        fn patvars<'p>(set: &mut Vec<&'p Sym>, pat: &'p Pattern) {
-            match pat {
-                Pattern::Name(name) if &**name == "_" => {}
-                Pattern::Name(name) => set.push(name),
-                Pattern::Literal(_) => {}
-                Pattern::Ref(_, pattern) => patvars(set, pattern),
-                Pattern::Tuple(patterns) | Pattern::Array(patterns) => {
-                    patterns.iter().for_each(|pat| patvars(set, pat))
-                }
-                Pattern::Struct(_path, items) => {
-                    items.iter().for_each(|(name, pat)| match pat {
-                        Some(pat) => patvars(set, pat),
-                        None => set.push(name),
-                    });
-                }
-                Pattern::TupleStruct(_path, items) => {
-                    items.iter().for_each(|pat| patvars(set, pat));
-                }
-            }
-        }
-        let mut set = Vec::new();
-        patvars(&mut set, pat);
-        set
-    }
-
-    /// Appends a substitution to the provided table
-    pub fn append_sub<'pat>(
-        sub: &mut HashMap<&'pat Sym, ConValue>,
-        pat: &'pat Pattern,
-        value: ConValue,
-    ) -> IResult<()> {
-        match (pat, value) {
-            (Pattern::Array(patterns), ConValue::Array(values))
-            | (Pattern::Tuple(patterns), ConValue::Tuple(values)) => {
-                if patterns.len() != values.len() {
-                    Err(Error::ArgNumber { want: patterns.len(), got: values.len() })?
-                }
-                for (pat, value) in patterns.iter().zip(Vec::from(values).into_iter()) {
-                    append_sub(sub, pat, value)?;
-                }
-                Ok(())
-            }
-            (Pattern::Tuple(patterns), ConValue::Empty) if patterns.is_empty() => Ok(()),
-
-            (Pattern::Literal(Literal::Bool(a)), ConValue::Bool(b)) => {
-                (*a == b).then_some(()).ok_or(Error::NotAssignable)
-            }
-            (Pattern::Literal(Literal::Char(a)), ConValue::Char(b)) => {
-                (*a == b).then_some(()).ok_or(Error::NotAssignable)
-            }
-            (Pattern::Literal(Literal::Float(a)), ConValue::Float(b)) => (f64::from_bits(*a) == b)
-                .then_some(())
-                .ok_or(Error::NotAssignable),
-            (Pattern::Literal(Literal::Int(a)), ConValue::Int(b)) => {
-                (b == *a as _).then_some(()).ok_or(Error::NotAssignable)
-            }
-            (Pattern::Literal(Literal::String(a)), ConValue::String(b)) => {
-                (*a == *b).then_some(()).ok_or(Error::NotAssignable)
-            }
-            (Pattern::Literal(_), _) => Err(Error::NotAssignable),
-
-            (Pattern::Name(name), _) if "_".eq(&**name) => Ok(()),
-            (Pattern::Name(name), value) => {
-                sub.insert(name, value);
-                Ok(())
-            }
-
-            (Pattern::Ref(_, pat), ConValue::Ref(r)) => {
-                append_sub(sub, pat, Rc::unwrap_or_clone(r))
-            }
-
-            (Pattern::Struct(path, patterns), ConValue::Struct(parts)) => {
-                let (name, mut values) = *parts;
-                if !path.ends_with(&name) {
-                    Err(Error::TypeError)?
-                }
-                if patterns.len() != values.len() {
-                    return Err(Error::ArgNumber { want: patterns.len(), got: values.len() });
-                }
-                for (name, pat) in patterns {
-                    let value = values.remove(name).ok_or(Error::TypeError)?;
-                    match pat {
-                        Some(pat) => append_sub(sub, pat, value)?,
-                        None => {
-                            sub.insert(name, value);
-                        }
-                    }
-                }
-                Ok(())
-            }
-
-            (Pattern::TupleStruct(path, patterns), ConValue::TupleStruct(parts)) => {
-                let (name, values) = *parts;
-                if !path.ends_with(&name) {
-                    Err(Error::TypeError)?
-                }
-                if patterns.len() != values.len() {
-                    Err(Error::ArgNumber { want: patterns.len(), got: values.len() })?
-                }
-                for (pat, value) in patterns.iter().zip(Vec::from(values).into_iter()) {
-                    append_sub(sub, pat, value)?;
-                }
-                Ok(())
-            }
-
-            (pat, value) => {
-                eprintln!("Could not match pattern `{pat}` with value `{value}`!");
-                Err(Error::NotAssignable)
-            }
-        }
-    }
-
-    /// Constructs a substitution from a pattern and a value
-    pub fn pattern_substitution(
-        pat: &Pattern,
-        value: ConValue,
-    ) -> IResult<HashMap<&Sym, ConValue>> {
-        let mut sub = HashMap::new();
-        append_sub(&mut sub, pat, value)?;
-        Ok(sub)
-    }
-
     pub(super) fn pat_assign(env: &mut Environment, pat: &Pattern, value: ConValue) -> IResult<()> {
-        let mut substitution = HashMap::new();
-        append_sub(&mut substitution, pat, value)
-            .map_err(|_| Error::PatFailed(pat.clone().into()))?;
-        for (path, value) in substitution {
-            env.insert(*path, Some(value));
+        for (name, value) in
+            pattern::substitution(pat, value).map_err(|_| Error::PatFailed(pat.clone().into()))?
+        {
+            *env.get_mut(*name)? = Some(value);
         }
         Ok(())
     }
@@ -478,6 +353,7 @@ mod assignment {
         match pat {
             ExprKind::Member(member) => *addrof_member(env, member)? = value,
             ExprKind::Index(index) => *addrof_index(env, index)? = value,
+            ExprKind::Path(path) => *addrof_path(env, &path.parts)? = Some(value),
             _ => Err(Error::NotAssignable)?,
         }
         Ok(())
@@ -978,7 +854,7 @@ impl Interpret for If {
 }
 impl Interpret for For {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { bind: name, cond, pass, fail } = self;
+        let Self { bind, cond, pass, fail } = self;
         let cond = cond.interpret(env)?;
         // TODO: A better iterator model
         let mut bounds: Box<dyn Iterator<Item = ConValue>> = match &cond {
@@ -990,9 +866,8 @@ impl Interpret for For {
         };
         loop {
             let mut env = env.frame("loop variable");
-            if let Some(loop_var) = bounds.next() {
-                let subs = assignment::pattern_substitution(name, loop_var)?;
-                for (name, value) in subs {
+            if let Some(value) = bounds.next() {
+                for (name, value) in pattern::substitution(bind, value)? {
                     env.insert(*name, Some(value));
                 }
                 match pass.interpret(&mut env) {

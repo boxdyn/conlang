@@ -44,7 +44,9 @@ pub fn exprkind(p: &mut Parser, power: u8) -> PResult<ExprKind> {
         Some(match op {
             TokenKind::LBrack => Precedence::Index,
             TokenKind::LParen => Precedence::Call,
+            TokenKind::LCurly => Precedence::Structor,
             TokenKind::Dot => Precedence::Member,
+            TokenKind::As => Precedence::Cast,
             _ => None?,
         })
     }
@@ -55,24 +57,35 @@ pub fn exprkind(p: &mut Parser, power: u8) -> PResult<ExprKind> {
             if before < power {
                 break;
             }
-            p.consume_peeked();
 
             head = match op {
                 TokenKind::LBrack => {
+                    p.consume_peeked();
                     let indices =
                         sep(Expr::parse, TokenKind::Comma, TokenKind::RBrack, parsing)(p)?;
                     p.match_type(TokenKind::RBrack, parsing)?;
                     ExprKind::Index(Index { head: head.into(), indices })
                 }
                 TokenKind::LParen => {
+                    p.consume_peeked();
                     let exprs = sep(Expr::parse, TokenKind::Comma, TokenKind::RParen, parsing)(p)?;
                     p.match_type(TokenKind::RParen, parsing)?;
                     Binary { kind: BinaryKind::Call, parts: (head, Tuple { exprs }.into()).into() }
                         .into()
                 }
+                TokenKind::LCurly => match head {
+                    ExprKind::Path(path) => ExprKind::Structor(structor_body(p, path)?),
+                    _ => break,
+                },
                 TokenKind::Dot => {
+                    p.consume_peeked();
                     let kind = MemberKind::parse(p)?;
                     Member { head: Box::new(head), kind }.into()
+                }
+                TokenKind::As => {
+                    p.consume_peeked();
+                    let ty = Ty::parse(p)?;
+                    Cast { head: head.into(), ty }.into()
                 }
                 _ => Err(p.error(Unexpected(op), parsing))?,
             };
@@ -217,11 +230,7 @@ fn exprkind_group(p: &mut Parser) -> PResult<ExprKind> {
 
 /// Parses an expression beginning with a [Path] (i.e. [Path] or [Structor])
 fn exprkind_pathlike(p: &mut Parser) -> PResult<ExprKind> {
-    let head = Path::parse(p)?;
-    Ok(match p.match_type(TokenKind::Colon, Parsing::Path) {
-        Ok(_) => ExprKind::Structor(structor_body(p, head)?),
-        Err(_) => ExprKind::Path(head),
-    })
+    Path::parse(p).map(Into::into)
 }
 
 /// [Structor]Body = `{` ([Fielder] `,`)* [Fielder]? `}`
@@ -244,6 +253,9 @@ fn structor_body(p: &mut Parser, to: Path) -> PResult<Structor> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Precedence {
     Assign,
+    Pattern,   // A pattern can contain a structor
+    Structor,  // A structor is never a valid conditional
+    Condition, // Anything that syntactically needs a block following it
     Logic,
     Compare,
     Range,
@@ -255,7 +267,6 @@ pub enum Precedence {
     Index,
     Cast,
     Member, // left-associative
-    Pattern,
     Call,
 }
 
@@ -284,7 +295,9 @@ impl Precedence {
 
     pub fn postfix(self) -> Option<(u8, ())> {
         match self {
-            Self::Index | Self::Call | Self::Member => Some((self.level(), ())),
+            Self::Structor | Self::Index | Self::Call | Self::Member | Self::Cast => {
+                Some((self.level(), ()))
+            }
             _ => None,
         }
     }

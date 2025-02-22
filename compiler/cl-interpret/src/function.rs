@@ -2,7 +2,7 @@
 
 use collect_upvars::collect_upvars;
 
-use super::{Callable, ConValue, Environment, Error, IResult, Interpret};
+use super::{pattern, Callable, ConValue, Environment, Error, IResult, Interpret};
 use cl_ast::{Function as FnDecl, Param, Sym};
 use std::{
     cell::{Ref, RefCell},
@@ -70,8 +70,10 @@ impl Callable for Function {
 
         // TODO: completely refactor data storage
         let mut frame = env.frame("fn args");
-        for (Param { mutability: _, name }, value) in bind.iter().zip(args) {
-            frame.insert(*name, Some(value.clone()));
+        for (Param { mutability: _, bind }, value) in bind.iter().zip(args) {
+            for (name, value) in pattern::substitution(bind, value.clone())? {
+                frame.insert(*name, Some(value));
+            }
         }
         let res = body.interpret(&mut frame);
         drop(frame);

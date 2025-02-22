@@ -1,5 +1,6 @@
 use super::*;
 
+use cl_ast::ExprKind;
 use cl_lexer::error::{Error as LexError, Reason};
 use std::fmt::Display;
 pub type PResult<T> = Result<T, Error>;
@@ -29,6 +30,7 @@ pub enum ErrorKind {
     ExpectedParsing {
         want: Parsing,
     },
+    InvalidPattern(Box<ExprKind>),
     /// Indicates unfinished code
     Todo(&'static str),
 }
@@ -148,6 +150,7 @@ impl Display for ErrorKind {
             ErrorKind::Unexpected(t) => write!(f, "Encountered unexpected token `{t}`"),
             ErrorKind::ExpectedToken { want: e, got: g } => write!(f, "Expected `{e}`, got `{g}`"),
             ErrorKind::ExpectedParsing { want } => write!(f, "Expected {want}"),
+            ErrorKind::InvalidPattern(got) => write!(f, "Got invalid `{got}`"),
             ErrorKind::Todo(unfinished) => write!(f, "TODO: {unfinished}"),
         }
     }

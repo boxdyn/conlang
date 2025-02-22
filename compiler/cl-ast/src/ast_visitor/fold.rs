@@ -111,8 +111,8 @@ pub trait Fold {
         }
     }
     fn fold_param(&mut self, p: Param) -> Param {
-        let Param { mutability, name } = p;
-        Param { mutability: self.fold_mutability(mutability), name: self.fold_sym(name) }
+        let Param { mutability, bind } = p;
+        Param { mutability: self.fold_mutability(mutability), bind: self.fold_pattern(bind) }
     }
     fn fold_struct(&mut self, s: Struct) -> Struct {
         let Struct { name, kind } = s;

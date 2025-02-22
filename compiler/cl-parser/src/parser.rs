@@ -494,7 +494,7 @@ impl Parse<'_> for TypedParam {
     /// Parses a single function [parameter](Param)
     fn parse(p: &mut Parser) -> PResult<(Param, TyKind)> {
         Ok((
-            Param { mutability: Mutability::parse(p)?, name: Sym::parse(p)? },
+            Param { mutability: Mutability::parse(p)?, bind: Pattern::parse(p)? },
             {
                 p.match_type(TokenKind::Colon, Parsing::Param)?;
                 TyKind::parse(p)?
@@ -1006,13 +1006,20 @@ impl Parse<'_> for Block {
     }
 }
 
+/// Conditions (which precede curly-braced blocks) get special treatment
+fn condition(p: &mut Parser) -> PResult<Expr> {
+    let start = p.loc();
+    let kind = prec::exprkind(p, prec::Precedence::Condition.level())?;
+    Ok(Expr { kind, extents: Span(start, p.loc()) })
+}
+
 impl Parse<'_> for While {
     /// [While] = `while` [Expr] [Block] [Else]?
     #[rustfmt::skip]
     fn parse(p: &mut Parser) -> PResult<While> {
         p.match_type(TokenKind::While, Parsing::While)?;
         Ok(While {
-            cond: Expr::parse(p)?.into(),
+            cond: condition(p)?.into(),
             pass: Block::parse(p)?.into(),
             fail: Else::parse(p)?
         })
@@ -1025,7 +1032,7 @@ impl Parse<'_> for If {
     fn parse(p: &mut Parser) -> PResult<If> {
         p.match_type(TokenKind::If, Parsing::If)?;
         Ok(If {
-            cond: Expr::parse(p)?.into(),
+            cond: condition(p)?.into(),
             pass: Block::parse(p)?.into(),
             fail: Else::parse(p)?,
         })
@@ -1033,7 +1040,7 @@ impl Parse<'_> for If {
 }
 
 impl Parse<'_> for For {
-    /// [For]: `for` Pattern (TODO) `in` [Expr] [Block] [Else]?
+    /// [For]: `for` [Pattern] `in` [Expr] [Block] [Else]?
     #[rustfmt::skip]
     fn parse(p: &mut Parser) -> PResult<For> {
         p.match_type(TokenKind::For, Parsing::For)?;
@@ -1041,7 +1048,7 @@ impl Parse<'_> for For {
         p.match_type(TokenKind::In, Parsing::For)?;
         Ok(For {
             bind,
-            cond: Expr::parse(p)?.into(),
+            cond: condition(p)?.into(),
             pass: Block::parse(p)?.into(),
             fail: Else::parse(p)?,
         })
@@ -1081,8 +1088,7 @@ impl Parse<'_> for Return {
 impl Parse<'_> for Pattern {
     fn parse(p: &mut Parser<'_>) -> PResult<Self> {
         let value = prec::exprkind(p, prec::Precedence::Pattern.level())?;
-        Pattern::try_from(value)
-            .map_err(|_| p.error(ExpectedParsing { want: Parsing::Pattern }, Parsing::Pattern))
+        Pattern::try_from(value).map_err(|e| p.error(InvalidPattern(e.into()), Parsing::Pattern))
     }
 }
 

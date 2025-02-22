@@ -194,8 +194,8 @@ mod display {
 
     impl Display for Param {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { mutability, name } = self;
-            write!(f, "{mutability}{name}")
+            let Self { mutability, bind } = self;
+            write!(f, "{mutability}{bind}")
         }
     }
 
@@ -474,11 +474,11 @@ mod display {
                 Pattern::Tuple(patterns) => separate(patterns, ", ")(f.delimit(INLINE_PARENS)),
                 Pattern::Array(patterns) => separate(patterns, ", ")(f.delimit(INLINE_SQUARE)),
                 Pattern::Struct(path, items) => {
-                    write!(f, "{path}: ")?;
-                    let f = &mut f.delimit(BRACES);
+                    write!(f, "{path} ")?;
+                    let f = &mut f.delimit(INLINE_BRACES);
                     for (idx, (name, item)) in items.iter().enumerate() {
                         if idx != 0 {
-                            f.write_str(",\n")?;
+                            f.write_str(", ")?;
                         }
                         write!(f, "{name}")?;
                         if let Some(pattern) = item {
@@ -639,7 +639,7 @@ mod display {
     impl Display for Structor {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { to, init } = self;
-            write!(f, "{to}: ")?;
+            write!(f, "{to} ")?;
             separate(init, ", ")(f.delimit(INLINE_BRACES))
         }
     }
