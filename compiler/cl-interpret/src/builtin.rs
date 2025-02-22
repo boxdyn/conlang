@@ -57,7 +57,7 @@ impl super::Callable for Builtin {
 /// Turns a function definition into a [Builtin].
 ///
 /// ```rust
-/// # use cl_interpret::{builtin2::builtin, convalue::ConValue};
+/// # use cl_interpret::{builtin::builtin, convalue::ConValue};
 /// let my_builtin = builtin! {
 ///     /// Use the `@env` suffix to bind the environment!
 ///     /// (needed for recursive calls)
