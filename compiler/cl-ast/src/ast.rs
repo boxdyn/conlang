@@ -418,12 +418,12 @@ pub struct Let {
 /// A [Pattern] meta-expression (any [`ExprKind`] that fits pattern rules)
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Pattern {
-    Path(Path),
+    Name(Sym),
     Literal(Literal),
     Ref(Mutability, Box<Pattern>),
     Tuple(Vec<Pattern>),
     Array(Vec<Pattern>),
-    Struct(Path, Vec<(Path, Option<Pattern>)>),
+    Struct(Path, Vec<(Sym, Option<Pattern>)>),
 }
 
 /// A `match` expression: `match` `{` ([MatchArm] `,`)* [MatchArm]? `}`
@@ -620,7 +620,7 @@ pub struct If {
 /// A [For] expression: `for` Pattern `in` [`Expr`] [`Block`] [`Else`]?
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct For {
-    pub bind: Sym, // TODO: Patterns?
+    pub bind: Pattern,
     pub cond: Box<Expr>,
     pub pass: Box<Block>,
     pub fail: Else,

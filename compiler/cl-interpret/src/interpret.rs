@@ -266,19 +266,13 @@ impl Interpret for Let {
         let Let { mutable: _, name, ty: _, init } = self;
         match init.as_ref().map(|i| i.interpret(env)).transpose()? {
             Some(value) => {
-                for (path, value) in assignment::pattern_substitution(name, value)? {
-                    match path.parts.as_slice() {
-                        [PathPart::Ident(name)] => env.insert(*name, Some(value)),
-                        _ => eprintln!("Bad assignment: {path} = {value}"),
-                    }
+                for (name, value) in assignment::pattern_substitution(name, value)? {
+                    env.insert(*name, Some(value));
                 }
             }
             None => {
-                for path in assignment::pattern_variables(name) {
-                    match path.parts.as_slice() {
-                        [PathPart::Ident(name)] => env.insert(*name, None),
-                        _ => eprintln!("Bad assignment: {path}"),
-                    }
+                for name in assignment::pattern_variables(name) {
+                    env.insert(*name, None);
                 }
             }
         }
@@ -290,13 +284,10 @@ impl Interpret for Match {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self { scrutinee, arms } = self;
         let scrutinee = scrutinee.interpret(env)?;
-        'arm: for MatchArm(pat, expr) in arms {
+        for MatchArm(pat, expr) in arms {
             if let Ok(substitution) = assignment::pattern_substitution(pat, scrutinee.clone()) {
                 let mut env = env.frame("match");
-                for (path, value) in substitution {
-                    let [PathPart::Ident(name)] = path.parts.as_slice() else {
-                        continue 'arm;
-                    };
+                for (name, value) in substitution {
                     env.insert(*name, Some(value));
                 }
                 return expr.interpret(&mut env);
@@ -313,11 +304,11 @@ mod assignment {
     type Namespace = HashMap<Sym, Option<ConValue>>;
 
     /// Gets the path variables in the given Pattern
-    pub fn pattern_variables(pat: &Pattern) -> Vec<&Path> {
-        fn patvars<'p>(set: &mut Vec<&'p Path>, pat: &'p Pattern) {
+    pub fn pattern_variables(pat: &Pattern) -> Vec<&Sym> {
+        fn patvars<'p>(set: &mut Vec<&'p Sym>, pat: &'p Pattern) {
             match pat {
-                Pattern::Path(path) if path.is_sinkhole() => {}
-                Pattern::Path(path) => set.push(path),
+                Pattern::Name(name) if &**name == "_" => {}
+                Pattern::Name(name) => set.push(name),
                 Pattern::Literal(_) => {}
                 Pattern::Ref(_, pattern) => patvars(set, pattern),
                 Pattern::Tuple(patterns) | Pattern::Array(patterns) => {
@@ -338,81 +329,70 @@ mod assignment {
 
     /// Appends a substitution to the provided table
     pub fn append_sub<'pat>(
-        env: &mut HashMap<&'pat Path, ConValue>,
+        sub: &mut HashMap<&'pat Sym, ConValue>,
         pat: &'pat Pattern,
         value: ConValue,
     ) -> IResult<()> {
-        match pat {
-            Pattern::Path(path) if path.is_sinkhole() => Ok(()),
-            Pattern::Path(path) => {
-                env.insert(path, value);
+        match (pat, value) {
+            (Pattern::Array(patterns), ConValue::Array(values))
+            | (Pattern::Tuple(patterns), ConValue::Tuple(values)) => {
+                if patterns.len() != values.len() {
+                    Err(Error::ArgNumber { want: patterns.len(), got: values.len() })?
+                }
+                for (pat, value) in patterns.iter().zip(Vec::from(values).into_iter()) {
+                    append_sub(sub, pat, value)?;
+                }
+                Ok(())
+            }
+            (Pattern::Tuple(patterns), ConValue::Empty) if patterns.is_empty() => Ok(()),
+
+            (Pattern::Literal(Literal::Bool(a)), ConValue::Bool(b)) => {
+                (*a == b).then_some(()).ok_or(Error::NotAssignable)
+            }
+            (Pattern::Literal(Literal::Char(a)), ConValue::Char(b)) => {
+                (*a == b).then_some(()).ok_or(Error::NotAssignable)
+            }
+            (Pattern::Literal(Literal::Float(a)), ConValue::Float(b)) => (f64::from_bits(*a) == b)
+            .then_some(())
+            .ok_or(Error::NotAssignable),
+            (Pattern::Literal(Literal::Int(a)), ConValue::Int(b)) => {
+                (b == *a as _).then_some(()).ok_or(Error::NotAssignable)
+            }
+            (Pattern::Literal(Literal::String(a)), ConValue::String(b)) => {
+                (*a == *b).then_some(()).ok_or(Error::NotAssignable)
+            }
+            (Pattern::Literal(_), _) => Err(Error::NotAssignable),
+
+            (Pattern::Name(name), _) if "_".eq(&**name) => Ok(()),
+            (Pattern::Name(name), value) => {
+                sub.insert(name, value);
                 Ok(())
             }
 
-            Pattern::Literal(literal) => match (literal, value) {
-                (Literal::Bool(a), ConValue::Bool(b)) => *a == b,
-                (Literal::Char(a), ConValue::Char(b)) => *a == b,
-                (Literal::Int(a), ConValue::Int(b)) => *a as isize == b,
-                (Literal::Float(a), ConValue::Float(b)) => f64::from_bits(*a) == b,
-                (Literal::String(a), ConValue::String(b)) => *a == *b,
-                _ => false,
+            (Pattern::Ref(_, pat), ConValue::Ref(r)) => {
+                append_sub(sub, pat, Rc::unwrap_or_clone(r))
             }
-            .then_some(())
-            .ok_or(Error::NotAssignable),
 
-            Pattern::Ref(_, pattern) => match value {
-                ConValue::Ref(value) => append_sub(env, pattern, Rc::unwrap_or_clone(value)),
-                _ => Err(Error::NotAssignable),
-            },
-
-            Pattern::Tuple(patterns) => match value {
-                ConValue::Tuple(values) => {
-                    if patterns.len() != values.len() {
-                        return Err(Error::OobIndex(patterns.len(), values.len()));
-                    };
-                    for (pat, value) in patterns.iter().zip(Vec::from(values).into_iter()) {
-                        append_sub(env, pat, value)?;
-                    }
-                    Ok(())
-                }
-                _ => Err(Error::NotAssignable),
-            },
-
-            Pattern::Array(patterns) => match value {
-                ConValue::Array(values) => {
-                    if patterns.len() != values.len() {
-                        return Err(Error::OobIndex(patterns.len(), values.len()));
-                    };
-                    for (pat, value) in patterns.iter().zip(Vec::from(values).into_iter()) {
-                        append_sub(env, pat, value)?;
-                    }
-                    Ok(())
-                }
-                _ => Err(Error::NotAssignable),
-            },
-
-            Pattern::Struct(_path, patterns) => {
-                let ConValue::Struct(parts) = value else {
-                    return Err(Error::TypeError);
-                };
-                let (_, mut values) = *parts;
-                if values.len() != patterns.len() {
+            (Pattern::Struct(_path, patterns), ConValue::Struct(parts)) => {
+                let (_name, mut values) = *parts;
+                if patterns.len() != values.len() {
                     return Err(Error::TypeError);
                 }
                 for (name, pat) in patterns {
-                    let [.., PathPart::Ident(index)] = name.parts.as_slice() else {
-                        Err(Error::TypeError)?
-                    };
-                    let value = values.remove(index).ok_or(Error::TypeError)?;
+                    let value = values.remove(name).ok_or(Error::TypeError)?;
                     match pat {
-                        Some(pat) => append_sub(env, pat, value)?,
+                        Some(pat) => append_sub(sub, pat, value)?,
                         None => {
-                            env.insert(name, value);
+                            sub.insert(name, value);
                         }
                     }
                 }
-
                 Ok(())
+            }
+
+            (pat, value) => {
+                eprintln!("Could not match pattern `{pat}` with value `{value}`!");
+                Err(Error::NotAssignable)
             }
         }
     }
@@ -421,10 +401,10 @@ mod assignment {
     pub fn pattern_substitution(
         pat: &Pattern,
         value: ConValue,
-    ) -> IResult<HashMap<&Path, ConValue>> {
-        let mut substitution = HashMap::new();
-        append_sub(&mut substitution, pat, value)?;
-        Ok(substitution)
+    ) -> IResult<HashMap<&Sym, ConValue>> {
+        let mut sub = HashMap::new();
+        append_sub(&mut sub, pat, value)?;
+        Ok(sub)
     }
 
     pub(super) fn pat_assign(env: &mut Environment, pat: &Pattern, value: ConValue) -> IResult<()> {
@@ -432,7 +412,7 @@ mod assignment {
         append_sub(&mut substitution, pat, value)
             .map_err(|_| Error::PatFailed(pat.clone().into()))?;
         for (path, value) in substitution {
-            assign_path(env, path, value)?;
+            env.insert(*path, Some(value));
         }
         Ok(())
     }
@@ -446,15 +426,6 @@ mod assignment {
             ExprKind::Index(index) => *addrof_index(env, index)? = value,
             _ => Err(Error::NotAssignable)?,
         }
-        Ok(())
-    }
-
-    fn assign_path(env: &mut Environment, path: &Path, value: ConValue) -> IResult<()> {
-        let Ok(addr) = addrof_path(env, &path.parts) else {
-            eprintln!("Cannot assign {value} to path {path}");
-            return Err(Error::NotAssignable);
-        };
-        *addr = Some(value);
         Ok(())
     }
 
@@ -942,7 +913,10 @@ impl Interpret for For {
         loop {
             let mut env = env.frame("loop variable");
             if let Some(loop_var) = bounds.next() {
-                env.insert(*name, Some(loop_var));
+                let subs = assignment::pattern_substitution(name, loop_var)?;
+                for (name, value) in subs {
+                    env.insert(*name, Some(value));
+                }
                 match pass.interpret(&mut env) {
                     Err(Error::Break(value)) => return Ok(value),
                     Err(Error::Continue) => continue,

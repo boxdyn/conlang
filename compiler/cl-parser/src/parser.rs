@@ -1037,7 +1037,7 @@ impl Parse<'_> for For {
     #[rustfmt::skip]
     fn parse(p: &mut Parser) -> PResult<For> {
         p.match_type(TokenKind::For, Parsing::For)?;
-        let bind = Sym::parse(p)?;
+        let bind = Pattern::parse(p)?;
         p.match_type(TokenKind::In, Parsing::For)?;
         Ok(For {
             bind,

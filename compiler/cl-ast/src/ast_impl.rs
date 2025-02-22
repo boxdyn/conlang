@@ -468,7 +468,7 @@ mod display {
     impl Display for Pattern {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
-                Pattern::Path(path) => path.fmt(f),
+                Pattern::Name(sym) => sym.fmt(f),
                 Pattern::Literal(literal) => literal.fmt(f),
                 Pattern::Ref(mutability, pattern) => write!(f, "&{mutability}{pattern}"),
                 Pattern::Tuple(patterns) => separate(patterns, ", ")(f.delimit(INLINE_PARENS)),
@@ -863,7 +863,10 @@ mod convert {
         fn try_from(value: ExprKind) -> Result<Self, Self::Error> {
             Ok(match value {
                 ExprKind::Literal(literal) => Pattern::Literal(literal),
-                ExprKind::Path(path) => Pattern::Path(path),
+                ExprKind::Path(Path { absolute: false, ref parts }) => match parts.as_slice() {
+                    [PathPart::Ident(name)] => Pattern::Name(*name),
+                    _ => Err(value)?,
+                },
                 ExprKind::Empty => Pattern::Tuple(vec![]),
                 ExprKind::Group(Group { expr }) => Pattern::Tuple(vec![Pattern::try_from(*expr)?]),
                 ExprKind::Tuple(Tuple { exprs }) => Pattern::Tuple(
@@ -887,10 +890,7 @@ mod convert {
                     let fields = init
                         .into_iter()
                         .map(|Fielder { name, init }| {
-                            Ok((
-                                name.into(),
-                                init.map(|i| Pattern::try_from(i.kind)).transpose()?,
-                            ))
+                            Ok((name, init.map(|i| Pattern::try_from(i.kind)).transpose()?))
                         })
                         .collect::<Result<_, Self::Error>>()?;
                     Pattern::Struct(to, fields)

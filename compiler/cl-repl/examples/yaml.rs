@@ -428,7 +428,7 @@ pub mod yamlify {
     impl Yamlify for Pattern {
         fn yaml(&self, y: &mut Yamler) {
             match self {
-                Pattern::Path(path) => y.value(path),
+                Pattern::Name(name) => y.value(name),
                 Pattern::Literal(literal) => y.value(literal),
                 Pattern::Ref(mutability, pattern) => {
                     y.pair("mutability", mutability).pair("subpattern", pattern)

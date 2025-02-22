@@ -79,7 +79,7 @@ impl<'a> Visit<'a> for CollectUpvars<'_> {
         let cl_ast::For { bind, cond, pass, fail } = f;
         self.visit_expr(cond);
         self.visit_else(fail);
-        self.bind_name(bind); // TODO: is bind only bound in the pass block?
+        self.visit_pattern(bind);
         self.visit_block(pass);
     }
 
@@ -105,10 +105,8 @@ impl<'a> Visit<'a> for CollectUpvars<'_> {
 
     fn visit_pattern(&mut self, p: &'a cl_ast::Pattern) {
         match p {
-            Pattern::Path(path) => {
-                if let [PathPart::Ident(name)] = path.parts.as_slice() {
-                    self.bind_name(name)
-                }
+            Pattern::Name(name) => {
+                self.bind_name(name);
             }
             Pattern::Literal(literal) => self.visit_literal(literal),
             Pattern::Ref(mutability, pattern) => {

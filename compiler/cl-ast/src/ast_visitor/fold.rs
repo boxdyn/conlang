@@ -248,7 +248,7 @@ pub trait Fold {
 
     fn fold_pattern(&mut self, p: Pattern) -> Pattern {
         match p {
-            Pattern::Path(path) => Pattern::Path(self.fold_path(path)),
+            Pattern::Name(sym) => Pattern::Name(self.fold_sym(sym)),
             Pattern::Literal(literal) => Pattern::Literal(self.fold_literal(literal)),
             Pattern::Ref(mutability, pattern) => Pattern::Ref(
                 self.fold_mutability(mutability),
@@ -285,7 +285,7 @@ pub trait Fold {
         let MatchArm(pat, expr) = a;
         MatchArm(self.fold_pattern(pat), self.fold_expr(expr))
     }
-    
+
     fn fold_assign(&mut self, a: Assign) -> Assign {
         let Assign { parts } = a;
         let (head, tail) = *parts;
@@ -400,7 +400,7 @@ pub trait Fold {
     fn fold_for(&mut self, f: For) -> For {
         let For { bind, cond, pass, fail } = f;
         For {
-            bind: self.fold_sym(bind),
+            bind: self.fold_pattern(bind),
             cond: Box::new(self.fold_expr(*cond)),
             pass: Box::new(self.fold_block(*pass)),
             fail: self.fold_else(fail),

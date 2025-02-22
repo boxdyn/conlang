@@ -214,7 +214,7 @@ pub trait Visit<'a>: Sized {
 
     fn visit_pattern(&mut self, p: &'a Pattern) {
         match p {
-            Pattern::Path(path) => self.visit_path(path),
+            Pattern::Name(name) => self.visit_sym(name),
             Pattern::Literal(literal) => self.visit_literal(literal),
             Pattern::Ref(mutability, pattern) => {
                 self.visit_mutability(mutability);
@@ -347,7 +347,7 @@ pub trait Visit<'a>: Sized {
     }
     fn visit_for(&mut self, f: &'a For) {
         let For { bind, cond, pass, fail } = f;
-        self.visit_sym(bind);
+        self.visit_pattern(bind);
         self.visit_expr(cond);
         self.visit_block(pass);
         self.visit_else(fail);
