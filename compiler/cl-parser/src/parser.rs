@@ -1080,7 +1080,7 @@ impl Parse<'_> for Return {
 
 impl Parse<'_> for Pattern {
     fn parse(p: &mut Parser<'_>) -> PResult<Self> {
-        let value = prec::exprkind(p, prec::Precedence::Highest.level())?;
+        let value = prec::exprkind(p, prec::Precedence::Pattern.level())?;
         Pattern::try_from(value)
             .map_err(|_| p.error(ExpectedParsing { want: Parsing::Pattern }, Parsing::Pattern))
     }

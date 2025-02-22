@@ -438,10 +438,17 @@ pub mod yamlify {
                 Pattern::Struct(path, items) => {
                     {
                         let mut y = y.key("Struct");
-                        y.pair("name", path);
+                        y.yaml(path);
                         for (name, item) in items {
                             y.pair(name, item);
                         }
+                    }
+                    y
+                }
+                Pattern::TupleStruct(path, items) => {
+                    {
+                        let mut y = y.key("TupleStruct");
+                        y.yaml(path).list(items);
                     }
                     y
                 }

@@ -127,6 +127,10 @@ impl<'a> Visit<'a> for CollectUpvars<'_> {
                     });
                 });
             }
+            Pattern::TupleStruct(path, items) => {
+                self.visit_path(path);
+                items.iter().for_each(|bind| self.visit_pattern(bind));
+            }
         }
     }
 }

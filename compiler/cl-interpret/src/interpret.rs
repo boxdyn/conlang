@@ -320,6 +320,9 @@ mod assignment {
                         None => set.push(name),
                     });
                 }
+                Pattern::TupleStruct(_path, items) => {
+                    items.iter().for_each(|pat| patvars(set, pat));
+                }
             }
         }
         let mut set = Vec::new();

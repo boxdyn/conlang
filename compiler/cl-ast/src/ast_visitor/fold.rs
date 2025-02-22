@@ -267,6 +267,13 @@ pub trait Fold {
                     .map(|(name, bind)| (name, bind.map(|p| self.fold_pattern(p))))
                     .collect(),
             ),
+            Pattern::TupleStruct(path, items) => Pattern::TupleStruct(
+                self.fold_path(path),
+                items
+                    .into_iter()
+                    .map(|bind| self.fold_pattern(bind))
+                    .collect(),
+            ),
         }
     }
 

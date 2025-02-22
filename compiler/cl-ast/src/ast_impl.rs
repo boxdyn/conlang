@@ -487,6 +487,10 @@ mod display {
                     }
                     Ok(())
                 }
+                Pattern::TupleStruct(path, items) => {
+                    write!(f, "{path}")?;
+                    separate(items, ", ")(f.delimit(INLINE_PARENS))
+                }
             }
         }
     }
@@ -884,8 +888,19 @@ mod convert {
                         .map(|e| Pattern::try_from(e.kind))
                         .collect::<Result<_, _>>()?,
                 ),
-                // ExprKind::Index(index) => todo!(),
-                // ExprKind::Member(member) => todo!(),
+                ExprKind::Binary(Binary { kind: BinaryKind::Call, parts }) => {
+                    let (ExprKind::Path(path), args) = *parts else {
+                        return Err(parts.0);
+                    };
+                    match args {
+                        ExprKind::Empty | ExprKind::Tuple(_) => {}
+                        _ => return Err(args),
+                    }
+                    let Pattern::Tuple(args) = Pattern::try_from(args)? else {
+                        unreachable!("Arguments should be convertible to pattern!")
+                    };
+                    Pattern::TupleStruct(path, args)
+                }
                 ExprKind::Structor(Structor { to, init }) => {
                     let fields = init
                         .into_iter()

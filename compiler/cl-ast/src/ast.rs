@@ -424,6 +424,7 @@ pub enum Pattern {
     Tuple(Vec<Pattern>),
     Array(Vec<Pattern>),
     Struct(Path, Vec<(Sym, Option<Pattern>)>),
+    TupleStruct(Path, Vec<Pattern>),
 }
 
 /// A `match` expression: `match` `{` ([MatchArm] `,`)* [MatchArm]? `}`

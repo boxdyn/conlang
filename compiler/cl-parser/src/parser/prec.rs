@@ -255,8 +255,8 @@ pub enum Precedence {
     Index,
     Cast,
     Member, // left-associative
+    Pattern,
     Call,
-    Highest,
 }
 
 impl Precedence {
