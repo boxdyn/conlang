@@ -81,18 +81,32 @@ impl Fold for ModuleInliner {
         self.path.set_extension("cl");
 
         let file = match std::fs::read_to_string(&self.path) {
-            Err(error) => return self.handle_io_error(error),
+            Err(error) => {
+                let Some(basename) = self.path.file_name() else {
+                    return self.handle_io_error(error);
+                };
+                let path = self
+                    .path
+                    .parent()
+                    .and_then(Path::parent)
+                    .map(|path| path.join(basename))
+                    .unwrap_or_default();
+
+                match std::fs::read_to_string(&path) {
+                    Err(error) => return self.handle_io_error(error),
+                    Ok(file) => file,
+                }
+            }
             Ok(file) => file,
         };
 
-        let kind = match Parser::new(Lexer::new(&file)).parse() {
-            Err(e) => return self.handle_parse_error(e),
-            Ok(file) => ModuleKind::Inline(file),
-        };
-        // cd path/mod
-        self.path.set_extension("");
-
-        // The newly loaded module may need further inlining
-        self.fold_module_kind(kind)
+        match Parser::new(Lexer::new(&file)).parse() {
+            Err(e) => self.handle_parse_error(e),
+            Ok(file) => {
+                self.path.set_extension("");
+                // The newly loaded module may need further inlining
+                ModuleKind::Inline(self.fold_file(file))
+            }
+        }
     }
 }

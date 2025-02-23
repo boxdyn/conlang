@@ -72,8 +72,7 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
 }
 
 fn load_file(env: &mut Environment, path: impl AsRef<Path>) -> Result<ConValue, Box<dyn Error>> {
-    let inliner =
-        cl_parser::inliner::ModuleInliner::new(path.as_ref().parent().unwrap_or(Path::new("")));
+    let inliner = cl_parser::inliner::ModuleInliner::new(path.as_ref().with_extension(""));
     let file = std::fs::read_to_string(path)?;
     let code = Parser::new(Lexer::new(&file)).parse()?;
     let code = match inliner.inline(code) {
