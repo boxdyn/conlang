@@ -510,8 +510,6 @@ impl Interpret for Binary {
         let (head, tail) = parts.borrow();
 
         let head = head.interpret(env)?;
-
-        // Short-circuiting ops
         match kind {
             BinaryKind::LogAnd => {
                 return if head.truthy()? {
@@ -534,6 +532,7 @@ impl Interpret for Binary {
             }
             _ => {}
         }
+
         let tail = tail.interpret(env)?;
         match kind {
             BinaryKind::Lt => head.lt(&tail),
@@ -561,36 +560,6 @@ impl Interpret for Binary {
             },
             _ => Ok(head),
         }
-
-        // // Temporarily disabled, to avoid function dispatch overhead while I screw around
-        // // Not like it helped much in the first place!
-        // match kind {
-        //     BinaryKind::Mul => env.call("mul", &[head, tail]),
-        //     BinaryKind::Div => env.call("div", &[head, tail]),
-        //     BinaryKind::Rem => env.call("rem", &[head, tail]),
-        //     BinaryKind::Add => env.call("add", &[head, tail]),
-        //     BinaryKind::Sub => env.call("sub", &[head, tail]),
-        //     BinaryKind::Shl => env.call("shl", &[head, tail]),
-        //     BinaryKind::Shr => env.call("shr", &[head, tail]),
-        //     BinaryKind::BitAnd => env.call("and", &[head, tail]),
-        //     BinaryKind::BitOr => env.call("or", &[head, tail]),
-        //     BinaryKind::BitXor => env.call("xor", &[head, tail]),
-        //     BinaryKind::RangeExc => env.call("range_exc", &[head, tail]),
-        //     BinaryKind::RangeInc => env.call("range_inc", &[head, tail]),
-        //     BinaryKind::Lt => env.call("lt", &[head, tail]),
-        //     BinaryKind::LtEq => env.call("lt_eq", &[head, tail]),
-        //     BinaryKind::Equal => env.call("eq", &[head, tail]),
-        //     BinaryKind::NotEq => env.call("neq", &[head, tail]),
-        //     BinaryKind::GtEq => env.call("gt_eq", &[head, tail]),
-        //     BinaryKind::Gt => env.call("gt", &[head, tail]),
-        //     BinaryKind::Dot => todo!("search within a type's namespace!"),
-        //     BinaryKind::Call => match tail {
-        //         ConValue::Empty => head.call(env, &[]),
-        //         ConValue::Tuple(args) => head.call(env, &args),
-        //         _ => Err(Error::TypeError),
-        //     },
-        //     _ => Ok(head),
-        // }
     }
 }
 
