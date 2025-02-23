@@ -22,18 +22,19 @@ impl Interpret for File {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         /// Sorts items
         #[derive(Debug, Default)]
-        struct ItemSorter<'ast>(pub [Vec<&'ast Item>; 6]);
+        struct ItemSorter<'ast>(pub [Vec<&'ast Item>; 8]);
         impl<'ast> Visit<'ast> for ItemSorter<'ast> {
             fn visit_item(&mut self, i: &'ast Item) {
-                self.0[match &i.kind {
-                    ItemKind::Module(_) => 0,
-                    ItemKind::Use(_) => 1,
-                    ItemKind::Enum(_) | ItemKind::Struct(_) | ItemKind::Alias(_) => 2,
-                    ItemKind::Function(_) => 3,
-                    ItemKind::Impl(_) => 4,
-                    ItemKind::Const(_) | ItemKind::Static(_) => 5,
-                }]
-                .push(i)
+                for stage in match &i.kind {
+                    ItemKind::Module(_) => [0].as_slice(),
+                    ItemKind::Use(_) => &[1, 6],
+                    ItemKind::Enum(_) | ItemKind::Struct(_) | ItemKind::Alias(_) => &[2],
+                    ItemKind::Function(_) => &[3, 7],
+                    ItemKind::Impl(_) => &[4],
+                    ItemKind::Const(_) | ItemKind::Static(_) => &[5],
+                } {
+                    self.0[*stage].push(i)
+                }
             }
         }
 
