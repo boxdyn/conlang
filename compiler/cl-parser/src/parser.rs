@@ -1097,7 +1097,7 @@ impl Parse<'_> for Match {
     /// [Match] = `match` [Expr] `{` [MatchArm],* `}`
     fn parse(p: &mut Parser<'_>) -> PResult<Self> {
         p.match_type(TokenKind::Match, Parsing::Match)?;
-        let scrutinee = Expr::parse(p)?.into();
+        let scrutinee = condition(p)?.into();
         let arms = delim(
             sep(MatchArm::parse, TokenKind::Comma, CURLIES.1, Parsing::Match),
             CURLIES,
