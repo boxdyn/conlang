@@ -173,9 +173,24 @@ impl Interpret for Enum {
 }
 impl Interpret for Impl {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        println!("TODO: impl {}", self.target);
-        let Self { target: _, body } = self;
-        body.interpret(env)
+        let Self { target: ImplKind::Type(Ty { extents: _, kind: TyKind::Path(name) }), body } =
+            self
+        else {
+            eprintln!("TODO: impl X for Ty");
+            return Ok(ConValue::Empty);
+        };
+        env.push_frame("impl", Default::default());
+        body.interpret(env)?;
+
+        let (frame, _) = env
+            .pop_frame()
+            .expect("Environment frames must be balanced");
+        match assignment::addrof_path(env, name.parts.as_slice())? {
+            Some(ConValue::Module(m)) => m.extend(frame),
+            Some(other) => eprintln!("TODO: impl for {other}"),
+            None => {}
+        }
+        Ok(ConValue::Empty)
     }
 }
 
