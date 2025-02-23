@@ -278,9 +278,9 @@ pub mod ops {
     }
 
     impl usize {
-        pub const MIN: Self = __march_ptr_width_unsigned_min();
-        pub const MAX: Self = __march_ptr_width_unsigned_max();
-        pub const BIT_WIDTH: u32 = __march_ptr_width_bits();
+        pub const MIN: Self = (); // __march_ptr_width_unsigned_min(); // TODO: intrinsics
+        pub const MAX: Self = (); // __march_ptr_width_unsigned_max(); // TODO: intrinsics
+        pub const BIT_WIDTH: u32 = (); // __march_ptr_width_bits(); // TODO: intrinsics
         pub fn default() -> Self {
             0
         }
@@ -512,9 +512,9 @@ pub mod ops {
     }
 
     impl isize {
-        pub const MIN: Self = __march_ptr_width_signed_min();
-        pub const MAX: Self = __march_ptr_width_signed_max();
-        pub const BIT_WIDTH: u32 = __march_ptr_width_bits();
+        pub const MIN: Self = (); // __march_ptr_width_signed_min(); // TODO: intrinsics
+        pub const MAX: Self = (); // __march_ptr_width_signed_max(); // TODO: intrinsics
+        pub const BIT_WIDTH: u32 = (); // __march_ptr_width_bits(); // TODO: intrinsics
         pub fn default() -> Self {
             0
         }
