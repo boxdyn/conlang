@@ -151,8 +151,23 @@ impl Interpret for Struct {
     }
 }
 impl Interpret for Enum {
-    fn interpret(&self, _env: &mut Environment) -> IResult<ConValue> {
-        println!("TODO: {self}");
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let Self { name, kind } = self;
+        if let EnumKind::Variants(variants) = kind {
+            env.push_frame(Sym::to_ref(name), Default::default());
+            for (idx, Variant { name, kind }) in variants.iter().enumerate() {
+                match kind {
+                    VariantKind::Plain => env.insert(*name, Some(ConValue::Int(idx as _))),
+                    VariantKind::CLike(idx) => env.insert(*name, Some(ConValue::Int(*idx as _))),
+                    VariantKind::Tuple(ty) => eprintln!("TODO: Enum-tuple variants: {ty}"),
+                    VariantKind::Struct(_) => eprintln!("TODO: Enum-struct members: {kind}"),
+                }
+            }
+            let (frame, _) = env
+                .pop_frame()
+                .expect("Frame stack should remain balanced.");
+            env.insert(*name, Some(ConValue::Module(Box::new(frame))));
+        }
         Ok(ConValue::Empty)
     }
 }
