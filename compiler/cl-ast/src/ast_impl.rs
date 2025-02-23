@@ -192,13 +192,6 @@ mod display {
         }
     }
 
-    impl Display for Param {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { mutability, bind } = self;
-            write!(f, "{mutability}{bind}")
-        }
-    }
-
     impl Display for Struct {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { name, kind } = self;

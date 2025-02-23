@@ -83,15 +83,10 @@ pub trait Visit<'a>: Sized {
         let Function { name, sign, bind, body } = f;
         self.visit_sym(name);
         self.visit_ty_fn(sign);
-        bind.iter().for_each(|p| self.visit_param(p));
+        bind.iter().for_each(|p| self.visit_pattern(p));
         if let Some(b) = body {
             self.visit_expr(b)
         }
-    }
-    fn visit_param(&mut self, p: &'a Param) {
-        let Param { mutability, bind } = p;
-        self.visit_mutability(mutability);
-        self.visit_pattern(bind);
     }
     fn visit_struct(&mut self, s: &'a Struct) {
         let Struct { name, kind } = s;

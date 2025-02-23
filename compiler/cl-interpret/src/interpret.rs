@@ -137,10 +137,7 @@ impl Interpret for Struct {
                     bind: args
                         .iter()
                         .enumerate()
-                        .map(|(idx, _)| Param {
-                            mutability: Mutability::Not,
-                            bind: Pattern::Name(idx.to_string().into()),
-                        })
+                        .map(|(idx, _)| Pattern::Name(idx.to_string().into()))
                         .collect(),
                     body: None,
                 };

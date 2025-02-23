@@ -145,15 +145,8 @@ pub enum ModuleKind {
 pub struct Function {
     pub name: Sym,
     pub sign: TyFn,
-    pub bind: Vec<Param>,
+    pub bind: Vec<Pattern>,
     pub body: Option<Expr>,
-}
-
-/// A single parameter for a [Function]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Param {
-    pub mutability: Mutability,
-    pub bind: Pattern,
 }
 
 /// A user-defined product type

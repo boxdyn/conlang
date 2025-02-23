@@ -106,7 +106,7 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         self.set_name(*name);
 
         self.visit_ty_fn(sign);
-        bind.iter().for_each(|p| self.visit_param(p));
+        bind.iter().for_each(|p| self.visit_pattern(p));
         if let Some(b) = body {
             self.visit_expr(b)
         }

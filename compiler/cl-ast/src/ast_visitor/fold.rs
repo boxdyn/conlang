@@ -106,13 +106,9 @@ pub trait Fold {
         Function {
             name: self.fold_sym(name),
             sign: self.fold_ty_fn(sign),
-            bind: bind.into_iter().map(|p| self.fold_param(p)).collect(),
+            bind: bind.into_iter().map(|p| self.fold_pattern(p)).collect(),
             body: body.map(|b| self.fold_expr(b)),
         }
-    }
-    fn fold_param(&mut self, p: Param) -> Param {
-        let Param { mutability, bind } = p;
-        Param { mutability: self.fold_mutability(mutability), bind: self.fold_pattern(bind) }
     }
     fn fold_struct(&mut self, s: Struct) -> Struct {
         let Struct { name, kind } = s;

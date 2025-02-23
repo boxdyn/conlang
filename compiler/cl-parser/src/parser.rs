@@ -469,7 +469,7 @@ impl Parse<'_> for Function {
     }
 }
 
-type FnSig = (Vec<Param>, Vec<TyKind>);
+type FnSig = (Vec<Pattern>, Vec<TyKind>);
 
 impl Parse<'_> for FnSig {
     /// Parses the [parameters](Param) associated with a Function
@@ -488,16 +488,17 @@ impl Parse<'_> for FnSig {
     }
 }
 
-type TypedParam = (Param, TyKind);
+type TypedParam = (Pattern, TyKind);
 
 impl Parse<'_> for TypedParam {
     /// Parses a single function [parameter](Param)
-    fn parse(p: &mut Parser) -> PResult<(Param, TyKind)> {
+    fn parse(p: &mut Parser) -> PResult<(Pattern, TyKind)> {
         Ok((
-            Param { mutability: Mutability::parse(p)?, bind: Pattern::parse(p)? },
-            {
-                p.match_type(TokenKind::Colon, Parsing::Param)?;
+            Pattern::parse(p)?,
+            if p.match_type(TokenKind::Colon, Parsing::Param).is_ok() {
                 TyKind::parse(p)?
+            } else {
+                TyKind::Path(Path::from(Sym::from("_")))
             },
         ))
     }
