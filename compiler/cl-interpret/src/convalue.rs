@@ -35,14 +35,10 @@ pub enum ConValue {
     Array(Box<[ConValue]>),
     /// A tuple
     Tuple(Box<[ConValue]>),
-    /// An exclusive range
-    RangeExc(Integer, Integer),
-    /// An inclusive range
-    RangeInc(Integer, Integer),
     /// A value of a product type
     Struct(Box<(Sym, HashMap<Sym, ConValue>)>),
     /// A value of a product type with anonymous members
-    TupleStruct(Box<(Sym, Box<[ConValue]>)>),
+    TupleStruct(Box<(&'static str, Box<[ConValue]>)>),
     /// An entire namespace
     Module(Box<HashMap<Sym, Option<ConValue>>>),
     /// A quoted expression
@@ -60,18 +56,6 @@ impl ConValue {
             ConValue::Bool(v) => Ok(*v),
             _ => Err(Error::TypeError)?,
         }
-    }
-    pub fn range_exc(self, other: Self) -> IResult<Self> {
-        let (Self::Int(a), Self::Int(b)) = (self, other) else {
-            Err(Error::TypeError)?
-        };
-        Ok(Self::RangeExc(a, b))
-    }
-    pub fn range_inc(self, other: Self) -> IResult<Self> {
-        let (Self::Int(a), Self::Int(b)) = (self, other) else {
-            Err(Error::TypeError)?
-        };
-        Ok(Self::RangeInc(a, b))
     }
     pub fn index(&self, index: &Self) -> IResult<ConValue> {
         let Self::Int(index) = index else {
@@ -289,8 +273,6 @@ impl std::fmt::Display for ConValue {
                 }
                 ']'.fmt(f)
             }
-            ConValue::RangeExc(a, b) => write!(f, "{a}..{}", b + 1),
-            ConValue::RangeInc(a, b) => write!(f, "{a}..={b}"),
             ConValue::Tuple(tuple) => {
                 '('.fmt(f)?;
                 for (idx, element) in tuple.iter().enumerate() {

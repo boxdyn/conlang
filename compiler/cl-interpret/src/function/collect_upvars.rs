@@ -107,6 +107,10 @@ impl<'a> Visit<'a> for CollectUpvars<'_> {
                 self.bind_name(name);
             }
             Pattern::Literal(literal) => self.visit_literal(literal),
+            Pattern::Rest(Some(name)) => {
+                self.visit_pattern(name);
+            }
+            Pattern::Rest(None) => {}
             Pattern::Ref(mutability, pattern) => {
                 self.visit_mutability(mutability);
                 self.visit_pattern(pattern);

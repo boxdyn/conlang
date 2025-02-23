@@ -330,7 +330,7 @@ impl From<UnaryKind> for Precedence {
         use UnaryKind as Op;
         match value {
             Op::Loop => Precedence::Assign,
-            Op::Deref | Op::Neg | Op::Not | Op::At | Op::Tilde => Precedence::Unary,
+            _ => Precedence::Unary,
         }
     }
 }
@@ -351,6 +351,8 @@ operator! {
         Star => Deref,
         Minus => Neg,
         Bang => Not,
+        DotDot => RangeExc,
+        DotDotEq => RangeInc,
         At => At,
         Tilde => Tilde,
     };

@@ -167,8 +167,6 @@ pub const Builtins: &[Builtin] = &builtins![
             ConValue::Ref(r) => return len(env, slice::from_ref(r.as_ref())),
             ConValue::Array(t) => t.len() as _,
             ConValue::Tuple(t) => t.len() as _,
-            ConValue::RangeExc(start, end) => (end - start) as _,
-            ConValue::RangeInc(start, end) => (end - start + 1) as _,
             _ => Err(Error::TypeError)?,
         })
     }
@@ -279,20 +277,25 @@ pub const Math: &[Builtin] = &builtins![
         })
     }
 
-    /// Exclusive Range `a..b`
-    fn range_exc(from, to) {
-        let (&ConValue::Int(from), &ConValue::Int(to)) = (from, to) else {
-            Err(Error::TypeError)?
-        };
-        Ok(ConValue::RangeExc(from, to))
+    #[allow(non_snake_case)]
+    fn RangeExc(start, end) {
+        Ok(ConValue::TupleStruct(Box::new((
+            "RangeExc", Box::new([start.clone(), end.clone()])
+        ))))
     }
 
-    /// Inclusive Range `a..=b`
-    fn range_inc(from, to) {
-        let (&ConValue::Int(from), &ConValue::Int(to)) = (from, to) else {
-            Err(Error::TypeError)?
-        };
-        Ok(ConValue::RangeInc(from, to))
+    #[allow(non_snake_case)]
+    fn RangeInc(start, end) {
+        Ok(ConValue::TupleStruct(Box::new((
+            "RangeInc", Box::new([start.clone(), end.clone()])
+        ))))
+    }
+
+    #[allow(non_snake_case)]
+    fn RangeTo(end) {
+        Ok(ConValue::TupleStruct(Box::new((
+            "RangeInc", Box::new([end.clone()])
+        ))))
     }
 
     /// Negates the ConValue

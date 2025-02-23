@@ -246,6 +246,8 @@ pub trait Fold {
         match p {
             Pattern::Name(sym) => Pattern::Name(self.fold_sym(sym)),
             Pattern::Literal(literal) => Pattern::Literal(self.fold_literal(literal)),
+            Pattern::Rest(Some(name)) => Pattern::Rest(Some(self.fold_pattern(*name).into())),
+            Pattern::Rest(None) => Pattern::Rest(None),
             Pattern::Ref(mutability, pattern) => Pattern::Ref(
                 self.fold_mutability(mutability),
                 Box::new(self.fold_pattern(*pattern)),

@@ -211,6 +211,8 @@ pub trait Visit<'a>: Sized {
         match p {
             Pattern::Name(name) => self.visit_sym(name),
             Pattern::Literal(literal) => self.visit_literal(literal),
+            Pattern::Rest(Some(name)) => self.visit_pattern(name),
+            Pattern::Rest(None) => {}
             Pattern::Ref(mutability, pattern) => {
                 self.visit_mutability(mutability);
                 self.visit_pattern(pattern);
@@ -247,7 +249,7 @@ pub trait Visit<'a>: Sized {
         self.visit_pattern(pat);
         self.visit_expr(expr);
     }
-    
+
     fn visit_assign(&mut self, a: &'a Assign) {
         let Assign { parts } = a;
         let (head, tail) = parts.as_ref();

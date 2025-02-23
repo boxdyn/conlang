@@ -430,6 +430,7 @@ pub mod yamlify {
             match self {
                 Pattern::Name(name) => y.value(name),
                 Pattern::Literal(literal) => y.value(literal),
+                Pattern::Rest(name) => y.pair("Rest", name),
                 Pattern::Ref(mutability, pattern) => {
                     y.pair("mutability", mutability).pair("subpattern", pattern)
                 }

@@ -463,6 +463,8 @@ mod display {
             match self {
                 Pattern::Name(sym) => sym.fmt(f),
                 Pattern::Literal(literal) => literal.fmt(f),
+                Pattern::Rest(Some(name)) => write!(f, "..{name}"),
+                Pattern::Rest(None) => "..".fmt(f),
                 Pattern::Ref(mutability, pattern) => write!(f, "&{mutability}{pattern}"),
                 Pattern::Tuple(patterns) => separate(patterns, ", ")(f.delimit(INLINE_PARENS)),
                 Pattern::Array(patterns) => separate(patterns, ", ")(f.delimit(INLINE_SQUARE)),
@@ -590,6 +592,8 @@ mod display {
                 UnaryKind::Deref => "*",
                 UnaryKind::Neg => "-",
                 UnaryKind::Not => "!",
+                UnaryKind::RangeExc => "..",
+                UnaryKind::RangeInc => "..=",
                 UnaryKind::At => "@",
                 UnaryKind::Tilde => "~",
             }
@@ -894,6 +898,9 @@ mod convert {
                     };
                     Pattern::TupleStruct(path, args)
                 }
+                ExprKind::Unary(Unary { kind: UnaryKind::RangeExc, tail }) => {
+                    Pattern::Rest(Some(Pattern::try_from(*tail)?.into()))
+                }
                 ExprKind::Structor(Structor { to, init }) => {
                     let fields = init
                         .into_iter()
@@ -934,9 +941,9 @@ mod path {
         }
 
         /// Checks whether this path ends in the given [Sym]
-        pub fn ends_with(&self, name: &Sym) -> bool {
+        pub fn ends_with(&self, name: &str) -> bool {
             match self.parts.as_slice() {
-                [.., PathPart::Ident(last)] => name == last,
+                [.., PathPart::Ident(last)] => name == &**last,
                 _ => false,
             }
         }

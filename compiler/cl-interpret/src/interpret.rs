@@ -542,8 +542,8 @@ impl Interpret for Binary {
             BinaryKind::NotEq => head.neq(&tail),
             BinaryKind::GtEq => head.gt_eq(&tail),
             BinaryKind::Gt => head.gt(&tail),
-            BinaryKind::RangeExc => head.range_exc(tail),
-            BinaryKind::RangeInc => head.range_inc(tail),
+            BinaryKind::RangeExc => env.call("RangeExc".into(), &[head, tail]),
+            BinaryKind::RangeInc => env.call("RangeInc".into(), &[head, tail]),
             BinaryKind::BitAnd => head & tail,
             BinaryKind::BitOr => head | tail,
             BinaryKind::BitXor => head ^ tail,
@@ -616,6 +616,14 @@ impl Interpret for Unary {
             UnaryKind::Not => {
                 let operand = tail.interpret(env)?;
                 env.call("not".into(), &[operand])
+            }
+            UnaryKind::RangeExc => {
+                let operand = tail.interpret(env)?;
+                env.call("RangeTo".into(), &[operand])
+            }
+            UnaryKind::RangeInc => {
+                let operand = tail.interpret(env)?;
+                env.call("RangeToInc".into(), &[operand])
             }
             UnaryKind::At => {
                 let operand = tail.interpret(env)?;
@@ -855,8 +863,21 @@ impl Interpret for For {
         let cond = cond.interpret(env)?;
         // TODO: A better iterator model
         let mut bounds: Box<dyn Iterator<Item = ConValue>> = match &cond {
-            &ConValue::RangeExc(a, b) => Box::new((a..b).map(ConValue::Int)),
-            &ConValue::RangeInc(a, b) => Box::new((a..=b).map(ConValue::Int)),
+            ConValue::TupleStruct(inner) => match &**inner {
+                ("RangeExc", values) => match **values {
+                    [ConValue::Int(from), ConValue::Int(to)] => {
+                        Box::new((from..to).map(ConValue::Int))
+                    }
+                    _ => Err(Error::NotIterable)?,
+                },
+                ("RangeInc", values) => match **values {
+                    [ConValue::Int(from), ConValue::Int(to)] => {
+                        Box::new((from..=to).map(ConValue::Int))
+                    }
+                    _ => Err(Error::NotIterable)?,
+                },
+                _ => Err(Error::NotIterable)?,
+            },
             ConValue::Array(a) => Box::new(a.iter().cloned()),
             ConValue::String(s) => Box::new(s.chars().map(ConValue::Char)),
             _ => Err(Error::TypeError)?,

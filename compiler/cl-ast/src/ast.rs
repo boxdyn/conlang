@@ -413,6 +413,7 @@ pub struct Let {
 pub enum Pattern {
     Name(Sym),
     Literal(Literal),
+    Rest(Option<Box<Pattern>>),
     Ref(Mutability, Box<Pattern>),
     Tuple(Vec<Pattern>),
     Array(Vec<Pattern>),
@@ -505,6 +506,8 @@ pub enum UnaryKind {
     Deref,
     Neg,
     Not,
+    RangeInc,
+    RangeExc,
     /// A Loop expression: `loop` [`Block`]
     Loop,
     /// Unused
