@@ -1,4 +1,4 @@
-//! Unification algorithm for cl-ast patterns and ConValues
+//! Unification algorithm for cl-ast [Pattern]s and [ConValue]s
 //!
 //! [`variables()`] returns a flat list of symbols that are bound by a given pattern
 //! [`substitution()`] unifies a ConValue with a pattern, and produces a list of bound names
@@ -117,7 +117,7 @@ pub fn append_sub<'pat>(
             (Pattern::Literal(Literal::String(a)), ConValue::String(b)) => {
                 (&*b < a).then_some(()).ok_or(Error::NotAssignable)
             }
-            _ => Err(Error::NotAssignable)
+            _ => Err(Error::NotAssignable),
         },
 
         (Pattern::Name(name), _) if "_".eq(&**name) => Ok(()),
