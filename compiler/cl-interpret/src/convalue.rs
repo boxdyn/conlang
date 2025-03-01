@@ -166,9 +166,9 @@ impl From<()> for ConValue {
 }
 impl From<&[ConValue]> for ConValue {
     fn from(value: &[ConValue]) -> Self {
-        match value.len() {
-            0 => Self::Empty,
-            1 => value[0].clone(),
+        match value {
+            [] => Self::Empty,
+            [value] => value.clone(),
             _ => Self::Tuple(value.into()),
         }
     }
