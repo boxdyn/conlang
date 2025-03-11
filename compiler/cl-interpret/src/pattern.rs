@@ -123,7 +123,9 @@ pub fn append_sub<'pat>(
             Ok(())
         }
 
-        (Pattern::Ref(_, pat), ConValue::Ref(r)) => append_sub(sub, pat, r.borrow().clone()),
+        (Pattern::Ref(_, pat), ConValue::Ref(r)) => {
+            todo!("Dereference <{r}> in pattern matching {pat}")
+        }
 
         (Pattern::Array(patterns), ConValue::Array(values)) => {
             match rest_binding(sub, patterns, values.into_vec().into())? {

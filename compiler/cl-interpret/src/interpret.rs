@@ -8,7 +8,7 @@
 use super::*;
 use cl_ast::{ast_visitor::Visit, *};
 use cl_structures::intern::interned::Interned;
-use std::{borrow::Borrow, cell::RefCell, rc::Rc};
+use std::borrow::Borrow;
 /// A work-in-progress tree walk interpreter for Conlang
 pub trait Interpret {
     /// Interprets this thing in the given [`Environment`].
@@ -86,6 +86,7 @@ impl Interpret for Static {
     }
 }
 impl Interpret for Module {
+    // TODO: Keep modules around somehow, rather than putting them on the stack
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self { name, kind } = self;
         env.push_frame(Interned::to_ref(name), Default::default());
@@ -203,6 +204,7 @@ impl Interpret for Use {
 
 impl Interpret for UseTree {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        // TODO: raw-bind use items
         type Bindings = HashMap<Sym, ConValue>;
         use std::collections::HashMap;
 
@@ -371,8 +373,8 @@ mod assignment {
             pattern::substitution(pat, value).map_err(|_| Error::PatFailed(pat.clone().into()))?
         {
             match env.get_mut(*name)? {
-                Some(ConValue::Ref(r)) => {
-                    r.replace(value);
+                &mut Some(ConValue::Ref(id)) => {
+                    *(env.get_id_mut(id).ok_or(Error::StackOverflow(id))?) = Some(value);
                 }
                 other => *other = Some(value),
             }
@@ -388,15 +390,18 @@ mod assignment {
             ExprKind::Member(member) => *addrof_member(env, member)? = value,
             ExprKind::Index(index) => *addrof_index(env, index)? = value,
             ExprKind::Path(path) => *addrof_path(env, &path.parts)? = Some(value),
+            ExprKind::Unary(Unary { kind: UnaryKind::Deref, tail }) => match addrof(env, tail)? {
+                &mut ConValue::Ref(r) => {
+                    *env.get_id_mut(r).ok_or(Error::StackOverflow(r))? = Some(value)
+                }
+                _ => Err(Error::NotAssignable)?,
+            },
             _ => Err(Error::NotAssignable)?,
         }
         Ok(())
     }
 
-    pub(super) fn addrof<'e>(
-        env: &'e mut Environment,
-        pat: &Expr,
-    ) -> IResult<&'e mut ConValue> {
+    pub(super) fn addrof<'e>(env: &'e mut Environment, pat: &Expr) -> IResult<&'e mut ConValue> {
         match &pat.kind {
             ExprKind::Path(path) => addrof_path(env, &path.parts)?
                 .as_mut()
@@ -484,6 +489,7 @@ mod assignment {
                 a.get_mut(*i as usize)
                     .ok_or(Error::OobIndex(*i as usize, a_len))
             }
+            (ConValue::Slice(_, _), _) => Err(Error::TypeError),
             _ => Err(Error::NotIndexable),
         }
     }
@@ -641,16 +647,23 @@ impl Interpret for Unary {
     }
 }
 
-fn cast(value: ConValue, ty: Sym) -> IResult<ConValue> {
+fn cast(env: &Environment, value: ConValue, ty: Sym) -> IResult<ConValue> {
     let value = match value {
         ConValue::Empty => 0,
         ConValue::Int(i) => i as _,
         ConValue::Bool(b) => b as _,
         ConValue::Char(c) => c as _,
-        ConValue::Ref(v) => return cast((*v).borrow().clone(), ty),
+        ConValue::Ref(v) => {
+            return cast(
+                env,
+                env.get_id(v).cloned().ok_or(Error::StackUnderflow)?,
+                ty,
+            )
+        }
         // TODO: This, better
         ConValue::Float(_) if ty.starts_with('f') => return Ok(value),
         ConValue::Float(f) => f as _,
+        _ if (*ty).eq("str") => return Ok(ConValue::String(format!("{value}").into())),
         _ => Err(Error::TypeError)?,
     };
     Ok(match &*ty {
@@ -681,7 +694,7 @@ impl Interpret for Cast {
             Err(Error::TypeError)?
         };
         match parts.as_slice() {
-            [PathPart::Ident(ty)] => cast(value, *ty),
+            [PathPart::Ident(ty)] => cast(env, value, *ty),
             _ => Err(Error::TypeError),
         }
     }
@@ -724,7 +737,7 @@ impl Interpret for Index {
         let Self { head, indices } = self;
         let mut head = head.interpret(env)?;
         for index in indices {
-            head = head.index(&index.interpret(env)?)?;
+            head = head.index(&index.interpret(env)?, env)?;
         }
         Ok(head)
     }
@@ -803,8 +816,15 @@ impl Interpret for AddrOf {
         let Self { mutable: _, expr } = self;
         match &expr.kind {
             ExprKind::Index(_) => todo!("AddrOf array index"),
-            ExprKind::Path(_) => todo!("Path traversal in addrof"),
-            _ => Ok(ConValue::Ref(Rc::new(RefCell::new(expr.interpret(env)?)))),
+            ExprKind::Path(Path { parts, .. }) => match parts.as_slice() {
+                [PathPart::Ident(name)] => Ok(ConValue::Ref(env.id_of(*name)?)),
+                _ => todo!("Path traversal in AddrOf(\"{self}\")"),
+            },
+            _ => {
+                let value = expr.interpret(env)?;
+                let temp = env.insert_temporary(value)?;
+                Ok(ConValue::Ref(temp))
+            }
         }
     }
 }

@@ -5,10 +5,7 @@ use crate::{
     env::Environment,
     error::{Error, IResult},
 };
-use std::{
-    io::{stdout, Write},
-    slice,
-};
+use std::io::{stdout, Write};
 
 /// A function built into the interpreter.
 #[derive(Clone, Copy)]
@@ -78,7 +75,7 @@ pub macro builtin(
     $(#[$($meta)*])*
     fn $name(_env: &mut Environment, _args: &[ConValue]) -> IResult<ConValue> {
         // Set up the builtin! environment
-        $(let $env = _env;)?
+        $(#[allow(unused)]let $env = _env;)?
         // Allow for single argument `fn foo(args @ ..)` pattern
         #[allow(clippy::redundant_at_rest_pattern, irrefutable_let_patterns)]
         let [$($arg),*] = _args else {
@@ -152,19 +149,21 @@ pub const Builtins: &[Builtin] = &builtins![
         Ok(())
     }
 
-    fn builtins() @env {
-        for builtin in env.builtins().values().flatten() {
-            println!("{builtin}");
-        }
-        Ok(())
-    }
+    // fn builtins() @env {
+    //     for builtin in env.builtins().values().flatten() {
+    //         println!("{builtin}");
+    //     }
+    //     Ok(())
+    // }
 
     /// Returns the length of the input list as a [ConValue::Int]
     fn len(list) @env {
         Ok(match list {
             ConValue::Empty => 0,
             ConValue::String(s) => s.chars().count() as _,
-            ConValue::Ref(r) => return len(env, slice::from_ref(&r.borrow())),
+            ConValue::Ref(r) => {
+                return len(env, &[env.get_id(*r).ok_or(Error::StackOverflow(*r))?.clone()])
+            }
             ConValue::Array(t) => t.len() as _,
             ConValue::Tuple(t) => t.len() as _,
             _ => Err(Error::TypeError)?,
@@ -174,6 +173,10 @@ pub const Builtins: &[Builtin] = &builtins![
     fn dump_symbols() {
         println!("{}", cl_structures::intern::string_interner::StringInterner::global());
         Ok(ConValue::Empty)
+    }
+
+    fn slice_of(ConValue::Ref(arr), ConValue::Int(start)) {
+        Ok(ConValue::Slice(*arr, *start as usize))
     }
 
     /// Returns a shark
@@ -330,9 +333,9 @@ pub const Math: &[Builtin] = &builtins![
     }
 
     /// Does the opposite of `&`
-    fn deref(tail) {
+    fn deref(tail) @env {
         Ok(match tail {
-            ConValue::Ref(v) => v.take(),
+            ConValue::Ref(v) => env.get_id(*v).cloned().ok_or(Error::StackOverflow(*v))?,
             _ => tail.clone(),
         })
     }

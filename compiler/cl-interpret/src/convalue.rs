@@ -9,7 +9,7 @@ use super::{
     function::Function,
     Callable, Environment,
 };
-use std::{cell::RefCell, collections::HashMap, ops::*, rc::Rc};
+use std::{collections::HashMap, ops::*, rc::Rc};
 
 /*
 A Value can be:
@@ -33,7 +33,6 @@ struct {
 }
 */
 
-
 type Integer = isize;
 
 /// A Conlang value stores data in the interpreter
@@ -53,7 +52,9 @@ pub enum ConValue {
     /// A string
     String(Sym),
     /// A reference
-    Ref(Rc<RefCell<ConValue>>),
+    Ref(usize),
+    /// A reference to an array
+    Slice(usize, usize),
     /// An Array
     Array(Box<[ConValue]>),
     /// A tuple
@@ -90,7 +91,7 @@ impl ConValue {
         Self::Struct(Box::new((name, values)))
     }
 
-    pub fn index(&self, index: &Self) -> IResult<ConValue> {
+    pub fn index(&self, index: &Self, env: &Environment) -> IResult<ConValue> {
         let Self::Int(index) = index else {
             Err(Error::TypeError)?
         };
@@ -104,6 +105,10 @@ impl ConValue {
                 .get(*index as usize)
                 .cloned()
                 .ok_or(Error::OobIndex(*index as usize, arr.len())),
+            ConValue::Slice(id, start) => env
+                .get_id(*id)
+                .ok_or(Error::StackOverflow(*id))?
+                .index(&ConValue::Int((*index as usize + start) as isize), env),
             _ => Err(Error::TypeError),
         }
     }
@@ -295,7 +300,8 @@ impl std::fmt::Display for ConValue {
             ConValue::Bool(v) => v.fmt(f),
             ConValue::Char(v) => v.fmt(f),
             ConValue::String(v) => v.fmt(f),
-            ConValue::Ref(v) => write!(f, "&{}", v.borrow()),
+            ConValue::Ref(v) => write!(f, "&<{}>", v),
+            ConValue::Slice(v, len) => write!(f, "&<{v}>[{len}..]"),
             ConValue::Array(array) => {
                 '['.fmt(f)?;
                 for (idx, element) in array.iter().enumerate() {

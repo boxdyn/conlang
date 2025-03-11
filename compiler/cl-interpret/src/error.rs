@@ -20,6 +20,8 @@ pub enum Error {
     Continue,
     /// Underflowed the stack
     StackUnderflow,
+    /// Overflowed the stack
+    StackOverflow(usize),
     /// Exited the last scope
     ScopeExit,
     /// Type incompatibility
@@ -70,6 +72,9 @@ impl std::fmt::Display for Error {
             Error::BadBreak(value) => write!(f, "rogue break: {value}"),
             Error::Continue => "continue".fmt(f),
             Error::StackUnderflow => "Stack underflow".fmt(f),
+            Error::StackOverflow(id) => {
+                write!(f, "Attempt to access <{id}> resulted in stack overflow.")
+            }
             Error::ScopeExit => "Exited the last scope. This is a logic bug.".fmt(f),
             Error::TypeError => "Incompatible types".fmt(f),
             Error::NotIterable => "`in` clause of `for` loop did not yield an iterable".fmt(f),

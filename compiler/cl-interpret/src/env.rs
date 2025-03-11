@@ -19,30 +19,35 @@ use std::{
 
 type StackFrame = HashMap<Sym, Option<ConValue>>;
 
+#[derive(Clone, Debug, Default)]
+struct EnvFrame {
+    /// The length of the array when this stack frame was constructed
+    pub name: Option<&'static str>,
+    pub base: usize,
+    pub binds: HashMap<Sym, usize>,
+}
+
 /// Implements a nested lexical scope
 #[derive(Clone, Debug)]
 pub struct Environment {
-    builtin: StackFrame,
-    global: Vec<(StackFrame, &'static str)>,
-    frames: Vec<(StackFrame, &'static str)>,
+    values: Vec<Option<ConValue>>,
+    frames: Vec<EnvFrame>,
 }
 
 impl Display for Environment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (frame, name) in self
-            .global
-            .iter()
-            .rev()
-            .take(2)
-            .rev()
-            .chain(self.frames.iter())
-        {
-            writeln!(f, "--- {name} ---")?;
-            for (var, val) in frame {
+        for EnvFrame { name, base: _, binds } in self.frames.iter().rev() {
+            writeln!(
+                f,
+                "--- {} ---",
+                if let Some(name) = name { name } else { "" }
+            )?;
+            for (var, val) in binds {
                 write!(f, "{var}: ")?;
-                match val {
-                    Some(value) => writeln!(f, "\t{value}"),
-                    None => writeln!(f, "<undefined>"),
+                match self.values.get(*val) {
+                    Some(Some(value)) => writeln!(f, "\t{value}"),
+                    Some(None) => writeln!(f, "<undefined>"),
+                    None => writeln!(f, "ERROR: {var} address blows the stack!"),
                 }?
             }
         }
@@ -51,18 +56,18 @@ impl Display for Environment {
 }
 impl Default for Environment {
     fn default() -> Self {
-        Self {
-            builtin: to_hashmap(Builtins.iter().chain(Math.iter())),
-            global: vec![(HashMap::new(), "globals")],
-            frames: vec![],
-        }
-    }
-}
+        let mut values = Vec::new();
 
-fn to_hashmap(from: impl IntoIterator<Item = &'static Builtin>) -> HashMap<Sym, Option<ConValue>> {
-    from.into_iter()
-        .map(|v| (v.name(), Some(v.into())))
-        .collect()
+        let mut builtins = EnvFrame { name: Some("builtin"), base: 0, binds: HashMap::new() };
+        for bu in Builtins.iter().chain(Math.iter()) {
+            builtins.binds.insert(bu.name(), values.len());
+            values.push(Some(bu.into()));
+        }
+        let globals =
+            EnvFrame { name: Some("globals"), base: values.len(), binds: HashMap::new() };
+
+        Self { values, frames: vec![builtins, globals] }
+    }
 }
 
 impl Environment {
@@ -71,36 +76,12 @@ impl Environment {
     }
     /// Creates an [Environment] with no [builtins](super::builtin)
     pub fn no_builtins() -> Self {
-        Self {
-            builtin: HashMap::new(),
-            global: vec![(Default::default(), "globals")],
-            frames: vec![],
-        }
+        let globals = EnvFrame { name: Some("globals"), base: 0, binds: HashMap::new() };
+
+        Self { values: Vec::new(), frames: vec![Default::default(), globals] }
     }
 
-    pub fn builtins(&self) -> &StackFrame {
-        &self.builtin
-    }
-
-    pub fn add_builtin(&mut self, builtin: &'static Builtin) -> &mut Self {
-        self.builtin.insert(builtin.name(), Some(builtin.into()));
-        self
-    }
-
-    pub fn add_builtins(&mut self, builtins: &'static [Builtin]) {
-        for builtin in builtins {
-            self.add_builtin(builtin);
-        }
-    }
-
-    pub fn push_frame(&mut self, name: &'static str, frame: StackFrame) {
-        self.frames.push((frame, name));
-    }
-
-    pub fn pop_frame(&mut self) -> Option<(StackFrame, &'static str)> {
-        self.frames.pop()
-    }
-
+    /// Reflexively evaluates a node
     pub fn eval(&mut self, node: &impl Interpret) -> IResult<ConValue> {
         node.interpret(self)
     }
@@ -108,87 +89,129 @@ impl Environment {
     /// Calls a function inside the interpreter's scope,
     /// and returns the result
     pub fn call(&mut self, name: Sym, args: &[ConValue]) -> IResult<ConValue> {
-        // FIXME: Clone to satisfy the borrow checker
-        let function = self.get(name)?.clone();
+        let function = self.get(name)?;
         function.call(self, args)
     }
+
+    /// Adds builtins
+    ///
+    /// # Panics
+    ///
+    /// Will panic if globals table is non-empty!
+    pub fn add_builtins(&mut self, builtins: &'static [Builtin]) {
+        let Self { values, frames } = self;
+        // Globals must be EMPTY to add builtins
+        assert_eq!(frames[1].binds.len(), 0);
+        for builtin in builtins {
+            if let Some(EnvFrame { name: _, base: _, binds }) = frames.first_mut() {
+                binds.insert(builtin.name(), values.len());
+                values.push(Some(builtin.into()));
+            }
+        }
+        frames[1].base = values.len();
+    }
+
+    pub fn push_frame(&mut self, name: &'static str, frame: StackFrame) {
+        self.enter(name);
+        for (k, v) in frame {
+            self.insert(k, v);
+        }
+    }
+
+    pub fn pop_frame(&mut self) -> Option<(StackFrame, &'static str)> {
+        let mut out = HashMap::new();
+        let EnvFrame { name, base, binds } = self.frames.pop()?;
+        for (k, v) in binds {
+            out.insert(k, self.values.get_mut(v).and_then(std::mem::take));
+        }
+        self.values.truncate(base);
+        Some((out, name.unwrap_or("")))
+    }
+
     /// Enters a nested scope, returning a [`Frame`] stack-guard.
     ///
     /// [`Frame`] implements Deref/DerefMut for [`Environment`].
     pub fn frame(&mut self, name: &'static str) -> Frame {
         Frame::new(self, name)
     }
+
     /// Resolves a variable mutably.
     ///
     /// Returns a mutable reference to the variable's record, if it exists.
-    pub fn get_mut(&mut self, id: Sym) -> IResult<&mut Option<ConValue>> {
-        for (frame, _) in self.frames.iter_mut().rev() {
-            if let Some(var) = frame.get_mut(&id) {
-                return Ok(var);
-            }
-        }
-        for (frame, _) in self.global.iter_mut().rev() {
-            if let Some(var) = frame.get_mut(&id) {
-                return Ok(var);
-            }
-        }
-        self.builtin.get_mut(&id).ok_or(Error::NotDefined(id))
+    pub fn get_mut(&mut self, name: Sym) -> IResult<&mut Option<ConValue>> {
+        let id = self.id_of(name)?;
+        self.values.get_mut(id).ok_or(Error::NotDefined(name))
     }
+
     /// Resolves a variable immutably.
     ///
     /// Returns a reference to the variable's contents, if it is defined and initialized.
-    pub fn get(&self, id: Sym) -> IResult<ConValue> {
-        for (frame, _) in self.frames.iter().rev() {
-            match frame.get(&id) {
-                Some(Some(var)) => return Ok(var.clone()),
-                Some(None) => return Err(Error::NotInitialized(id)),
-                _ => (),
-            }
+    pub fn get(&self, name: Sym) -> IResult<ConValue> {
+        let id = self.id_of(name)?;
+        match self.values.get(id).ok_or(Error::NotDefined(name))? {
+            Some(value) => Ok(value.clone()),
+            None => Err(Error::NotInitialized(name)),
         }
-        for (frame, _) in self.global.iter().rev() {
-            match frame.get(&id) {
-                Some(Some(var)) => return Ok(var.clone()),
-                Some(None) => return Err(Error::NotInitialized(id)),
-                _ => (),
-            }
-        }
-        self.builtin
-            .get(&id)
-            .cloned()
-            .flatten()
-            .ok_or(Error::NotDefined(id))
     }
 
     pub(crate) fn get_local(&self, id: Sym) -> IResult<ConValue> {
-        for (frame, _) in self.frames.iter().rev() {
-            match frame.get(&id) {
-                Some(Some(var)) => return Ok(var.clone()),
-                Some(None) => return Err(Error::NotInitialized(id)),
-                _ => (),
+        for EnvFrame { binds, .. } in self.frames.iter().skip(2).rev() {
+            if let Some(var) = binds.get(&id) {
+                if let Some(var) = self.values.get(*var) {
+                    return match var {
+                        Some(value) => Ok(value.clone()),
+                        None => Err(Error::NotInitialized(id)),
+                    };
+                }
             }
         }
-        Err(Error::NotInitialized(id))
+        Err(Error::NotDefined(id))
+    }
+
+    pub fn id_of(&self, name: Sym) -> IResult<usize> {
+        for EnvFrame { binds, .. } in self.frames.iter().rev() {
+            if let Some(id) = binds.get(&name).copied() {
+                return Ok(id);
+            }
+        }
+        Err(Error::NotDefined(name))
+    }
+
+    pub fn get_id(&self, id: usize) -> Option<&ConValue> {
+        self.values.get(id)?.as_ref()
+    }
+
+    pub fn get_id_mut(&mut self, id: usize) -> Option<&mut Option<ConValue>> {
+        self.values.get_mut(id)
     }
 
     /// Inserts a new [ConValue] into this [Environment]
-    pub fn insert(&mut self, id: Sym, value: Option<ConValue>) {
-        if let Some((frame, _)) = self.frames.last_mut() {
-            frame.insert(id, value);
-        } else if let Some((frame, _)) = self.global.last_mut() {
-            frame.insert(id, value);
+    pub fn insert(&mut self, k: Sym, v: Option<ConValue>) {
+        if self.bind_raw(k, self.values.len()).is_some() {
+            self.values.push(v);
         }
     }
+
     /// A convenience function for registering a [FnDecl] as a [Function]
     pub fn insert_fn(&mut self, decl: &FnDecl) {
         let FnDecl { name, .. } = decl;
-        let (name, function) = (name, Rc::new(Function::new(decl)));
-        if let Some((frame, _)) = self.frames.last_mut() {
-            frame.insert(*name, Some(ConValue::Function(function.clone())));
-        } else if let Some((frame, _)) = self.global.last_mut() {
-            frame.insert(*name, Some(ConValue::Function(function.clone())));
-        }
+        let (name, function) = (*name, Rc::new(Function::new(decl)));
+        self.insert(name, Some(ConValue::Function(function.clone())));
         // Tell the function to lift its upvars now, after it's been declared
         function.lift_upvars(self);
+    }
+
+    /// Inserts a temporary/anonymous variable, and returns its address
+    pub fn insert_temporary(&mut self, value: ConValue) -> IResult<usize> {
+        let adr = self.values.len();
+        self.values.push(Some(value));
+        Ok(adr)
+    }
+
+    pub fn bind_raw(&mut self, name: Sym, id: usize) -> Option<()> {
+        let EnvFrame { name: _, base: _, binds } = self.frames.last_mut()?;
+        binds.insert(name, id);
+        Some(())
     }
 }
 
@@ -196,14 +219,18 @@ impl Environment {
 impl Environment {
     /// Enters a scope, creating a new namespace for variables
     fn enter(&mut self, name: &'static str) -> &mut Self {
-        self.frames.push((Default::default(), name));
+        let new_frame =
+            EnvFrame { name: Some(name), base: self.values.len(), binds: HashMap::new() };
+        self.frames.push(new_frame);
         self
     }
 
     /// Exits the scope, destroying all local variables and
     /// returning the outer scope, if there is one
     fn exit(&mut self) -> &mut Self {
-        self.frames.pop();
+        if let Some(frame) = self.frames.pop() {
+            self.values.truncate(frame.base);
+        }
         self
     }
 }
