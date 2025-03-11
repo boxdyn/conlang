@@ -857,12 +857,12 @@ mod convert {
         }
     }
 
-    impl TryFrom<ExprKind> for Pattern {
-        type Error = ExprKind;
+    impl TryFrom<Expr> for Pattern {
+        type Error = Expr;
 
         /// Performs the conversion. On failure, returns the *first* non-pattern subexpression.
-        fn try_from(value: ExprKind) -> Result<Self, Self::Error> {
-            Ok(match value {
+        fn try_from(value: Expr) -> Result<Self, Self::Error> {
+            Ok(match value.kind {
                 ExprKind::Literal(literal) => Pattern::Literal(literal),
                 ExprKind::Path(Path { absolute: false, ref parts }) => match parts.as_slice() {
                     [PathPart::Ident(name)] => Pattern::Name(*name),
@@ -873,7 +873,7 @@ mod convert {
                 ExprKind::Tuple(Tuple { exprs }) => Pattern::Tuple(
                     exprs
                         .into_iter()
-                        .map(|e| Pattern::try_from(e.kind))
+                        .map(Pattern::try_from)
                         .collect::<Result<_, _>>()?,
                 ),
                 ExprKind::AddrOf(AddrOf { mutable, expr }) => {
@@ -882,14 +882,14 @@ mod convert {
                 ExprKind::Array(Array { values }) => Pattern::Array(
                     values
                         .into_iter()
-                        .map(|e| Pattern::try_from(e.kind))
+                        .map(Pattern::try_from)
                         .collect::<Result<_, _>>()?,
                 ),
                 ExprKind::Binary(Binary { kind: BinaryKind::Call, parts }) => {
-                    let (ExprKind::Path(path), args) = *parts else {
+                    let (Expr { kind: ExprKind::Path(path), .. }, args) = *parts else {
                         return Err(parts.0);
                     };
-                    match args {
+                    match args.kind {
                         ExprKind::Empty | ExprKind::Tuple(_) => {}
                         _ => return Err(args),
                     }
@@ -905,12 +905,12 @@ mod convert {
                     let fields = init
                         .into_iter()
                         .map(|Fielder { name, init }| {
-                            Ok((name, init.map(|i| Pattern::try_from(i.kind)).transpose()?))
+                            Ok((name, init.map(|i| Pattern::try_from(*i)).transpose()?))
                         })
                         .collect::<Result<_, Self::Error>>()?;
                     Pattern::Struct(to, fields)
                 }
-                err => Err(err)?,
+                _ => Err(value)?,
             })
         }
     }

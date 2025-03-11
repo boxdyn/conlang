@@ -253,39 +253,39 @@ pub trait Visit<'a>: Sized {
     fn visit_assign(&mut self, a: &'a Assign) {
         let Assign { parts } = a;
         let (head, tail) = parts.as_ref();
-        self.visit_expr_kind(head);
-        self.visit_expr_kind(tail);
+        self.visit_expr(head);
+        self.visit_expr(tail);
     }
     fn visit_modify(&mut self, m: &'a Modify) {
         let Modify { kind, parts } = m;
         let (head, tail) = parts.as_ref();
         self.visit_modify_kind(kind);
-        self.visit_expr_kind(head);
-        self.visit_expr_kind(tail);
+        self.visit_expr(head);
+        self.visit_expr(tail);
     }
     fn visit_modify_kind(&mut self, _kind: &'a ModifyKind) {}
     fn visit_binary(&mut self, b: &'a Binary) {
         let Binary { kind, parts } = b;
         let (head, tail) = parts.as_ref();
         self.visit_binary_kind(kind);
-        self.visit_expr_kind(head);
-        self.visit_expr_kind(tail);
+        self.visit_expr(head);
+        self.visit_expr(tail);
     }
     fn visit_binary_kind(&mut self, _kind: &'a BinaryKind) {}
     fn visit_unary(&mut self, u: &'a Unary) {
         let Unary { kind, tail } = u;
         self.visit_unary_kind(kind);
-        self.visit_expr_kind(tail);
+        self.visit_expr(tail);
     }
     fn visit_unary_kind(&mut self, _kind: &'a UnaryKind) {}
     fn visit_cast(&mut self, cast: &'a Cast) {
         let Cast { head, ty } = cast;
-        self.visit_expr_kind(head);
+        self.visit_expr(head);
         self.visit_ty(ty);
     }
     fn visit_member(&mut self, m: &'a Member) {
         let Member { head, kind } = m;
-        self.visit_expr_kind(head);
+        self.visit_expr(head);
         self.visit_member_kind(kind);
     }
     fn visit_member_kind(&mut self, kind: &'a MemberKind) {
@@ -293,7 +293,7 @@ pub trait Visit<'a>: Sized {
     }
     fn visit_index(&mut self, i: &'a Index) {
         let Index { head, indices } = i;
-        self.visit_expr_kind(head);
+        self.visit_expr(head);
         indices.iter().for_each(|e| self.visit_expr(e));
     }
     fn visit_structor(&mut self, s: &'a Structor) {
@@ -314,13 +314,13 @@ pub trait Visit<'a>: Sized {
     }
     fn visit_array_rep(&mut self, a: &'a ArrayRep) {
         let ArrayRep { value, repeat } = a;
-        self.visit_expr_kind(value);
-        self.visit_expr_kind(repeat);
+        self.visit_expr(value);
+        self.visit_expr(repeat);
     }
     fn visit_addrof(&mut self, a: &'a AddrOf) {
         let AddrOf { mutable, expr } = a;
         self.visit_mutability(mutable);
-        self.visit_expr_kind(expr);
+        self.visit_expr(expr);
     }
     fn visit_block(&mut self, b: &'a Block) {
         let Block { stmts } = b;
@@ -328,7 +328,7 @@ pub trait Visit<'a>: Sized {
     }
     fn visit_group(&mut self, g: &'a Group) {
         let Group { expr } = g;
-        self.visit_expr_kind(expr)
+        self.visit_expr(expr)
     }
     fn visit_tuple(&mut self, t: &'a Tuple) {
         let Tuple { exprs } = t;

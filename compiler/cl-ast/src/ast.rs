@@ -396,7 +396,7 @@ pub enum ExprKind {
 /// A backtick-quoted subexpression-literal
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Quote {
-    pub quote: Box<ExprKind>,
+    pub quote: Box<Expr>,
 }
 
 /// A local variable declaration [Stmt]
@@ -435,14 +435,14 @@ pub struct MatchArm(pub Pattern, pub Expr);
 /// An [Assign]ment expression: [`Expr`] ([`ModifyKind`] [`Expr`])\+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Assign {
-    pub parts: Box<(ExprKind, ExprKind)>,
+    pub parts: Box<(Expr, Expr)>,
 }
 
 /// A [Modify]-assignment expression: [`Expr`] ([`ModifyKind`] [`Expr`])\+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Modify {
     pub kind: ModifyKind,
-    pub parts: Box<(ExprKind, ExprKind)>,
+    pub parts: Box<(Expr, Expr)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -463,7 +463,7 @@ pub enum ModifyKind {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Binary {
     pub kind: BinaryKind,
-    pub parts: Box<(ExprKind, ExprKind)>,
+    pub parts: Box<(Expr, Expr)>,
 }
 
 /// A [Binary] operator
@@ -497,7 +497,7 @@ pub enum BinaryKind {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Unary {
     pub kind: UnaryKind,
-    pub tail: Box<ExprKind>,
+    pub tail: Box<Expr>,
 }
 
 /// A [Unary] operator
@@ -519,14 +519,14 @@ pub enum UnaryKind {
 /// A cast expression: [`Expr`] `as` [`Ty`]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Cast {
-    pub head: Box<ExprKind>,
+    pub head: Box<Expr>,
     pub ty: Ty,
 }
 
 /// A [Member] access expression: [`Expr`] [`MemberKind`]\*
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Member {
-    pub head: Box<ExprKind>,
+    pub head: Box<Expr>,
     pub kind: MemberKind,
 }
 
@@ -541,7 +541,7 @@ pub enum MemberKind {
 /// A repeated [Index] expression: a[10, 20, 30][40, 50, 60]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Index {
-    pub head: Box<ExprKind>,
+    pub head: Box<Expr>,
     pub indices: Vec<Expr>,
 }
 
@@ -569,15 +569,15 @@ pub struct Array {
 /// `[` [Expr] `;` [Literal] `]`
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ArrayRep {
-    pub value: Box<ExprKind>,
-    pub repeat: Box<ExprKind>,
+    pub value: Box<Expr>,
+    pub repeat: Box<Expr>,
 }
 
 /// An address-of expression: `&` `mut`? [`Expr`]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct AddrOf {
     pub mutable: Mutability,
-    pub expr: Box<ExprKind>,
+    pub expr: Box<Expr>,
 }
 
 /// A [Block] expression: `{` [`Stmt`]\* [`Expr`]? `}`
@@ -589,7 +589,7 @@ pub struct Block {
 /// A [Grouping](Group) expression `(` [`Expr`] `)`
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Group {
-    pub expr: Box<ExprKind>,
+    pub expr: Box<Expr>,
 }
 
 /// A [Tuple] expression: `(` [`Expr`] (`,` [`Expr`])+ `)`

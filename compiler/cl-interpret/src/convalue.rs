@@ -1,7 +1,7 @@
 //! Values in the dynamically typed AST interpreter.
 //!
 //! The most permanent fix is a temporary one.
-use cl_ast::{format::FmtAdapter, ExprKind, Sym};
+use cl_ast::{format::FmtAdapter, Expr, Sym};
 
 use super::{
     builtin::Builtin,
@@ -42,7 +42,7 @@ pub enum ConValue {
     /// An entire namespace
     Module(Box<HashMap<Sym, Option<ConValue>>>),
     /// A quoted expression
-    Quote(Box<ExprKind>),
+    Quote(Box<Expr>),
     /// A callable thing
     Function(Rc<Function>),
     /// A built-in function
@@ -152,9 +152,9 @@ from! {
     char => ConValue::Char,
     Sym => ConValue::String,
     &str => ConValue::String,
+    Expr => ConValue::Quote,
     String => ConValue::String,
     Rc<str> => ConValue::String,
-    ExprKind => ConValue::Quote,
     Function => ConValue::Function,
     Vec<ConValue> => ConValue::Tuple,
     &'static Builtin => ConValue::Builtin,
@@ -262,7 +262,7 @@ impl std::fmt::Display for ConValue {
             ConValue::Bool(v) => v.fmt(f),
             ConValue::Char(v) => v.fmt(f),
             ConValue::String(v) => v.fmt(f),
-            ConValue::Ref(v) => write!(f, "&{v}"),
+            ConValue::Ref(v) => write!(f, "&{}", v.borrow()),
             ConValue::Array(array) => {
                 '['.fmt(f)?;
                 for (idx, element) in array.iter().enumerate() {

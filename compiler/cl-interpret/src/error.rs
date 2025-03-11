@@ -1,6 +1,7 @@
 //! The [Error] type represents any error thrown by the [Environment](super::Environment)
 
 use cl_ast::{Pattern, Sym};
+use cl_structures::span::Span;
 
 use super::convalue::ConValue;
 
@@ -46,6 +47,18 @@ pub enum Error {
     MatchNonexhaustive,
     /// Error produced by a Builtin
     BuiltinDebug(String),
+    /// Error with associated line information
+    WithSpan(Box<Error>, Span),
+}
+
+impl Error {
+    /// Adds a [Span] to this [Error], if there isn't already a more specific one.
+    pub fn with_span(self, span: Span) -> Self {
+        match self {
+            Self::WithSpan(..) => self,
+            err => Self::WithSpan(Box::new(err), span),
+        }
+    }
 }
 
 impl std::error::Error for Error {}
@@ -92,6 +105,7 @@ impl std::fmt::Display for Error {
                 write!(f, "Fell through a non-exhaustive match expression!")
             }
             Error::BuiltinDebug(s) => write!(f, "DEBUG: {s}"),
+            Error::WithSpan(e, span) => write!(f, "{}..{}: {e}", span.head, span.tail),
         }
     }
 }

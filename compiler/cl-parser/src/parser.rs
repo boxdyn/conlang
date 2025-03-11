@@ -888,26 +888,15 @@ impl Parse<'_> for StmtKind {
 
 impl Parse<'_> for Expr {
     /// Parses an [Expr]
-    ///
-    /// See also: [ExprKind::parse]
     fn parse(p: &mut Parser) -> PResult<Expr> {
-        let start = p.loc();
-        Ok(Expr { kind: ExprKind::parse(p)?, extents: Span(start, p.loc()) })
-    }
-}
-
-impl Parse<'_> for ExprKind {
-    /// Parses an [ExprKind] at the lowest precedence level
-    // Implementer's note: Do not call this from within [prec::exprkind]
-    fn parse(p: &mut Parser<'_>) -> PResult<ExprKind> {
-        prec::exprkind(p, 0)
+        prec::expr(p, 0)
     }
 }
 
 impl Parse<'_> for Quote {
     fn parse(p: &mut Parser<'_>) -> PResult<Self> {
         let quote = delim(
-            ExprKind::parse,
+            Expr::parse,
             (TokenKind::Grave, TokenKind::Grave),
             Parsing::ExprKind,
         )(p)?
@@ -981,16 +970,20 @@ impl Parse<'_> for AddrOf {
         match p.peek_kind(P)? {
             TokenKind::Amp => {
                 p.consume_peeked();
-                Ok(AddrOf { mutable: Mutability::parse(p)?, expr: ExprKind::parse(p)?.into() })
+                Ok(AddrOf { mutable: Mutability::parse(p)?, expr: Expr::parse(p)?.into() })
             }
             TokenKind::AmpAmp => {
+                let start = p.loc();
                 p.consume_peeked();
                 Ok(AddrOf {
                     mutable: Mutability::Not,
-                    expr: ExprKind::AddrOf(AddrOf {
-                        mutable: Mutability::parse(p)?,
-                        expr: ExprKind::parse(p)?.into(),
-                    })
+                    expr: Expr {
+                        kind: ExprKind::AddrOf(AddrOf {
+                            mutable: Mutability::parse(p)?,
+                            expr: Expr::parse(p)?.into(),
+                        }),
+                        extents: Span(start, p.loc()),
+                    }
                     .into(),
                 })
             }
@@ -1009,9 +1002,7 @@ impl Parse<'_> for Block {
 
 /// Conditions (which precede curly-braced blocks) get special treatment
 fn condition(p: &mut Parser) -> PResult<Expr> {
-    let start = p.loc();
-    let kind = prec::exprkind(p, prec::Precedence::Condition.level())?;
-    Ok(Expr { kind, extents: Span(start, p.loc()) })
+    prec::expr(p, prec::Precedence::Condition.level())
 }
 
 impl Parse<'_> for While {
@@ -1088,7 +1079,7 @@ impl Parse<'_> for Return {
 
 impl Parse<'_> for Pattern {
     fn parse(p: &mut Parser<'_>) -> PResult<Self> {
-        let value = prec::exprkind(p, prec::Precedence::Pattern.level())?;
+        let value = prec::expr(p, prec::Precedence::Pattern.level())?;
         Pattern::try_from(value).map_err(|e| p.error(InvalidPattern(e.into()), Parsing::Pattern))
     }
 }

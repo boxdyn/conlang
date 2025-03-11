@@ -36,6 +36,8 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
         fn get_line() {
             match repline::Repline::new("", "", "").read() {
                 Ok(line) => Ok(ConValue::String(line.into())),
+                Err(repline::Error::CtrlD(line)) => Ok(ConValue::String(line.into())),
+                Err(repline::Error::CtrlC(_)) => Err(cl_interpret::error::Error::Break(ConValue::Empty)),
                 Err(e) => Ok(ConValue::String(e.to_string().into())),
             }
         }
@@ -87,7 +89,13 @@ fn load_file(env: &mut Environment, path: impl AsRef<Path>) -> Result<ConValue, 
             code
         }
     };
-    Ok(env.eval(&code)?)
+    match env.eval(&code) {
+        Ok(v) => Ok(v),
+        Err(e) => {
+            eprintln!("{e}");
+            Ok(ConValue::Empty)
+        }
+    }
 }
 
 fn lex_code(code: &str, path: Option<impl AsRef<Path>>) -> Result<(), Box<dyn Error>> {

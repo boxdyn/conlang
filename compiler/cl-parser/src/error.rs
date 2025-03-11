@@ -1,6 +1,6 @@
 use super::*;
 
-use cl_ast::ExprKind;
+use cl_ast::Expr;
 use cl_lexer::error::{Error as LexError, Reason};
 use std::fmt::Display;
 pub type PResult<T> = Result<T, Error>;
@@ -30,7 +30,7 @@ pub enum ErrorKind {
     ExpectedParsing {
         want: Parsing,
     },
-    InvalidPattern(Box<ExprKind>),
+    InvalidPattern(Box<Expr>),
     /// Indicates unfinished code
     Todo(&'static str),
 }
@@ -135,7 +135,7 @@ impl Display for Error {
             ErrorKind::Todo(_) => write!(f, "{loc} {reason} {while_parsing:?}"),
             // lexical errors print their own higher-resolution loc info
             ErrorKind::Lexical(e) => write!(f, "{e} (while parsing {while_parsing})"),
-            _ => write!(f, "{loc} {reason} while parsing {while_parsing}"),
+            _ => write!(f, "{loc}: {reason} while parsing {while_parsing}"),
         }
     }
 }

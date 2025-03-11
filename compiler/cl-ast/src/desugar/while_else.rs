@@ -27,7 +27,10 @@ fn desugar_while(extents: Span, kind: ExprKind) -> ExprKind {
 
             let loop_body = If { cond, pass, fail: Else { body: Some(Box::new(break_expr)) } };
             let loop_body = ExprKind::If(loop_body);
-            ExprKind::Unary(Unary { kind: UnaryKind::Loop, tail: Box::new(loop_body) })
+            ExprKind::Unary(Unary {
+                kind: UnaryKind::Loop,
+                tail: Box::new(Expr { extents, kind: loop_body }),
+            })
         }
         _ => kind,
     }

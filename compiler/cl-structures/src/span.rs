@@ -42,6 +42,6 @@ impl Loc {
 impl std::fmt::Display for Loc {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Loc { line, col } = self;
-        write!(f, "{line}:{col}:")
+        write!(f, "{line}:{col}")
     }
 }

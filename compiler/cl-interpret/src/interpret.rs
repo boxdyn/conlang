@@ -173,8 +173,7 @@ impl Interpret for Enum {
 }
 impl Interpret for Impl {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { target: ImplKind::Type(Ty { extents: _, kind: TyKind::Path(name) }), body } =
-            self
+        let Self { target: ImplKind::Type(Ty { extents, kind: TyKind::Path(name) }), body } = self
         else {
             eprintln!("TODO: impl X for Ty");
             return Ok(ConValue::Empty);
@@ -185,7 +184,9 @@ impl Interpret for Impl {
         let (frame, _) = env
             .pop_frame()
             .expect("Environment frames must be balanced");
-        match assignment::addrof_path(env, name.parts.as_slice())? {
+        match assignment::addrof_path(env, name.parts.as_slice())
+            .map_err(|err| err.with_span(*extents))?
+        {
             Some(ConValue::Module(m)) => m.extend(frame),
             Some(other) => eprintln!("TODO: impl for {other}"),
             None => {}
@@ -262,12 +263,13 @@ impl Interpret for UseTree {
 
 impl Interpret for Stmt {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { extents: _, kind, semi } = self;
+        let Self { extents, kind, semi } = self;
         let out = match kind {
-            StmtKind::Empty => ConValue::Empty,
-            StmtKind::Item(stmt) => stmt.interpret(env)?,
-            StmtKind::Expr(stmt) => stmt.interpret(env)?,
-        };
+            StmtKind::Empty => Ok(ConValue::Empty),
+            StmtKind::Item(stmt) => stmt.interpret(env),
+            StmtKind::Expr(stmt) => stmt.interpret(env),
+        }
+        .map_err(|err| err.with_span(*extents))?;
         Ok(match semi {
             Semi::Terminated => ConValue::Empty,
             Semi::Unterminated => out,
@@ -278,8 +280,8 @@ impl Interpret for Stmt {
 impl Interpret for Expr {
     #[inline]
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { extents: _, kind } = self;
-        kind.interpret(env)
+        let Self { extents, kind } = self;
+        kind.interpret(env).map_err(|err| err.with_span(*extents))
     }
 }
 
@@ -374,11 +376,11 @@ mod assignment {
         Ok(())
     }
 
-    pub(super) fn assign(env: &mut Environment, pat: &ExprKind, value: ConValue) -> IResult<()> {
+    pub(super) fn assign(env: &mut Environment, pat: &Expr, value: ConValue) -> IResult<()> {
         if let Ok(pat) = Pattern::try_from(pat.clone()) {
             return pat_assign(env, &pat, value);
         }
-        match pat {
+        match &pat.kind {
             ExprKind::Member(member) => *addrof_member(env, member)? = value,
             ExprKind::Index(index) => *addrof_index(env, index)? = value,
             ExprKind::Path(path) => *addrof_path(env, &path.parts)? = Some(value),
@@ -389,9 +391,9 @@ mod assignment {
 
     pub(super) fn addrof<'e>(
         env: &'e mut Environment,
-        pat: &ExprKind,
+        pat: &Expr,
     ) -> IResult<&'e mut ConValue> {
-        match pat {
+        match &pat.kind {
             ExprKind::Path(path) => addrof_path(env, &path.parts)?
                 .as_mut()
                 .ok_or(Error::NotInitialized("".into())),
@@ -422,7 +424,7 @@ mod assignment {
         member: &Member,
     ) -> IResult<&'e mut ConValue> {
         let Member { head, kind } = member;
-        let ExprKind::Path(path) = head.as_ref() else {
+        let ExprKind::Path(path) = &head.kind else {
             return Err(Error::TypeError);
         };
         let slot = addrof_path(env, &path.parts)?
@@ -641,7 +643,7 @@ fn cast(value: ConValue, ty: Sym) -> IResult<ConValue> {
         ConValue::Int(i) => i as _,
         ConValue::Bool(b) => b as _,
         ConValue::Char(c) => c as _,
-        ConValue::Ref(v) => return cast((*v).clone(), ty),
+        ConValue::Ref(v) => return cast((*v).borrow().clone(), ty),
         // TODO: This, better
         ConValue::Float(_) if ty.starts_with('f') => return Ok(value),
         ConValue::Float(f) => f as _,
@@ -684,7 +686,7 @@ impl Interpret for Cast {
 impl Interpret for Member {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Member { head, kind } = self;
-        if let ExprKind::Path(_) = head.as_ref() {
+        if let ExprKind::Path(_) = &head.kind {
             return assignment::addrof_member(env, self).cloned();
         }
         let head = head.interpret(env)?;
@@ -727,6 +729,8 @@ impl Interpret for Structor {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self { to: Path { absolute: _, parts }, init } = self;
         use std::collections::HashMap;
+
+        // Look up struct/enum-struct definition
 
         let name = match parts.last() {
             Some(PathPart::Ident(name)) => *name,
@@ -793,7 +797,7 @@ impl Interpret for ArrayRep {
 impl Interpret for AddrOf {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self { mutable: _, expr } = self;
-        match expr.as_ref() {
+        match &expr.kind {
             ExprKind::Index(_) => todo!("AddrOf array index"),
             ExprKind::Path(_) => todo!("Path traversal in addrof"),
             _ => Ok(ConValue::Ref(Rc::new(expr.interpret(env)?))),

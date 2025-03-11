@@ -294,14 +294,14 @@ pub trait Fold {
     fn fold_assign(&mut self, a: Assign) -> Assign {
         let Assign { parts } = a;
         let (head, tail) = *parts;
-        Assign { parts: Box::new((self.fold_expr_kind(head), self.fold_expr_kind(tail))) }
+        Assign { parts: Box::new((self.fold_expr(head), self.fold_expr(tail))) }
     }
     fn fold_modify(&mut self, m: Modify) -> Modify {
         let Modify { kind, parts } = m;
         let (head, tail) = *parts;
         Modify {
             kind: self.fold_modify_kind(kind),
-            parts: Box::new((self.fold_expr_kind(head), self.fold_expr_kind(tail))),
+            parts: Box::new((self.fold_expr(head), self.fold_expr(tail))),
         }
     }
     fn fold_modify_kind(&mut self, kind: ModifyKind) -> ModifyKind {
@@ -312,7 +312,7 @@ pub trait Fold {
         let (head, tail) = *parts;
         Binary {
             kind: self.fold_binary_kind(kind),
-            parts: Box::new((self.fold_expr_kind(head), self.fold_expr_kind(tail))),
+            parts: Box::new((self.fold_expr(head), self.fold_expr(tail))),
         }
     }
     fn fold_binary_kind(&mut self, kind: BinaryKind) -> BinaryKind {
@@ -320,18 +320,18 @@ pub trait Fold {
     }
     fn fold_unary(&mut self, u: Unary) -> Unary {
         let Unary { kind, tail } = u;
-        Unary { kind: self.fold_unary_kind(kind), tail: Box::new(self.fold_expr_kind(*tail)) }
+        Unary { kind: self.fold_unary_kind(kind), tail: Box::new(self.fold_expr(*tail)) }
     }
     fn fold_unary_kind(&mut self, kind: UnaryKind) -> UnaryKind {
         kind
     }
     fn fold_cast(&mut self, cast: Cast) -> Cast {
         let Cast { head, ty } = cast;
-        Cast { head: Box::new(self.fold_expr_kind(*head)), ty: self.fold_ty(ty) }
+        Cast { head: Box::new(self.fold_expr(*head)), ty: self.fold_ty(ty) }
     }
     fn fold_member(&mut self, m: Member) -> Member {
         let Member { head, kind } = m;
-        Member { head: Box::new(self.fold_expr_kind(*head)), kind: self.fold_member_kind(kind) }
+        Member { head: Box::new(self.fold_expr(*head)), kind: self.fold_member_kind(kind) }
     }
     fn fold_member_kind(&mut self, kind: MemberKind) -> MemberKind {
         or_fold_member_kind(self, kind)
@@ -339,7 +339,7 @@ pub trait Fold {
     fn fold_index(&mut self, i: Index) -> Index {
         let Index { head, indices } = i;
         Index {
-            head: Box::new(self.fold_expr_kind(*head)),
+            head: Box::new(self.fold_expr(*head)),
             indices: indices.into_iter().map(|e| self.fold_expr(e)).collect(),
         }
     }
@@ -363,15 +363,15 @@ pub trait Fold {
     fn fold_array_rep(&mut self, a: ArrayRep) -> ArrayRep {
         let ArrayRep { value, repeat } = a;
         ArrayRep {
-            value: Box::new(self.fold_expr_kind(*value)),
-            repeat: Box::new(self.fold_expr_kind(*repeat)),
+            value: Box::new(self.fold_expr(*value)),
+            repeat: Box::new(self.fold_expr(*repeat)),
         }
     }
     fn fold_addrof(&mut self, a: AddrOf) -> AddrOf {
         let AddrOf { mutable, expr } = a;
         AddrOf {
             mutable: self.fold_mutability(mutable),
-            expr: Box::new(self.fold_expr_kind(*expr)),
+            expr: Box::new(self.fold_expr(*expr)),
         }
     }
     fn fold_block(&mut self, b: Block) -> Block {
@@ -380,7 +380,7 @@ pub trait Fold {
     }
     fn fold_group(&mut self, g: Group) -> Group {
         let Group { expr } = g;
-        Group { expr: Box::new(self.fold_expr_kind(*expr)) }
+        Group { expr: Box::new(self.fold_expr(*expr)) }
     }
     fn fold_tuple(&mut self, t: Tuple) -> Tuple {
         let Tuple { exprs } = t;

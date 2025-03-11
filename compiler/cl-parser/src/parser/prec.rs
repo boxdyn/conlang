@@ -8,36 +8,40 @@
 use super::{Parse, *};
 
 /// Parses an [ExprKind]
-pub fn exprkind(p: &mut Parser, power: u8) -> PResult<ExprKind> {
+pub fn expr(p: &mut Parser, power: u8) -> PResult<Expr> {
     let parsing = Parsing::ExprKind;
-
+    let start = p.loc();
     // Prefix expressions
-    let mut head = match p.peek_kind(Parsing::Unary)? {
-        literal_like!() => Literal::parse(p)?.into(),
-        path_like!() => exprkind_pathlike(p)?,
-        TokenKind::Amp | TokenKind::AmpAmp => AddrOf::parse(p)?.into(),
-        TokenKind::Grave => Quote::parse(p)?.into(),
-        TokenKind::LCurly => Block::parse(p)?.into(),
-        TokenKind::LBrack => exprkind_arraylike(p)?,
-        TokenKind::LParen => exprkind_tuplelike(p)?,
-        TokenKind::Let => Let::parse(p)?.into(),
-        TokenKind::Match => Match::parse(p)?.into(),
-        TokenKind::While => ExprKind::While(While::parse(p)?),
-        TokenKind::If => ExprKind::If(If::parse(p)?),
-        TokenKind::For => ExprKind::For(For::parse(p)?),
-        TokenKind::Break => ExprKind::Break(Break::parse(p)?),
-        TokenKind::Return => ExprKind::Return(Return::parse(p)?),
-        TokenKind::Continue => {
-            p.consume_peeked();
-            ExprKind::Continue
-        }
+    let mut head = Expr {
+        kind: match p.peek_kind(Parsing::Unary)? {
+            literal_like!() => Literal::parse(p)?.into(),
+            path_like!() => exprkind_pathlike(p)?,
+            TokenKind::Amp | TokenKind::AmpAmp => AddrOf::parse(p)?.into(),
+            TokenKind::Grave => Quote::parse(p)?.into(),
+            TokenKind::LCurly => Block::parse(p)?.into(),
+            TokenKind::LBrack => exprkind_arraylike(p)?,
+            TokenKind::LParen => exprkind_tuplelike(p)?,
+            TokenKind::Let => Let::parse(p)?.into(),
+            TokenKind::Match => Match::parse(p)?.into(),
+            TokenKind::While => ExprKind::While(While::parse(p)?),
+            TokenKind::If => ExprKind::If(If::parse(p)?),
+            TokenKind::For => ExprKind::For(For::parse(p)?),
+            TokenKind::Break => ExprKind::Break(Break::parse(p)?),
+            TokenKind::Return => ExprKind::Return(Return::parse(p)?),
+            TokenKind::Continue => {
+                p.consume_peeked();
+                ExprKind::Continue
+            }
 
-        op => {
-            let (kind, prec) = from_prefix(op).ok_or_else(|| p.error(Unexpected(op), parsing))?;
-            let ((), after) = prec.prefix().expect("should have a precedence");
-            p.consume_peeked();
-            Unary { kind, tail: exprkind(p, after)?.into() }.into()
-        }
+            op => {
+                let (kind, prec) =
+                    from_prefix(op).ok_or_else(|| p.error(Unexpected(op), parsing))?;
+                let ((), after) = prec.prefix().expect("should have a precedence");
+                p.consume_peeked();
+                Unary { kind, tail: expr(p, after)?.into() }.into()
+            }
+        },
+        extents: Span(start, p.loc()),
     };
 
     fn from_postfix(op: TokenKind) -> Option<Precedence> {
@@ -58,36 +62,50 @@ pub fn exprkind(p: &mut Parser, power: u8) -> PResult<ExprKind> {
                 break;
             }
 
-            head = match op {
-                TokenKind::LBrack => {
-                    p.consume_peeked();
-                    let indices =
-                        sep(Expr::parse, TokenKind::Comma, TokenKind::RBrack, parsing)(p)?;
-                    p.match_type(TokenKind::RBrack, parsing)?;
-                    ExprKind::Index(Index { head: head.into(), indices })
-                }
-                TokenKind::LParen => {
-                    p.consume_peeked();
-                    let exprs = sep(Expr::parse, TokenKind::Comma, TokenKind::RParen, parsing)(p)?;
-                    p.match_type(TokenKind::RParen, parsing)?;
-                    Binary { kind: BinaryKind::Call, parts: (head, Tuple { exprs }.into()).into() }
+            head = Expr {
+                kind: match op {
+                    TokenKind::LBrack => {
+                        p.consume_peeked();
+                        let indices =
+                            sep(Expr::parse, TokenKind::Comma, TokenKind::RBrack, parsing)(p)?;
+                        p.match_type(TokenKind::RBrack, parsing)?;
+                        ExprKind::Index(Index { head: head.into(), indices })
+                    }
+                    TokenKind::LParen => {
+                        p.consume_peeked();
+                        let exprs =
+                            sep(Expr::parse, TokenKind::Comma, TokenKind::RParen, parsing)(p)?;
+                        p.match_type(TokenKind::RParen, parsing)?;
+                        Binary {
+                            kind: BinaryKind::Call,
+                            parts: (
+                                head,
+                                Expr {
+                                    kind: Tuple { exprs }.into(),
+                                    extents: Span(start, p.loc()),
+                                },
+                            )
+                                .into(),
+                        }
                         .into()
-                }
-                TokenKind::LCurly => match head {
-                    ExprKind::Path(path) => ExprKind::Structor(structor_body(p, path)?),
-                    _ => break,
+                    }
+                    TokenKind::LCurly => match head.kind {
+                        ExprKind::Path(path) => ExprKind::Structor(structor_body(p, path)?),
+                        _ => break,
+                    },
+                    TokenKind::Dot => {
+                        p.consume_peeked();
+                        let kind = MemberKind::parse(p)?;
+                        Member { head: Box::new(head), kind }.into()
+                    }
+                    TokenKind::As => {
+                        p.consume_peeked();
+                        let ty = Ty::parse(p)?;
+                        Cast { head: head.into(), ty }.into()
+                    }
+                    _ => Err(p.error(Unexpected(op), parsing))?,
                 },
-                TokenKind::Dot => {
-                    p.consume_peeked();
-                    let kind = MemberKind::parse(p)?;
-                    Member { head: Box::new(head), kind }.into()
-                }
-                TokenKind::As => {
-                    p.consume_peeked();
-                    let ty = Ty::parse(p)?;
-                    Cast { head: head.into(), ty }.into()
-                }
-                _ => Err(p.error(Unexpected(op), parsing))?,
+                extents: Span(start, p.loc()),
             };
             continue;
         }
@@ -99,8 +117,11 @@ pub fn exprkind(p: &mut Parser, power: u8) -> PResult<ExprKind> {
             }
             p.consume_peeked();
 
-            let tail = exprkind(p, after)?;
-            head = Binary { kind, parts: (head, tail).into() }.into();
+            let tail = expr(p, after)?;
+            head = Expr {
+                kind: Binary { kind, parts: (head, tail).into() }.into(),
+                extents: Span(start, p.loc()),
+            };
             continue;
         }
 
@@ -111,8 +132,11 @@ pub fn exprkind(p: &mut Parser, power: u8) -> PResult<ExprKind> {
             }
             p.consume_peeked();
 
-            let tail = exprkind(p, after)?;
-            head = Modify { kind, parts: (head, tail).into() }.into();
+            let tail = expr(p, after)?;
+            head = Expr {
+                kind: Modify { kind, parts: (head, tail).into() }.into(),
+                extents: Span(start, p.loc()),
+            };
             continue;
         }
 
@@ -125,8 +149,12 @@ pub fn exprkind(p: &mut Parser, power: u8) -> PResult<ExprKind> {
             }
             p.consume_peeked();
 
-            let tail = exprkind(p, after)?;
-            head = Assign { parts: (head, tail).into() }.into();
+            let tail = expr(p, after)?;
+            head = Expr {
+                kind: Assign { parts: (head, tail).into() }.into(),
+                extents: Span(start, p.loc()),
+            };
+
             continue;
         }
 
@@ -138,7 +166,9 @@ pub fn exprkind(p: &mut Parser, power: u8) -> PResult<ExprKind> {
             p.consume_peeked();
 
             let ty = Ty::parse(p)?;
-            head = Cast { head: head.into(), ty }.into();
+            head =
+                Expr { kind: Cast { head: head.into(), ty }.into(), extents: Span(start, p.loc()) };
+
             continue;
         }
 
@@ -174,10 +204,10 @@ fn exprkind_array_rep(p: &mut Parser) -> PResult<ExprKind> {
     let first = Expr::parse(p)?;
     Ok(match p.peek_kind(P)? {
         TokenKind::Semi => ArrayRep {
-            value: first.kind.into(),
+            value: first.into(),
             repeat: {
                 p.consume_peeked();
-                Box::new(exprkind(p, 0)?)
+                Box::new(expr(p, 0)?)
             },
         }
         .into(),
@@ -224,7 +254,7 @@ fn exprkind_group(p: &mut Parser) -> PResult<ExprKind> {
             }
             Ok(Tuple { exprs }.into())
         }
-        _ => Ok(Group { expr: first.kind.into() }.into()),
+        _ => Ok(Group { expr: first.into() }.into()),
     }
 }
 
