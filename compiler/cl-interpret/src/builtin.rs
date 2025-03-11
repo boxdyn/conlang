@@ -164,7 +164,7 @@ pub const Builtins: &[Builtin] = &builtins![
         Ok(match list {
             ConValue::Empty => 0,
             ConValue::String(s) => s.chars().count() as _,
-            ConValue::Ref(r) => return len(env, slice::from_ref(r.as_ref())),
+            ConValue::Ref(r) => return len(env, slice::from_ref(&r.borrow())),
             ConValue::Array(t) => t.len() as _,
             ConValue::Tuple(t) => t.len() as _,
             _ => Err(Error::TypeError)?,
@@ -331,9 +331,8 @@ pub const Math: &[Builtin] = &builtins![
 
     /// Does the opposite of `&`
     fn deref(tail) {
-        use std::rc::Rc;
         Ok(match tail {
-            ConValue::Ref(v) => Rc::as_ref(v).clone(),
+            ConValue::Ref(v) => v.take(),
             _ => tail.clone(),
         })
     }

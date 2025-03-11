@@ -5,11 +5,10 @@
 //! meaningless to get a pointer to one, and would be undefined behavior to dereference a pointer to
 //! one in any situation.
 
-use std::{borrow::Borrow, rc::Rc};
-
 use super::*;
 use cl_ast::{ast_visitor::Visit, *};
 use cl_structures::intern::interned::Interned;
+use std::{borrow::Borrow, cell::RefCell, rc::Rc};
 /// A work-in-progress tree walk interpreter for Conlang
 pub trait Interpret {
     /// Interprets this thing in the given [`Environment`].
@@ -371,7 +370,12 @@ mod assignment {
         for (name, value) in
             pattern::substitution(pat, value).map_err(|_| Error::PatFailed(pat.clone().into()))?
         {
-            *env.get_mut(*name)? = Some(value);
+            match env.get_mut(*name)? {
+                Some(ConValue::Ref(r)) => {
+                    r.replace(value);
+                }
+                other => *other = Some(value),
+            }
         }
         Ok(())
     }
@@ -800,7 +804,7 @@ impl Interpret for AddrOf {
         match &expr.kind {
             ExprKind::Index(_) => todo!("AddrOf array index"),
             ExprKind::Path(_) => todo!("Path traversal in addrof"),
-            _ => Ok(ConValue::Ref(Rc::new(expr.interpret(env)?))),
+            _ => Ok(ConValue::Ref(Rc::new(RefCell::new(expr.interpret(env)?)))),
         }
     }
 }

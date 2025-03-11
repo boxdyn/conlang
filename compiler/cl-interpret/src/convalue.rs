@@ -9,7 +9,30 @@ use super::{
     function::Function,
     Callable, Environment,
 };
-use std::{collections::HashMap, ops::*, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, ops::*, rc::Rc};
+
+/*
+A Value can be:
+- A Primitive (Empty, isize, etc.)
+- A Record (Array, Tuple, Struct)
+- A Variant (discriminant, Value) pair
+
+array [
+    10,     // 0
+    20,     // 1
+]
+
+tuple (
+    10,     // 0
+    20,     // 1
+)
+
+struct {
+    x: 10,  // x => 0
+    y: 20,  // y => 1
+}
+*/
+
 
 type Integer = isize;
 
@@ -30,7 +53,7 @@ pub enum ConValue {
     /// A string
     String(Sym),
     /// A reference
-    Ref(Rc<ConValue>),
+    Ref(Rc<RefCell<ConValue>>),
     /// An Array
     Array(Box<[ConValue]>),
     /// A tuple
@@ -57,6 +80,16 @@ impl ConValue {
             _ => Err(Error::TypeError)?,
         }
     }
+
+    #[allow(non_snake_case)]
+    pub fn TupleStruct(name: Sym, values: Box<[ConValue]>) -> Self {
+        Self::TupleStruct(Box::new((Sym::to_ref(&name), values)))
+    }
+    #[allow(non_snake_case)]
+    pub fn Struct(name: Sym, values: HashMap<Sym, ConValue>) -> Self {
+        Self::Struct(Box::new((name, values)))
+    }
+
     pub fn index(&self, index: &Self) -> IResult<ConValue> {
         let Self::Int(index) = index else {
             Err(Error::TypeError)?
@@ -333,3 +366,13 @@ impl std::fmt::Display for ConValue {
         }
     }
 }
+
+pub macro cvstruct (
+    $Name:ident {
+        $($member:ident : $expr:expr),*
+    }
+) {{
+    let mut members = HashMap::new();
+    $(members.insert(stringify!($member).into(), ($expr).into());)*
+    ConValue::Struct(Box::new((stringify!($Name).into(), members)))
+}}

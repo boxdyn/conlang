@@ -8,10 +8,7 @@ use crate::{
     error::{Error, IResult},
 };
 use cl_ast::{Literal, Pattern, Sym};
-use std::{
-    collections::{HashMap, VecDeque},
-    rc::Rc,
-};
+use std::collections::{HashMap, VecDeque};
 
 /// Gets the path variables in the given Pattern
 pub fn variables(pat: &Pattern) -> Vec<&Sym> {
@@ -126,7 +123,7 @@ pub fn append_sub<'pat>(
             Ok(())
         }
 
-        (Pattern::Ref(_, pat), ConValue::Ref(r)) => append_sub(sub, pat, Rc::unwrap_or_clone(r)),
+        (Pattern::Ref(_, pat), ConValue::Ref(r)) => append_sub(sub, pat, r.borrow().clone()),
 
         (Pattern::Array(patterns), ConValue::Array(values)) => {
             match rest_binding(sub, patterns, values.into_vec().into())? {
