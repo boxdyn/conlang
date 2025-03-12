@@ -19,6 +19,21 @@ use std::{
 
 type StackFrame = HashMap<Sym, Option<ConValue>>;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Place {
+    Global(Sym),
+    Local(usize),
+}
+
+impl Display for Place {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Place::Global(name) => name.fmt(f),
+            Place::Local(id) => id.fmt(f),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 struct EnvFrame {
     /// The length of the array when this stack frame was constructed
@@ -30,6 +45,7 @@ struct EnvFrame {
 /// Implements a nested lexical scope
 #[derive(Clone, Debug)]
 pub struct Environment {
+    global: HashMap<Sym, Option<ConValue>>,
     values: Vec<Option<ConValue>>,
     frames: Vec<EnvFrame>,
 }
@@ -56,17 +72,9 @@ impl Display for Environment {
 }
 impl Default for Environment {
     fn default() -> Self {
-        let mut values = Vec::new();
-
-        let mut builtins = EnvFrame { name: Some("builtin"), base: 0, binds: HashMap::new() };
-        for bu in Builtins.iter().chain(Math.iter()) {
-            builtins.binds.insert(bu.name(), values.len());
-            values.push(Some(bu.into()));
-        }
-        let globals =
-            EnvFrame { name: Some("globals"), base: values.len(), binds: HashMap::new() };
-
-        Self { values, frames: vec![builtins, globals] }
+        let mut this = Self::no_builtins();
+        this.add_builtins(Builtins).add_builtins(Math);
+        this
     }
 }
 
@@ -76,9 +84,7 @@ impl Environment {
     }
     /// Creates an [Environment] with no [builtins](super::builtin)
     pub fn no_builtins() -> Self {
-        let globals = EnvFrame { name: Some("globals"), base: 0, binds: HashMap::new() };
-
-        Self { values: Vec::new(), frames: vec![Default::default(), globals] }
+        Self { values: Vec::new(), global: HashMap::new(), frames: vec![] }
     }
 
     /// Reflexively evaluates a node
@@ -98,17 +104,12 @@ impl Environment {
     /// # Panics
     ///
     /// Will panic if globals table is non-empty!
-    pub fn add_builtins(&mut self, builtins: &'static [Builtin]) {
-        let Self { values, frames } = self;
-        // Globals must be EMPTY to add builtins
-        assert_eq!(frames[1].binds.len(), 0);
+    pub fn add_builtins(&mut self, builtins: &'static [Builtin]) -> &mut Self {
+        let Self { global, .. } = self;
         for builtin in builtins {
-            if let Some(EnvFrame { name: _, base: _, binds }) = frames.first_mut() {
-                binds.insert(builtin.name(), values.len());
-                values.push(Some(builtin.into()));
-            }
+            global.insert(builtin.name(), Some(builtin.into()));
         }
-        frames[1].base = values.len();
+        self
     }
 
     pub fn push_frame(&mut self, name: &'static str, frame: StackFrame) {
@@ -139,8 +140,8 @@ impl Environment {
     ///
     /// Returns a mutable reference to the variable's record, if it exists.
     pub fn get_mut(&mut self, name: Sym) -> IResult<&mut Option<ConValue>> {
-        let id = self.id_of(name)?;
-        self.values.get_mut(id).ok_or(Error::NotDefined(name))
+        let at = self.id_of(name)?;
+        self.get_id_mut(at).ok_or(Error::NotDefined(name))
     }
 
     /// Resolves a variable immutably.
@@ -148,47 +149,63 @@ impl Environment {
     /// Returns a reference to the variable's contents, if it is defined and initialized.
     pub fn get(&self, name: Sym) -> IResult<ConValue> {
         let id = self.id_of(name)?;
-        match self.values.get(id).ok_or(Error::NotDefined(name))? {
+        let res = match id {
+            Place::Global(name) => self.global.get(&name),
+            Place::Local(id) => self.values.get(id),
+        };
+        match res.ok_or(Error::NotDefined(name))? {
             Some(value) => Ok(value.clone()),
             None => Err(Error::NotInitialized(name)),
         }
     }
 
-    pub(crate) fn get_local(&self, id: Sym) -> IResult<ConValue> {
+    pub(crate) fn get_local(&self, name: Sym) -> IResult<ConValue> {
         for EnvFrame { binds, .. } in self.frames.iter().skip(2).rev() {
-            if let Some(var) = binds.get(&id) {
+            if let Some(var) = binds.get(&name) {
                 if let Some(var) = self.values.get(*var) {
                     return match var {
                         Some(value) => Ok(value.clone()),
-                        None => Err(Error::NotInitialized(id)),
+                        None => Err(Error::NotInitialized(name)),
                     };
                 }
-            }
-        }
-        Err(Error::NotDefined(id))
-    }
-
-    pub fn id_of(&self, name: Sym) -> IResult<usize> {
-        for EnvFrame { binds, .. } in self.frames.iter().rev() {
-            if let Some(id) = binds.get(&name).copied() {
-                return Ok(id);
             }
         }
         Err(Error::NotDefined(name))
     }
 
-    pub fn get_id(&self, id: usize) -> Option<&ConValue> {
-        self.values.get(id)?.as_ref()
+    pub fn id_of(&self, name: Sym) -> IResult<Place> {
+        for EnvFrame { binds, .. } in self.frames.iter().rev() {
+            if let Some(id) = binds.get(&name).copied() {
+                return Ok(Place::Local(id));
+            }
+        }
+        self.global
+            .contains_key(&name)
+            .then_some(Place::Global(name))
+            .ok_or(Error::NotDefined(name))
     }
 
-    pub fn get_id_mut(&mut self, id: usize) -> Option<&mut Option<ConValue>> {
-        self.values.get_mut(id)
+    pub fn get_id(&self, at: Place) -> Option<&ConValue> {
+        let res = match at {
+            Place::Global(name) => self.global.get(&name),
+            Place::Local(id) => self.values.get(id),
+        }?;
+        res.as_ref()
+    }
+
+    pub fn get_id_mut(&mut self, at: Place) -> Option<&mut Option<ConValue>> {
+        match at {
+            Place::Global(name) => self.global.get_mut(&name),
+            Place::Local(id) => self.values.get_mut(id),
+        }
     }
 
     /// Inserts a new [ConValue] into this [Environment]
     pub fn insert(&mut self, k: Sym, v: Option<ConValue>) {
         if self.bind_raw(k, self.values.len()).is_some() {
             self.values.push(v);
+        } else {
+            self.global.insert(k, v);
         }
     }
 
@@ -201,8 +218,8 @@ impl Environment {
         function.lift_upvars(self);
     }
 
-    /// Inserts a temporary/anonymous variable, and returns its address
-    pub fn insert_temporary(&mut self, value: ConValue) -> IResult<usize> {
+    /// Allocates a local variable
+    pub fn stack_alloc(&mut self, value: ConValue) -> IResult<usize> {
         let adr = self.values.len();
         self.values.push(Some(value));
         Ok(adr)

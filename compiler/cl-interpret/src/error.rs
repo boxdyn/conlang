@@ -3,7 +3,7 @@
 use cl_ast::{Pattern, Sym};
 use cl_structures::span::Span;
 
-use super::convalue::ConValue;
+use super::{convalue::ConValue, env::Place};
 
 pub type IResult<T> = Result<T, Error>;
 
@@ -21,7 +21,7 @@ pub enum Error {
     /// Underflowed the stack
     StackUnderflow,
     /// Overflowed the stack
-    StackOverflow(usize),
+    StackOverflow(Place),
     /// Exited the last scope
     ScopeExit,
     /// Type incompatibility

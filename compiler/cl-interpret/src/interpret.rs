@@ -822,8 +822,8 @@ impl Interpret for AddrOf {
             },
             _ => {
                 let value = expr.interpret(env)?;
-                let temp = env.insert_temporary(value)?;
-                Ok(ConValue::Ref(temp))
+                let temp = env.stack_alloc(value)?;
+                Ok(ConValue::Ref(env::Place::Local(temp)))
             }
         }
     }
