@@ -86,7 +86,7 @@ impl ConValue {
 
     #[allow(non_snake_case)]
     pub fn TupleStruct(name: Sym, values: Box<[ConValue]>) -> Self {
-        Self::TupleStruct(Box::new((Sym::to_ref(&name), values)))
+        Self::TupleStruct(Box::new((name.to_ref(), values)))
     }
     #[allow(non_snake_case)]
     pub fn Struct(name: Sym, values: HashMap<Sym, ConValue>) -> Self {

@@ -938,7 +938,7 @@ mod path {
         /// Checks whether this path refers to the sinkhole identifier, `_`
         pub fn is_sinkhole(&self) -> bool {
             if let [PathPart::Ident(id)] = self.parts.as_slice() {
-                if let "_" = Sym::to_ref(id) {
+                if let "_" = id.to_ref(){
                     return true;
                 }
             }

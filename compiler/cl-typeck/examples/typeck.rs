@@ -320,9 +320,9 @@ fn banner() {
 
 /// Interns a [File](cl_ast::File), returning a static reference to it.
 fn interned(file: cl_ast::File) -> &'static cl_ast::File {
-    use cl_structures::intern::{interned::Interned, typed_interner::TypedInterner};
+    use cl_structures::intern::typed_interner::TypedInterner;
     static INTERNER: LazyLock<TypedInterner<'static, cl_ast::File>> =
         LazyLock::new(Default::default);
 
-    Interned::to_ref(&INTERNER.get_or_insert(file))
+    INTERNER.get_or_insert(file).to_ref()
 }

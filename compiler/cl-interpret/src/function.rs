@@ -59,7 +59,7 @@ impl Callable for Function {
             return Err(Error::ArgNumber { want: bind.len(), got: args.len() });
         }
         if self.is_constructor {
-            return Ok(ConValue::TupleStruct(Box::new((Sym::to_ref(name), args.into()))));
+            return Ok(ConValue::TupleStruct(Box::new((name.to_ref(), args.into()))));
         }
         let Some(body) = body else {
             return Err(Error::NotDefined(*name));

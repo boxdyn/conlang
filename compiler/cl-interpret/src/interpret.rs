@@ -89,7 +89,7 @@ impl Interpret for Module {
     // TODO: Keep modules around somehow, rather than putting them on the stack
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self { name, kind } = self;
-        env.push_frame(Interned::to_ref(name), Default::default());
+        env.push_frame(name.to_ref(), Default::default());
         let out = match kind {
             Some(file) => file.interpret(env),
             None => {
@@ -154,7 +154,7 @@ impl Interpret for Enum {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self { name, variants: kind } = self;
         if let Some(variants) = kind {
-            env.push_frame(Sym::to_ref(name), Default::default());
+            env.push_frame(name.to_ref(), Default::default());
             for (idx, Variant { name, kind }) in variants.iter().enumerate() {
                 match kind {
                     VariantKind::Plain => env.insert(*name, Some(ConValue::Int(idx as _))),
@@ -223,7 +223,7 @@ impl Interpret for UseTree {
                     let Ok(ConValue::Module(m)) = env.get(*name) else {
                         Err(Error::TypeError)?
                     };
-                    env.push_frame(Interned::to_ref(name), *m);
+                    env.push_frame(name.to_ref(), *m);
                     let out = get_bindings(tree, env, bindings);
                     env.pop_frame();
                     return out;
