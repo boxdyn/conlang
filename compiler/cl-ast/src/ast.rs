@@ -31,16 +31,6 @@ pub enum Visibility {
     Public,
 }
 
-/// A [Literal]: 0x42, 1e123, 2.4, "Hello"
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Literal {
-    Bool(bool),
-    Char(char),
-    Int(u128),
-    Float(u64),
-    String(String),
-}
-
 /// A list of [Item]s
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct File {
@@ -102,6 +92,13 @@ pub enum ItemKind {
     Use(Use),
 }
 
+/// An ordered collection of [Items](Item)
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Module {
+    pub name: Sym,
+    pub kind: Option<File>,
+}
+
 /// An alias to another [Ty]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Alias {
@@ -124,20 +121,6 @@ pub struct Static {
     pub name: Sym,
     pub ty: Box<Ty>,
     pub init: Box<Expr>,
-}
-
-/// An ordered collection of [Items](Item)
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Module {
-    pub name: Sym,
-    pub kind: ModuleKind,
-}
-
-/// The contents of a [Module], if they're in the same file
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum ModuleKind {
-    Inline(File),
-    Outline,
 }
 
 /// Code, and the interface to that code
@@ -176,15 +159,7 @@ pub struct StructMember {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Enum {
     pub name: Sym,
-    pub kind: EnumKind,
-}
-
-/// An [Enum]'s [Variant]s, if it has a variant block
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum EnumKind {
-    /// Represents an enum with no variants
-    NoVariants,
-    Variants(Vec<Variant>),
+    pub variants: Option<Vec<Variant>>,
 }
 
 /// A single [Enum] variant
@@ -543,6 +518,16 @@ pub enum MemberKind {
 pub struct Index {
     pub head: Box<Expr>,
     pub indices: Vec<Expr>,
+}
+
+/// A [Literal]: 0x42, 1e123, 2.4, "Hello"
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Literal {
+    Bool(bool),
+    Char(char),
+    Int(u128),
+    Float(u64),
+    String(String),
 }
 
 /// A [Struct creation](Structor) expression: [Path] `{` ([Fielder] `,`)* [Fielder]? `}`

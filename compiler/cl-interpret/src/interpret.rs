@@ -91,8 +91,8 @@ impl Interpret for Module {
         let Self { name, kind } = self;
         env.push_frame(Interned::to_ref(name), Default::default());
         let out = match kind {
-            ModuleKind::Inline(file) => file.interpret(env),
-            ModuleKind::Outline => {
+            Some(file) => file.interpret(env),
+            None => {
                 eprintln!("Module {name} specified, but not imported.");
                 Ok(ConValue::Empty)
             }
@@ -152,8 +152,8 @@ impl Interpret for Struct {
 }
 impl Interpret for Enum {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { name, kind } = self;
-        if let EnumKind::Variants(variants) = kind {
+        let Self { name, variants: kind } = self;
+        if let Some(variants) = kind {
             env.push_frame(Sym::to_ref(name), Default::default());
             for (idx, Variant { name, kind }) in variants.iter().enumerate() {
                 match kind {

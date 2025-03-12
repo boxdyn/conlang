@@ -239,14 +239,6 @@ pub mod yamlify {
             y.key("Module").pair("name", name).yaml(kind);
         }
     }
-    impl Yamlify for ModuleKind {
-        fn yaml(&self, y: &mut Yamler) {
-            match self {
-                ModuleKind::Inline(f) => y.yaml(f),
-                ModuleKind::Outline => y,
-            };
-        }
-    }
     impl Yamlify for Function {
         fn yaml(&self, y: &mut Yamler) {
             let Self { name, sign, bind, body } = self;
@@ -280,16 +272,8 @@ pub mod yamlify {
     }
     impl Yamlify for Enum {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { name, kind } = self;
+            let Self { name, variants: kind } = self;
             y.key("Enum").pair("name", name).yaml(kind);
-        }
-    }
-    impl Yamlify for EnumKind {
-        fn yaml(&self, y: &mut Yamler) {
-            match self {
-                EnumKind::NoVariants => y,
-                EnumKind::Variants(v) => y.yaml(v),
-            };
         }
     }
     impl Yamlify for Variant {

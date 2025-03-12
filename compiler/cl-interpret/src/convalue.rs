@@ -3,6 +3,8 @@
 //! The most permanent fix is a temporary one.
 use cl_ast::{format::FmtAdapter, Expr, Sym};
 
+use crate::env::Place;
+
 use super::{
     builtin::Builtin,
     error::{Error, IResult},
@@ -52,9 +54,9 @@ pub enum ConValue {
     /// A string
     String(Sym),
     /// A reference
-    Ref(usize),
+    Ref(Place),
     /// A reference to an array
-    Slice(usize, usize),
+    Slice(Place, usize),
     /// An Array
     Array(Box<[ConValue]>),
     /// A tuple

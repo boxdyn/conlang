@@ -74,10 +74,9 @@ pub trait Visit<'a>: Sized {
     fn visit_module(&mut self, m: &'a Module) {
         let Module { name, kind } = m;
         self.visit_sym(name);
-        self.visit_module_kind(kind);
-    }
-    fn visit_module_kind(&mut self, kind: &'a ModuleKind) {
-        or_visit_module_kind(self, kind)
+        if let Some(f) = kind {
+            self.visit_file(f)
+        }
     }
     fn visit_function(&mut self, f: &'a Function) {
         let Function { name, sign, bind, body } = f;
@@ -103,12 +102,11 @@ pub trait Visit<'a>: Sized {
         self.visit_ty(ty);
     }
     fn visit_enum(&mut self, e: &'a Enum) {
-        let Enum { name, kind } = e;
+        let Enum { name, variants: kind } = e;
         self.visit_sym(name);
-        self.visit_enum_kind(kind);
-    }
-    fn visit_enum_kind(&mut self, kind: &'a EnumKind) {
-        or_visit_enum_kind(self, kind)
+        if let Some(variants) = kind {
+            variants.iter().for_each(|v| self.visit_variant(v))
+        }
     }
     fn visit_variant(&mut self, v: &'a Variant) {
         let Variant { name, kind } = v;
@@ -406,25 +404,11 @@ pub fn or_visit_item_kind<'a, V: Visit<'a>>(visitor: &mut V, kind: &'a ItemKind)
     }
 }
 
-pub fn or_visit_module_kind<'a, V: Visit<'a>>(visitor: &mut V, kind: &'a ModuleKind) {
-    match kind {
-        ModuleKind::Inline(f) => visitor.visit_file(f),
-        ModuleKind::Outline => {}
-    }
-}
-
 pub fn or_visit_struct_kind<'a, V: Visit<'a>>(visitor: &mut V, kind: &'a StructKind) {
     match kind {
         StructKind::Empty => {}
         StructKind::Tuple(ty) => ty.iter().for_each(|t| visitor.visit_ty(t)),
         StructKind::Struct(m) => m.iter().for_each(|m| visitor.visit_struct_member(m)),
-    }
-}
-
-pub fn or_visit_enum_kind<'a, V: Visit<'a>>(visitor: &mut V, kind: &'a EnumKind) {
-    match kind {
-        EnumKind::NoVariants => {}
-        EnumKind::Variants(variants) => variants.iter().for_each(|v| visitor.visit_variant(v)),
     }
 }
 

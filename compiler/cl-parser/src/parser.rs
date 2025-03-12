@@ -414,24 +414,22 @@ impl Parse<'_> for Module {
     fn parse(p: &mut Parser<'_>) -> PResult<Self> {
         p.consume_peeked();
 
-        Ok(Module { name: Sym::parse(p)?, kind: ModuleKind::parse(p)? })
-    }
-}
+        Ok(Module {
+            name: Sym::parse(p)?,
+            kind: {
+                const P: Parsing = Parsing::ModuleKind;
+                let inline = delim(Parse::parse, CURLIES, P);
 
-impl Parse<'_> for ModuleKind {
-    /// Parses the item list associated with a [Module], if present
-    fn parse(p: &mut Parser) -> PResult<ModuleKind> {
-        const P: Parsing = Parsing::ModuleKind;
-        let inline = delim(Parse::parse, CURLIES, P);
-
-        match p.peek_kind(P)? {
-            TokenKind::LCurly => Ok(ModuleKind::Inline(inline(p)?)),
-            TokenKind::Semi => {
-                p.consume_peeked();
-                Ok(ModuleKind::Outline)
-            }
-            got => Err(p.error(ExpectedToken { want: TokenKind::Semi, got }, P)),
-        }
+                match p.peek_kind(P)? {
+                    TokenKind::LCurly => Some(inline(p)?),
+                    TokenKind::Semi => {
+                        p.consume_peeked();
+                        None
+                    }
+                    got => Err(p.error(ExpectedToken { want: TokenKind::Semi, got }, P))?,
+                }
+            },
+        })
     }
 }
 
@@ -555,26 +553,23 @@ impl Parse<'_> for Enum {
     /// Parses an [`enum`](Enum) definition
     fn parse(p: &mut Parser) -> PResult<Enum> {
         p.match_type(TokenKind::Enum, Parsing::Enum)?;
-
-        Ok(Enum { name: Sym::parse(p)?, kind: EnumKind::parse(p)? })
-    }
-}
-
-impl Parse<'_> for EnumKind {
-    /// Parses the various [kinds of Enum](EnumKind)
-    fn parse(p: &mut Parser<'_>) -> PResult<EnumKind> {
-        const P: Parsing = Parsing::EnumKind;
-        Ok(match p.peek_kind(P)? {
-            TokenKind::LCurly => EnumKind::Variants(delim(
-                sep(Variant::parse, TokenKind::Comma, TokenKind::RCurly, P),
-                CURLIES,
-                P,
-            )(p)?),
-            TokenKind::Semi => {
-                p.consume_peeked();
-                EnumKind::NoVariants
-            }
-            t => Err(p.error(Unexpected(t), P))?,
+        Ok(Enum {
+            name: Sym::parse(p)?,
+            variants: {
+                const P: Parsing = Parsing::EnumKind;
+                match p.peek_kind(P)? {
+                    TokenKind::LCurly => Some(delim(
+                        sep(Variant::parse, TokenKind::Comma, TokenKind::RCurly, P),
+                        CURLIES,
+                        P,
+                    )(p)?),
+                    TokenKind::Semi => {
+                        p.consume_peeked();
+                        None
+                    }
+                    t => Err(p.error(Unexpected(t), P))?,
+                }
+            },
         })
     }
 }

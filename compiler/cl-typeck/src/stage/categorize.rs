@@ -99,10 +99,10 @@ fn cat_member(
 }
 
 fn cat_enum<'a>(table: &mut Table<'a>, node: Handle, e: &'a Enum) -> CatResult<()> {
-    let Enum { name: _, kind } = e;
+    let Enum { name: _, variants: kind } = e;
     let kind = match kind {
-        EnumKind::NoVariants => TypeKind::Adt(Adt::Enum(vec![])),
-        EnumKind::Variants(variants) => {
+        None => TypeKind::Adt(Adt::Enum(vec![])),
+        Some(variants) => {
             let mut out_vars = vec![];
             for v in variants {
                 out_vars.push(cat_variant(table, node, v)?)

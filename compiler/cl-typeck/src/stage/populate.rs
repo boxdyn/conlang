@@ -97,7 +97,9 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         self.inner.set_source(Source::Module(m));
         self.set_name(*name);
 
-        self.visit_module_kind(kind);
+        if let Some(file) = kind {
+            self.visit_file(file);
+        }
     }
 
     fn visit_function(&mut self, f: &'a cl_ast::Function) {
@@ -121,11 +123,13 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
     }
 
     fn visit_enum(&mut self, e: &'a cl_ast::Enum) {
-        let cl_ast::Enum { name, kind } = e;
+        let cl_ast::Enum { name, variants } = e;
         self.inner.set_source(Source::Enum(e));
         self.set_name(*name);
 
-        self.visit_enum_kind(kind);
+        if let Some(variants) = variants {
+            variants.iter().for_each(|v| self.visit_variant(v));
+        }
     }
 
     fn visit_impl(&mut self, i: &'a cl_ast::Impl) {

@@ -48,15 +48,15 @@ impl ModuleInliner {
     }
 
     /// Records an [I/O error](std::io::Error) for later
-    fn handle_io_error(&mut self, error: std::io::Error) -> ModuleKind {
+    fn handle_io_error(&mut self, error: std::io::Error) -> Option<File> {
         self.io_errs.push((self.path.clone(), error));
-        ModuleKind::Outline
+        None
     }
 
     /// Records a [parse error](crate::error::Error) for later
-    fn handle_parse_error(&mut self, error: crate::error::Error) -> ModuleKind {
+    fn handle_parse_error(&mut self, error: crate::error::Error) -> Option<File> {
         self.parse_errs.push((self.path.clone(), error));
-        ModuleKind::Outline
+        None
     }
 }
 
@@ -71,11 +71,13 @@ impl Fold for ModuleInliner {
         self.path.pop(); // cd ..
         Module { name, kind }
     }
+}
 
+impl ModuleInliner {
     /// Attempts to read and parse a file for every module in the tree
-    fn fold_module_kind(&mut self, m: ModuleKind) -> ModuleKind {
-        if let ModuleKind::Inline(f) = m {
-            return ModuleKind::Inline(self.fold_file(f));
+    fn fold_module_kind(&mut self, m: Option<File>) -> Option<File> {
+        if let Some(f) = m {
+            return Some(self.fold_file(f));
         }
         // cd path/mod.cl
         self.path.set_extension("cl");
@@ -105,7 +107,7 @@ impl Fold for ModuleInliner {
             Ok(file) => {
                 self.path.set_extension("");
                 // The newly loaded module may need further inlining
-                ModuleKind::Inline(self.fold_file(file))
+                Some(self.fold_file(file))
             }
         }
     }

@@ -93,13 +93,7 @@ pub trait Fold {
     }
     fn fold_module(&mut self, m: Module) -> Module {
         let Module { name, kind } = m;
-        Module { name: self.fold_sym(name), kind: self.fold_module_kind(kind) }
-    }
-    fn fold_module_kind(&mut self, m: ModuleKind) -> ModuleKind {
-        match m {
-            ModuleKind::Inline(f) => ModuleKind::Inline(self.fold_file(f)),
-            ModuleKind::Outline => ModuleKind::Outline,
-        }
+        Module { name: self.fold_sym(name), kind: kind.map(|v| self.fold_file(v)) }
     }
     fn fold_function(&mut self, f: Function) -> Function {
         let Function { name, sign, bind, body } = f;
@@ -136,11 +130,11 @@ pub trait Fold {
         }
     }
     fn fold_enum(&mut self, e: Enum) -> Enum {
-        let Enum { name, kind } = e;
-        Enum { name: self.fold_sym(name), kind: self.fold_enum_kind(kind) }
-    }
-    fn fold_enum_kind(&mut self, kind: EnumKind) -> EnumKind {
-        or_fold_enum_kind(self, kind)
+        let Enum { name, variants: kind } = e;
+        Enum {
+            name: self.fold_sym(name),
+            variants: kind.map(|v| v.into_iter().map(|v| self.fold_variant(v)).collect()),
+        }
     }
     fn fold_variant(&mut self, v: Variant) -> Variant {
         let Variant { name, kind } = v;
@@ -369,10 +363,7 @@ pub trait Fold {
     }
     fn fold_addrof(&mut self, a: AddrOf) -> AddrOf {
         let AddrOf { mutable, expr } = a;
-        AddrOf {
-            mutable: self.fold_mutability(mutable),
-            expr: Box::new(self.fold_expr(*expr)),
-        }
+        AddrOf { mutable: self.fold_mutability(mutable), expr: Box::new(self.fold_expr(*expr)) }
     }
     fn fold_block(&mut self, b: Block) -> Block {
         let Block { stmts } = b;
@@ -466,15 +457,6 @@ pub fn or_fold_item_kind<F: Fold + ?Sized>(folder: &mut F, kind: ItemKind) -> It
 }
 
 #[inline]
-/// Folds a [ModuleKind] in the default way
-pub fn or_fold_module_kind<F: Fold + ?Sized>(folder: &mut F, kind: ModuleKind) -> ModuleKind {
-    match kind {
-        ModuleKind::Inline(f) => ModuleKind::Inline(folder.fold_file(f)),
-        ModuleKind::Outline => ModuleKind::Outline,
-    }
-}
-
-#[inline]
 /// Folds a [StructKind] in the default way
 pub fn or_fold_struct_kind<F: Fold + ?Sized>(folder: &mut F, kind: StructKind) -> StructKind {
     match kind {
@@ -487,17 +469,6 @@ pub fn or_fold_struct_kind<F: Fold + ?Sized>(folder: &mut F, kind: StructKind) -
                 .map(|m| folder.fold_struct_member(m))
                 .collect(),
         ),
-    }
-}
-
-#[inline]
-/// Folds an [EnumKind] in the default way
-pub fn or_fold_enum_kind<F: Fold + ?Sized>(folder: &mut F, kind: EnumKind) -> EnumKind {
-    match kind {
-        EnumKind::NoVariants => EnumKind::NoVariants,
-        EnumKind::Variants(v) => {
-            EnumKind::Variants(v.into_iter().map(|v| folder.fold_variant(v)).collect())
-        }
     }
 }
 

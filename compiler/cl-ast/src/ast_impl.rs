@@ -143,18 +143,13 @@ mod display {
     impl Display for Module {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let Self { name, kind } = self;
-            write!(f, "mod {name}{kind}")
-        }
-    }
-
-    impl Display for ModuleKind {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                ModuleKind::Inline(items) => {
+            write!(f, "mod {name}")?;
+            match kind {
+                Some(items) => {
                     ' '.fmt(f)?;
                     write!(f.delimit(BRACES), "{items}")
                 }
-                ModuleKind::Outline => ';'.fmt(f),
+                None => Ok(())
             }
         }
     }
@@ -218,16 +213,11 @@ mod display {
 
     impl Display for Enum {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { name, kind } = self;
-            write!(f, "enum {name}{kind}")
-        }
-    }
-
-    impl Display for EnumKind {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                EnumKind::NoVariants => ';'.fmt(f),
-                EnumKind::Variants(v) => separate(v, ",\n")(f.delimit(SPACED_BRACES)),
+            let Self { name, variants: kind } = self;
+            write!(f, "enum {name}")?;
+            match kind {
+                Some(v) =>  separate(v, ",\n")(f.delimit(SPACED_BRACES)),
+                None => ";".fmt(f),
             }
         }
     }
@@ -794,9 +784,6 @@ mod convert {
         impl From for StructKind {
             Vec<Ty> => StructKind::Tuple,
             // TODO: Struct members in struct
-        }
-        impl From for EnumKind {
-            Vec<Variant> => EnumKind::Variants,
         }
         impl From for VariantKind {
             u128 => VariantKind::CLike,
