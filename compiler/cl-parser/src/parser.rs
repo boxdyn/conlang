@@ -496,7 +496,7 @@ impl Parse<'_> for TypedParam {
             if p.match_type(TokenKind::Colon, Parsing::Param).is_ok() {
                 TyKind::parse(p)?
             } else {
-                TyKind::Path(Path::from(Sym::from("_")))
+                TyKind::Infer
             },
         ))
     }
@@ -742,7 +742,14 @@ impl Parse<'_> for TyKind {
                 }
             }
             TokenKind::Fn => TyFn::parse(p)?.into(),
-            path_like!() => Path::parse(p)?.into(),
+            path_like!() => {
+                let path = Path::parse(p)?;
+                if path.is_sinkhole() {
+                    TyKind::Infer
+                } else {
+                    TyKind::Path(path)
+                }
+            }
             t => Err(p.error(Unexpected(t), P))?,
         };
 

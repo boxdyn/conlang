@@ -221,6 +221,7 @@ pub struct Ty {
 pub enum TyKind {
     Never,
     Empty,
+    Infer,
     Path(Path),
     Array(TyArray),
     Slice(TySlice),

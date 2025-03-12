@@ -455,6 +455,7 @@ pub fn or_visit_ty_kind<'a, V: Visit<'a>>(visitor: &mut V, kind: &'a TyKind) {
     match kind {
         TyKind::Never => {}
         TyKind::Empty => {}
+        TyKind::Infer => {}
         TyKind::Path(p) => visitor.visit_path(p),
         TyKind::Array(t) => visitor.visit_ty_array(t),
         TyKind::Slice(t) => visitor.visit_ty_slice(t),

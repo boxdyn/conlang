@@ -149,7 +149,7 @@ mod display {
                     ' '.fmt(f)?;
                     write!(f.delimit(BRACES), "{items}")
                 }
-                None => Ok(())
+                None => Ok(()),
             }
         }
     }
@@ -216,7 +216,7 @@ mod display {
             let Self { name, variants: kind } = self;
             write!(f, "enum {name}")?;
             match kind {
-                Some(v) =>  separate(v, ",\n")(f.delimit(SPACED_BRACES)),
+                Some(v) => separate(v, ",\n")(f.delimit(SPACED_BRACES)),
                 None => ";".fmt(f),
             }
         }
@@ -290,6 +290,7 @@ mod display {
             match self {
                 TyKind::Never => "!".fmt(f),
                 TyKind::Empty => "()".fmt(f),
+                TyKind::Infer => "_".fmt(f),
                 TyKind::Path(v) => v.fmt(f),
                 TyKind::Array(v) => v.fmt(f),
                 TyKind::Slice(v) => v.fmt(f),

@@ -7,7 +7,6 @@
 
 use super::*;
 use cl_ast::{ast_visitor::Visit, *};
-use cl_structures::intern::interned::Interned;
 use std::borrow::Borrow;
 /// A work-in-progress tree walk interpreter for Conlang
 pub trait Interpret {

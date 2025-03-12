@@ -523,6 +523,7 @@ pub fn or_fold_ty_kind<F: Fold + ?Sized>(folder: &mut F, kind: TyKind) -> TyKind
     match kind {
         TyKind::Never => TyKind::Never,
         TyKind::Empty => TyKind::Empty,
+        TyKind::Infer => TyKind::Infer,
         TyKind::Path(p) => TyKind::Path(folder.fold_path(p)),
         TyKind::Array(a) => TyKind::Array(folder.fold_ty_array(a)),
         TyKind::Slice(s) => TyKind::Slice(folder.fold_ty_slice(s)),

@@ -637,6 +637,7 @@ pub mod yamlify {
             match self {
                 TyKind::Never => y.value("Never"),
                 TyKind::Empty => y.value("Empty"),
+                TyKind::Infer => y.value("_"),
                 TyKind::Path(t) => y.yaml(t),
                 TyKind::Tuple(t) => y.yaml(t),
                 TyKind::Ref(t) => y.yaml(t),
