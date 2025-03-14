@@ -61,8 +61,10 @@ macro_rules! make_index {($($(#[$meta:meta])* $name:ident),*$(,)?) => {$(
 )*}}
 
 use self::iter::MapIndexIter;
-use core::slice::GetManyMutError;
-use std::ops::{Index, IndexMut};
+use std::{
+    ops::{Index, IndexMut},
+    slice::GetDisjointMutError,
+};
 
 pub use make_index;
 
@@ -103,11 +105,11 @@ impl<V, K: MapIndex> IndexMap<K, V> {
     /// Returns mutable references to many indices at once.
     ///
     /// Returns an error if any index is out of bounds, or if the same index was passed twice.
-    pub fn get_many_mut<const N: usize>(
+    pub fn get_disjoint_mut<const N: usize>(
         &mut self,
         indices: [K; N],
-    ) -> Result<[&mut V; N], GetManyMutError> {
-        self.map.get_many_mut(indices.map(|id| id.get()))
+    ) -> Result<[&mut V; N], GetDisjointMutError> {
+        self.map.get_disjoint_mut(indices.map(|id| id.get()))
     }
 
     /// Returns an iterator over the IndexMap.
