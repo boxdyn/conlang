@@ -176,9 +176,9 @@ pub fn append_sub<'pat>(
             Ok(())
         }
 
-        (pat, value) => {
-            eprintln!("Could not match pattern `{pat}` with value `{value}`!");
-            Ok(())
+        _ => {
+            // eprintln!("Could not match pattern `{pat}` with value `{value}`!");
+            Err(Error::NotAssignable)
         }
     }
 }
