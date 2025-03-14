@@ -28,6 +28,7 @@ impl<'a> Repline<'a, std::io::Stdin> {
 impl<'a, R: Read> Repline<'a, R> {
     /// Constructs a [Repline] with the given [Reader](Read), color, begin, and again prompts.
     pub fn with_input(input: R, color: &'a str, begin: &'a str, again: &'a str) -> Self {
+        #[allow(clippy::unbuffered_bytes)]
         Self {
             input: Chars(Flatten(input.bytes())),
             history: Default::default(),
