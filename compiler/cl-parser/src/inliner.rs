@@ -63,13 +63,13 @@ impl ModuleInliner {
 impl Fold for ModuleInliner {
     /// Traverses down the module tree, entering ever nested directories
     fn fold_module(&mut self, m: Module) -> Module {
-        let Module { name, kind } = m;
+        let Module { name, file } = m;
         self.path.push(&*name); // cd ./name
 
-        let kind = self.fold_module_kind(kind);
+        let file = self.fold_module_kind(file);
 
         self.path.pop(); // cd ..
-        Module { name, kind }
+        Module { name, file }
     }
 }
 

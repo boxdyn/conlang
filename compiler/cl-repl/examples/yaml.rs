@@ -193,7 +193,7 @@ pub mod yamlify {
 
     impl Yamlify for Item {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { extents: _, attrs, vis, kind } = self;
+            let Self { span: _, attrs, vis, kind } = self;
             y.key("Item").yaml(attrs).yaml(vis).yaml(kind);
         }
     }
@@ -214,8 +214,8 @@ pub mod yamlify {
     }
     impl Yamlify for Alias {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { to, from } = self;
-            y.key("Alias").pair("to", to).pair("from", from);
+            let Self { name, from } = self;
+            y.key("Alias").pair("to", name).pair("from", from);
         }
     }
     impl Yamlify for Const {
@@ -235,8 +235,8 @@ pub mod yamlify {
     }
     impl Yamlify for Module {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { name, kind } = self;
-            y.key("Module").pair("name", name).yaml(kind);
+            let Self { name, file } = self;
+            y.key("Module").pair("name", name).yaml(file);
         }
     }
     impl Yamlify for Function {
@@ -333,7 +333,7 @@ pub mod yamlify {
     }
     impl Yamlify for Stmt {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { extents: _, kind, semi } = self;
+            let Self { span: _, kind, semi } = self;
             y.key("Stmt").yaml(kind).yaml(semi);
         }
     }
@@ -355,7 +355,7 @@ pub mod yamlify {
     }
     impl Yamlify for Expr {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { extents: _, kind } = self;
+            let Self { span: _, kind } = self;
             y.yaml(kind);
         }
     }
@@ -628,7 +628,7 @@ pub mod yamlify {
     }
     impl Yamlify for Ty {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { extents: _, kind } = self;
+            let Self { span: _, kind } = self;
             y.key("Ty").yaml(kind);
         }
     }

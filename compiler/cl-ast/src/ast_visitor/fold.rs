@@ -13,8 +13,8 @@ use cl_structures::span::Span;
 ///
 /// For all other nodes, traversal is *explicit*.
 pub trait Fold {
-    fn fold_span(&mut self, extents: Span) -> Span {
-        extents
+    fn fold_span(&mut self, span: Span) -> Span {
+        span
     }
     fn fold_mutability(&mut self, mutability: Mutability) -> Mutability {
         mutability
@@ -59,9 +59,9 @@ pub trait Fold {
         or_fold_meta_kind(self, kind)
     }
     fn fold_item(&mut self, i: Item) -> Item {
-        let Item { extents, attrs, vis, kind } = i;
+        let Item { span, attrs, vis, kind } = i;
         Item {
-            extents: self.fold_span(extents),
+            span: self.fold_span(span),
             attrs: self.fold_attrs(attrs),
             vis: self.fold_visibility(vis),
             kind: self.fold_item_kind(kind),
@@ -71,8 +71,8 @@ pub trait Fold {
         or_fold_item_kind(self, kind)
     }
     fn fold_alias(&mut self, a: Alias) -> Alias {
-        let Alias { to, from } = a;
-        Alias { to: self.fold_sym(to), from: from.map(|from| Box::new(self.fold_ty(*from))) }
+        let Alias { name, from } = a;
+        Alias { name: self.fold_sym(name), from: from.map(|from| Box::new(self.fold_ty(*from))) }
     }
     fn fold_const(&mut self, c: Const) -> Const {
         let Const { name, ty, init } = c;
@@ -92,8 +92,8 @@ pub trait Fold {
         }
     }
     fn fold_module(&mut self, m: Module) -> Module {
-        let Module { name, kind } = m;
-        Module { name: self.fold_sym(name), kind: kind.map(|v| self.fold_file(v)) }
+        let Module { name, file } = m;
+        Module { name: self.fold_sym(name), file: file.map(|v| self.fold_file(v)) }
     }
     fn fold_function(&mut self, f: Function) -> Function {
         let Function { name, sign, bind, body } = f;
@@ -159,8 +159,8 @@ pub trait Fold {
         or_fold_use_tree(self, tree)
     }
     fn fold_ty(&mut self, t: Ty) -> Ty {
-        let Ty { extents, kind } = t;
-        Ty { extents: self.fold_span(extents), kind: self.fold_ty_kind(kind) }
+        let Ty { span, kind } = t;
+        Ty { span: self.fold_span(span), kind: self.fold_ty_kind(kind) }
     }
     fn fold_ty_kind(&mut self, kind: TyKind) -> TyKind {
         or_fold_ty_kind(self, kind)
@@ -206,9 +206,9 @@ pub trait Fold {
         }
     }
     fn fold_stmt(&mut self, s: Stmt) -> Stmt {
-        let Stmt { extents, kind, semi } = s;
+        let Stmt { span, kind, semi } = s;
         Stmt {
-            extents: self.fold_span(extents),
+            span: self.fold_span(span),
             kind: self.fold_stmt_kind(kind),
             semi: self.fold_semi(semi),
         }
@@ -220,8 +220,8 @@ pub trait Fold {
         s
     }
     fn fold_expr(&mut self, e: Expr) -> Expr {
-        let Expr { extents, kind } = e;
-        Expr { extents: self.fold_span(extents), kind: self.fold_expr_kind(kind) }
+        let Expr { span, kind } = e;
+        Expr { span: self.fold_span(span), kind: self.fold_expr_kind(kind) }
     }
     fn fold_expr_kind(&mut self, kind: ExprKind) -> ExprKind {
         or_fold_expr_kind(self, kind)

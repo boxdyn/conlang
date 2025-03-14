@@ -41,7 +41,7 @@ pub fn expr(p: &mut Parser, power: u8) -> PResult<Expr> {
                 Unary { kind, tail: expr(p, after)?.into() }.into()
             }
         },
-        extents: Span(start, p.loc()),
+        span: Span(start, p.loc()),
     };
 
     fn from_postfix(op: TokenKind) -> Option<Precedence> {
@@ -80,10 +80,7 @@ pub fn expr(p: &mut Parser, power: u8) -> PResult<Expr> {
                             kind: BinaryKind::Call,
                             parts: (
                                 head,
-                                Expr {
-                                    kind: Tuple { exprs }.into(),
-                                    extents: Span(start, p.loc()),
-                                },
+                                Expr { kind: Tuple { exprs }.into(), span: Span(start, p.loc()) },
                             )
                                 .into(),
                         }
@@ -105,7 +102,7 @@ pub fn expr(p: &mut Parser, power: u8) -> PResult<Expr> {
                     }
                     _ => Err(p.error(Unexpected(op), parsing))?,
                 },
-                extents: Span(start, p.loc()),
+                span: Span(start, p.loc()),
             };
             continue;
         }
@@ -120,7 +117,7 @@ pub fn expr(p: &mut Parser, power: u8) -> PResult<Expr> {
             let tail = expr(p, after)?;
             head = Expr {
                 kind: Binary { kind, parts: (head, tail).into() }.into(),
-                extents: Span(start, p.loc()),
+                span: Span(start, p.loc()),
             };
             continue;
         }
@@ -135,7 +132,7 @@ pub fn expr(p: &mut Parser, power: u8) -> PResult<Expr> {
             let tail = expr(p, after)?;
             head = Expr {
                 kind: Modify { kind, parts: (head, tail).into() }.into(),
-                extents: Span(start, p.loc()),
+                span: Span(start, p.loc()),
             };
             continue;
         }
@@ -152,7 +149,7 @@ pub fn expr(p: &mut Parser, power: u8) -> PResult<Expr> {
             let tail = expr(p, after)?;
             head = Expr {
                 kind: Assign { parts: (head, tail).into() }.into(),
-                extents: Span(start, p.loc()),
+                span: Span(start, p.loc()),
             };
 
             continue;
@@ -166,8 +163,7 @@ pub fn expr(p: &mut Parser, power: u8) -> PResult<Expr> {
             p.consume_peeked();
 
             let ty = Ty::parse(p)?;
-            head =
-                Expr { kind: Cast { head: head.into(), ty }.into(), extents: Span(start, p.loc()) };
+            head = Expr { kind: Cast { head: head.into(), ty }.into(), span: Span(start, p.loc()) };
 
             continue;
         }

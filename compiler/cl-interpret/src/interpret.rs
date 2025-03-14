@@ -87,9 +87,9 @@ impl Interpret for Static {
 impl Interpret for Module {
     // TODO: Keep modules around somehow, rather than putting them on the stack
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { name, kind } = self;
+        let Self { name, file } = self;
         env.push_frame(name.to_ref(), Default::default());
-        let out = match kind {
+        let out = match file {
             Some(file) => file.interpret(env),
             None => {
                 eprintln!("Module {name} specified, but not imported.");
@@ -128,7 +128,7 @@ impl Interpret for Struct {
                         .into(),
                         rety: Some(
                             Ty {
-                                extents: cl_structures::span::Span::dummy(),
+                                span: cl_structures::span::Span::dummy(),
                                 kind: TyKind::Path(Path::from(*name)),
                             }
                             .into(),
@@ -172,7 +172,7 @@ impl Interpret for Enum {
 }
 impl Interpret for Impl {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { target: ImplKind::Type(Ty { extents, kind: TyKind::Path(name) }), body } = self
+        let Self { target: ImplKind::Type(Ty { span, kind: TyKind::Path(name) }), body } = self
         else {
             eprintln!("TODO: impl X for Ty");
             return Ok(ConValue::Empty);
@@ -184,7 +184,7 @@ impl Interpret for Impl {
             .pop_frame()
             .expect("Environment frames must be balanced");
         match assignment::addrof_path(env, name.parts.as_slice())
-            .map_err(|err| err.with_span(*extents))?
+            .map_err(|err| err.with_span(*span))?
         {
             Some(ConValue::Module(m)) => m.extend(frame),
             Some(other) => eprintln!("TODO: impl for {other}"),
@@ -263,13 +263,13 @@ impl Interpret for UseTree {
 
 impl Interpret for Stmt {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { extents, kind, semi } = self;
+        let Self { span, kind, semi } = self;
         let out = match kind {
             StmtKind::Empty => Ok(ConValue::Empty),
             StmtKind::Item(stmt) => stmt.interpret(env),
             StmtKind::Expr(stmt) => stmt.interpret(env),
         }
-        .map_err(|err| err.with_span(*extents))?;
+        .map_err(|err| err.with_span(*span))?;
         Ok(match semi {
             Semi::Terminated => ConValue::Empty,
             Semi::Unterminated => out,
@@ -280,8 +280,8 @@ impl Interpret for Stmt {
 impl Interpret for Expr {
     #[inline]
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { extents, kind } = self;
-        kind.interpret(env).map_err(|err| err.with_span(*extents))
+        let Self { span, kind } = self;
+        kind.interpret(env).map_err(|err| err.with_span(*span))
     }
 }
 

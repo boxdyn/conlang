@@ -320,7 +320,7 @@ impl Parse<'_> for Item {
             attrs: Attrs::parse(p)?,
             vis: Visibility::parse(p)?,
             kind: ItemKind::parse(p)?,
-            extents: Span(start, p.loc()),
+            span: Span(start, p.loc()),
         })
     }
 }
@@ -352,7 +352,7 @@ impl Parse<'_> for Alias {
         p.consume_peeked();
 
         let out = Ok(Alias {
-            to: Sym::parse(p)?,
+            name: Sym::parse(p)?,
             from: if p.match_type(TokenKind::Eq, P).is_ok() {
                 Some(Ty::parse(p)?.into())
             } else {
@@ -416,7 +416,7 @@ impl Parse<'_> for Module {
 
         Ok(Module {
             name: Sym::parse(p)?,
-            kind: {
+            file: {
                 const P: Parsing = Parsing::ModuleKind;
                 let inline = delim(Parse::parse, CURLIES, P);
 
@@ -636,7 +636,7 @@ impl Parse<'_> for ImplKind {
             Err(Error {
                 reason: ExpectedParsing { want: Parsing::Path },
                 while_parsing: P,
-                loc: target.extents.head,
+                loc: target.span.head,
             })?
         }
     }
@@ -696,7 +696,7 @@ impl Parse<'_> for Ty {
     /// See also: [TyKind::parse]
     fn parse(p: &mut Parser<'_>) -> PResult<Self> {
         let start = p.loc();
-        Ok(Ty { kind: TyKind::parse(p)?, extents: Span(start, p.loc()) })
+        Ok(Ty { kind: TyKind::parse(p)?, span: Span(start, p.loc()) })
     }
 }
 
@@ -868,7 +868,7 @@ impl Parse<'_> for Stmt {
                 Ok(_) => Semi::Terminated,
                 _ => Semi::Unterminated,
             },
-            extents: Span(start, p.loc()),
+            span: Span(start, p.loc()),
         })
     }
 }
@@ -984,7 +984,7 @@ impl Parse<'_> for AddrOf {
                             mutable: Mutability::parse(p)?,
                             expr: Expr::parse(p)?.into(),
                         }),
-                        extents: Span(start, p.loc()),
+                        span: Span(start, p.loc()),
                     }
                     .into(),
                 })

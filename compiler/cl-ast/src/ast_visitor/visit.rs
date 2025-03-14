@@ -13,7 +13,7 @@ use cl_structures::span::Span;
 ///
 /// For all other nodes, traversal is *explicit*.
 pub trait Visit<'a>: Sized {
-    fn visit_span(&mut self, _extents: &'a Span) {}
+    fn visit_span(&mut self, _span: &'a Span) {}
     fn visit_mutability(&mut self, _mutable: &'a Mutability) {}
     fn visit_visibility(&mut self, _vis: &'a Visibility) {}
     fn visit_sym(&mut self, _name: &'a Sym) {}
@@ -42,8 +42,8 @@ pub trait Visit<'a>: Sized {
         or_visit_meta_kind(self, kind)
     }
     fn visit_item(&mut self, i: &'a Item) {
-        let Item { extents, attrs, vis, kind } = i;
-        self.visit_span(extents);
+        let Item { span, attrs, vis, kind } = i;
+        self.visit_span(span);
         self.visit_attrs(attrs);
         self.visit_visibility(vis);
         self.visit_item_kind(kind);
@@ -52,8 +52,8 @@ pub trait Visit<'a>: Sized {
         or_visit_item_kind(self, kind)
     }
     fn visit_alias(&mut self, a: &'a Alias) {
-        let Alias { to, from } = a;
-        self.visit_sym(to);
+        let Alias { name, from } = a;
+        self.visit_sym(name);
         if let Some(t) = from {
             self.visit_ty(t)
         }
@@ -72,9 +72,9 @@ pub trait Visit<'a>: Sized {
         self.visit_expr(init);
     }
     fn visit_module(&mut self, m: &'a Module) {
-        let Module { name, kind } = m;
+        let Module { name, file } = m;
         self.visit_sym(name);
-        if let Some(f) = kind {
+        if let Some(f) = file {
             self.visit_file(f)
         }
     }
@@ -132,8 +132,8 @@ pub trait Visit<'a>: Sized {
         or_visit_use_tree(self, tree)
     }
     fn visit_ty(&mut self, t: &'a Ty) {
-        let Ty { extents, kind } = t;
-        self.visit_span(extents);
+        let Ty { span, kind } = t;
+        self.visit_span(span);
         self.visit_ty_kind(kind);
     }
     fn visit_ty_kind(&mut self, kind: &'a TyKind) {
@@ -176,8 +176,8 @@ pub trait Visit<'a>: Sized {
         }
     }
     fn visit_stmt(&mut self, s: &'a Stmt) {
-        let Stmt { extents, kind, semi } = s;
-        self.visit_span(extents);
+        let Stmt { span, kind, semi } = s;
+        self.visit_span(span);
         self.visit_stmt_kind(kind);
         self.visit_semi(semi);
     }
@@ -186,8 +186,8 @@ pub trait Visit<'a>: Sized {
     }
     fn visit_semi(&mut self, _s: &'a Semi) {}
     fn visit_expr(&mut self, e: &'a Expr) {
-        let Expr { extents, kind } = e;
-        self.visit_span(extents);
+        let Expr { span, kind } = e;
+        self.visit_span(span);
         self.visit_expr_kind(kind)
     }
     fn visit_expr_kind(&mut self, e: &'a ExprKind) {

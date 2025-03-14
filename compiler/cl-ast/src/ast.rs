@@ -62,7 +62,7 @@ pub enum MetaKind {
 /// Anything that can appear at the top level of a [File]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Item {
-    pub extents: Span,
+    pub span: Span,
     pub attrs: Attrs,
     pub vis: Visibility,
     pub kind: ItemKind,
@@ -96,13 +96,13 @@ pub enum ItemKind {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Module {
     pub name: Sym,
-    pub kind: Option<File>,
+    pub file: Option<File>,
 }
 
 /// An alias to another [Ty]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Alias {
-    pub to: Sym,
+    pub name: Sym,
     pub from: Option<Box<Ty>>,
 }
 
@@ -212,7 +212,7 @@ pub enum UseTree {
 /// A type expression
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Ty {
-    pub extents: Span,
+    pub span: Span,
     pub kind: TyKind,
 }
 
@@ -283,7 +283,7 @@ pub enum PathPart {
 /// An abstract statement, and associated metadata
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Stmt {
-    pub extents: Span,
+    pub span: Span,
     pub kind: StmtKind,
     pub semi: Semi,
 }
@@ -306,7 +306,7 @@ pub enum Semi {
 /// An expression, the beating heart of the language
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Expr {
-    pub extents: Span,
+    pub span: Span,
     pub kind: ExprKind,
 }
 

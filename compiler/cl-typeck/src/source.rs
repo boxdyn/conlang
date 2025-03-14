@@ -25,7 +25,7 @@ impl Source<'_> {
         match self {
             Source::Root => None,
             Source::Module(v) => Some(v.name),
-            Source::Alias(v) => Some(v.to),
+            Source::Alias(v) => Some(v.name),
             Source::Enum(v) => Some(v.name),
             Source::Variant(v) => Some(v.name),
             Source::Struct(v) => Some(v.name),

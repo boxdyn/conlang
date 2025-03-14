@@ -93,7 +93,7 @@ mod display {
 
     impl Display for Item {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { extents: _, attrs, vis, kind } = self;
+            let Self { span: _, attrs, vis, kind } = self;
             attrs.fmt(f)?;
             vis.fmt(f)?;
             kind.fmt(f)
@@ -118,10 +118,10 @@ mod display {
 
     impl Display for Alias {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { to, from } = self;
+            let Self { name, from } = self;
             match from {
-                Some(from) => write!(f, "type {to} = {from};"),
-                None => write!(f, "type {to};"),
+                Some(from) => write!(f, "type {name} = {from};"),
+                None => write!(f, "type {name};"),
             }
         }
     }
@@ -142,9 +142,9 @@ mod display {
 
     impl Display for Module {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Self { name, kind } = self;
+            let Self { name, file } = self;
             write!(f, "mod {name}")?;
-            match kind {
+            match file {
                 Some(items) => {
                     ' '.fmt(f)?;
                     write!(f.delimit(BRACES), "{items}")
@@ -365,7 +365,7 @@ mod display {
 
     impl Display for Stmt {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let Stmt { extents: _, kind, semi } = self;
+            let Stmt { span: _, kind, semi } = self;
             write!(f, "{kind}{semi}")
         }
     }
@@ -939,7 +939,7 @@ mod path {
         /// Checks whether this path refers to the sinkhole identifier, `_`
         pub fn is_sinkhole(&self) -> bool {
             if let [PathPart::Ident(id)] = self.parts.as_slice() {
-                if let "_" = id.to_ref(){
+                if let "_" = id.to_ref() {
                     return true;
                 }
             }

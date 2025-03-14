@@ -23,14 +23,14 @@ impl Default for NormalizePaths {
 
 impl Fold for NormalizePaths {
     fn fold_module(&mut self, m: Module) -> Module {
-        let Module { name, kind } = m;
+        let Module { name, file } = m;
         self.path.push(PathPart::Ident(name));
-        
+
         let name = self.fold_sym(name);
-        let kind = kind.map(|f| self.fold_file(f));
+        let file = file.map(|f| self.fold_file(f));
 
         self.path.pop();
-        Module { name, kind }
+        Module { name, file }
     }
 
     fn fold_path(&mut self, p: Path) -> Path {

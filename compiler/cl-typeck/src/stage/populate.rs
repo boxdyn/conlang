@@ -33,7 +33,7 @@ impl<'t, 'a> Populator<'t, 'a> {
 
 impl<'a> Visit<'a> for Populator<'_, 'a> {
     fn visit_item(&mut self, i: &'a cl_ast::Item) {
-        let cl_ast::Item { extents, attrs, vis, kind } = i;
+        let cl_ast::Item { span, attrs, vis, kind } = i;
         // TODO: this, better, better.
         let entry_kind = match kind {
             ItemKind::Alias(_) => NodeKind::Type,
@@ -50,10 +50,10 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         };
 
         let mut entry = self.new_entry(entry_kind);
-        entry.inner.set_span(*extents);
+        entry.inner.set_span(*span);
         entry.inner.set_meta(&attrs.meta);
 
-        entry.visit_span(extents);
+        entry.visit_span(span);
         entry.visit_attrs(attrs);
         entry.visit_visibility(vis);
         entry.visit_item_kind(kind);
@@ -64,9 +64,9 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
     }
 
     fn visit_alias(&mut self, a: &'a cl_ast::Alias) {
-        let cl_ast::Alias { to, from } = a;
+        let cl_ast::Alias { name, from } = a;
         self.inner.set_source(Source::Alias(a));
-        self.set_name(*to);
+        self.set_name(*name);
 
         if let Some(t) = from {
             self.visit_ty(t)
@@ -93,11 +93,11 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
     }
 
     fn visit_module(&mut self, m: &'a cl_ast::Module) {
-        let cl_ast::Module { name, kind } = m;
+        let cl_ast::Module { name, file } = m;
         self.inner.set_source(Source::Module(m));
         self.set_name(*name);
 
-        if let Some(file) = kind {
+        if let Some(file) = file {
             self.visit_file(file);
         }
     }
