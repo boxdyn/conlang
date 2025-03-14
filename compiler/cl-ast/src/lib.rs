@@ -14,6 +14,7 @@
 #![feature(decl_macro)]
 
 pub use ast::*;
+pub use ast_impl::weight_of::WeightOf;
 
 pub mod ast;
 pub mod ast_impl;
