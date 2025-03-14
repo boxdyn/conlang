@@ -1,5 +1,5 @@
 //! Utils for [Path]
-use crate::{ast::Path, PathPart, Sym};
+use crate::{PathPart, Sym, ast::Path};
 
 impl Path {
     /// Appends a [PathPart] to this [Path]
@@ -18,6 +18,13 @@ impl Path {
         } else {
             self.parts.extend(other.parts.iter().cloned());
             self
+        }
+    }
+
+    pub fn as_sym(&self) -> Option<Sym> {
+        match self.parts.as_slice() {
+            [PathPart::Ident(name)] => Some(*name),
+            _ => None,
         }
     }
 

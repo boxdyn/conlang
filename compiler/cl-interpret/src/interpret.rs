@@ -408,7 +408,14 @@ mod assignment {
             ExprKind::Member(member) => addrof_member(env, member),
             ExprKind::Index(index) => addrof_index(env, index),
             ExprKind::Group(Group { expr }) => addrof(env, expr),
-            ExprKind::AddrOf(AddrOf { mutable: Mutability::Mut, expr }) => addrof(env, expr),
+            ExprKind::Unary(Unary { kind: UnaryKind::Deref, tail }) => match *addrof(env, tail)? {
+                ConValue::Ref(place) => env
+                    .get_id_mut(place)
+                    .ok_or(Error::NotIndexable)?
+                    .as_mut()
+                    .ok_or(Error::NotAssignable),
+                _ => Err(Error::TypeError),
+            },
             _ => Err(Error::TypeError),
         }
     }
@@ -432,13 +439,9 @@ mod assignment {
         member: &Member,
     ) -> IResult<&'e mut ConValue> {
         let Member { head, kind } = member;
-        let ExprKind::Path(path) = &head.kind else {
-            return Err(Error::TypeError);
-        };
-        let slot = addrof_path(env, &path.parts)?
-            .as_mut()
-            .ok_or(Error::NotAssignable)?;
-        project_memberkind(slot, kind)
+
+        let head = addrof(env, head)?;
+        project_memberkind(head, kind)
     }
 
     fn addrof_index<'e>(env: &'e mut Environment, index: &Index) -> IResult<&'e mut ConValue> {
@@ -447,6 +450,7 @@ mod assignment {
             .iter()
             .map(|index| index.interpret(env))
             .collect::<IResult<Vec<_>>>()?;
+
         let mut head = addrof(env, head)?;
         for index in indices {
             head = project_index(head, &index)?;
@@ -657,7 +661,7 @@ fn cast(env: &Environment, value: ConValue, ty: Sym) -> IResult<ConValue> {
                 env,
                 env.get_id(v).cloned().ok_or(Error::StackUnderflow)?,
                 ty,
-            )
+            );
         }
         // TODO: This, better
         ConValue::Float(_) if ty.starts_with('f') => return Ok(value),
@@ -702,11 +706,19 @@ impl Interpret for Cast {
 impl Interpret for Member {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Member { head, kind } = self;
-        if let ExprKind::Path(_) = &head.kind {
-            return assignment::addrof_member(env, self).cloned();
+        // Attempt member access projection (fast path)
+        if let Ok(member) = assignment::addrof_member(env, self) {
+            return Ok(member.clone());
         }
-        let head = head.interpret(env)?;
-        match (head, kind) {
+        // Evaluate if this can be Self'd
+        let value = match (&head.kind, kind) {
+            (ExprKind::Path(p), MemberKind::Call(..)) => {
+                p.as_sym().map(|name| Ok(ConValue::Ref(env.id_of(name)?))) // "borrow" it
+            }
+            _ => None,
+        };
+        // Perform alternate member access
+        match (value.unwrap_or_else(|| head.interpret(env))?, kind) {
             (ConValue::Struct(parts), MemberKind::Call(name, args))
                 if parts.1.contains_key(name) =>
             {
