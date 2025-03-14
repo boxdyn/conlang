@@ -16,7 +16,7 @@ resolver = "2"
 repository = "https://github.com/boxdyn/conlang"
 version = "0.0.9"
 authors = ["John <j@soft.fish>"]
-edition = "2021"
+edition = "2024"
 license = "MIT"
 publish = ["soft-fish"]
 

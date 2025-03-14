@@ -120,7 +120,7 @@ impl<'a> Table<'a> {
         self.impls.push(item);
     }
 
-    pub fn handle_iter(&mut self) -> impl Iterator<Item = Handle> {
+    pub fn handle_iter(&mut self) -> impl Iterator<Item = Handle> + use<> {
         self.kinds.keys()
     }
 
