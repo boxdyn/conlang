@@ -71,7 +71,7 @@ mod macros {
     ///
     /// Returns a `Result<`[`Block`]`, ParseError>`
     pub macro block($($t:tt)*) {
-        Block::parse(&mut Parser::new(Lexer::new(stringify!({ $($t)* }))))
+        Block::parse(&mut Parser::new("test", Lexer::new(stringify!({ $($t)* }))))
     }
 
     /// Evaluates a block of code in the given environment

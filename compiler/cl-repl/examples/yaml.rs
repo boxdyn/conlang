@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             Err(e) => Err(e)?,
         };
 
-        let mut parser = Parser::new(Lexer::new(&line));
+        let mut parser = Parser::new("", Lexer::new(&line));
         let code = match parser.parse::<Stmt>() {
             Ok(code) => {
                 rl.accept();
@@ -150,8 +150,8 @@ pub mod yamlify {
 
     impl Yamlify for File {
         fn yaml(&self, y: &mut Yamler) {
-            let File { items } = self;
-            y.key("File").yaml(items);
+            let File { name, items } = self;
+            y.key("File").pair("name", name).yaml(items);
         }
     }
     impl Yamlify for Visibility {

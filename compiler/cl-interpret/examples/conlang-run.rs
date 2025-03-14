@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let parent = path.parent().unwrap_or("".as_ref());
 
     let code = std::fs::read_to_string(&path)?;
-    let code = Parser::new(Lexer::new(&code)).parse()?;
+    let code = Parser::new(path.display().to_string(), Lexer::new(&code)).parse()?;
     let code = match ModuleInliner::new(parent).inline(code) {
         Ok(code) => code,
         Err((code, ioerrs, perrs)) => {
@@ -40,7 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if env.get(main).is_ok() {
         let args = args
             .flat_map(|arg| {
-                Parser::new(Lexer::new(&arg))
+                Parser::new(&arg, Lexer::new(&arg))
                     .parse::<Expr>()
                     .map(|arg| env.eval(&arg))
             })

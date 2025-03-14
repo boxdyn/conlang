@@ -1,6 +1,6 @@
 use super::*;
 
-use cl_ast::Expr;
+use cl_ast::{Expr, Sym};
 use cl_lexer::error::{Error as LexError, Reason};
 use std::fmt::Display;
 pub type PResult<T> = Result<T, Error>;
@@ -8,6 +8,7 @@ pub type PResult<T> = Result<T, Error>;
 /// Contains information about [Parser] errors
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Error {
+    pub in_file: Sym,
     pub reason: ErrorKind,
     pub while_parsing: Parsing,
     pub loc: Loc,
@@ -129,13 +130,18 @@ pub enum Parsing {
 
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self { reason, while_parsing, loc } = self;
+        let Self { in_file, reason, while_parsing, loc } = self;
         match reason {
             // TODO entries are debug-printed
-            ErrorKind::Todo(_) => write!(f, "{loc} {reason} {while_parsing:?}"),
+            ErrorKind::Todo(_) => write!(f, "{in_file}:{loc} {reason} {while_parsing:?}"),
             // lexical errors print their own higher-resolution loc info
             ErrorKind::Lexical(e) => write!(f, "{e} (while parsing {while_parsing})"),
-            _ => write!(f, "{loc}: {reason} while parsing {while_parsing}"),
+            _ => {
+                if !in_file.is_empty() {
+                    write!(f, "{in_file}:")?
+                }
+                write!(f, "{loc}: {reason} while parsing {while_parsing}")
+            }
         }
     }
 }

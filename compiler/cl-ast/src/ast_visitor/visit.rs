@@ -26,7 +26,7 @@ pub trait Visit<'a>: Sized {
     fn visit_smuggled_float(&mut self, _f: &'a u64) {}
     fn visit_string(&mut self, _s: &'a str) {}
     fn visit_file(&mut self, f: &'a File) {
-        let File { items } = f;
+        let File { name: _, items } = f;
         items.iter().for_each(|i| self.visit_item(i));
     }
     fn visit_attrs(&mut self, a: &'a Attrs) {

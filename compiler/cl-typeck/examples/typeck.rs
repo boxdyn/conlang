@@ -34,7 +34,7 @@ const C_LISTING: &str = "\x1b[38;5;117m";
 fn main() -> Result<(), Box<dyn Error>> {
     let mut prj = Table::default();
 
-    let mut parser = Parser::new(Lexer::new(PREAMBLE));
+    let mut parser = Parser::new("PREAMBLE", Lexer::new(PREAMBLE));
     let code = match parser.parse() {
         Ok(code) => code,
         Err(e) => {
@@ -91,7 +91,7 @@ fn enter_code(prj: &mut Table) -> Result<(), RlError> {
         if line.trim().is_empty() {
             return Ok(Response::Break);
         }
-        let code = Parser::new(Lexer::new(line)).parse()?;
+        let code = Parser::new("", Lexer::new(line)).parse()?;
         let code = inline_modules(code, "");
         let code = WhileElseDesugar.fold_file(code);
 
@@ -102,7 +102,7 @@ fn enter_code(prj: &mut Table) -> Result<(), RlError> {
 
 fn live_desugar() -> Result<(), RlError> {
     read_and(C_RESV, "se>", "? >", |line| {
-        let code = Parser::new(Lexer::new(line)).parse::<Stmt>()?;
+        let code = Parser::new("", Lexer::new(line)).parse::<Stmt>()?;
         println!("Raw, as parsed:\n{C_LISTING}{code}\x1b[0m");
 
         let code = SquashGroups.fold_stmt(code);
@@ -128,7 +128,7 @@ fn query_type_expression(prj: &mut Table) -> Result<(), RlError> {
             return Ok(Response::Break);
         }
         // parse it as a path, and convert the path into a borrowed path
-        let ty: Ty = Parser::new(Lexer::new(line)).parse()?;
+        let ty: Ty = Parser::new("", Lexer::new(line)).parse()?;
         let id = ty.evaluate(prj, prj.root())?;
         pretty_handle(id.to_entry(prj))?;
         Ok(Response::Accept)
@@ -143,7 +143,7 @@ fn get_by_id(prj: &mut Table) -> Result<(), RlError> {
         if line.trim().is_empty() {
             return Ok(Response::Break);
         }
-        let mut parser = Parser::new(Lexer::new(line));
+        let mut parser = Parser::new("", Lexer::new(line));
         let def_id = match Parse::parse(&mut parser)? {
             cl_ast::Literal::Int(int) => int as _,
             other => Err(format!("Expected integer, got {other}"))?,
@@ -209,7 +209,7 @@ fn import_files(table: &mut Table) -> Result<(), RlError> {
             return Ok(Response::Accept);
         };
 
-        let mut parser = Parser::new(Lexer::new(&file));
+        let mut parser = Parser::new("", Lexer::new(&file));
         let code = match parser.parse() {
             Ok(code) => inline_modules(code, PathBuf::from(line).parent().unwrap_or("".as_ref())),
             Err(e) => {

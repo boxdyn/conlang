@@ -13,6 +13,8 @@ mod prec;
 /// Parses a sequence of [Tokens](Token) into an [AST](cl_ast)
 #[derive(Debug)]
 pub struct Parser<'t> {
+    /// Name of the file being parsed
+    file: Sym,
     /// Lazy tokenizer
     lexer: Lexer<'t>,
     /// Look-ahead buffer
@@ -23,8 +25,8 @@ pub struct Parser<'t> {
 
 /// Basic parser functionality
 impl<'t> Parser<'t> {
-    pub fn new(lexer: Lexer<'t>) -> Self {
-        Self { loc: Loc::from(&lexer), lexer, next: None }
+    pub fn new(filename: impl AsRef<str>, lexer: Lexer<'t>) -> Self {
+        Self { file: filename.as_ref().into(), loc: Loc::from(&lexer), lexer, next: None }
     }
 
     /// Gets the location of the last consumed [Token]
@@ -40,7 +42,7 @@ impl<'t> Parser<'t> {
 
     /// Constructs an [Error]
     pub fn error(&self, reason: ErrorKind, while_parsing: Parsing) -> Error {
-        Error { reason, while_parsing, loc: self.loc }
+        Error { in_file: self.file, reason, while_parsing, loc: self.loc }
     }
 
     /// Internal impl of peek and consume
@@ -262,7 +264,7 @@ impl Parse<'_> for File {
         } {
             items.push(Item::parse(p)?)
         }
-        Ok(File { items })
+        Ok(File { name: p.file.to_ref(), items })
     }
 }
 
@@ -634,6 +636,7 @@ impl Parse<'_> for ImplKind {
             Ok(ImplKind::Trait { impl_trait, for_type: Ty::parse(p)?.into() })
         } else {
             Err(Error {
+                in_file: p.file,
                 reason: ExpectedParsing { want: Parsing::Path },
                 while_parsing: P,
                 loc: target.span.head,

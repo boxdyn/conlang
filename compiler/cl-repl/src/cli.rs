@@ -9,7 +9,7 @@ use cl_ast::File;
 use cl_interpret::{builtin::builtins, convalue::ConValue, env::Environment, interpret::Interpret};
 use cl_lexer::Lexer;
 use cl_parser::Parser;
-use std::{error::Error, path::Path};
+use std::{borrow::Cow, error::Error, path::Path};
 
 /// Run the command line interface
 pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
@@ -49,7 +49,9 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
 
     if repl {
         if let Some(file) = file {
-            load_file(&mut env, file)?;
+            if let Err(e) = load_file(&mut env, file) {
+                eprintln!("{e}")
+            }
         }
         let mut ctx = Context::with_env(env);
         match mode {
@@ -59,24 +61,36 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
             Mode::Run => menu::run(&mut ctx)?,
         }
     } else {
+        let path = format_path_for_display(file.as_deref());
         let code = match &file {
             Some(file) => std::fs::read_to_string(file)?,
             None => std::io::read_to_string(std::io::stdin())?,
         };
 
         match mode {
-            Mode::Lex => lex_code(&code, file),
-            Mode::Fmt => fmt_code(&code),
-            Mode::Run | Mode::Menu => run_code(&code, &mut env),
+            Mode::Lex => lex_code(&path, &code),
+            Mode::Fmt => fmt_code(&path, &code),
+            Mode::Run | Mode::Menu => run_code(&path, &code, &mut env),
         }?;
     }
     Ok(())
 }
 
+fn format_path_for_display(path: Option<&Path>) -> Cow<str> {
+    match path {
+        Some(file) => file
+            .to_str()
+            .map(Cow::Borrowed)
+            .unwrap_or_else(|| Cow::Owned(file.display().to_string())),
+        None => Cow::Borrowed(""),
+    }
+}
+
 fn load_file(env: &mut Environment, path: impl AsRef<Path>) -> Result<ConValue, Box<dyn Error>> {
-    let inliner = cl_parser::inliner::ModuleInliner::new(path.as_ref().with_extension(""));
+    let path = path.as_ref();
+    let inliner = cl_parser::inliner::ModuleInliner::new(path.with_extension(""));
     let file = std::fs::read_to_string(path)?;
-    let code = Parser::new(Lexer::new(&file)).parse()?;
+    let code = Parser::new(path.display().to_string(), Lexer::new(&file)).parse()?;
     let code = match inliner.inline(code) {
         Ok(a) => a,
         Err((code, io_errs, parse_errs)) => {
@@ -89,6 +103,9 @@ fn load_file(env: &mut Environment, path: impl AsRef<Path>) -> Result<ConValue, 
             code
         }
     };
+    use cl_ast::WeightOf;
+    eprintln!("File {} weighs {} units", code.name, code.weight_of());
+
     match env.eval(&code) {
         Ok(v) => Ok(v),
         Err(e) => {
@@ -98,10 +115,10 @@ fn load_file(env: &mut Environment, path: impl AsRef<Path>) -> Result<ConValue, 
     }
 }
 
-fn lex_code(code: &str, path: Option<impl AsRef<Path>>) -> Result<(), Box<dyn Error>> {
+fn lex_code(path: &str, code: &str) -> Result<(), Box<dyn Error>> {
     for token in Lexer::new(code) {
-        if let Some(path) = &path {
-            print!("{}:", path.as_ref().display());
+        if !path.is_empty() {
+            print!("{}:", path);
         }
         match token {
             Ok(token) => print_token(&token),
@@ -111,14 +128,14 @@ fn lex_code(code: &str, path: Option<impl AsRef<Path>>) -> Result<(), Box<dyn Er
     Ok(())
 }
 
-fn fmt_code(code: &str) -> Result<(), Box<dyn Error>> {
-    let code = Parser::new(Lexer::new(code)).parse::<File>()?;
+fn fmt_code(path: &str, code: &str) -> Result<(), Box<dyn Error>> {
+    let code = Parser::new(path, Lexer::new(code)).parse::<File>()?;
     println!("{code}");
     Ok(())
 }
 
-fn run_code(code: &str, env: &mut Environment) -> Result<(), Box<dyn Error>> {
-    let code = Parser::new(Lexer::new(code)).parse::<File>()?;
+fn run_code(path: &str, code: &str, env: &mut Environment) -> Result<(), Box<dyn Error>> {
+    let code = Parser::new(path, Lexer::new(code)).parse::<File>()?;
     match code.interpret(env)? {
         ConValue::Empty => {}
         ret => println!("{ret}"),

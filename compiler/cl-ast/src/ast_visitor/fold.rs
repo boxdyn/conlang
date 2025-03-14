@@ -44,8 +44,8 @@ pub trait Fold {
         s
     }
     fn fold_file(&mut self, f: File) -> File {
-        let File { items } = f;
-        File { items: items.into_iter().map(|i| self.fold_item(i)).collect() }
+        let File { name, items } = f;
+        File { name, items: items.into_iter().map(|i| self.fold_item(i)).collect() }
     }
     fn fold_attrs(&mut self, a: Attrs) -> Attrs {
         let Attrs { meta } = a;

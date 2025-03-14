@@ -34,6 +34,7 @@ pub enum Visibility {
 /// A list of [Item]s
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct File {
+    pub name: &'static str,
     pub items: Vec<Item>,
 }
 

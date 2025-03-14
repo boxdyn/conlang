@@ -76,25 +76,29 @@ impl Fold for ModuleInliner {
 impl ModuleInliner {
     /// Attempts to read and parse a file for every module in the tree
     fn fold_module_kind(&mut self, m: Option<File>) -> Option<File> {
+        use std::borrow::Cow;
         if let Some(f) = m {
             return Some(self.fold_file(f));
         }
+
         // cd path/mod.cl
         self.path.set_extension("cl");
+        let mut used_path: Cow<Path> = Cow::Borrowed(&self.path);
 
         let file = match std::fs::read_to_string(&self.path) {
             Err(error) => {
                 let Some(basename) = self.path.file_name() else {
                     return self.handle_io_error(error);
                 };
-                let path = self
-                    .path
-                    .parent()
-                    .and_then(Path::parent)
-                    .map(|path| path.join(basename))
-                    .unwrap_or_default();
+                used_path = Cow::Owned(
+                    self.path
+                        .parent()
+                        .and_then(Path::parent)
+                        .map(|path| path.join(basename))
+                        .unwrap_or_default(),
+                );
 
-                match std::fs::read_to_string(&path) {
+                match std::fs::read_to_string(&used_path) {
                     Err(error) => return self.handle_io_error(error),
                     Ok(file) => file,
                 }
@@ -102,7 +106,7 @@ impl ModuleInliner {
             Ok(file) => file,
         };
 
-        match Parser::new(Lexer::new(&file)).parse() {
+        match Parser::new(used_path.display().to_string(), Lexer::new(&file)).parse() {
             Err(e) => self.handle_parse_error(e),
             Ok(file) => {
                 self.path.set_extension("");

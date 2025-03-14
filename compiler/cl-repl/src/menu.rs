@@ -47,7 +47,7 @@ pub fn run(ctx: &mut ctx::Context) -> ReplResult<()> {
         if line.trim().is_empty() {
             return Ok(Response::Deny);
         }
-        let code = Parser::new(Lexer::new(line)).parse::<Stmt>()?;
+        let code = Parser::new("", Lexer::new(line)).parse::<Stmt>()?;
         let code = ModuleInliner::new(".").fold_stmt(code);
 
         print!("{}", ansi::OUTPUT);
@@ -75,7 +75,7 @@ pub fn lex(_ctx: &mut ctx::Context) -> ReplResult<()> {
 
 pub fn fmt(_ctx: &mut ctx::Context) -> ReplResult<()> {
     read_and(ansi::BRIGHT_MAGENTA, "cl>", " ?>", |line| {
-        let mut p = Parser::new(Lexer::new(line));
+        let mut p = Parser::new("", Lexer::new(line));
 
         match p.parse::<Stmt>() {
             Ok(code) => println!("{}{code}{}", ansi::OUTPUT, ansi::RESET),

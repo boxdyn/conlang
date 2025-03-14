@@ -13,8 +13,8 @@ pub trait WeightOf {
 
 impl WeightOf for File {
     fn weight_of(&self) -> usize {
-        let Self { items } = self;
-        items.weight_of()
+        let Self { name, items } = self;
+        name.weight_of() + items.weight_of()
     }
 }
 
