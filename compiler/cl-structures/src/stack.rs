@@ -93,11 +93,18 @@ use std::{
 /// assert_eq!(Some(&10), v.last());
 /// ```
 pub macro stack {
-    ($count:literal) => {
-        Stack::<_, $count>::new()
+    ($capacity:literal) => {
+        Stack::<_, $capacity>::new()
     },
     ($value:expr ; $count:literal) => {{
         let mut stack: Stack<_, $count> = Stack::new();
+        for _ in 0..$count {
+            stack.push($value)
+        }
+        stack
+    }},
+    ($value:expr ; $count:literal ; $capacity:literal) => {{
+        let mut stack: Stack<_, $capacity> = Stack::new();
         for _ in 0..$count {
             stack.push($value)
         }
@@ -142,20 +149,14 @@ impl<T, const N: usize> Deref for Stack<T, N> {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        // Safety:
-        // - We have ensured all elements from 0 to len have been initialized
-        // - self.elem[0] came from a reference, and so is aligned to T
-        // unsafe { &*(&self.buf[0..self.len] as *const [_] as *const [T]) }
-        unsafe { slice::from_raw_parts(self.buf.as_ptr().cast(), self.len) }
+        self.as_slice()
     }
 }
 
 impl<T, const N: usize> DerefMut for Stack<T, N> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        // Safety:
-        // - See Deref
-        unsafe { slice::from_raw_parts_mut(self.buf.as_mut_ptr().cast(), self.len) }
+        self.as_mut_slice()
     }
 }
 
@@ -163,7 +164,7 @@ impl<T, const N: usize> DerefMut for Stack<T, N> {
 unsafe impl<#[may_dangle] T, const N: usize> Drop for Stack<T, N> {
     #[inline]
     fn drop(&mut self) {
-        // Safety: We have ensured that all elements in the list are
+        // Safety: Elements in [0..self.len] are initialized
         if std::mem::needs_drop::<T>() {
             unsafe { core::ptr::drop_in_place(self.as_mut_slice()) };
         }
@@ -271,18 +272,24 @@ impl<T, const N: usize> Stack<T, N> {
     }
 
     /// Returns an unsafe mutable pointer to the stack's buffer
-    pub fn as_mut_ptr(&mut self) -> *mut T {
+    pub const fn as_mut_ptr(&mut self) -> *mut T {
         self.buf.as_mut_ptr().cast()
     }
 
     /// Extracts a slice containing the entire vector
-    pub fn as_slice(&self) -> &[T] {
-        self
+    pub const fn as_slice(&self) -> &[T] {
+        // Safety:
+        // - We have ensured all elements from 0 to len have been initialized
+        // - self.elem[0] came from a reference, and so is aligned to T
+        // unsafe { &*(&self.buf[0..self.len] as *const [_] as *const [T]) }
+        unsafe { slice::from_raw_parts(self.buf.as_ptr().cast(), self.len) }
     }
 
     /// Extracts a mutable slice containing the entire vector
-    pub fn as_mut_slice(&mut self) -> &mut [T] {
-        self
+    pub const fn as_mut_slice(&mut self) -> &mut [T] {
+        // Safety:
+        // - See Stack::as_slice
+        unsafe { slice::from_raw_parts_mut(self.buf.as_mut_ptr().cast(), self.len) }
     }
 
     /// Returns the total number of elements the stack can hold
@@ -355,7 +362,7 @@ impl<T, const N: usize> Stack<T, N> {
     /// v.push(3);
     /// assert_eq!(&[0, 1, 2, 3], v.as_slice());
     /// ```
-    pub fn push(&mut self, value: T) {
+    pub const fn push(&mut self, value: T) {
         if self.len >= N {
             panic!("Attempted to push into full stack")
         }
@@ -366,7 +373,7 @@ impl<T, const N: usize> Stack<T, N> {
     /// Push a new element onto the end of the stack
     ///
     /// Returns [`Err(value)`](Result::Err) if the new length would exceed capacity
-    pub fn try_push(&mut self, value: T) -> Result<(), T> {
+    pub const fn try_push(&mut self, value: T) -> Result<(), T> {
         if self.len >= N {
             return Err(value);
         }
@@ -381,8 +388,11 @@ impl<T, const N: usize> Stack<T, N> {
     ///
     /// len after push must not exceed capacity N
     #[inline]
-    unsafe fn push_unchecked(&mut self, value: T) {
-        unsafe { ptr::write(self.as_mut_ptr().add(self.len), value) }
+    const unsafe fn push_unchecked(&mut self, value: T) {
+        unsafe {
+            // self.buf.get_unchecked_mut(self.len).write(value); // TODO: This is non-const
+            ptr::write(self.as_mut_ptr().add(self.len), value)
+        }
         self.len += 1; // post inc
     }
 
@@ -402,13 +412,14 @@ impl<T, const N: usize> Stack<T, N> {
     /// assert_eq!(Some(0), v.pop());
     /// assert_eq!(None, v.pop());
     /// ```
-    pub fn pop(&mut self) -> Option<T> {
+    pub const fn pop(&mut self) -> Option<T> {
         if self.len == 0 {
             None
         } else {
             self.len -= 1;
             // Safety: MaybeUninit<T> implies ManuallyDrop<T>,
             // therefore should not get dropped twice
+            // Some(unsafe { self.buf.get_unchecked_mut(self.len).assume_init_read() })
             Some(unsafe { ptr::read(self.as_ptr().add(self.len).cast()) })
         }
     }
@@ -507,7 +518,7 @@ impl<T, const N: usize> Stack<T, N> {
     ///
     /// assert_eq!(Ok(()), v.try_insert(0, 0));
     /// ```
-    pub fn try_insert(&mut self, index: usize, data: T) -> Result<(), (T, InsertFailed<N>)> {
+    pub const fn try_insert(&mut self, index: usize, data: T) -> Result<(), (T, InsertFailed<N>)> {
         if index > self.len {
             return Err((data, InsertFailed::Bounds(index)));
         }
@@ -523,7 +534,7 @@ impl<T, const N: usize> Stack<T, N> {
     /// - index must be less than self.len
     /// - length after insertion must be <= N
     #[inline]
-    unsafe fn insert_unchecked(&mut self, index: usize, data: T) {
+    const unsafe fn insert_unchecked(&mut self, index: usize, data: T) {
         let base = self.as_mut_ptr();
 
         unsafe { ptr::copy(base.add(index), base.add(index + 1), self.len - index) }
@@ -547,7 +558,9 @@ impl<T, const N: usize> Stack<T, N> {
     /// ```
     pub fn clear(&mut self) {
         // Hopefully copy elision takes care of this lmao
-        drop(std::mem::take(self))
+        while !self.is_empty() {
+            drop(self.pop());
+        }
     }
 
     /// Returns the number of elements in the stack
@@ -557,7 +570,7 @@ impl<T, const N: usize> Stack<T, N> {
     ///
     /// assert_eq!(5, v.len());
     /// ```
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.len
     }
 
@@ -572,7 +585,7 @@ impl<T, const N: usize> Stack<T, N> {
     /// assert!(v.is_full());
     /// ```
     #[inline]
-    pub fn is_full(&self) -> bool {
+    pub const fn is_full(&self) -> bool {
         self.len >= N
     }
 
@@ -587,7 +600,7 @@ impl<T, const N: usize> Stack<T, N> {
     /// assert!(v.is_empty());
     /// ```
     #[inline]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.len == 0
     }
 }
@@ -625,6 +638,7 @@ mod tests {
         v.pop();
         assert_eq!(v.len(), usize::MAX - 1);
     }
+
     #[test]
     fn new() {
         let v: Stack<(), 255> = Stack::new();
@@ -744,5 +758,20 @@ mod tests {
             Box::new(4),
         ]);
         std::mem::drop(std::hint::black_box(v));
+    }
+
+    #[test]
+    fn drop_zst() {
+        struct Droppable;
+        impl Drop for Droppable {
+            fn drop(&mut self) {
+                use std::sync::atomic::{AtomicU32, Ordering};
+                static V: AtomicU32 = AtomicU32::new(1);
+                eprintln!("{}", V.fetch_add(1, Ordering::Relaxed));
+            }
+        }
+
+        let v = Stack::from([const { Droppable }; 10]);
+        std::mem::drop(v);
     }
 }
