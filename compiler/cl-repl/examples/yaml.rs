@@ -3,7 +3,7 @@
 use cl_ast::Stmt;
 use cl_lexer::Lexer;
 use cl_parser::Parser;
-use repline::{error::Error as RlError, Repline};
+use repline::{Repline, error::Error as RlError};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -642,8 +642,8 @@ pub mod yamlify {
                 TyKind::Tuple(t) => y.yaml(t),
                 TyKind::Ref(t) => y.yaml(t),
                 TyKind::Fn(t) => y.yaml(t),
-                TyKind::Slice(_) => todo!(),
-                TyKind::Array(_) => todo!(),
+                TyKind::Slice(t) => y.yaml(t),
+                TyKind::Array(t) => y.yaml(t),
             };
         }
     }
