@@ -294,6 +294,7 @@ pub enum Precedence {
     Cast,
     Member, // left-associative
     Call,
+    Deref,
 }
 
 impl Precedence {
@@ -306,6 +307,7 @@ impl Precedence {
         match self {
             Self::Assign => Some(((), self.level())),
             Self::Unary => Some(((), self.level())),
+            Self::Deref => Some(((), self.level())),
             _ => None,
         }
     }
@@ -356,6 +358,7 @@ impl From<UnaryKind> for Precedence {
         use UnaryKind as Op;
         match value {
             Op::Loop => Precedence::Assign,
+            Op::Deref => Precedence::Deref,
             _ => Precedence::Unary,
         }
     }
