@@ -79,7 +79,7 @@ pub macro builtin(
         // Allow for single argument `fn foo(args @ ..)` pattern
         #[allow(clippy::redundant_at_rest_pattern, irrefutable_let_patterns)]
         let [$($arg),*] = _args else {
-            Err($crate::error::Error::TypeError)?
+            Err($crate::error::Error::TypeError())?
         };
         $body.map(Into::into)
     }
@@ -166,7 +166,7 @@ pub const Builtins: &[Builtin] = &builtins![
             }
             ConValue::Array(t) => t.len() as _,
             ConValue::Tuple(t) => t.len() as _,
-            _ => Err(Error::TypeError)?,
+            _ => Err(Error::TypeError())?,
         })
     }
 
@@ -191,7 +191,7 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a * b),
-            _ => Err(Error::TypeError)?
+            _ => Err(Error::TypeError())?
         })
     }
 
@@ -200,7 +200,7 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs){
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a / b),
-            _ => Err(Error::TypeError)?
+            _ => Err(Error::TypeError())?
         })
     }
 
@@ -209,7 +209,7 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a % b),
-            _ => Err(Error::TypeError)?,
+            _ => Err(Error::TypeError())?,
         })
     }
 
@@ -219,7 +219,7 @@ pub const Math: &[Builtin] = &builtins![
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a + b),
             (ConValue::String(a), ConValue::String(b)) => (a.to_string() + &b.to_string()).into(),
-            _ => Err(Error::TypeError)?
+            _ => Err(Error::TypeError())?
         })
     }
 
@@ -228,7 +228,7 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a - b),
-            _ => Err(Error::TypeError)?,
+            _ => Err(Error::TypeError())?,
         })
     }
 
@@ -237,7 +237,7 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a << b),
-            _ => Err(Error::TypeError)?,
+            _ => Err(Error::TypeError())?,
         })
     }
 
@@ -246,7 +246,7 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a >> b),
-            _ => Err(Error::TypeError)?,
+            _ => Err(Error::TypeError())?,
         })
     }
 
@@ -256,7 +256,7 @@ pub const Math: &[Builtin] = &builtins![
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a & b),
             (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a & b),
-            _ => Err(Error::TypeError)?,
+            _ => Err(Error::TypeError())?,
         })
     }
 
@@ -266,7 +266,7 @@ pub const Math: &[Builtin] = &builtins![
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a | b),
             (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a | b),
-            _ => Err(Error::TypeError)?,
+            _ => Err(Error::TypeError())?,
         })
     }
 
@@ -276,7 +276,7 @@ pub const Math: &[Builtin] = &builtins![
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a ^ b),
             (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a ^ b),
-            _ => Err(Error::TypeError)?,
+            _ => Err(Error::TypeError())?,
         })
     }
 
@@ -307,7 +307,7 @@ pub const Math: &[Builtin] = &builtins![
             ConValue::Empty => ConValue::Empty,
             ConValue::Int(v) => ConValue::Int(v.wrapping_neg()),
             ConValue::Float(v) => ConValue::Float(-v),
-            _ => Err(Error::TypeError)?,
+            _ => Err(Error::TypeError())?,
         })
     }
 
@@ -317,7 +317,7 @@ pub const Math: &[Builtin] = &builtins![
             ConValue::Empty => ConValue::Empty,
             ConValue::Int(v) => ConValue::Int(!v),
             ConValue::Bool(v) => ConValue::Bool(!v),
-            _ => Err(Error::TypeError)?,
+            _ => Err(Error::TypeError())?,
         })
     }
 

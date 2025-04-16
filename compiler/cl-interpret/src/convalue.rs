@@ -1,15 +1,15 @@
 //! Values in the dynamically typed AST interpreter.
 //!
 //! The most permanent fix is a temporary one.
-use cl_ast::{format::FmtAdapter, Expr, Sym};
+use cl_ast::{Expr, Sym, format::FmtAdapter};
 
 use crate::env::Place;
 
 use super::{
+    Callable, Environment,
     builtin::Builtin,
     error::{Error, IResult},
     function::Function,
-    Callable, Environment,
 };
 use std::{collections::HashMap, ops::*, rc::Rc};
 
@@ -80,7 +80,7 @@ impl ConValue {
     pub fn truthy(&self) -> IResult<bool> {
         match self {
             ConValue::Bool(v) => Ok(*v),
-            _ => Err(Error::TypeError)?,
+            _ => Err(Error::TypeError())?,
         }
     }
 
@@ -95,7 +95,7 @@ impl ConValue {
 
     pub fn index(&self, index: &Self, env: &Environment) -> IResult<ConValue> {
         let Self::Int(index) = index else {
-            Err(Error::TypeError)?
+            Err(Error::TypeError())?
         };
         match self {
             ConValue::String(string) => string
@@ -111,7 +111,7 @@ impl ConValue {
                 .get_id(*id)
                 .ok_or(Error::StackOverflow(*id))?
                 .index(&ConValue::Int((*index as usize + start) as isize), env),
-            _ => Err(Error::TypeError),
+            _ => Err(Error::TypeError()),
         }
     }
     cmp! {
@@ -164,7 +164,7 @@ macro cmp ($($fn:ident: $empty:literal, $op:tt);*$(;)?) {$(
             (Self::Bool(a), Self::Bool(b)) => Ok(Self::Bool(a $op b)),
             (Self::Char(a), Self::Char(b)) => Ok(Self::Bool(a $op b)),
             (Self::String(a), Self::String(b)) => Ok(Self::Bool(&**a $op &**b)),
-            _ => Err(Error::TypeError)
+            _ => Err(Error::TypeError())
         }
     }
 )*}
@@ -234,25 +234,25 @@ ops! {
         (ConValue::Char(a), ConValue::Char(b)) => {
             ConValue::String([a, b].into_iter().collect::<String>().into())
         }
-        _ => Err(Error::TypeError)?
+        _ => Err(Error::TypeError())?
         ]
     BitAnd: bitand = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a & b),
         (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a & b),
-        _ => Err(Error::TypeError)?
+        _ => Err(Error::TypeError())?
     ]
     BitOr: bitor = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a | b),
         (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a | b),
-        _ => Err(Error::TypeError)?
+        _ => Err(Error::TypeError())?
     ]
     BitXor: bitxor = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a ^ b),
         (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a ^ b),
-        _ => Err(Error::TypeError)?
+        _ => Err(Error::TypeError())?
     ]
     Div: div = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
@@ -260,13 +260,13 @@ ops! {
             eprintln!("Warning: Divide by zero in {a} / {b}"); a
         })),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a / b),
-        _ => Err(Error::TypeError)?
+        _ => Err(Error::TypeError())?
     ]
     Mul: mul = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_mul(b)),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a * b),
-        _ => Err(Error::TypeError)?
+        _ => Err(Error::TypeError())?
     ]
     Rem: rem = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
@@ -274,23 +274,23 @@ ops! {
             println!("Warning: Divide by zero in {a} % {b}"); a
         })),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a % b),
-        _ => Err(Error::TypeError)?
+        _ => Err(Error::TypeError())?
     ]
     Shl: shl = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_shl(b as _)),
-        _ => Err(Error::TypeError)?
+        _ => Err(Error::TypeError())?
     ]
     Shr: shr = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_shr(b as _)),
-        _ => Err(Error::TypeError)?
+        _ => Err(Error::TypeError())?
     ]
     Sub: sub = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_sub(b)),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a - b),
-        _ => Err(Error::TypeError)?
+        _ => Err(Error::TypeError())?
     ]
 }
 impl std::fmt::Display for ConValue {

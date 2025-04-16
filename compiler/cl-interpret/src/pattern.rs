@@ -82,39 +82,39 @@ pub fn append_sub<'pat>(
 ) -> IResult<()> {
     match (pat, value) {
         (Pattern::Literal(Literal::Bool(a)), ConValue::Bool(b)) => {
-            (*a == b).then_some(()).ok_or(Error::NotAssignable)
+            (*a == b).then_some(()).ok_or(Error::NotAssignable())
         }
         (Pattern::Literal(Literal::Char(a)), ConValue::Char(b)) => {
-            (*a == b).then_some(()).ok_or(Error::NotAssignable)
+            (*a == b).then_some(()).ok_or(Error::NotAssignable())
         }
         (Pattern::Literal(Literal::Float(a)), ConValue::Float(b)) => (f64::from_bits(*a) == b)
             .then_some(())
-            .ok_or(Error::NotAssignable),
+            .ok_or(Error::NotAssignable()),
         (Pattern::Literal(Literal::Int(a)), ConValue::Int(b)) => {
-            (b == *a as _).then_some(()).ok_or(Error::NotAssignable)
+            (b == *a as _).then_some(()).ok_or(Error::NotAssignable())
         }
         (Pattern::Literal(Literal::String(a)), ConValue::String(b)) => {
-            (*a == *b).then_some(()).ok_or(Error::NotAssignable)
+            (*a == *b).then_some(()).ok_or(Error::NotAssignable())
         }
-        (Pattern::Literal(_), _) => Err(Error::NotAssignable),
+        (Pattern::Literal(_), _) => Err(Error::NotAssignable()),
 
         (Pattern::Rest(Some(pat)), value) => match (pat.as_ref(), value) {
             (Pattern::Literal(Literal::Int(a)), ConValue::Int(b)) => {
-                (b < *a as _).then_some(()).ok_or(Error::NotAssignable)
+                (b < *a as _).then_some(()).ok_or(Error::NotAssignable())
             }
             (Pattern::Literal(Literal::Char(a)), ConValue::Char(b)) => {
-                (b < *a as _).then_some(()).ok_or(Error::NotAssignable)
+                (b < *a as _).then_some(()).ok_or(Error::NotAssignable())
             }
             (Pattern::Literal(Literal::Bool(a)), ConValue::Bool(b)) => {
-                (!b & *a).then_some(()).ok_or(Error::NotAssignable)
+                (!b & *a).then_some(()).ok_or(Error::NotAssignable())
             }
             (Pattern::Literal(Literal::Float(a)), ConValue::Float(b)) => {
-                (b < *a as _).then_some(()).ok_or(Error::NotAssignable)
+                (b < *a as _).then_some(()).ok_or(Error::NotAssignable())
             }
             (Pattern::Literal(Literal::String(a)), ConValue::String(b)) => {
-                (&*b < a).then_some(()).ok_or(Error::NotAssignable)
+                (&*b < a).then_some(()).ok_or(Error::NotAssignable())
             }
-            _ => Err(Error::NotAssignable),
+            _ => Err(Error::NotAssignable()),
         },
 
         (Pattern::Name(name), _) if "_".eq(&**name) => Ok(()),
@@ -149,7 +149,7 @@ pub fn append_sub<'pat>(
         (Pattern::TupleStruct(path, patterns), ConValue::TupleStruct(parts)) => {
             let (name, values) = *parts;
             if !path.ends_with(name) {
-                Err(Error::TypeError)?
+                Err(Error::TypeError())?
             }
             match rest_binding(sub, patterns, values.into_vec().into())? {
                 Some((pattern, values)) => {
@@ -162,10 +162,10 @@ pub fn append_sub<'pat>(
         (Pattern::Struct(path, patterns), ConValue::Struct(parts)) => {
             let (name, mut values) = *parts;
             if !path.ends_with(&name) {
-                Err(Error::TypeError)?
+                Err(Error::TypeError())?
             }
             for (name, pat) in patterns {
-                let value = values.remove(name).ok_or(Error::TypeError)?;
+                let value = values.remove(name).ok_or(Error::TypeError())?;
                 match pat {
                     Some(pat) => append_sub(sub, pat, value)?,
                     None => {
@@ -178,7 +178,7 @@ pub fn append_sub<'pat>(
 
         _ => {
             // eprintln!("Could not match pattern `{pat}` with value `{value}`!");
-            Err(Error::NotAssignable)
+            Err(Error::NotAssignable())
         }
     }
 }

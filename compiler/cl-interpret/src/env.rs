@@ -3,11 +3,11 @@
 use crate::builtin::Builtin;
 
 use super::{
+    Callable, Interpret,
     builtin::{Builtins, Math},
     convalue::ConValue,
     error::{Error, IResult},
     function::Function,
-    Callable, Interpret,
 };
 use cl_ast::{Function as FnDecl, Sym};
 use std::{

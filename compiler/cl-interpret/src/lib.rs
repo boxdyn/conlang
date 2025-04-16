@@ -5,7 +5,7 @@
 use cl_ast::Sym;
 use convalue::ConValue;
 use env::Environment;
-use error::{Error, IResult};
+use error::{Error, ErrorKind, IResult};
 use interpret::Interpret;
 
 /// Callable types can be called from within a Conlang program

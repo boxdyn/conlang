@@ -2,7 +2,9 @@
 
 use collect_upvars::collect_upvars;
 
-use super::{pattern, Callable, ConValue, Environment, Error, IResult, Interpret};
+use crate::error::ErrorKind;
+
+use super::{Callable, ConValue, Environment, Error, IResult, Interpret, pattern};
 use cl_ast::{Function as FnDecl, Sym};
 use std::{
     cell::{Ref, RefCell},
@@ -56,10 +58,13 @@ impl Callable for Function {
 
         // Check arg mapping
         if args.len() != bind.len() {
-            return Err(Error::ArgNumber { want: bind.len(), got: args.len() });
+            return Err(Error::ArgNumber(bind.len(), args.len()));
         }
         if self.is_constructor {
-            return Ok(ConValue::TupleStruct(Box::new((name.to_ref(), args.into()))));
+            return Ok(ConValue::TupleStruct(Box::new((
+                name.to_ref(),
+                args.into(),
+            ))));
         }
         let Some(body) = body else {
             return Err(Error::NotDefined(*name));
@@ -67,6 +72,8 @@ impl Callable for Function {
 
         let upvars = self.upvars.take();
         env.push_frame("upvars", upvars);
+
+        eprintln!("{name}{args:?}");
 
         // TODO: completely refactor data storage
         let mut frame = env.frame("fn args");
@@ -81,9 +88,9 @@ impl Callable for Function {
             self.upvars.replace(upvars);
         }
         match res {
-            Err(Error::Return(value)) => Ok(value),
-            Err(Error::Break(value)) => Err(Error::BadBreak(value)),
-            result => result,
+            Err(Error { kind: ErrorKind::Return(value), .. }) => Ok(value),
+            Err(Error { kind: ErrorKind::Break(value), .. }) => Err(Error::BadBreak(value)),
+            other => other,
         }
     }
 }

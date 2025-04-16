@@ -220,7 +220,7 @@ impl Interpret for UseTree {
                 }
                 UseTree::Path(PathPart::Ident(name), tree) => {
                     let Ok(ConValue::Module(m)) = env.get(*name) else {
-                        Err(Error::TypeError)?
+                        Err(Error::TypeError())?
                     };
                     env.push_frame(name.to_ref(), *m);
                     let out = get_bindings(tree, env, bindings);
@@ -313,7 +313,7 @@ impl Interpret for ExprKind {
             ExprKind::For(v) => v.interpret(env),
             ExprKind::Break(v) => v.interpret(env),
             ExprKind::Return(v) => v.interpret(env),
-            ExprKind::Continue => Err(Error::Continue),
+            ExprKind::Continue => Err(Error::Continue()),
         }
     }
 }
@@ -357,7 +357,7 @@ impl Interpret for Match {
                 return expr.interpret(&mut env);
             }
         }
-        Err(Error::MatchNonexhaustive)
+        Err(Error::MatchNonexhaustive())
     }
 }
 
@@ -393,9 +393,9 @@ mod assignment {
                 &mut ConValue::Ref(r) => {
                     *env.get_id_mut(r).ok_or(Error::StackOverflow(r))? = Some(value)
                 }
-                _ => Err(Error::NotAssignable)?,
+                _ => Err(Error::NotAssignable())?,
             },
-            _ => Err(Error::NotAssignable)?,
+            _ => Err(Error::NotAssignable())?,
         }
         Ok(())
     }
@@ -411,12 +411,12 @@ mod assignment {
             ExprKind::Unary(Unary { kind: UnaryKind::Deref, tail }) => match *addrof(env, tail)? {
                 ConValue::Ref(place) => env
                     .get_id_mut(place)
-                    .ok_or(Error::NotIndexable)?
+                    .ok_or(Error::NotIndexable())?
                     .as_mut()
-                    .ok_or(Error::NotAssignable),
-                _ => Err(Error::TypeError),
+                    .ok_or(Error::NotAssignable()),
+                _ => Err(Error::TypeError()),
             },
-            _ => Err(Error::TypeError),
+            _ => Err(Error::TypeError()),
         }
     }
 
@@ -428,9 +428,9 @@ mod assignment {
             [PathPart::Ident(name)] => env.get_mut(*name),
             [PathPart::Ident(name), rest @ ..] => match env.get_mut(*name)? {
                 Some(ConValue::Module(env)) => project_path_in_namespace(env, rest),
-                _ => Err(Error::NotIndexable),
+                _ => Err(Error::NotIndexable()),
             },
-            _ => Err(Error::NotAssignable),
+            _ => Err(Error::NotAssignable()),
         }
     }
 
@@ -477,7 +477,7 @@ mod assignment {
                 t.get_mut(*id as usize)
                     .ok_or(Error::OobIndex(*id as _, len))
             }
-            _ => Err(Error::TypeError),
+            _ => Err(Error::TypeError()),
         }
     }
 
@@ -492,8 +492,8 @@ mod assignment {
                 a.get_mut(*i as usize)
                     .ok_or(Error::OobIndex(*i as usize, a_len))
             }
-            (ConValue::Slice(_, _), _) => Err(Error::TypeError),
-            _ => Err(Error::NotIndexable),
+            (ConValue::Slice(_, _), _) => Err(Error::TypeError()),
+            _ => Err(Error::NotIndexable()),
         }
     }
 
@@ -502,12 +502,12 @@ mod assignment {
         path: &[PathPart],
     ) -> IResult<&'e mut Option<ConValue>> {
         match path {
-            [] => Err(Error::NotAssignable),
+            [] => Err(Error::NotAssignable()),
             [PathPart::Ident(name)] => env.get_mut(name).ok_or(Error::NotDefined(*name)),
             [PathPart::Ident(name), rest @ ..] => {
                 match env.get_mut(name).ok_or(Error::NotDefined(*name))? {
                     Some(ConValue::Module(env)) => project_path_in_namespace(env, rest),
-                    _ => Err(Error::NotIndexable),
+                    _ => Err(Error::NotIndexable()),
                 }
             }
             [PathPart::SelfKw, rest @ ..] => project_path_in_namespace(env, rest),
@@ -602,7 +602,7 @@ impl Interpret for Binary {
             BinaryKind::Call => match tail {
                 ConValue::Empty => head.call(env, &[]),
                 ConValue::Tuple(args) => head.call(env, &args),
-                _ => Err(Error::TypeError),
+                _ => Err(Error::TypeError()),
             },
             _ => Ok(head),
         }
@@ -615,8 +615,8 @@ impl Interpret for Unary {
         match kind {
             UnaryKind::Loop => loop {
                 match tail.interpret(env) {
-                    Err(Error::Break(value)) => return Ok(value),
-                    Err(Error::Continue) => continue,
+                    Err(Error { kind: ErrorKind::Break(value), .. }) => break Ok(value),
+                    Err(Error { kind: ErrorKind::Continue, .. }) => continue,
                     e => e?,
                 };
             },
@@ -659,7 +659,7 @@ fn cast(env: &Environment, value: ConValue, ty: Sym) -> IResult<ConValue> {
         ConValue::Ref(v) => {
             return cast(
                 env,
-                env.get_id(v).cloned().ok_or(Error::StackUnderflow)?,
+                env.get_id(v).cloned().ok_or(Error::StackUnderflow())?,
                 ty,
             );
         }
@@ -667,7 +667,7 @@ fn cast(env: &Environment, value: ConValue, ty: Sym) -> IResult<ConValue> {
         ConValue::Float(_) if ty.starts_with('f') => return Ok(value),
         ConValue::Float(f) => f as _,
         _ if (*ty).eq("str") => return Ok(ConValue::String(format!("{value}").into())),
-        _ => Err(Error::TypeError)?,
+        _ => Err(Error::TypeError())?,
     };
     Ok(match &*ty {
         "u8" => ConValue::Int(value as u8 as _),
@@ -694,11 +694,11 @@ impl Interpret for Cast {
             return Ok(ConValue::Empty);
         };
         let TyKind::Path(Path { absolute: false, parts }) = &ty.kind else {
-            Err(Error::TypeError)?
+            Err(Error::TypeError())?
         };
         match parts.as_slice() {
             [PathPart::Ident(ty)] => cast(env, value, *ty),
-            _ => Err(Error::TypeError),
+            _ => Err(Error::TypeError()),
         }
     }
 }
@@ -816,7 +816,7 @@ impl Interpret for ArrayRep {
         let Self { value, repeat } = self;
         let repeat = match repeat.interpret(env)? {
             ConValue::Int(v) => v,
-            _ => Err(Error::TypeError)?,
+            _ => Err(Error::TypeError())?,
         };
         let value = value.interpret(env)?;
         Ok(ConValue::Array(vec![value; repeat as usize].into()))
@@ -876,8 +876,8 @@ impl Interpret for While {
         loop {
             if cond.interpret(env)?.truthy()? {
                 match pass.interpret(env) {
-                    Err(Error::Break(value)) => return Ok(value),
-                    Err(Error::Continue) => continue,
+                    Err(Error { kind: ErrorKind::Break(value), .. }) => break Ok(value),
+                    Err(Error { kind: ErrorKind::Continue, .. }) => continue,
                     e => e?,
                 };
             } else {
@@ -907,19 +907,19 @@ impl Interpret for For {
                     [ConValue::Int(from), ConValue::Int(to)] => {
                         Box::new((from..to).map(ConValue::Int))
                     }
-                    _ => Err(Error::NotIterable)?,
+                    _ => Err(Error::NotIterable())?,
                 },
                 ("RangeInc", values) => match **values {
                     [ConValue::Int(from), ConValue::Int(to)] => {
                         Box::new((from..=to).map(ConValue::Int))
                     }
-                    _ => Err(Error::NotIterable)?,
+                    _ => Err(Error::NotIterable())?,
                 },
-                _ => Err(Error::NotIterable)?,
+                _ => Err(Error::NotIterable())?,
             },
             ConValue::Array(a) => Box::new(a.iter().cloned()),
             ConValue::String(s) => Box::new(s.chars().map(ConValue::Char)),
-            _ => Err(Error::TypeError)?,
+            _ => Err(Error::TypeError())?,
         };
         loop {
             let mut env = env.frame("loop variable");
@@ -928,9 +928,9 @@ impl Interpret for For {
                     env.insert(*name, Some(value));
                 }
                 match pass.interpret(&mut env) {
-                    Err(Error::Break(value)) => return Ok(value),
-                    Err(Error::Continue) => continue,
-                    result => result?,
+                    Err(Error { kind: ErrorKind::Break(value), .. }) => break Ok(value),
+                    Err(Error { kind: ErrorKind::Continue, .. }) => continue,
+                    e => e?,
                 };
             } else {
                 break fail.interpret(&mut env);
