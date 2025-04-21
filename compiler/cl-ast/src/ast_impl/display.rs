@@ -161,11 +161,19 @@ impl Display for Function {
                 Default::default()
             }
         };
+        let bind = match bind {
+            Pattern::Tuple(patterns) => patterns.as_slice(),
+            _ => {
+                write!(f, "Invalid argument binder: {bind}")?;
+                Default::default()
+            }
+        };
 
         debug_assert_eq!(bind.len(), types.len());
         write!(f, "fn {name} ")?;
         {
             let mut f = f.delimit(INLINE_PARENS);
+
             for (idx, (arg, ty)) in bind.iter().zip(types.iter()).enumerate() {
                 if idx != 0 {
                     f.write_str(", ")?;
@@ -453,6 +461,8 @@ impl Display for Pattern {
             Pattern::Rest(Some(name)) => write!(f, "..{name}"),
             Pattern::Rest(None) => "..".fmt(f),
             Pattern::Ref(mutability, pattern) => write!(f, "&{mutability}{pattern}"),
+            Pattern::RangeExc(head, tail) => write!(f, "{head}..{tail}"),
+            Pattern::RangeInc(head, tail) => write!(f, "{head}..={tail}"),
             Pattern::Tuple(patterns) => separate(patterns, ", ")(f.delimit(INLINE_PARENS)),
             Pattern::Array(patterns) => separate(patterns, ", ")(f.delimit(INLINE_SQUARE)),
             Pattern::Struct(path, items) => {

@@ -469,7 +469,7 @@ impl Parse<'_> for Function {
     }
 }
 
-type FnSig = (Vec<Pattern>, Vec<TyKind>);
+type FnSig = (Pattern, Vec<TyKind>);
 
 impl Parse<'_> for FnSig {
     /// Parses the [parameters](Param) associated with a Function
@@ -484,7 +484,7 @@ impl Parse<'_> for FnSig {
                 break;
             }
         }
-        Ok((params, types))
+        Ok((Pattern::Tuple(params), types))
     }
 }
 
@@ -783,7 +783,7 @@ impl Parse<'_> for TyRef {
             }
             p.consume_peeked();
         }
-        Ok(TyRef { count, mutable: Mutability::parse(p)?, to: Path::parse(p)? })
+        Ok(TyRef { count, mutable: Mutability::parse(p)?, to: Box::new(Ty::parse(p)?) })
     }
 }
 

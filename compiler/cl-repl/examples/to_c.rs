@@ -54,13 +54,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub use yamler::CLangifier;
-pub mod yamler {
-    use crate::yamlify::CLangify;
+pub use clangifier::CLangifier;
+pub mod clangifier {
+    use crate::clangify::CLangify;
     use std::{
         fmt::Display,
         io::Write,
-        ops::{Deref, DerefMut},
+        ops::{Add, Deref, DerefMut},
     };
     #[derive(Debug, Default)]
     pub struct CLangifier {
@@ -104,9 +104,17 @@ pub mod yamler {
         }
 
         /// Prints a section header and increases indentation
-        pub fn key(&mut self, name: impl Display) -> Section {
+        pub fn nest(&mut self, name: impl Display) -> Section {
             print!("{name}");
             self.indent()
+        }
+    }
+
+    impl<C: CLangify + ?Sized> Add<&C> for &mut CLangifier {
+        type Output = Self;
+
+        fn add(self, rhs: &C) -> Self::Output {
+            self.p(rhs)
         }
     }
 
@@ -142,10 +150,11 @@ pub mod yamler {
     }
 }
 
-pub mod yamlify {
+pub mod clangify {
+    use core::panic;
     use std::iter;
 
-    use super::yamler::CLangifier;
+    use super::clangifier::CLangifier;
     use cl_ast::*;
 
     pub trait CLangify {
@@ -153,11 +162,17 @@ pub mod yamlify {
     }
 
     impl CLangify for File {
-        fn print(&self, y: &mut CLangifier) {
+        fn print(&self, mut y: &mut CLangifier) {
             let File { name, items } = self;
             // TODO: turn name into include guard
-            y.p("// Generated from ").p(name).endl();
-            y.p(items);
+            y = (y + "// Generated from " + name).endl();
+            for (idx, item) in items.iter().enumerate() {
+                if idx > 0 {
+                    y.endl().endl();
+                }
+                y.p(item);
+            }
+            y.endl();
         }
     }
     impl CLangify for Visibility {
@@ -174,14 +189,14 @@ pub mod yamlify {
     impl CLangify for Attrs {
         fn print(&self, y: &mut CLangifier) {
             let Self { meta } = self;
-            y.key("Attrs").p(meta);
+            y.nest("Attrs").p(meta);
             todo!("Attributes");
         }
     }
     impl CLangify for Meta {
         fn print(&self, y: &mut CLangifier) {
             let Self { name, kind } = self;
-            y.key("Meta").p(name).p(kind);
+            y.nest("Meta").p(name).p(kind);
             todo!("Attributes");
         }
     }
@@ -199,7 +214,7 @@ pub mod yamlify {
     impl CLangify for Item {
         fn print(&self, y: &mut CLangifier) {
             let Self { span: _, attrs: _, vis, kind } = self;
-            y.p(vis).p(kind).endl().endl();
+            y.p(vis).p(kind);
         }
     }
     impl CLangify for ItemKind {
@@ -241,7 +256,7 @@ pub mod yamlify {
     impl CLangify for Module {
         fn print(&self, y: &mut CLangifier) {
             let Self { name, file } = self;
-            y.key("// mod ").p(name).p(" {").endl();
+            y.nest("// mod ").p(name).p(" {").endl();
             y.p(file);
             y.endl().p("// } mod ").p(name);
         }
@@ -255,13 +270,17 @@ pub mod yamlify {
                 TyKind::Empty => &[],
                 _ => panic!("Unsupported function args: {args}"),
             };
+            let bind = match bind {
+                Pattern::Tuple(tup) => tup.as_slice(),
+                _ => panic!("Unsupported function binders: {args}"),
+            };
             match rety {
                 Some(ty) => y.p(ty),
                 None => y.p("void"),
             }
             .p(" ")
             .p(name)
-            .p("(");
+            .p(" (");
             for (idx, (bind, ty)) in bind.iter().zip(types).enumerate() {
                 if idx > 0 {
                     y.p(", ");
@@ -269,13 +288,13 @@ pub mod yamlify {
                 // y.print("/* TODO: desugar pat match args */");
                 y.p(ty).p(" ").p(bind);
             }
-            y.p(")").p(body);
+            y.p(") ").p(body);
         }
     }
     impl CLangify for Struct {
         fn print(&self, y: &mut CLangifier) {
             let Self { name, kind } = self;
-            y.p("struct ").p(name).key(" {").p(kind);
+            y.p("struct ").p(name).nest(" {").p(kind);
             y.endl().p("}");
         }
     }
@@ -302,7 +321,7 @@ pub mod yamlify {
     impl CLangify for Enum {
         fn print(&self, y: &mut CLangifier) {
             let Self { name, variants } = self;
-            y.key("enum ").p(name).p(" {").endl();
+            y.nest("enum ").p(name).p(" {").endl();
             match variants {
                 Some(v) => {
                     for (idx, variant) in v.iter().enumerate() {
@@ -336,7 +355,7 @@ pub mod yamlify {
     impl CLangify for Impl {
         fn print(&self, y: &mut CLangifier) {
             let Self { target, body } = self;
-            y.key("/* TODO: impl ").p(target).p(" { */ ");
+            y.nest("/* TODO: impl ").p(target).p(" { */ ");
             y.p(body);
             y.p("/* } // impl ").p(target).p(" */ ");
         }
@@ -372,7 +391,7 @@ pub mod yamlify {
         fn print(&self, y: &mut CLangifier) {
             let Self { stmts } = self;
             {
-                let mut y = y.key("{");
+                let mut y = y.nest("{");
                 y.endl();
                 if let [
                     stmts @ ..,
@@ -442,14 +461,14 @@ pub mod yamlify {
                 ExprKind::Break(k) => k.print(y),
                 ExprKind::Return(k) => k.print(y),
                 ExprKind::Continue => {
-                    y.key("continue");
+                    y.nest("continue");
                 }
             }
         }
     }
     impl CLangify for Quote {
         fn print(&self, y: &mut CLangifier) {
-            y.key("\"");
+            y.nest("\"");
             print!("{self}");
             y.p("\"");
         }
@@ -463,7 +482,7 @@ pub mod yamlify {
                     y.p(ty).p(" ").p(mutable).p(name).p("[").p(count).p("]");
                 }
                 TyKind::Fn(TyFn { args, rety }) => {
-                    y.key("(").p(rety).p(" *").p(mutable).p(name).p(")(");
+                    y.nest("(").p(rety).p(" *").p(mutable).p(name).p(")(");
                     match args.as_ref() {
                         TyKind::Empty => {}
                         TyKind::Tuple(TyTuple { types }) => {
@@ -498,11 +517,13 @@ pub mod yamlify {
                 Pattern::Literal(literal) => y.p(literal),
                 Pattern::Rest(name) => y.p("..").p(name),
                 Pattern::Ref(mutability, pattern) => y.p("&").p(mutability).p(pattern),
-                Pattern::Tuple(patterns) => y.key("Tuple").p(patterns),
-                Pattern::Array(patterns) => y.key("Array").p(patterns),
+                Pattern::RangeExc(head, tail) => y.p("RangeExc").p(head).p(tail),
+                Pattern::RangeInc(head, tail) => y.p("RangeExc").p(head).p(tail),
+                Pattern::Tuple(patterns) => y.nest("Tuple").p(patterns),
+                Pattern::Array(patterns) => y.nest("Array").p(patterns),
                 Pattern::Struct(path, items) => {
                     {
-                        let mut y = y.key("Struct");
+                        let mut y = y.nest("Struct");
                         y.p(path);
                         for (name, item) in items {
                             y.p(name).p(item);
@@ -512,7 +533,7 @@ pub mod yamlify {
                 }
                 Pattern::TupleStruct(path, items) => {
                     {
-                        let mut y = y.key("TupleStruct");
+                        let mut y = y.nest("TupleStruct");
                         y.p(path).p(items);
                     }
                     y
@@ -524,7 +545,7 @@ pub mod yamlify {
         fn print(&self, y: &mut CLangifier) {
             let Self { scrutinee, arms } = self;
             y.p("/* match ").p(scrutinee);
-            y.key(" { ").p(arms);
+            y.nest(" { ").p(arms);
             y.p(" } */");
         }
     }
@@ -575,7 +596,7 @@ pub mod yamlify {
                 UnaryKind::Not => y.p("!").p(tail),
                 UnaryKind::RangeInc => todo!("Unary RangeInc in C"),
                 UnaryKind::RangeExc => todo!("Unary RangeExc in C"),
-                UnaryKind::Loop => y.key("while (1) { ").p(tail).p(" }"),
+                UnaryKind::Loop => y.nest("while (1) { ").p(tail).p(" }"),
                 UnaryKind::At => todo!(),
                 UnaryKind::Tilde => todo!(),
             };
@@ -584,7 +605,7 @@ pub mod yamlify {
     impl CLangify for Cast {
         fn print(&self, y: &mut CLangifier) {
             let Self { head, ty } = self;
-            y.key("(").p(ty).p(")");
+            y.nest("(").p(ty).p(")");
             y.p(head);
         }
     }
@@ -611,7 +632,7 @@ pub mod yamlify {
     impl CLangify for Tuple {
         fn print(&self, y: &mut CLangifier) {
             let Self { exprs } = self;
-            let mut y = y.key("( ");
+            let mut y = y.nest("( ");
             for (idx, expr) in exprs.iter().enumerate() {
                 if idx > 0 {
                     y.p(", ");
@@ -633,9 +654,9 @@ pub mod yamlify {
     impl CLangify for Structor {
         fn print(&self, y: &mut CLangifier) {
             let Self { to, init } = self;
-            y.key("(").p(to).p(")");
+            y.nest("(").p(to).p(")");
             {
-                let mut y = y.key("{ ");
+                let mut y = y.nest("{ ");
                 for (idx, field) in init.iter().enumerate() {
                     if idx > 0 {
                         y.p(", ");
@@ -657,7 +678,7 @@ pub mod yamlify {
         fn print(&self, y: &mut CLangifier) {
             let Self { values } = self;
             {
-                let mut y = y.key("{");
+                let mut y = y.nest("{");
                 y.endl();
                 for (idx, value) in values.iter().enumerate() {
                     if idx > 0 {
@@ -672,14 +693,10 @@ pub mod yamlify {
     impl CLangify for ArrayRep {
         fn print(&self, y: &mut CLangifier) {
             let Self { value, repeat } = self;
-            // TODO: compile time evaluation
-            let ExprKind::Literal(Literal::Int(count)) = &repeat.kind else {
-                panic!("Unsupported repeat count: {repeat}");
-            };
             {
-                let mut y = y.key("{");
+                let mut y = y.nest("{");
                 y.endl();
-                for idx in 0..*count {
+                for idx in 0..*repeat {
                     if idx > 0 {
                         y.p(", ");
                     }
@@ -707,24 +724,35 @@ pub mod yamlify {
             // declared on every line lmao. This will require type info.
             let Self { cond, pass, fail } = self;
             let Else { body: fail } = fail;
-            y.key("while(1) { if (").p(cond).p(")").p(pass);
-            if let Some(fail) = fail {
-                y.p("else { ").p(fail).p("; break; }");
+            y.nest("while(1) {")
+                .endl()
+                .p("if (")
+                .p(cond)
+                .p(") ")
+                .p(pass);
+            {
+                let mut y = y.nest(" else {");
+                y.endl();
+                if let Some(fail) = fail {
+                    y.p(fail).p(";").endl();
+                }
+                y.p("break;");
             }
+            y.endl().p("}");
         }
     }
     impl CLangify for Else {
         fn print(&self, y: &mut CLangifier) {
             let Self { body } = self;
             if let Some(body) = body {
-                y.key("else ").p(body);
+                y.p(" else ").p(body);
             }
         }
     }
     impl CLangify for If {
         fn print(&self, y: &mut CLangifier) {
             let Self { cond, pass, fail } = self;
-            y.p("(").p(cond).p(")");
+            y.p("if (").p(cond).p(")");
             y.p(pass).p(fail);
         }
     }
@@ -747,13 +775,13 @@ pub mod yamlify {
     impl CLangify for Break {
         fn print(&self, y: &mut CLangifier) {
             let Self { body } = self;
-            y.key("break ").p(body);
+            y.nest("break ").p(body);
         }
     }
     impl CLangify for Return {
         fn print(&self, y: &mut CLangifier) {
             let Self { body } = self;
-            y.key("return ").p(body);
+            y.nest("return ").p(body);
         }
     }
     impl CLangify for Literal {
@@ -830,7 +858,7 @@ pub mod yamlify {
         fn print(&self, y: &mut CLangifier) {
             let Self { types } = self;
             {
-                let mut y = y.key("struct {");
+                let mut y = y.nest("struct {");
                 y.endl();
                 for (idx, ty) in types.iter().enumerate() {
                     if idx > 0 {
@@ -855,7 +883,7 @@ pub mod yamlify {
         fn print(&self, y: &mut CLangifier) {
             let Self { args, rety } = self;
             // TODO: function pointer syntax
-            y.key("*(").p(rety).p(")(");
+            y.nest("(").p(rety).p(" *)(");
             match args.as_ref() {
                 TyKind::Empty => y,
                 TyKind::Tuple(TyTuple { types }) => {

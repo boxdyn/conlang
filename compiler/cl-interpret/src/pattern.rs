@@ -20,6 +20,8 @@ pub fn variables(pat: &Pattern) -> Vec<&Sym> {
             Pattern::Rest(Some(pattern)) => patvars(set, pattern),
             Pattern::Rest(None) => {}
             Pattern::Ref(_, pattern) => patvars(set, pattern),
+            Pattern::RangeExc(_, _) => {}
+            Pattern::RangeInc(_, _) => {}
             Pattern::Tuple(patterns) | Pattern::Array(patterns) => {
                 patterns.iter().for_each(|pat| patvars(set, pat))
             }
@@ -126,6 +128,70 @@ pub fn append_sub<'pat>(
         (Pattern::Ref(_, pat), ConValue::Ref(r)) => {
             todo!("Dereference <{r}> in pattern matching {pat}")
         }
+
+        (Pattern::RangeExc(head, tail), value) => match (head.as_ref(), tail.as_ref(), value) {
+            (
+                Pattern::Literal(Literal::Int(a)),
+                Pattern::Literal(Literal::Int(c)),
+                ConValue::Int(b),
+            ) => (*a as isize <= b as _ && b < *c as isize)
+                .then_some(())
+                .ok_or(Error::NotAssignable()),
+            (
+                Pattern::Literal(Literal::Char(a)),
+                Pattern::Literal(Literal::Char(c)),
+                ConValue::Char(b),
+            ) => (*a <= b && b < *c)
+                .then_some(())
+                .ok_or(Error::NotAssignable()),
+            (
+                Pattern::Literal(Literal::Float(a)),
+                Pattern::Literal(Literal::Float(c)),
+                ConValue::Float(b),
+            ) => (f64::from_bits(*a) <= b && b < f64::from_bits(*c))
+                .then_some(())
+                .ok_or(Error::NotAssignable()),
+            (
+                Pattern::Literal(Literal::String(a)),
+                Pattern::Literal(Literal::String(c)),
+                ConValue::String(b),
+            ) => (a.as_str() <= b.to_ref() && b.to_ref() < c.as_str())
+                .then_some(())
+                .ok_or(Error::NotAssignable()),
+            _ => Err(Error::NotAssignable()),
+        },
+
+        (Pattern::RangeInc(head, tail), value) => match (head.as_ref(), tail.as_ref(), value) {
+            (
+                Pattern::Literal(Literal::Int(a)),
+                Pattern::Literal(Literal::Int(c)),
+                ConValue::Int(b),
+            ) => (*a as isize <= b && b <= *c as isize)
+                .then_some(())
+                .ok_or(Error::NotAssignable()),
+            (
+                Pattern::Literal(Literal::Char(a)),
+                Pattern::Literal(Literal::Char(c)),
+                ConValue::Char(b),
+            ) => (*a <= b && b <= *c)
+                .then_some(())
+                .ok_or(Error::NotAssignable()),
+            (
+                Pattern::Literal(Literal::Float(a)),
+                Pattern::Literal(Literal::Float(c)),
+                ConValue::Float(b),
+            ) => (f64::from_bits(*a) <= b && b <= f64::from_bits(*c))
+                .then_some(())
+                .ok_or(Error::NotAssignable()),
+            (
+                Pattern::Literal(Literal::String(a)),
+                Pattern::Literal(Literal::String(c)),
+                ConValue::String(b),
+            ) => (a.as_str() <= b.to_ref() && b.to_ref() <= c.as_str())
+                .then_some(())
+                .ok_or(Error::NotAssignable()),
+            _ => Err(Error::NotAssignable()),
+        },
 
         (Pattern::Array(patterns), ConValue::Array(values)) => {
             match rest_binding(sub, patterns, values.into_vec().into())? {

@@ -140,6 +140,14 @@ impl TryFrom<Expr> for Pattern {
                 };
                 Pattern::TupleStruct(path, args)
             }
+            ExprKind::Binary(Binary { kind: BinaryKind::RangeExc, parts }) => {
+                let (head, tail) = (Pattern::try_from(parts.0)?, Pattern::try_from(parts.1)?);
+                Pattern::RangeExc(head.into(), tail.into())
+            }
+            ExprKind::Binary(Binary { kind: BinaryKind::RangeInc, parts }) => {
+                let (head, tail) = (Pattern::try_from(parts.0)?, Pattern::try_from(parts.1)?);
+                Pattern::RangeInc(head.into(), tail.into())
+            }
             ExprKind::Unary(Unary { kind: UnaryKind::RangeExc, tail }) => {
                 Pattern::Rest(Some(Pattern::try_from(*tail)?.into()))
             }

@@ -100,7 +100,7 @@ pub trait Fold {
         Function {
             name: self.fold_sym(name),
             sign: self.fold_ty_fn(sign),
-            bind: bind.into_iter().map(|p| self.fold_pattern(p)).collect(),
+            bind: self.fold_pattern(bind),
             body: body.map(|b| self.fold_expr(b)),
         }
     }
@@ -184,7 +184,7 @@ pub trait Fold {
     }
     fn fold_ty_ref(&mut self, t: TyRef) -> TyRef {
         let TyRef { mutable, count, to } = t;
-        TyRef { mutable: self.fold_mutability(mutable), count, to: self.fold_path(to) }
+        TyRef { mutable: self.fold_mutability(mutable), count, to: Box::new(self.fold_ty(*to)) }
     }
     fn fold_ty_fn(&mut self, t: TyFn) -> TyFn {
         let TyFn { args, rety } = t;
@@ -245,6 +245,14 @@ pub trait Fold {
             Pattern::Ref(mutability, pattern) => Pattern::Ref(
                 self.fold_mutability(mutability),
                 Box::new(self.fold_pattern(*pattern)),
+            ),
+            Pattern::RangeExc(head, tail) => Pattern::RangeInc(
+                Box::new(self.fold_pattern(*head)),
+                Box::new(self.fold_pattern(*tail)),
+            ),
+            Pattern::RangeInc(head, tail) => Pattern::RangeInc(
+                Box::new(self.fold_pattern(*head)),
+                Box::new(self.fold_pattern(*tail)),
             ),
             Pattern::Tuple(patterns) => {
                 Pattern::Tuple(patterns.into_iter().map(|p| self.fold_pattern(p)).collect())
@@ -356,10 +364,7 @@ pub trait Fold {
     }
     fn fold_array_rep(&mut self, a: ArrayRep) -> ArrayRep {
         let ArrayRep { value, repeat } = a;
-        ArrayRep {
-            value: Box::new(self.fold_expr(*value)),
-            repeat: Box::new(self.fold_expr(*repeat)),
-        }
+        ArrayRep { value: Box::new(self.fold_expr(*value)), repeat }
     }
     fn fold_addrof(&mut self, a: AddrOf) -> AddrOf {
         let AddrOf { mutable, expr } = a;

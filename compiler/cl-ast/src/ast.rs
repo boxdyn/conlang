@@ -129,7 +129,7 @@ pub struct Static {
 pub struct Function {
     pub name: Sym,
     pub sign: TyFn,
-    pub bind: Vec<Pattern>,
+    pub bind: Pattern,
     pub body: Option<Expr>,
 }
 
@@ -255,7 +255,7 @@ pub struct TyTuple {
 pub struct TyRef {
     pub mutable: Mutability,
     pub count: u16,
-    pub to: Path,
+    pub to: Box<Ty>,
 }
 
 /// The args and return value for a function pointer [Ty]pe
@@ -360,7 +360,7 @@ pub enum ExprKind {
     While(While),
     /// An [If] expression: `if` [`Expr`] [`Block`] [`Else`]?
     If(If),
-    /// A [For] expression: `for` Pattern `in` [`Expr`] [`Block`] [`Else`]?
+    /// A [For] expression: `for` [`Pattern`] `in` [`Expr`] [`Block`] [`Else`]?
     For(For),
     /// A [Break] expression: `break` [`Expr`]?
     Break(Break),
@@ -392,6 +392,8 @@ pub enum Pattern {
     Literal(Literal),
     Rest(Option<Box<Pattern>>),
     Ref(Mutability, Box<Pattern>),
+    RangeExc(Box<Pattern>, Box<Pattern>),
+    RangeInc(Box<Pattern>, Box<Pattern>),
     Tuple(Vec<Pattern>),
     Array(Vec<Pattern>),
     Struct(Path, Vec<(Sym, Option<Pattern>)>),
@@ -557,7 +559,7 @@ pub struct Array {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ArrayRep {
     pub value: Box<Expr>,
-    pub repeat: Box<Expr>,
+    pub repeat: usize,
 }
 
 /// An address-of expression: `&` `mut`? [`Expr`]

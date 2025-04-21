@@ -1,6 +1,6 @@
 //! Collects the "Upvars" of a function at the point of its creation, allowing variable capture
 use crate::{convalue::ConValue, env::Environment};
-use cl_ast::{ast_visitor::visit::*, Function, Let, Path, PathPart, Pattern, Sym};
+use cl_ast::{Function, Let, Path, PathPart, Pattern, Sym, ast_visitor::visit::*};
 use std::collections::{HashMap, HashSet};
 
 pub fn collect_upvars(f: &Function, env: &Environment) -> super::Upvars {
@@ -67,7 +67,7 @@ impl<'a> Visit<'a> for CollectUpvars<'_> {
     fn visit_function(&mut self, f: &'a cl_ast::Function) {
         let Function { name: _, sign: _, bind, body } = f;
         // parameters can never be upvars
-        bind.iter().for_each(|pat| self.visit_pattern(pat));
+        self.visit_pattern(bind);
         if let Some(body) = body {
             self.visit_expr(body);
         }
@@ -115,6 +115,8 @@ impl<'a> Visit<'a> for CollectUpvars<'_> {
                 self.visit_mutability(mutability);
                 self.visit_pattern(pattern);
             }
+            Pattern::RangeExc(_, _) => {}
+            Pattern::RangeInc(_, _) => {}
             Pattern::Tuple(patterns) => {
                 patterns.iter().for_each(|p| self.visit_pattern(p));
             }

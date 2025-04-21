@@ -57,9 +57,6 @@ impl Callable for Function {
         let FnDecl { name, bind, body, sign: _ } = &*self.decl;
 
         // Check arg mapping
-        if args.len() != bind.len() {
-            return Err(Error::ArgNumber(bind.len(), args.len()));
-        }
         if self.is_constructor {
             return Ok(ConValue::TupleStruct(Box::new((
                 name.to_ref(),
@@ -73,14 +70,10 @@ impl Callable for Function {
         let upvars = self.upvars.take();
         env.push_frame("upvars", upvars);
 
-        eprintln!("{name}{args:?}");
-
         // TODO: completely refactor data storage
         let mut frame = env.frame("fn args");
-        for (bind, value) in bind.iter().zip(args) {
-            for (name, value) in pattern::substitution(bind, value.clone())? {
-                frame.insert(*name, Some(value));
-            }
+        for (name, value) in pattern::substitution(bind, ConValue::Tuple(args.into()))? {
+            frame.insert(*name, Some(value));
         }
         let res = body.interpret(&mut frame);
         drop(frame);

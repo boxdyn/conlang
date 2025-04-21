@@ -342,6 +342,8 @@ impl WeightOf for Pattern {
             Pattern::Rest(Some(pattern)) => pattern.weight_of(),
             Pattern::Rest(None) => 0,
             Pattern::Ref(mutability, pattern) => mutability.weight_of() + pattern.weight_of(),
+            Pattern::RangeExc(head, tail) => head.weight_of() + tail.weight_of(),
+            Pattern::RangeInc(head, tail) => head.weight_of() + tail.weight_of(),
             Pattern::Tuple(patterns) | Pattern::Array(patterns) => patterns.weight_of(),
             Pattern::Struct(path, items) => {
                 let sitems: usize = items

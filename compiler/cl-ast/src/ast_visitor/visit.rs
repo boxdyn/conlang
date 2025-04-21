@@ -82,7 +82,7 @@ pub trait Visit<'a>: Sized {
         let Function { name, sign, bind, body } = f;
         self.visit_sym(name);
         self.visit_ty_fn(sign);
-        bind.iter().for_each(|p| self.visit_pattern(p));
+        self.visit_pattern(bind);
         if let Some(b) = body {
             self.visit_expr(b)
         }
@@ -154,7 +154,7 @@ pub trait Visit<'a>: Sized {
     fn visit_ty_ref(&mut self, t: &'a TyRef) {
         let TyRef { mutable, count: _, to } = t;
         self.visit_mutability(mutable);
-        self.visit_path(to);
+        self.visit_ty(to);
     }
     fn visit_ty_fn(&mut self, t: &'a TyFn) {
         let TyFn { args, rety } = t;
@@ -214,6 +214,14 @@ pub trait Visit<'a>: Sized {
             Pattern::Ref(mutability, pattern) => {
                 self.visit_mutability(mutability);
                 self.visit_pattern(pattern);
+            }
+            Pattern::RangeExc(head, tail) => {
+                self.visit_pattern(head);
+                self.visit_pattern(tail);
+            }
+            Pattern::RangeInc(head, tail) => {
+                self.visit_pattern(head);
+                self.visit_pattern(tail);
             }
             Pattern::Tuple(patterns) => {
                 patterns.iter().for_each(|p| self.visit_pattern(p));
@@ -311,9 +319,8 @@ pub trait Visit<'a>: Sized {
         values.iter().for_each(|e| self.visit_expr(e))
     }
     fn visit_array_rep(&mut self, a: &'a ArrayRep) {
-        let ArrayRep { value, repeat } = a;
+        let ArrayRep { value, repeat: _ } = a;
         self.visit_expr(value);
-        self.visit_expr(repeat);
     }
     fn visit_addrof(&mut self, a: &'a AddrOf) {
         let AddrOf { mutable, expr } = a;

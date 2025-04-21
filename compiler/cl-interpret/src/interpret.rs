@@ -134,11 +134,12 @@ impl Interpret for Struct {
                             .into(),
                         ),
                     },
-                    bind: args
-                        .iter()
-                        .enumerate()
-                        .map(|(idx, _)| Pattern::Name(idx.to_string().into()))
-                        .collect(),
+                    bind: Pattern::Tuple(
+                        args.iter()
+                            .enumerate()
+                            .map(|(idx, _)| Pattern::Name(idx.to_string().into()))
+                            .collect(),
+                    ),
                     body: None,
                 };
                 let constructor = crate::function::Function::new_constructor(constructor);
@@ -814,12 +815,8 @@ impl Interpret for Array {
 impl Interpret for ArrayRep {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self { value, repeat } = self;
-        let repeat = match repeat.interpret(env)? {
-            ConValue::Int(v) => v,
-            _ => Err(Error::TypeError())?,
-        };
         let value = value.interpret(env)?;
-        Ok(ConValue::Array(vec![value; repeat as usize].into()))
+        Ok(ConValue::Array(vec![value; *repeat].into()))
     }
 }
 impl Interpret for AddrOf {

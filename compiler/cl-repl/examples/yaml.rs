@@ -41,7 +41,6 @@ pub use yamler::Yamler;
 pub mod yamler {
     use crate::yamlify::Yamlify;
     use std::{
-        fmt::Display,
         io::Write,
         ops::{Deref, DerefMut},
     };
@@ -81,22 +80,25 @@ pub mod yamler {
         }
 
         /// Prints a section header and increases indentation
-        pub fn key(&mut self, name: impl Display) -> Section {
+        pub fn key(&mut self, name: impl Yamlify) -> Section {
             println!();
             self.print_indentation(&mut std::io::stdout().lock());
-            print!("- {name}:");
+            print!("- ");
+            name.yaml(self);
+            print!(":");
             self.indent()
         }
 
         /// Prints a yaml key value pair: `- name: "value"`
-        pub fn pair<D: Display, T: Yamlify>(&mut self, name: D, value: T) -> &mut Self {
-            self.key(name).yaml(&value);
+        pub fn pair<D: Yamlify, T: Yamlify>(&mut self, name: D, value: T) -> &mut Self {
+            self.key(name).value(value);
             self
         }
 
         /// Prints a yaml scalar value: `"name"``
-        pub fn value<D: Display>(&mut self, value: D) -> &mut Self {
-            print!(" {value}");
+        pub fn value<D: Yamlify>(&mut self, value: D) -> &mut Self {
+            print!(" ");
+            value.yaml(self);
             self
         }
 
@@ -334,7 +336,7 @@ pub mod yamlify {
     impl Yamlify for Stmt {
         fn yaml(&self, y: &mut Yamler) {
             let Self { span: _, kind, semi } = self;
-            y.key("Stmt").yaml(kind).yaml(semi);
+            y.key("Stmt").value(kind).yaml(semi);
         }
     }
     impl Yamlify for Semi {
@@ -415,11 +417,17 @@ pub mod yamlify {
                 Pattern::Name(name) => y.value(name),
                 Pattern::Literal(literal) => y.value(literal),
                 Pattern::Rest(name) => y.pair("Rest", name),
-                Pattern::Ref(mutability, pattern) => {
-                    y.pair("mutability", mutability).pair("subpattern", pattern)
+                Pattern::Ref(mutability, pattern) => y.yaml(mutability).pair("Pat", pattern),
+                Pattern::RangeInc(head, tail) => {
+                    y.key("RangeInc").pair("head", head).pair("tail", tail);
+                    y
                 }
-                Pattern::Tuple(patterns) => y.key("Tuple").yaml(patterns),
-                Pattern::Array(patterns) => y.key("Array").yaml(patterns),
+                Pattern::RangeExc(head, tail) => {
+                    y.key("RangeExc").pair("head", head).pair("tail", tail);
+                    y
+                }
+                Pattern::Tuple(patterns) => y.key("Tuple").list(patterns),
+                Pattern::Array(patterns) => y.key("Array").list(patterns),
                 Pattern::Struct(path, items) => {
                     {
                         let mut y = y.key("Struct");
@@ -431,10 +439,7 @@ pub mod yamlify {
                     y
                 }
                 Pattern::TupleStruct(path, items) => {
-                    {
-                        let mut y = y.key("TupleStruct");
-                        y.yaml(path).list(items);
-                    }
+                    y.key("TupleStruct").yaml(path).list(items);
                     y
                 }
             };
@@ -472,11 +477,6 @@ pub mod yamlify {
                 .pair("tail", &parts.1);
         }
     }
-    impl Yamlify for ModifyKind {
-        fn yaml(&self, y: &mut Yamler) {
-            y.value(self);
-        }
-    }
     impl Yamlify for Binary {
         fn yaml(&self, y: &mut Yamler) {
             let Self { kind, parts } = self;
@@ -486,20 +486,10 @@ pub mod yamlify {
                 .pair("tail", &parts.1);
         }
     }
-    impl Yamlify for BinaryKind {
-        fn yaml(&self, y: &mut Yamler) {
-            y.value(self);
-        }
-    }
     impl Yamlify for Unary {
         fn yaml(&self, y: &mut Yamler) {
             let Self { kind, tail } = self;
             y.key("Unary").pair("kind", kind).pair("tail", tail);
-        }
-    }
-    impl Yamlify for UnaryKind {
-        fn yaml(&self, y: &mut Yamler) {
-            y.value(self);
         }
     }
     impl Yamlify for Cast {
@@ -617,13 +607,14 @@ pub mod yamlify {
         }
     }
     impl Yamlify for Literal {
-        fn yaml(&self, y: &mut Yamler) {
-            y.value(format_args!("\"{self}\""));
-        }
-    }
-    impl Yamlify for Sym {
-        fn yaml(&self, y: &mut Yamler) {
-            y.value(self);
+        fn yaml(&self, _y: &mut Yamler) {
+            match self {
+                Literal::Bool(v) => print!("{v}"),
+                Literal::Char(v) => print!("'{}'", v.escape_debug()),
+                Literal::Int(v) => print!("{v}"),
+                Literal::Float(v) => print!("{v}"),
+                Literal::String(v) => print!("{}", v.escape_debug()),
+            }
         }
     }
     impl Yamlify for Ty {
@@ -740,14 +731,15 @@ pub mod yamlify {
     macro_rules! scalar {
         ($($t:ty),*$(,)?) => {
             $(impl Yamlify for $t {
-                fn yaml(&self, y: &mut Yamler) {
-                    y.value(self);
+                fn yaml(&self, _y: &mut Yamler) {
+                    print!("{self}");
                 }
             })*
         };
     }
 
     scalar! {
-        bool, char, u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, &str, String
+        bool, char, u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, &str, String,
+        BinaryKind, UnaryKind, ModifyKind, Sym,
     }
 }
