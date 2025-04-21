@@ -31,7 +31,7 @@ use crate::{
     source::Source,
     type_kind::TypeKind,
 };
-use cl_ast::{Meta, PathPart, Sym};
+use cl_ast::{Expr, Meta, PathPart, Sym};
 use cl_structures::{index_map::IndexMap, span::Span};
 use std::collections::HashMap;
 
@@ -50,11 +50,11 @@ pub struct Table<'a> {
     pub(crate) children: HashMap<Handle, HashMap<Sym, Handle>>,
     pub(crate) imports: HashMap<Handle, HashMap<Sym, Handle>>,
     pub(crate) use_items: HashMap<Handle, Vec<Handle>>,
+    bodies: HashMap<Handle, &'a Expr>,
     types: HashMap<Handle, TypeKind>,
     spans: HashMap<Handle, Span>,
     metas: HashMap<Handle, &'a [Meta]>,
     sources: HashMap<Handle, Source<'a>>,
-    // code: HashMap<Handle, BasicBlock>, // TODO: lower sources
     impl_targets: HashMap<Handle, Handle>,
     anon_types: HashMap<TypeKind, Handle>,
 
@@ -77,6 +77,7 @@ impl<'a> Table<'a> {
             children: HashMap::new(),
             imports: HashMap::new(),
             use_items: HashMap::new(),
+            bodies: HashMap::new(),
             types: HashMap::new(),
             spans: HashMap::new(),
             metas: HashMap::new(),
@@ -142,6 +143,18 @@ impl<'a> Table<'a> {
         entry
     }
 
+    pub(crate) fn uninferred_type(&mut self) -> Handle {
+        let handle = self.new_entry(self.root, NodeKind::Type);
+        self.types.insert(handle, TypeKind::Uninferred);
+        handle
+    }
+
+    pub(crate) fn type_variable(&mut self) -> Handle {
+        let handle = self.new_entry(self.root, NodeKind::Type);
+        self.types.insert(handle, TypeKind::Variable);
+        handle
+    }
+
     pub const fn root_entry(&self) -> Entry<'_, 'a> {
         self.root.to_entry(self)
     }
@@ -172,6 +185,10 @@ impl<'a> Table<'a> {
         self.imports.get(&node)
     }
 
+    pub fn body(&self, node: Handle) -> Option<&'a Expr> {
+        self.bodies.get(&node).copied()
+    }
+
     pub fn ty(&self, node: Handle) -> Option<&TypeKind> {
         self.types.get(&node)
     }
@@ -190,6 +207,10 @@ impl<'a> Table<'a> {
 
     pub fn impl_target(&self, node: Handle) -> Option<Handle> {
         self.impl_targets.get(&node).copied()
+    }
+
+    pub fn set_body(&mut self, node: Handle, body: &'a Expr) -> Option<&'a Expr> {
+        self.bodies.insert(node, body)
     }
 
     pub fn set_ty(&mut self, node: Handle, kind: TypeKind) -> Option<TypeKind> {
@@ -282,6 +303,7 @@ pub enum NodeKind {
     Const,
     Static,
     Function,
+    Temporary,
     Local,
     Impl,
     Use,
@@ -299,6 +321,7 @@ mod display {
                 NodeKind::Const => write!(f, "const"),
                 NodeKind::Static => write!(f, "static"),
                 NodeKind::Function => write!(f, "fn"),
+                NodeKind::Temporary => write!(f, "temp"),
                 NodeKind::Local => write!(f, "local"),
                 NodeKind::Use => write!(f, "use"),
                 NodeKind::Impl => write!(f, "impl"),

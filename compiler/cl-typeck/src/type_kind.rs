@@ -10,6 +10,10 @@ mod display;
 /// (a component of a [Table](crate::table::Table))
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum TypeKind {
+    /// A type that is yet to be inferred!
+    Uninferred,
+    /// A type variable, to be filled in later
+    Variable,
     /// An alias for an already-defined type
     Instance(Handle),
     /// A primitive type, built-in to the compiler

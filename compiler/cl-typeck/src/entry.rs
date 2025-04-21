@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use cl_ast::{Meta, PathPart, Sym};
+use cl_ast::{Expr, Meta, PathPart, Sym};
 use cl_structures::span::Span;
 
 use crate::{
@@ -76,6 +76,10 @@ impl<'t, 'a> Entry<'t, 'a> {
 
     pub fn imports(&self) -> Option<&HashMap<Sym, Handle>> {
         self.table.imports(self.id)
+    }
+
+    pub fn bodies(&self) -> Option<&'a Expr> {
+        self.table.body(self.id)
     }
 
     pub fn ty(&self) -> Option<&TypeKind> {
@@ -152,6 +156,10 @@ impl<'t, 'a> EntryMut<'t, 'a> {
 
     pub fn add_child(&mut self, name: Sym, child: Handle) -> Option<Handle> {
         self.table.add_child(self.id, name, child)
+    }
+
+    pub fn set_body(&mut self, body: &'a Expr) -> Option<&'a Expr> {
+        self.table.set_body(self.id, body)
     }
 
     pub fn set_ty(&mut self, kind: TypeKind) -> Option<TypeKind> {

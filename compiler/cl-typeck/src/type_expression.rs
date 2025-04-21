@@ -42,10 +42,7 @@ impl TypeExpression for TyKind {
         match self {
             TyKind::Never => Ok(table.anon_type(TypeKind::Never)),
             TyKind::Empty => Ok(table.anon_type(TypeKind::Empty)),
-            TyKind::Infer => {
-                eprintln!("TODO: Introduce type variables");
-                Err(Error::BadPath { parent: node, path: vec![PathPart::Ident("_".into())] })
-            }
+            TyKind::Infer => Ok(table.uninferred_type()),
             TyKind::Path(p) => p.evaluate(table, node),
             TyKind::Array(a) => a.evaluate(table, node),
             TyKind::Slice(s) => s.evaluate(table, node),

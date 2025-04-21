@@ -5,244 +5,405 @@
 //! [1]: https://github.com/tcr/rust-hindley-milner/
 //! [2]: https://github.com/rob-smallshire/hindley-milner-python
 
-use cl_ast::Sym;
-use core::fmt;
-use std::{cell::RefCell, rc::Rc};
+pub mod engine;
 
-/*
-    Types in Conlang:
-    - Never type: !
-      - type !
-      - for<A> ! -> A
-    - Primitive types: bool, i32, (), ...
-      - type bool; ...
-    - Reference types: &T, *T
-      - for<T> type ref<T>; for<T> type ptr<T>
-    - Slice type:      [T]
-      - for<T> type slice<T>
-    - Array type:      [T;usize]
-      - for<T> type array<T, instanceof<usize>>
-    - Tuple type:      (T, ...Z)
-      - for<T, ..> type tuple<T, ..>    // on a per-case basis!
-    - Funct type:      fn Tuple -> R
-      - for<T, R> type T -> R           // on a per-case basis!
-*/
+pub mod error;
 
-/// A refcounted [Type]
-pub type RcType = Rc<Type>;
+pub mod inference {
+    use std::iter;
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct Variable {
-    pub instance: RefCell<Option<RcType>>,
-}
+    use super::{engine::InferenceEngine, error::InferenceError};
+    use crate::{handle::Handle, type_kind::TypeKind};
+    use cl_ast::*;
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct Operator {
-    name: Sym,
-    types: RefCell<Vec<RcType>>,
-}
-
-/// A [Type::Variable] or [Type::Operator]:
-/// - A [Type::Variable] can be either bound or unbound (instance: Some(_) | None)
-/// - A [Type::Operator] has a name (used to identify the operator) and a list of types.
-///
-/// A type which contains unbound variables is considered "generic" (see
-/// [`Type::is_generic()`]).
-#[derive(Debug, PartialEq, Eq)]
-pub enum Type {
-    Variable(Variable),
-    Operator(Operator),
-}
-
-impl Type {
-    /// Creates a new unbound [type variable](Type::Variable)
-    pub fn new_var() -> RcType {
-        Rc::new(Self::Variable(Variable { instance: RefCell::new(None) }))
-    }
-    /// Creates a variable that is a new instance of another [Type]
-    pub fn new_inst(of: &RcType) -> RcType {
-        Rc::new(Self::Variable(Variable {
-            instance: RefCell::new(Some(of.clone())),
-        }))
-    }
-    /// Creates a new [type operator](Type::Operator)
-    pub fn new_op(name: Sym, types: &[RcType]) -> RcType {
-        Rc::new(Self::Operator(Operator {
-            name,
-            types: RefCell::new(types.to_vec()),
-        }))
-    }
-    /// Creates a new [type operator](Type::Operator) representing a lambda
-    pub fn new_fn(takes: &RcType, returns: &RcType) -> RcType {
-        Self::new_op("fn".into(), &[takes.clone(), returns.clone()])
-    }
-    /// Creates a new [type operator](Type::Operator) representing a primitive type
-    pub fn new_prim(name: Sym) -> RcType {
-        Self::new_op(name, &[])
-    }
-    /// Creates a new [type operator](Type::Operator) representing a tuple
-    pub fn new_tuple(members: &[RcType]) -> RcType {
-        Self::new_op("tuple".into(), members)
+    pub trait Inference<'a> {
+        /// Performs type inference
+        fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError>;
     }
 
-    /// Sets this type variable to be an instance `of` the other
-    /// # Panics
-    /// Panics if `self` is not a type variable
-    pub fn set_instance(self: &RcType, of: &RcType) {
-        match self.as_ref() {
-            Type::Operator(_) => unimplemented!("Cannot set instance of a type operator"),
-            Type::Variable(Variable { instance }) => *instance.borrow_mut() = Some(of.clone()),
-        }
-    }
-    /// Checks whether there are any unbound type variables in this type.
-    /// ```rust
-    /// # use cl_typeck::stage::infer::*;
-    /// let bool = Type::new_op("bool".into(), &[]);
-    /// let true_v = Type::new_inst(&bool);
-    /// let unbound = Type::new_var();
-    /// let id_fun = Type::new_fn(&unbound, &unbound);
-    /// let truthy = Type::new_fn(&unbound, &bool);
-    /// assert!(!bool.is_generic());   // bool contains no unbound type variables
-    /// assert!(!true_v.is_generic()); // true_v is bound to `bool`
-    /// assert!(unbound.is_generic()); // unbound is an unbound type variable
-    /// assert!(id_fun.is_generic());  // id_fun is a function with unbound type variables
-    /// assert!(truthy.is_generic());  // truthy is a function with one unbound type variable
-    /// ```
-    pub fn is_generic(self: &RcType) -> bool {
-        match self.as_ref() {
-            Type::Variable(Variable { instance }) => match instance.borrow().as_ref() {
-                // base case: self is an unbound type variable (instance is none)
-                None => true,
-                // Variable is bound to a type which may be generic
-                Some(instance) => instance.is_generic(),
-            },
-            Type::Operator(Operator { types, .. }) => {
-                // Operator may have generic args
-                types.borrow().iter().any(Self::is_generic)
-            }
-        }
-    }
-    /// Makes a deep copy of a type expression.
-    ///
-    /// Bound variables are shared, unbound variables are duplicated.
-    pub fn deep_clone(self: &RcType) -> RcType {
-        // If there aren't any unbound variables, it's fine to clone the entire expression
-        if !self.is_generic() {
-            return self.clone();
-        }
-        // There are unbound type variables, so we make a new one
-        match self.as_ref() {
-            Type::Variable { .. } => Self::new_var(),
-            Type::Operator(Operator { name, types }) => Self::new_op(
-                *name,
-                &types
-                    .borrow()
-                    .iter()
-                    .map(Self::deep_clone)
-                    .collect::<Vec<_>>(),
-            ),
-        }
-    }
-    /// Returns the defining instance of `self`,
-    /// collapsing type instances along the way.
-    /// # May panic
-    /// Panics if this type variable's instance field is already borrowed.
-    /// # Examples
-    /// ```rust
-    /// # use cl_typeck::stage::infer::*;
-    /// let t_bool = Type::new_op("bool".into(), &[]);
-    /// let t_nest = Type::new_inst(&Type::new_inst(&Type::new_inst(&t_bool)));
-    /// let pruned = t_nest.prune();
-    /// assert_eq!(pruned, t_bool);
-    /// assert_eq!(t_nest, Type::new_inst(&t_bool));
-    /// ```
-    pub fn prune(self: &RcType) -> RcType {
-        if let Type::Variable(Variable { instance }) = self.as_ref() {
-            if let Some(old_inst) = instance.borrow_mut().as_mut() {
-                let new_inst = old_inst.prune(); // get defining instance
-                *old_inst = new_inst.clone(); // collapse
-                return new_inst;
-            }
-        }
-        self.clone()
-    }
-
-    /// Checks whether a type expression occurs in another type expression
-    ///
-    /// # Note:
-    /// - Since the test uses strict equality, `self` should be pruned prior to testing.
-    /// - The test is *not guaranteed to terminate* for recursive types.
-    pub fn occurs_in(self: &RcType, other: &RcType) -> bool {
-        if self == other {
-            return true;
-        }
-        match other.as_ref() {
-            Type::Variable(Variable { instance }) => match instance.borrow().as_ref() {
-                Some(t) => self.occurs_in(t),
-                None => false,
-            },
-            Type::Operator(Operator { types, .. }) => {
-                // Note: this might panic.
-                // Think about whether it panics for only recursive types?
-                types.borrow().iter().any(|other| self.occurs_in(other))
-            }
+    impl<'a> Inference<'a> for cl_ast::Expr {
+        fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+            self.kind.infer(e)
         }
     }
 
-    /// Unifies two type expressions, propagating changes via interior mutability
-    pub fn unify(self: &RcType, other: &RcType) -> Result<(), InferenceError> {
-        let (a, b) = (self.prune(), other.prune()); // trim the hedges
-        match (a.as_ref(), b.as_ref()) {
-            (Type::Variable { .. }, _) if !a.occurs_in(&b) => a.set_instance(&b),
-            (Type::Variable { .. }, _) => Err(InferenceError::Recursive(a, b))?,
-            (Type::Operator { .. }, Type::Variable { .. }) => b.unify(&a)?,
-            (
-                Type::Operator(Operator { name: a_name, types: a_types }),
-                Type::Operator(Operator { name: b_name, types: b_types }),
-            ) => {
-                let (a_types, b_types) = (a_types.borrow(), b_types.borrow());
-                if a_name != b_name || a_types.len() != b_types.len() {
-                    Err(InferenceError::Mismatch(a.clone(), b.clone()))?
+    impl<'a> Inference<'a> for cl_ast::ExprKind {
+        fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+            match self {
+                ExprKind::Empty => Ok(e.from_type_kind(TypeKind::Empty)),
+                ExprKind::Quote(quote) => todo!("Quote: {quote}"),
+                ExprKind::Let(l) => {
+                    // Infer the pattern
+                    // Deep copy the ty, if it exists
+                    // Unify the pattern and the ty
+                    // Infer the initializer
+                    // Unify the initializer and the ty
+                    todo!("Let: {l}")
                 }
-                for (a, b) in a_types.iter().zip(b_types.iter()) {
-                    a.unify(b)?
+                ExprKind::Match(m) => {
+                    let Match { scrutinee, arms } = m;
+                    // Infer the scrutinee
+                    let scrutinee = scrutinee.infer(e)?;
+
+                    let scope = e.new_var();
+                    for arm in arms {
+                        let _ty = arm.infer(e)?;
+                    }
+                    // For each pattern:
+                    //   Infer the pattern
+                    //   Unify it with the scrutinee
+                    //   Infer the Expr
+                    //   Unify the expr with the out variable
+                    // Return out
+                    todo!("Match: {m} {scrutinee} {scope}")
                 }
+                ExprKind::Assign(assign) => {
+                    // Infer the tail expression
+                    // Infer the head expression
+                    // Unify head and tail
+                    // Return Empty
+                    todo!("Assign {assign}")
+                }
+                ExprKind::Modify(modify) => {
+                    // Infer the tail expression
+                    // Infer the head expression
+                    // Search within the head type for `(op)_assign`
+                    // Typecheck `op_assign(&mut head, tail)`
+                    todo!("Modify {modify}")
+                }
+                ExprKind::Binary(binary) => {
+                    let Binary { kind: _, parts } = binary;
+                    let (head, tail) = parts.as_ref();
+                    // Infer the tail expression
+                    let tail = tail.infer(e)?;
+                    // Infer the head expression
+                    let head = head.infer(e)?;
+                    // TODO: Search within the head type for `(op)`
+                    e.unify(head, tail)?;
+                    // Typecheck op(head, tail)
+                    Ok(head)
+                }
+                ExprKind::Unary(unary) => {
+                    let Unary { kind: _, tail } = unary;
+                    // Infer the tail expression
+                    let tail = tail.infer(e)?;
+                    // TODO: Search within the tail type for `(op)`
+
+                    // Typecheck `(op)(tail)`
+                    Ok(tail)
+                }
+                ExprKind::Cast(cast) => {
+                    // Infer the head expression
+                    // Evaluate the type
+                    // Decide whether the type is castable
+                    // Return the type
+                    todo!("Cast {cast}")
+                }
+                ExprKind::Member(member) => {
+                    let Member { head, kind } = member;
+                    // Infer the head expression
+                    let head = head.infer(e)?;
+                    // Get the type of head
+                    let ty = e.entry(e.de_inst(head));
+                    // Search within the head type for the memberkind
+                    match kind {
+                        MemberKind::Call(name, tuple) => match ty.nav(&[PathPart::Ident(*name)]) {
+                            Some(ty) => match e.entry(e.de_inst(ty.id())).ty() {
+                                Some(&TypeKind::FnSig { args, rety }) => {
+                                    let values = iter::once(Ok(ty.id()))
+                                        .chain(
+                                            tuple
+                                                .exprs
+                                                .iter()
+                                                // Infer each member
+                                                .map(|expr| expr.infer(e)),
+                                        )
+                                        // Construct tuple
+                                        .collect::<Result<Vec<_>, InferenceError>>()
+                                        // Return tuple
+                                        .map(|tys| e.from_type_kind(TypeKind::Tuple(tys)))?;
+                                    e.unify(args, values)?;
+                                    Ok(rety)
+                                }
+                                other => todo!("member-call {other:?}"),
+                            },
+                            None => Err(InferenceError::NotFound(Path::from(*name))),
+                        },
+                        MemberKind::Struct(name) => match ty.nav(&[PathPart::Ident(*name)]) {
+                            Some(ty) => Ok(ty.id()),
+                            None => Err(InferenceError::NotFound(Path::from(*name))),
+                        },
+                        MemberKind::Tuple(Literal::Int(idx)) => match ty.ty() {
+                            Some(TypeKind::Tuple(tys)) => Ok(tys[*idx as usize]),
+                            _ => Err(InferenceError::Mismatch(ty.id(), e.table.root())),
+                        },
+                        _ => Err(InferenceError::Mismatch(ty.id(), ty.root())),
+                    }
+                    // Type is required to be inferred at this point.
+                }
+                ExprKind::Index(index) => {
+                    // Infer the head expression
+                    // For each index expression:
+                    //   Infer the index type
+                    //   Decide whether the head can be indexed by that type
+                    //   head = result of indexing head
+                    todo!("Index {index}")
+                }
+                ExprKind::Structor(structor) => {
+                    // Evaluate the path in the current context
+                    // Typecheck the fielders against the fields
+                    todo!("Structor {structor}")
+                }
+                ExprKind::Path(path) => e
+                    .by_name(path)
+                    .map_err(|_| InferenceError::NotFound(path.clone())),
+                ExprKind::Literal(literal) => literal.infer(e),
+                ExprKind::Array(array) => {
+                    let Array { values } = array;
+                    let out = e.new_var();
+                    for value in values {
+                        let ty = value.infer(e)?;
+                        e.unify(out, ty)?;
+                    }
+                    Ok(out)
+                }
+                ExprKind::ArrayRep(array_rep) => {
+                    let ArrayRep { value, repeat } = array_rep;
+                    let ty = value.infer(e)?;
+                    Ok(e.from_type_kind(TypeKind::Array(ty, *repeat)))
+                }
+                ExprKind::AddrOf(addr_of) => {
+                    let AddrOf { mutable: _, expr } = addr_of;
+                    // TODO: mut ref
+                    let ty = expr.infer(e)?;
+                    Ok(e.from_type_kind(TypeKind::Ref(ty)))
+                }
+                ExprKind::Block(block) => block.infer(e),
+                ExprKind::Group(group) => {
+                    let Group { expr } = group;
+                    expr.infer(e)
+                }
+                ExprKind::Tuple(tuple) => tuple.infer(e),
+
+                ExprKind::While(w) => {
+                    let While { cond, pass, fail } = w;
+                    // Infer the condition
+                    let cond = cond.infer(e)?;
+                    // Unify the condition with bool
+                    let boule = e
+                        .primitive("bool".into())
+                        .expect("Primitive bool should exist!");
+                    e.unify(boule, cond)?;
+                    // Enter a new breakset
+                    let mut e = e.open_bset();
+
+                    // Infer the fail branch
+                    let fail = fail.infer(&mut e)?;
+                    // Unify the fail branch with breakset
+                    e.bset = fail;
+
+                    // Infer the pass branch
+                    let pass = pass.infer(&mut e)?;
+                    // Unify the pass branch with Empty
+                    let empt = e.from_type_kind(TypeKind::Empty);
+                    e.unify(pass, empt)?;
+
+                    // Return breakset
+                    Ok(e.bset)
+                }
+                ExprKind::If(i) => {
+                    let If { cond, pass, fail } = i;
+                    // Do inference on the condition'
+                    let cond = cond.infer(e)?;
+                    // Unify the condition with bool
+                    let boule = e
+                        .primitive("bool".into())
+                        .expect("Primitive bool should exist!");
+                    e.unify(boule, cond)?;
+                    // Do inference on the pass branch
+                    let pass = pass.infer(e)?;
+                    // Do inference on the fail branch
+                    let fail = fail.infer(e)?;
+                    // Unify pass and fail
+                    e.unify(pass, fail)?;
+                    // Return the result
+                    Ok(pass)
+                }
+                ExprKind::For(f) => todo!("For {f}"),
+                ExprKind::Break(b) => {
+                    let Break { body } = b;
+                    // Infer the body of the break
+                    let ty = body.infer(e)?;
+                    // Unify it with the breakset of the loop
+                    e.unify(ty, e.bset)?;
+                    // Return never
+                    Ok(e.from_type_kind(TypeKind::Never))
+                }
+                ExprKind::Return(r) => {
+                    let Return { body } = r;
+                    // Infer the body of the return
+                    let ty = body.infer(e)?;
+                    // Unify it with the return-set of the function
+                    e.unify(ty, e.rset)?;
+                    // Return never
+                    Ok(e.from_type_kind(TypeKind::Never))
+                }
+                ExprKind::Continue => Ok(e.from_type_kind(TypeKind::Never)),
             }
         }
-        Ok(())
     }
-}
 
-impl fmt::Display for Type {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Type::Variable(Variable { instance }) => match instance.borrow().as_ref() {
-                Some(instance) => write!(f, "{instance}"),
-                None => write!(f, "_"),
-            },
-            Type::Operator(Operator { name, types }) => {
-                write!(f, "({name}")?;
-                for ty in types.borrow().iter() {
-                    write!(f, " {ty}")?;
+    impl<'a> Inference<'a> for MatchArm {
+        fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+            let MatchArm(pat, expr) = self;
+            let table = &mut e.table;
+            let scope = table.new_entry(e.at, crate::table::NodeKind::Local);
+            let mut e = e.at(scope);
+
+            let pat_ty = pat.infer(&mut e)?;
+            // TODO: bind pattern variables in scope
+            let expr_ty = expr.infer(&mut e)?;
+            todo!("Finish pattern-matching: {pat_ty}, {expr_ty}")
+        }
+    }
+
+    impl<'a> Inference<'a> for Pattern {
+        fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+            match self {
+                Pattern::Name(name) => e
+                    .table
+                    .get_by_sym(e.at, name)
+                    .ok_or(InferenceError::NotFound((*name).into())),
+                Pattern::Literal(literal) => literal.infer(e),
+                Pattern::Rest(_) => todo!("Infer rest-patterns"),
+                Pattern::Ref(_, pattern) => {
+                    let ty = pattern.infer(e)?;
+                    Ok(e.from_type_kind(TypeKind::Ref(ty)))
                 }
-                f.write_str(")")
+                Pattern::RangeExc(pat1, pat2) => {
+                    let ty1 = pat1.infer(e)?;
+                    let ty2 = pat2.infer(e)?;
+                    e.unify(ty1, ty2)?;
+                    Ok(ty1)
+                }
+                Pattern::RangeInc(pat1, pat2) => {
+                    let ty1 = pat1.infer(e)?;
+                    let ty2 = pat2.infer(e)?;
+                    e.unify(ty1, ty2)?;
+                    Ok(ty1)
+                }
+                Pattern::Tuple(patterns) => {
+                    let tys = patterns
+                        .iter()
+                        .map(|pat| pat.infer(e))
+                        .collect::<Result<Vec<Handle>, InferenceError>>()?;
+                    Ok(e.from_type_kind(TypeKind::Tuple(tys)))
+                }
+                Pattern::Array(patterns) => match patterns.as_slice() {
+                    [one, rest @ ..] => {
+                        let ty = one.infer(e)?;
+                        for rest in rest {
+                            let ty2 = rest.infer(e)?;
+                            e.unify(ty, ty2)?;
+                        }
+                        Ok(e.from_type_kind(TypeKind::Slice(ty)))
+                    }
+                    [] => {
+                        let ty = e.new_var();
+                        Ok(e.from_type_kind(TypeKind::Slice(ty)))
+                    }
+                },
+                Pattern::Struct(_path, _items) => todo!(),
+                Pattern::TupleStruct(_path, _patterns) => todo!(),
             }
         }
     }
-}
 
-/// An error produced during type inference
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum InferenceError {
-    Mismatch(RcType, RcType),
-    Recursive(RcType, RcType),
-}
+    impl<'a> Inference<'a> for Tuple {
+        fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+            let Tuple { exprs } = self;
+            exprs
+                .iter()
+                // Infer each member
+                .map(|expr| expr.infer(e))
+                // Construct tuple
+                .collect::<Result<Vec<_>, InferenceError>>()
+                // Return tuple
+                .map(|tys| e.from_type_kind(TypeKind::Tuple(tys)))
+        }
+    }
 
-impl fmt::Display for InferenceError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            InferenceError::Mismatch(a, b) => write!(f, "Type mismatch: {a:?} != {b:?}"),
-            InferenceError::Recursive(_, _) => write!(f, "Recursive type!"),
+    impl<'a> Inference<'a> for Block {
+        fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+            let Block { stmts } = self;
+            let empty = e.from_type_kind(TypeKind::Empty);
+            if let [stmts @ .., ret] = stmts.as_slice() {
+                for stmt in stmts {
+                    match (&stmt.kind, &stmt.semi) {
+                        (StmtKind::Expr(expr), Semi::Terminated) => {
+                            expr.infer(e)?;
+                        }
+                        (StmtKind::Expr(expr), Semi::Unterminated) => {
+                            let ty = expr.infer(e)?;
+                            e.unify(ty, empty)?;
+                        }
+                        _ => {}
+                    }
+                }
+                match (&ret.kind, &ret.semi) {
+                    (StmtKind::Expr(expr), Semi::Terminated) => {
+                        expr.infer(e)?;
+                    }
+                    (StmtKind::Expr(expr), Semi::Unterminated) => {
+                        return expr.infer(e);
+                    }
+                    _ => {}
+                }
+            }
+            Ok(empty)
+        }
+    }
+
+    impl<'a> Inference<'a> for Else {
+        fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+            self.body.infer(e)
+        }
+    }
+
+    impl<'a, I: Inference<'a>> Inference<'a> for Option<I> {
+        fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+            match self {
+                Some(expr) => expr.infer(e),
+                None => Ok(e.from_type_kind(TypeKind::Empty)),
+            }
+        }
+    }
+    impl<'a, I: Inference<'a>> Inference<'a> for Box<I> {
+        fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+            self.as_ref().infer(e)
+        }
+    }
+
+    impl<'a> Inference<'a> for Literal {
+        fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+            let ty = match self {
+                Literal::Bool(_) => Ok(e
+                    .primitive("bool".into())
+                    .expect("Primitive bool should exist!")),
+                Literal::Char(_) => Ok(e
+                    .primitive("char".into())
+                    .expect("Primitive char should exist!")),
+                Literal::Int(_) => Ok(e
+                    .primitive("isize".into())
+                    .expect("Primitive isize should exist!")),
+                Literal::Float(_) => Ok(e
+                    .primitive("f64".into())
+                    .expect("Primitive f64 should exist!")),
+                Literal::String(_) => Ok(e
+                    .primitive("str".into())
+                    .expect("Primitive str should exist!")),
+            }?;
+            Ok(e.new_inst(ty))
         }
     }
 }

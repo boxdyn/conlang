@@ -8,6 +8,8 @@ use std::fmt::{self, Display, Write};
 impl Display for TypeKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            TypeKind::Uninferred => write!(f, "_"),
+            TypeKind::Variable => write!(f, "?"),
             TypeKind::Instance(def) => write!(f, "alias to #{def}"),
             TypeKind::Intrinsic(i) => i.fmt(f),
             TypeKind::Adt(a) => a.fmt(f),

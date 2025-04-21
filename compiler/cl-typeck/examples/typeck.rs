@@ -1,12 +1,20 @@
-use cl_typeck::{entry::Entry, stage::*, table::Table, type_expression::TypeExpression};
+use cl_typeck::{
+    entry::Entry,
+    stage::{
+        infer::{engine::InferenceEngine, error::InferenceError, inference::Inference},
+        *,
+    },
+    table::Table,
+    type_expression::TypeExpression,
+};
 
 use cl_ast::{
+    Expr, Path, Stmt, Ty,
     ast_visitor::{Fold, Visit},
     desugar::*,
-    Stmt, Ty,
 };
 use cl_lexer::Lexer;
-use cl_parser::{inliner::ModuleInliner, Parser};
+use cl_parser::{Parser, inliner::ModuleInliner};
 use cl_structures::intern::string_interner::StringInterner;
 use repline::{error::Error as RlError, prebaked::*};
 use std::{
@@ -44,7 +52,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     // This code is special - it gets loaded from a hard-coded project directory (for now)
     let code = inline_modules(code, concat!(env!("CARGO_MANIFEST_DIR"), "/../../stdlib"));
+    let code = cl_ast::desugar::WhileElseDesugar.fold_file(code);
     Populator::new(&mut prj).visit_file(interned(code));
+
+    for arg in std::env::args().skip(1) {
+        import_file(&mut prj, arg)?;
+    }
+
+    resolve_all(&mut prj)?;
 
     main_menu(&mut prj)?;
     Ok(())
@@ -53,20 +68,22 @@ fn main() -> Result<(), Box<dyn Error>> {
 fn main_menu(prj: &mut Table) -> Result<(), RlError> {
     banner();
     read_and(C_MAIN, "mu>", "? >", |line| {
-        match line.trim() {
-            "c" | "code" => enter_code(prj)?,
-            "clear" => clear()?,
-            "d" | "desugar" => live_desugar()?,
-            "e" | "exit" => return Ok(Response::Break),
-            "f" | "file" => import_files(prj)?,
-            "i" | "id" => get_by_id(prj)?,
-            "l" | "list" => list_types(prj),
-            "q" | "query" => query_type_expression(prj)?,
-            "r" | "resolve" => resolve_all(prj)?,
-            "s" | "strings" => print_strings(),
-            "h" | "help" | "" => {
-                println!(
-                    "Valid commands are:
+        for line in line.trim().split_ascii_whitespace() {
+            match line {
+                "c" | "code" => enter_code(prj)?,
+                "clear" => clear()?,
+                "d" | "desugar" => live_desugar()?,
+                "e" | "exit" => return Ok(Response::Break),
+                "f" | "file" => import_files(prj)?,
+                "i" | "id" => get_by_id(prj)?,
+                "l" | "list" => list_types(prj),
+                "q" | "query" => query_type_expression(prj)?,
+                "r" | "resolve" => resolve_all(prj)?,
+                "s" | "strings" => print_strings(),
+                "t" | "test" => infer_expression(prj)?,
+                "h" | "help" | "" => {
+                    println!(
+                        "Valid commands are:
     clear      : Clear the screen
     code    (c): Enter code to type-check
     desugar (d): WIP: Test the experimental desugaring passes
@@ -77,10 +94,11 @@ fn main_menu(prj: &mut Table) -> Result<(), RlError> {
     resolve (r): Perform type resolution
     help    (h): Print this list
     exit    (e): Exit the program"
-                );
-                return Ok(Response::Deny);
+                    );
+                    return Ok(Response::Deny);
+                }
+                _ => Err(r#"Invalid command. Type "help" to see the list of valid commands."#)?,
             }
-            _ => Err(r#"Invalid command. Type "help" to see the list of valid commands."#)?,
         }
         Ok(Response::Accept)
     })
@@ -127,10 +145,43 @@ fn query_type_expression(prj: &mut Table) -> Result<(), RlError> {
         if line.trim().is_empty() {
             return Ok(Response::Break);
         }
-        // parse it as a path, and convert the path into a borrowed path
-        let ty: Ty = Parser::new("", Lexer::new(line)).parse()?;
+        // A query is comprised of a Ty and a relative Path
+        let mut p = Parser::new("", Lexer::new(line));
+        let ty: Ty = p.parse()?;
+        let path: Path = p
+            .parse()
+            .map(|p| Path { absolute: false, ..p })
+            .unwrap_or_default();
         let id = ty.evaluate(prj, prj.root())?;
+        let id = path.evaluate(prj, id)?;
         pretty_handle(id.to_entry(prj))?;
+        Ok(Response::Accept)
+    })
+}
+
+fn infer_expression(prj: &mut Table) -> Result<(), RlError> {
+    read_and(C_RESV, "ex>", "!?>", |line| {
+        if line.trim().is_empty() {
+            return Ok(Response::Break);
+        }
+        let mut p = Parser::new("", Lexer::new(line));
+        let e: Expr = p.parse()?;
+        let mut inf = InferenceEngine::new(prj, prj.root());
+        let ty = match exp_terned(e).infer(&mut inf) {
+            Ok(ty) => ty,
+            Err(e) => match e {
+                InferenceError::Mismatch(a, b) => {
+                    eprintln!("Mismatched types: {}, {}", prj.entry(a), prj.entry(b));
+                    return Ok(Response::Deny);
+                }
+                InferenceError::Recursive(a, b) => {
+                    eprintln!("Recursive types: {}, {}", prj.entry(a), prj.entry(b));
+                    return Ok(Response::Deny);
+                }
+                e => Err(e)?,
+            },
+        };
+        eprintln!("--> {}", prj.entry(ty));
         Ok(Response::Accept)
     })
 }
@@ -194,6 +245,32 @@ fn list_types(table: &mut Table) {
         let name = handle.name().unwrap_or("".into());
         println!("{id:3}: {name:16}| {kind}: {handle}");
     }
+}
+
+fn import_file(table: &mut Table, path: impl AsRef<std::path::Path>) -> Result<(), Box<dyn Error>> {
+    let Ok(file) = std::fs::read_to_string(path.as_ref()) else {
+        for file in std::fs::read_dir(path)? {
+            println!("{}", file?.path().display())
+        }
+        return Ok(());
+    };
+
+    let mut parser = Parser::new("", Lexer::new(&file));
+    let code = match parser.parse() {
+        Ok(code) => inline_modules(
+            code,
+            PathBuf::from(path.as_ref()).parent().unwrap_or("".as_ref()),
+        ),
+        Err(e) => {
+            eprintln!("{C_ERROR}{}:{e}\x1b[0m", path.as_ref().display());
+            return Ok(());
+        }
+    };
+
+    let code = cl_ast::desugar::WhileElseDesugar.fold_file(code);
+    Populator::new(table).visit_file(interned(code));
+
+    Ok(())
 }
 
 fn import_files(table: &mut Table) -> Result<(), RlError> {
@@ -325,4 +402,13 @@ fn interned(file: cl_ast::File) -> &'static cl_ast::File {
         LazyLock::new(Default::default);
 
     INTERNER.get_or_insert(file).to_ref()
+}
+
+/// Interns an [Expr](cl_ast::Expr), returning a static reference to it.
+fn exp_terned(expr: cl_ast::Expr) -> &'static cl_ast::Expr {
+    use cl_structures::intern::typed_interner::TypedInterner;
+    static INTERNER: LazyLock<TypedInterner<'static, cl_ast::Expr>> =
+        LazyLock::new(Default::default);
+
+    INTERNER.get_or_insert(expr).to_ref()
 }

@@ -5,7 +5,7 @@ use crate::{
     source::Source,
     table::{NodeKind, Table},
 };
-use cl_ast::{ast_visitor::Visit, ItemKind, Sym};
+use cl_ast::{ItemKind, Sym, ast_visitor::Visit};
 
 #[derive(Debug)]
 pub struct Populator<'t, 'a> {
@@ -76,6 +76,7 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
     fn visit_const(&mut self, c: &'a cl_ast::Const) {
         let cl_ast::Const { name, ty, init } = c;
         self.inner.set_source(Source::Const(c));
+        self.inner.set_body(init);
         self.set_name(*name);
 
         self.visit_ty(ty);
@@ -85,6 +86,7 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
     fn visit_static(&mut self, s: &'a cl_ast::Static) {
         let cl_ast::Static { mutable, name, ty, init } = s;
         self.inner.set_source(Source::Static(s));
+        self.inner.set_body(init);
         self.set_name(*name);
 
         self.visit_mutability(mutable);
@@ -108,8 +110,9 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         self.set_name(*name);
 
         self.visit_ty_fn(sign);
-        bind.iter().for_each(|p| self.visit_pattern(p));
+        self.visit_pattern(bind);
         if let Some(b) = body {
+            self.inner.set_body(b);
             self.visit_expr(b)
         }
     }
@@ -147,25 +150,5 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         self.inner.mark_use_item();
 
         self.visit_use_tree(tree);
-    }
-
-    fn visit_let(&mut self, l: &'a cl_ast::Let) {
-        let cl_ast::Let { mutable, name: _, ty, init } = l;
-        let mut entry = self.new_entry(NodeKind::Local);
-
-        entry.inner.set_source(Source::Local(l));
-        // entry.set_name(*name);
-
-        entry.visit_mutability(mutable);
-        if let Some(ty) = ty {
-            entry.visit_ty(ty);
-        }
-        if let Some(init) = init {
-            entry.visit_expr(init)
-        }
-
-        // let child = entry.inner.id();
-        // self.inner.add_child(*name, child);
-        todo!("Pattern destructuring in cl-typeck")
     }
 }
