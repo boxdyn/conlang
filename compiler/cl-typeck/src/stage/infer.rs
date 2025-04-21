@@ -13,7 +13,7 @@ pub mod inference {
     use std::iter;
 
     use super::{engine::InferenceEngine, error::InferenceError};
-    use crate::{handle::Handle, type_kind::TypeKind};
+    use crate::{handle::Handle, type_expression::TypeExpression, type_kind::TypeKind};
     use cl_ast::*;
 
     pub trait Inference<'a> {
@@ -33,12 +33,28 @@ pub mod inference {
                 ExprKind::Empty => Ok(e.from_type_kind(TypeKind::Empty)),
                 ExprKind::Quote(quote) => todo!("Quote: {quote}"),
                 ExprKind::Let(l) => {
+                    let Let { mutable: _, name, ty, init } = l;
                     // Infer the pattern
+                    let patty = name.infer(e)?;
                     // Deep copy the ty, if it exists
+                    let ty = match ty {
+                        Some(ty) => {
+                            let ty = ty
+                                .evaluate(e.table, e.at)
+                                .map_err(InferenceError::AnnotationEval)?;
+                            e.deep_clone(ty)
+                        }
+                        None => e.new_var(),
+                    };
                     // Unify the pattern and the ty
+                    e.unify(ty, patty)?;
                     // Infer the initializer
-                    // Unify the initializer and the ty
-                    todo!("Let: {l}")
+                    if let Some(init) = init {
+                        // Unify the initializer and the ty
+                        let initty = init.infer(e)?;
+                        e.unify(ty, initty)?;
+                    }
+                    Ok(ty)
                 }
                 ExprKind::Match(m) => {
                     let Match { scrutinee, arms } = m;
@@ -270,10 +286,11 @@ pub mod inference {
     impl<'a> Inference<'a> for Pattern {
         fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
             match self {
-                Pattern::Name(name) => e
-                    .table
-                    .get_by_sym(e.at, name)
-                    .ok_or(InferenceError::NotFound((*name).into())),
+                Pattern::Name(name) => {
+                    let child = e.new_var();
+                    e.table.add_child(e.at, *name, child);
+                    Ok(child)
+                }
                 Pattern::Literal(literal) => literal.infer(e),
                 Pattern::Rest(_) => todo!("Infer rest-patterns"),
                 Pattern::Ref(_, pattern) => {
@@ -336,15 +353,16 @@ pub mod inference {
     impl<'a> Inference<'a> for Block {
         fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
             let Block { stmts } = self;
+            let mut e = e.block_scope();
             let empty = e.from_type_kind(TypeKind::Empty);
             if let [stmts @ .., ret] = stmts.as_slice() {
                 for stmt in stmts {
                     match (&stmt.kind, &stmt.semi) {
                         (StmtKind::Expr(expr), Semi::Terminated) => {
-                            expr.infer(e)?;
+                            expr.infer(&mut e)?;
                         }
                         (StmtKind::Expr(expr), Semi::Unterminated) => {
-                            let ty = expr.infer(e)?;
+                            let ty = expr.infer(&mut e)?;
                             e.unify(ty, empty)?;
                         }
                         _ => {}
@@ -352,10 +370,10 @@ pub mod inference {
                 }
                 match (&ret.kind, &ret.semi) {
                     (StmtKind::Expr(expr), Semi::Terminated) => {
-                        expr.infer(e)?;
+                        expr.infer(&mut e)?;
                     }
                     (StmtKind::Expr(expr), Semi::Unterminated) => {
-                        return expr.infer(e);
+                        return expr.infer(&mut e);
                     }
                     _ => {}
                 }

@@ -264,10 +264,15 @@ pub mod typed_interner {
     /// A [TypedInterner] hands out [Interned] references for arbitrary types.
     ///
     /// See the [module-level documentation](self) for more information.
-    #[derive(Default)]
     pub struct TypedInterner<'a, T: Eq + Hash> {
         arena: TypedArena<'a, T>,
         keys: RwLock<HashSet<&'a T>>,
+    }
+
+    impl<'a, T: Eq + Hash> Default for TypedInterner<'a, T> {
+        fn default() -> Self {
+            Self { arena: Default::default(), keys: Default::default() }
+        }
     }
 
     impl<'a, T: Eq + Hash> TypedInterner<'a, T> {

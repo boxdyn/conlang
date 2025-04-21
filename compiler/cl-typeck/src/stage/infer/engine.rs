@@ -2,7 +2,7 @@ use super::error::InferenceError;
 use crate::{
     entry::Entry,
     handle::Handle,
-    table::Table,
+    table::{NodeKind, Table},
     type_expression::TypeExpression,
     type_kind::{Adt, TypeKind},
 };
@@ -40,16 +40,16 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
         Self { at, table, bset: never, rset: never }
     }
 
-    pub fn at<'b>(&'b mut self, at: Handle) -> InferenceEngine<'b, 'a> {
+    pub fn at(&mut self, at: Handle) -> InferenceEngine<'_, 'a> {
         InferenceEngine { at, table: self.table, bset: self.bset, rset: self.rset }
     }
 
-    pub fn open_bset<'b>(&'b mut self) -> InferenceEngine<'b, 'a> {
+    pub fn open_bset(&mut self) -> InferenceEngine<'_, 'a> {
         let bset = self.from_type_kind(TypeKind::Empty);
         InferenceEngine { at: self.at, table: self.table, bset, rset: self.rset }
     }
 
-    pub fn open_rset<'b>(&'b mut self) -> InferenceEngine<'b, 'a> {
+    pub fn open_rset(&mut self) -> InferenceEngine<'_, 'a> {
         let rset = self.new_var();
         InferenceEngine { at: self.at, table: self.table, bset: self.bset, rset }
     }
@@ -104,6 +104,18 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
     /// All primitives must be predefined in the standard library.
     pub fn primitive(&self, name: Sym) -> Option<Handle> {
         self.table.get_by_sym(self.table.root(), &name)
+    }
+
+    /// Enters a new scope
+    pub fn local_scope(&mut self) {
+        let scope = self.table.new_entry(self.at, NodeKind::Local);
+        self.at = scope;
+    }
+
+    /// Creates a new locally-scoped InferenceEngine.
+    pub fn block_scope(&mut self) -> InferenceEngine<'_, 'a> {
+        let scope = self.table.new_entry(self.at, NodeKind::Local);
+        self.at(scope)
     }
 
     /// Sets this type variable `to` be an instance `of` the other
