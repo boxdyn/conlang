@@ -14,6 +14,9 @@ cl-ast = { path = "../cl-ast" }
 cl-lexer = { path = "../cl-lexer" }
 cl-token = { path = "../cl-token" }
 cl-parser = { path = "../cl-parser" }
+cl-typeck = { path = "../cl-typeck" }
 cl-interpret = { path = "../cl-interpret" }
+cl-structures = { path = "../cl-structures" }
+cl-arena = { version = "0", registry = "soft-fish" }
 repline = { path = "../../repline" }
 argwerk = "0.20.4"
