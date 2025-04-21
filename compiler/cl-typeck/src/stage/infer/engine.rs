@@ -45,7 +45,7 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
     }
 
     pub fn open_bset(&mut self) -> InferenceEngine<'_, 'a> {
-        let bset = self.from_type_kind(TypeKind::Empty);
+        let bset = self.new_var();
         InferenceEngine { at: self.at, table: self.table, bset, rset: self.rset }
     }
 
@@ -124,6 +124,12 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
     pub fn set_instance(&mut self, to: Handle, of: Handle) {
         let mut e = self.table.entry_mut(to);
         match e.as_ref().ty() {
+            Some(TypeKind::Uninferred) => {
+                if let Some(ty) = self.table.ty(of) {
+                    self.table.set_ty(to, ty.clone());
+                }
+                None
+            }
             Some(TypeKind::Variable) => e.set_ty(TypeKind::Instance(of)),
             other => todo!("Cannot set {} to instance of: {other:?}", e.as_ref()),
         };
@@ -355,11 +361,20 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
                 if a.len() != b.len() {
                     return Err(InferenceError::Mismatch(ah, bh));
                 }
+                let (a, b) = (a.clone(), b.clone());
+                for (a, b) in a.iter().zip(b.iter()) {
+                    self.unify(*a, *b)?;
+                }
                 Ok(())
             }
             (&TypeKind::FnSig { args: a1, rety: r1 }, &TypeKind::FnSig { args: a2, rety: r2 }) => {
                 self.unify(a1, a2)?;
                 self.unify(r1, r2)
+            }
+            (TypeKind::Empty, TypeKind::Tuple(t)) | (TypeKind::Tuple(t), TypeKind::Empty)
+                if t.is_empty() =>
+            {
+                Ok(())
             }
             (TypeKind::Empty, TypeKind::Empty) => Ok(()),
             (TypeKind::Never, _) | (_, TypeKind::Never) => Ok(()),
