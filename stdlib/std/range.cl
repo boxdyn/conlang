@@ -1,17 +1,15 @@
 //! Iterable ranges
 
-type T = _;
-
 /// An Exclusive Range `a .. b` iterates from a to b, excluding b
-// #[lang = "range_exc", T]
-pub struct RangeExc(T, T)
+// #[lang = "range_exc"]
+pub struct RangeExc<T>(T, T)
 
 /// An Inclusive Range `a ..= b` iterates from a to b, including b
-// #[lang = "range_inc", T]
-pub struct RangeInc(T, T)
+// #[lang = "range_inc"]
+pub struct RangeInc<T>(T, T)
 
 impl RangeExc {
-    fn next(this: &RangeInc) -> T {
+    fn next<T>(this: &RangeExc) -> T {
         (*this).0
     }
 }

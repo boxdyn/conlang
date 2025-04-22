@@ -12,6 +12,10 @@ pub mod num;
 
 pub mod str;
 
+pub mod option;
+
+pub mod result;
+
 pub mod range;
 
 #[cfg("test")]
