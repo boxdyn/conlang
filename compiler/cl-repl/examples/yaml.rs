@@ -214,6 +214,12 @@ pub mod yamlify {
             };
         }
     }
+    impl Yamlify for Generics {
+        fn yaml(&self, y: &mut Yamler) {
+            let Self { vars } = self;
+            y.key("Generics").value(vars);
+        }
+    }
     impl Yamlify for Alias {
         fn yaml(&self, y: &mut Yamler) {
             let Self { name, from } = self;
@@ -243,9 +249,10 @@ pub mod yamlify {
     }
     impl Yamlify for Function {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { name, sign, bind, body } = self;
+            let Self { name, gens, sign, bind, body } = self;
             y.key("Function")
                 .pair("name", name)
+                .pair("gens", gens)
                 .pair("sign", sign)
                 .pair("bind", bind)
                 .pair("body", body);
@@ -253,8 +260,11 @@ pub mod yamlify {
     }
     impl Yamlify for Struct {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { name, kind } = self;
-            y.key("Struct").pair("name", name).yaml(kind);
+            let Self { name, gens, kind } = self;
+            y.key("Struct")
+                .pair("gens", gens)
+                .pair("name", name)
+                .yaml(kind);
         }
     }
     impl Yamlify for StructKind {
@@ -274,8 +284,8 @@ pub mod yamlify {
     }
     impl Yamlify for Enum {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { name, variants: kind } = self;
-            y.key("Enum").pair("name", name).yaml(kind);
+            let Self { name,gens, variants: kind } = self;
+            y.key("Enum").pair("gens", gens).pair("name", name).yaml(kind);
         }
     }
     impl Yamlify for Variant {

@@ -112,6 +112,16 @@ impl Display for ItemKind {
     }
 }
 
+impl Display for Generics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Generics { vars } = self;
+        if !vars.is_empty() {
+            separate(vars, ", ")(f.delimit_with("<", ">"))?
+        }
+        Ok(())
+    }
+}
+
 impl Display for Alias {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self { name, from } = self;
@@ -152,7 +162,7 @@ impl Display for Module {
 
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self { name, sign: sign @ TyFn { args, rety }, bind, body } = self;
+        let Self { name, gens, sign: sign @ TyFn { args, rety }, bind, body } = self;
         let types = match **args {
             TyKind::Tuple(TyTuple { ref types }) => types.as_slice(),
             TyKind::Empty => Default::default(),
@@ -170,7 +180,7 @@ impl Display for Function {
         };
 
         debug_assert_eq!(bind.len(), types.len());
-        write!(f, "fn {name} ")?;
+        write!(f, "fn {name}{gens} ")?;
         {
             let mut f = f.delimit(INLINE_PARENS);
 
@@ -193,8 +203,8 @@ impl Display for Function {
 
 impl Display for Struct {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self { name, kind } = self;
-        write!(f, "struct {name}{kind}")
+        let Self { name, gens, kind } = self;
+        write!(f, "struct {name}{gens}{kind}")
     }
 }
 
@@ -217,8 +227,8 @@ impl Display for StructMember {
 
 impl Display for Enum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self { name, variants: kind } = self;
-        write!(f, "enum {name}")?;
+        let Self { name, gens, variants: kind } = self;
+        write!(f, "enum {name}{gens}")?;
         match kind {
             Some(v) => separate(v, ",\n")(f.delimit(SPACED_BRACES)),
             None => ";".fmt(f),

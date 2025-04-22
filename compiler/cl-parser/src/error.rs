@@ -60,6 +60,7 @@ pub enum Parsing {
 
     Item,
     ItemKind,
+    Generics,
     Alias,
     Const,
     Static,
@@ -176,6 +177,7 @@ impl Display for Parsing {
             Parsing::MetaKind => "an attribute's arguments",
             Parsing::Item => "an item",
             Parsing::ItemKind => "an item",
+            Parsing::Generics => "a list of type arguments",
             Parsing::Alias => "a type alias",
             Parsing::Const => "a const item",
             Parsing::Static => "a static variable",

@@ -114,13 +114,14 @@ impl Interpret for Function {
 }
 impl Interpret for Struct {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { name, kind } = self;
+        let Self { name, gens: _, kind } = self;
         match kind {
             StructKind::Empty => {}
             StructKind::Tuple(args) => {
                 // Constructs the AST from scratch. TODO: This, better.
                 let constructor = Function {
                     name: *name,
+                    gens: Default::default(),
                     sign: TyFn {
                         args: TyKind::Tuple(TyTuple {
                             types: args.iter().map(|ty| ty.kind.clone()).collect(),
@@ -152,7 +153,7 @@ impl Interpret for Struct {
 }
 impl Interpret for Enum {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { name, variants: kind } = self;
+        let Self { name, gens: _, variants: kind } = self;
         if let Some(variants) = kind {
             env.push_frame(name.to_ref(), Default::default());
             for (idx, Variant { name, kind }) in variants.iter().enumerate() {

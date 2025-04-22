@@ -51,6 +51,10 @@ pub trait Visit<'a>: Sized {
     fn visit_item_kind(&mut self, kind: &'a ItemKind) {
         or_visit_item_kind(self, kind)
     }
+    fn visit_generics(&mut self, gens: &'a Generics) {
+        let Generics { vars } = gens;
+        vars.iter().for_each(|name| self.visit_sym(name));
+    }
     fn visit_alias(&mut self, a: &'a Alias) {
         let Alias { name, from } = a;
         self.visit_sym(name);
@@ -79,8 +83,9 @@ pub trait Visit<'a>: Sized {
         }
     }
     fn visit_function(&mut self, f: &'a Function) {
-        let Function { name, sign, bind, body } = f;
+        let Function { name, gens, sign, bind, body } = f;
         self.visit_sym(name);
+        self.visit_generics(gens);
         self.visit_ty_fn(sign);
         self.visit_pattern(bind);
         if let Some(b) = body {
@@ -88,8 +93,9 @@ pub trait Visit<'a>: Sized {
         }
     }
     fn visit_struct(&mut self, s: &'a Struct) {
-        let Struct { name, kind } = s;
+        let Struct { name, gens, kind } = s;
         self.visit_sym(name);
+        self.visit_generics(gens);
         self.visit_struct_kind(kind);
     }
     fn visit_struct_kind(&mut self, kind: &'a StructKind) {
@@ -102,8 +108,9 @@ pub trait Visit<'a>: Sized {
         self.visit_ty(ty);
     }
     fn visit_enum(&mut self, e: &'a Enum) {
-        let Enum { name, variants: kind } = e;
+        let Enum { name, gens, variants: kind } = e;
         self.visit_sym(name);
+        self.visit_generics(gens);
         if let Some(variants) = kind {
             variants.iter().for_each(|v| self.visit_variant(v))
         }

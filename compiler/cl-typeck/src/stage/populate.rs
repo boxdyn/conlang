@@ -105,7 +105,8 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
     }
 
     fn visit_function(&mut self, f: &'a cl_ast::Function) {
-        let cl_ast::Function { name, sign, bind, body } = f;
+        let cl_ast::Function { name, gens: _, sign, bind, body } = f;
+        // TODO: populate generics?
         self.inner.set_source(Source::Function(f));
         self.set_name(*name);
 
@@ -118,7 +119,8 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
     }
 
     fn visit_struct(&mut self, s: &'a cl_ast::Struct) {
-        let cl_ast::Struct { name, kind } = s;
+        let cl_ast::Struct { name, gens: _, kind } = s;
+        // TODO: populate generics?
         self.inner.set_source(Source::Struct(s));
         self.set_name(*name);
 
@@ -126,7 +128,8 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
     }
 
     fn visit_enum(&mut self, e: &'a cl_ast::Enum) {
-        let cl_ast::Enum { name, variants } = e;
+        let cl_ast::Enum { name, gens: _, variants } = e;
+        // TODO: populate generics?
         self.inner.set_source(Source::Enum(e));
         self.set_name(*name);
 

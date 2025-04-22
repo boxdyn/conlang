@@ -65,6 +65,13 @@ impl WeightOf for ItemKind {
     }
 }
 
+impl WeightOf for Generics {
+    fn weight_of(&self) -> usize {
+        let Self { vars } = self;
+        vars.iter().map(|v| v.weight_of()).sum()
+    }
+}
+
 impl WeightOf for Module {
     fn weight_of(&self) -> usize {
         let Self { name, file } = self;
@@ -95,15 +102,15 @@ impl WeightOf for Static {
 
 impl WeightOf for Function {
     fn weight_of(&self) -> usize {
-        let Self { name, sign, bind, body } = self;
-        name.weight_of() + sign.weight_of() + bind.weight_of() + body.weight_of()
+        let Self { name, gens, sign, bind, body } = self;
+        name.weight_of() + gens.weight_of() + sign.weight_of() + bind.weight_of() + body.weight_of()
     }
 }
 
 impl WeightOf for Struct {
     fn weight_of(&self) -> usize {
-        let Self { name, kind } = self;
-        name.weight_of() + kind.weight_of()
+        let Self { name, gens, kind } = self;
+        name.weight_of() + gens.weight_of() + kind.weight_of()
     }
 }
 
@@ -126,8 +133,9 @@ impl WeightOf for StructMember {
 
 impl WeightOf for Enum {
     fn weight_of(&self) -> usize {
-        let Self { name, variants } = self;
+        let Self { name, gens, variants } = self;
         name.weight_of()
+            + gens.weight_of()
             + variants
                 .as_ref()
                 .map_or(size_of_val(variants), |v| v.weight_of())

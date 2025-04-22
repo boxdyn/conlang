@@ -70,6 +70,10 @@ pub trait Fold {
     fn fold_item_kind(&mut self, kind: ItemKind) -> ItemKind {
         or_fold_item_kind(self, kind)
     }
+    fn fold_generics(&mut self, gens: Generics) -> Generics {
+        let Generics { vars } = gens;
+        Generics { vars: vars.into_iter().map(|sym| self.fold_sym(sym)).collect() }
+    }
     fn fold_alias(&mut self, a: Alias) -> Alias {
         let Alias { name, from } = a;
         Alias { name: self.fold_sym(name), from: from.map(|from| Box::new(self.fold_ty(*from))) }
@@ -96,17 +100,22 @@ pub trait Fold {
         Module { name: self.fold_sym(name), file: file.map(|v| self.fold_file(v)) }
     }
     fn fold_function(&mut self, f: Function) -> Function {
-        let Function { name, sign, bind, body } = f;
+        let Function { name, gens, sign, bind, body } = f;
         Function {
             name: self.fold_sym(name),
+            gens: self.fold_generics(gens),
             sign: self.fold_ty_fn(sign),
             bind: self.fold_pattern(bind),
             body: body.map(|b| self.fold_expr(b)),
         }
     }
     fn fold_struct(&mut self, s: Struct) -> Struct {
-        let Struct { name, kind } = s;
-        Struct { name: self.fold_sym(name), kind: self.fold_struct_kind(kind) }
+        let Struct { name, gens, kind } = s;
+        Struct {
+            name: self.fold_sym(name),
+            gens: self.fold_generics(gens),
+            kind: self.fold_struct_kind(kind),
+        }
     }
     fn fold_struct_kind(&mut self, kind: StructKind) -> StructKind {
         match kind {
@@ -130,9 +139,10 @@ pub trait Fold {
         }
     }
     fn fold_enum(&mut self, e: Enum) -> Enum {
-        let Enum { name, variants: kind } = e;
+        let Enum { name, gens, variants: kind } = e;
         Enum {
             name: self.fold_sym(name),
+            gens: self.fold_generics(gens),
             variants: kind.map(|v| v.into_iter().map(|v| self.fold_variant(v)).collect()),
         }
     }

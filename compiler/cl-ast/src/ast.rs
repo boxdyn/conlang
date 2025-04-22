@@ -93,6 +93,12 @@ pub enum ItemKind {
     Use(Use),
 }
 
+/// A list of type variables to introduce
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Generics {
+    pub vars: Vec<Sym>,
+}
+
 /// An ordered collection of [Items](Item)
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Module {
@@ -128,6 +134,7 @@ pub struct Static {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Function {
     pub name: Sym,
+    pub gens: Generics,
     pub sign: TyFn,
     pub bind: Pattern,
     pub body: Option<Expr>,
@@ -137,6 +144,7 @@ pub struct Function {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Struct {
     pub name: Sym,
+    pub gens: Generics,
     pub kind: StructKind,
 }
 
@@ -160,6 +168,7 @@ pub struct StructMember {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Enum {
     pub name: Sym,
+    pub gens: Generics,
     pub variants: Option<Vec<Variant>>,
 }
 

@@ -54,7 +54,7 @@ impl Callable for Function {
         name
     }
     fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
-        let FnDecl { name, bind, body, sign: _ } = &*self.decl;
+        let FnDecl { name, gens: _, bind, body, sign: _ } = &*self.decl;
 
         // Check arg mapping
         if self.is_constructor {

@@ -66,7 +66,8 @@ fn cat_alias(table: &mut Table, node: Handle, a: &Alias) -> CatResult<()> {
 
 fn cat_struct(table: &mut Table, node: Handle, s: &Struct) -> CatResult<()> {
     let parent = parent(table, node);
-    let Struct { name: _, kind } = s;
+    let Struct { name: _, gens: _, kind } = s;
+    // TODO: Generics
     let kind = match kind {
         StructKind::Empty => TypeKind::Adt(Adt::UnitStruct),
         StructKind::Tuple(types) => {
@@ -99,7 +100,8 @@ fn cat_member(
 }
 
 fn cat_enum<'a>(table: &mut Table<'a>, node: Handle, e: &'a Enum) -> CatResult<()> {
-    let Enum { name: _, variants: kind } = e;
+    let Enum { name: _, gens: _, variants: kind } = e;
+    // TODO: Genereics
     let kind = match kind {
         None => TypeKind::Adt(Adt::Enum(vec![])),
         Some(variants) => {

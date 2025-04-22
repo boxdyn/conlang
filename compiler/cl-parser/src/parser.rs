@@ -347,6 +347,21 @@ impl Parse<'_> for ItemKind {
     }
 }
 
+impl Parse<'_> for Generics {
+    fn parse(p: &mut Parser<'_>) -> PResult<Self> {
+        const P: Parsing = Parsing::Generics;
+        let vars = match p.peek_kind(P)? {
+            TokenKind::Lt => delim(
+                sep(Sym::parse, TokenKind::Comma, TokenKind::Gt, P),
+                (TokenKind::Lt, TokenKind::Gt),
+                P,
+            )(p)?,
+            _ => Vec::new(),
+        };
+        Ok(Generics { vars })
+    }
+}
+
 impl Parse<'_> for Alias {
     /// Parses a [`type` alias](Alias)
     fn parse(p: &mut Parser<'_>) -> PResult<Self> {
@@ -442,6 +457,7 @@ impl Parse<'_> for Function {
         p.consume_peeked();
 
         let name = Sym::parse(p)?;
+        let gens = Generics::parse(p)?;
         let (bind, types) = delim(FnSig::parse, PARENS, P)(p)?;
         let sign = TyFn {
             args: Box::new(match types.len() {
@@ -456,6 +472,7 @@ impl Parse<'_> for Function {
         };
         Ok(Function {
             name,
+            gens,
             sign,
             bind,
             body: match p.peek_kind(P)? {
@@ -508,7 +525,7 @@ impl Parse<'_> for Struct {
     /// Parses a [`struct` definition](Struct)
     fn parse(p: &mut Parser) -> PResult<Struct> {
         p.match_type(TokenKind::Struct, Parsing::Struct)?;
-        Ok(Struct { name: Sym::parse(p)?, kind: StructKind::parse(p)? })
+        Ok(Struct { name: Sym::parse(p)?, gens: Generics::parse(p)?, kind: StructKind::parse(p)? })
     }
 }
 
@@ -557,6 +574,7 @@ impl Parse<'_> for Enum {
         p.match_type(TokenKind::Enum, Parsing::Enum)?;
         Ok(Enum {
             name: Sym::parse(p)?,
+            gens: Generics::parse(p)?,
             variants: {
                 const P: Parsing = Parsing::EnumKind;
                 match p.peek_kind(P)? {

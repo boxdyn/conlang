@@ -232,6 +232,14 @@ pub mod clangify {
             };
         }
     }
+    impl CLangify for Generics {
+        fn print(&self, _y: &mut CLangifier) {
+            let Self { vars } = self;
+            if !vars.is_empty() {
+                panic!("C doesn't have generics, dumbass.")
+            }
+        }
+    }
     impl CLangify for Alias {
         fn print(&self, y: &mut CLangifier) {
             let Self { name, from } = self;
@@ -263,7 +271,7 @@ pub mod clangify {
     }
     impl CLangify for Function {
         fn print(&self, y: &mut CLangifier) {
-            let Self { name, sign, bind, body } = self;
+            let Self { name, gens: _, sign, bind, body } = self;
             let TyFn { args, rety } = sign;
             let types = match args.as_ref() {
                 TyKind::Tuple(TyTuple { types }) => types.as_slice(),
@@ -293,7 +301,7 @@ pub mod clangify {
     }
     impl CLangify for Struct {
         fn print(&self, y: &mut CLangifier) {
-            let Self { name, kind } = self;
+            let Self { name, gens: _, kind } = self;
             y.p("struct ").p(name).nest(" {").p(kind);
             y.endl().p("}");
         }
@@ -320,7 +328,7 @@ pub mod clangify {
     }
     impl CLangify for Enum {
         fn print(&self, y: &mut CLangifier) {
-            let Self { name, variants } = self;
+            let Self { name, gens: _, variants } = self;
             y.nest("enum ").p(name).p(" {").endl();
             match variants {
                 Some(v) => {
