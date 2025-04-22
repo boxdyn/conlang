@@ -1,7 +1,11 @@
 //! # The Conlang Standard Library
 
 pub mod preamble {
-    pub use super::{num::*, str::str};
+    pub use super::{
+        num::*,
+        range::{RangeExc, RangeInc},
+        str::str,
+    };
 }
 
 pub mod num;

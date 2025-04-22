@@ -46,15 +46,15 @@ impl<'t, 'a> Entry<'t, 'a> {
         self.id
     }
 
-    pub fn inner(&self) -> &Table<'a> {
+    pub fn inner(&self) -> &'t Table<'a> {
         self.table
     }
 
-    pub const fn with_id(&self, id: Handle) -> Entry<'_, 'a> {
+    pub const fn with_id(&self, id: Handle) -> Entry<'t, 'a> {
         Self { table: self.table, id }
     }
 
-    pub fn nav(&self, path: &[PathPart]) -> Option<Entry<'_, 'a>> {
+    pub fn nav(&self, path: &[PathPart]) -> Option<Entry<'t, 'a>> {
         Some(Entry { id: self.table.nav(self.id, path)?, table: self.table })
     }
 
@@ -62,19 +62,19 @@ impl<'t, 'a> Entry<'t, 'a> {
         self.table.root()
     }
 
-    pub fn kind(&self) -> Option<&NodeKind> {
+    pub fn kind(&self) -> Option<&'t NodeKind> {
         self.table.kind(self.id)
     }
 
-    pub fn parent(&self) -> Option<Entry<'_, 'a>> {
+    pub fn parent(&self) -> Option<Entry<'t, 'a>> {
         Some(Entry { id: *self.table.parent(self.id)?, ..*self })
     }
 
-    pub fn children(&self) -> Option<&HashMap<Sym, Handle>> {
+    pub fn children(&self) -> Option<&'t HashMap<Sym, Handle>> {
         self.table.children(self.id)
     }
 
-    pub fn imports(&self) -> Option<&HashMap<Sym, Handle>> {
+    pub fn imports(&self) -> Option<&'t HashMap<Sym, Handle>> {
         self.table.imports(self.id)
     }
 
@@ -82,11 +82,11 @@ impl<'t, 'a> Entry<'t, 'a> {
         self.table.body(self.id)
     }
 
-    pub fn ty(&self) -> Option<&TypeKind> {
+    pub fn ty(&self) -> Option<&'t TypeKind> {
         self.table.ty(self.id)
     }
 
-    pub fn span(&self) -> Option<&Span> {
+    pub fn span(&self) -> Option<&'t Span> {
         self.table.span(self.id)
     }
 
@@ -94,7 +94,7 @@ impl<'t, 'a> Entry<'t, 'a> {
         self.table.meta(self.id)
     }
 
-    pub fn source(&self) -> Option<&Source<'a>> {
+    pub fn source(&self) -> Option<&'t Source<'a>> {
         self.table.source(self.id)
     }
 

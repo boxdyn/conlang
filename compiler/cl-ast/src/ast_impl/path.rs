@@ -21,9 +21,10 @@ impl Path {
         }
     }
 
+    /// Gets the defining [Sym] of this path
     pub fn as_sym(&self) -> Option<Sym> {
         match self.parts.as_slice() {
-            [PathPart::Ident(name)] => Some(*name),
+            [.., PathPart::Ident(name)] => Some(*name),
             _ => None,
         }
     }

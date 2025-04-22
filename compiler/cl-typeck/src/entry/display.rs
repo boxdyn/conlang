@@ -18,10 +18,10 @@ impl fmt::Display for Entry<'_, '_> {
 
         if let Some(ty) = self.ty() {
             match ty {
-                TypeKind::Uninferred => write!(f, "<_{}>", self.id),
+                TypeKind::Inferred => write!(f, "<_{}>", self.id),
                 TypeKind::Variable => write!(f, "<?{}>", self.id),
                 TypeKind::Instance(id) => write!(f, "{}", self.with_id(*id)),
-                TypeKind::Intrinsic(kind) => write!(f, "{kind}"),
+                TypeKind::Primitive(kind) => write!(f, "{kind}"),
                 TypeKind::Adt(adt) => write_adt(adt, self, f),
                 &TypeKind::Ref(id) => {
                     f.write_str("&")?;

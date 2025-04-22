@@ -1,6 +1,6 @@
 //! [Display] implementations for [TypeKind], [Adt], and [Intrinsic]
 
-use super::{Adt, Intrinsic, TypeKind};
+use super::{Adt, Primitive, TypeKind};
 use crate::format_utils::*;
 use cl_ast::format::FmtAdapter;
 use std::fmt::{self, Display, Write};
@@ -8,10 +8,10 @@ use std::fmt::{self, Display, Write};
 impl Display for TypeKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TypeKind::Uninferred => write!(f, "_"),
+            TypeKind::Inferred => write!(f, "_"),
             TypeKind::Variable => write!(f, "?"),
             TypeKind::Instance(def) => write!(f, "alias to #{def}"),
-            TypeKind::Intrinsic(i) => i.fmt(f),
+            TypeKind::Primitive(i) => i.fmt(f),
             TypeKind::Adt(a) => a.fmt(f),
             TypeKind::Ref(def) => write!(f, "&{def}"),
             TypeKind::Slice(def) => write!(f, "slice [#{def}]"),
@@ -70,29 +70,31 @@ impl Display for Adt {
     }
 }
 
-impl Display for Intrinsic {
+impl Display for Primitive {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Intrinsic::I8 => f.write_str("i8"),
-            Intrinsic::I16 => f.write_str("i16"),
-            Intrinsic::I32 => f.write_str("i32"),
-            Intrinsic::I64 => f.write_str("i64"),
-            Intrinsic::I128 => f.write_str("i128"),
-            Intrinsic::Isize => f.write_str("isize"),
-            Intrinsic::U8 => f.write_str("u8"),
-            Intrinsic::U16 => f.write_str("u16"),
-            Intrinsic::U32 => f.write_str("u32"),
-            Intrinsic::U64 => f.write_str("u64"),
-            Intrinsic::U128 => f.write_str("u128"),
-            Intrinsic::Usize => f.write_str("usize"),
-            Intrinsic::F8 => f.write_str("f8"),
-            Intrinsic::F16 => f.write_str("f16"),
-            Intrinsic::F32 => f.write_str("f32"),
-            Intrinsic::F64 => f.write_str("f64"),
-            Intrinsic::F128 => f.write_str("f128"),
-            Intrinsic::Fsize => f.write_str("fsize"),
-            Intrinsic::Bool => f.write_str("bool"),
-            Intrinsic::Char => f.write_str("char"),
+            Primitive::I8 => f.write_str("i8"),
+            Primitive::I16 => f.write_str("i16"),
+            Primitive::I32 => f.write_str("i32"),
+            Primitive::I64 => f.write_str("i64"),
+            Primitive::I128 => f.write_str("i128"),
+            Primitive::Isize => f.write_str("isize"),
+            Primitive::U8 => f.write_str("u8"),
+            Primitive::U16 => f.write_str("u16"),
+            Primitive::U32 => f.write_str("u32"),
+            Primitive::U64 => f.write_str("u64"),
+            Primitive::U128 => f.write_str("u128"),
+            Primitive::Usize => f.write_str("usize"),
+            Primitive::F8 => f.write_str("f8"),
+            Primitive::F16 => f.write_str("f16"),
+            Primitive::F32 => f.write_str("f32"),
+            Primitive::F64 => f.write_str("f64"),
+            Primitive::F128 => f.write_str("f128"),
+            Primitive::Fsize => f.write_str("fsize"),
+            Primitive::Integer => f.write_str("{integer}"),
+            Primitive::Float => f.write_str("{float}"),
+            Primitive::Bool => f.write_str("bool"),
+            Primitive::Char => f.write_str("char"),
         }
     }
 }

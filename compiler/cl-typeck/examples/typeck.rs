@@ -80,6 +80,7 @@ fn main_menu(prj: &mut Table) -> Result<(), RlError> {
                 "q" | "query" => query_type_expression(prj)?,
                 "r" | "resolve" => resolve_all(prj)?,
                 "s" | "strings" => print_strings(),
+                "a" | "all" => infer_all(prj)?,
                 "t" | "test" => infer_expression(prj)?,
                 "h" | "help" | "" => {
                     println!(
@@ -159,6 +160,7 @@ fn query_type_expression(prj: &mut Table) -> Result<(), RlError> {
     })
 }
 
+#[allow(dead_code)]
 fn infer_expression(prj: &mut Table) -> Result<(), RlError> {
     read_and(C_RESV, "ex>", "!?>", |line| {
         if line.trim().is_empty() {
@@ -235,6 +237,24 @@ fn resolve_all(table: &mut Table) -> Result<(), Box<dyn Error>> {
     }
 
     println!("...Resolved!");
+    Ok(())
+}
+
+fn infer_all(table: &mut Table) -> Result<(), Box<dyn Error>> {
+    for (id, error) in InferenceEngine::new(table, table.root()).infer_all() {
+        match error {
+            InferenceError::Mismatch(a, b) => {
+                eprint!("Mismatched types: {}, {}", table.entry(a), table.entry(b));
+            }
+            InferenceError::Recursive(a, b) => {
+                eprint!("Recursive types: {}, {}", table.entry(a), table.entry(b));
+            }
+            e => eprint!("{e}"),
+        }
+        eprintln!(" in {} ({id})", id.to_entry(table))
+    }
+
+    println!("...Inferred!");
     Ok(())
 }
 

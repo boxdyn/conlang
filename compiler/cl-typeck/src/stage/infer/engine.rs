@@ -2,9 +2,10 @@ use super::error::InferenceError;
 use crate::{
     entry::Entry,
     handle::Handle,
+    stage::infer::inference::Inference,
     table::{NodeKind, Table},
     type_expression::TypeExpression,
-    type_kind::{Adt, TypeKind},
+    type_kind::{Adt, Primitive, TypeKind},
 };
 use cl_ast::Sym;
 
@@ -28,37 +29,91 @@ use cl_ast::Sym;
 */
 
 pub struct InferenceEngine<'table, 'a> {
-    pub(crate) at: Handle,
     pub(super) table: &'table mut Table<'a>,
+    /// The current working node
+    pub(crate) at: Handle,
+    /// The current breakset
     pub(crate) bset: Handle,
+    /// The current returnset
     pub(crate) rset: Handle,
 }
 
 impl<'table, 'a> InferenceEngine<'table, 'a> {
+    /// Infers the type of an object by deferring to [`Inference::infer()`]
+    pub fn infer(&mut self, inferrable: &'a impl Inference<'a>) -> Result<Handle, InferenceError> {
+        inferrable.infer(self)
+    }
+
+    /// Constructs a new [`InferenceEngine`], scoped around a [`Handle`] in a [`Table`].
     pub fn new(table: &'table mut Table<'a>, at: Handle) -> Self {
         let never = table.anon_type(TypeKind::Never);
         Self { at, table, bset: never, rset: never }
     }
 
+    /// Constructs an [`InferenceEngine`] that borrows the same table as `self`,
+    /// but with a shortened lifetime.
+    pub fn scoped(&mut self) -> InferenceEngine<'_, 'a> {
+        InferenceEngine { at: self.at, table: self.table, bset: self.bset, rset: self.rset }
+    }
+
+    pub fn infer_all(&mut self) -> Vec<(Handle, InferenceError)> {
+        let iter = self.table.handle_iter();
+        let mut res = Vec::new();
+        for handle in iter {
+            let mut eng = self.at(handle);
+            // TODO: use sources instead of bodies, and infer the type globally
+            let Some(body) = eng.table.body(handle) else {
+                continue;
+            };
+            eprintln!("Evaluating body {body}");
+            match body.infer(&mut eng) {
+                Ok(ty) => println!("=> {}", eng.table.entry(ty)),
+                Err(e) => {
+                    match &e {
+                        &InferenceError::Mismatch(a, b) => {
+                            eprintln!(
+                                "=> Mismatched types: {}, {}",
+                                eng.table.entry(a),
+                                eng.table.entry(b)
+                            );
+                        }
+                        &InferenceError::Recursive(a, b) => {
+                            eprintln!(
+                                "=> Recursive types: {}, {}",
+                                eng.table.entry(a),
+                                eng.table.entry(b)
+                            );
+                        }
+                        e => eprintln!("=> {e}"),
+                    }
+                    res.push((handle, e))
+                }
+            }
+        }
+        res
+    }
+
+    /// Constructs a new InferenceEngine with the
     pub fn at(&mut self, at: Handle) -> InferenceEngine<'_, 'a> {
-        InferenceEngine { at, table: self.table, bset: self.bset, rset: self.rset }
+        InferenceEngine { at, ..self.scoped() }
     }
 
     pub fn open_bset(&mut self) -> InferenceEngine<'_, 'a> {
-        let bset = self.new_var();
-        InferenceEngine { at: self.at, table: self.table, bset, rset: self.rset }
+        InferenceEngine { bset: self.new_var(), ..self.scoped() }
     }
 
     pub fn open_rset(&mut self) -> InferenceEngine<'_, 'a> {
-        let rset = self.new_var();
-        InferenceEngine { at: self.at, table: self.table, bset: self.bset, rset }
+        InferenceEngine { rset: self.new_var(), ..self.scoped() }
     }
 
+    /// Constructs an [Entry] out of a [Handle], for ease of use
     pub fn entry(&self, of: Handle) -> Entry<'_, 'a> {
         self.table.entry(of)
     }
 
+    #[deprecated = "Use dedicated methods instead."]
     pub fn from_type_kind(&mut self, kind: TypeKind) -> Handle {
+        // TODO: preserve type heirarchy (for, i.e., reference types)
         self.table.anon_type(kind)
     }
 
@@ -79,16 +134,26 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
         self.table.anon_type(TypeKind::Instance(of))
     }
 
-    pub fn de_inst(&self, to: Handle) -> Handle {
+    /// Gets the defining usage of a type without collapsing intermediates
+    pub fn def_usage(&self, to: Handle) -> Handle {
         match self.table.entry(to).ty() {
-            Some(TypeKind::Instance(id)) => self.de_inst(*id),
+            Some(TypeKind::Instance(id)) => self.def_usage(*id),
             _ => to,
         }
     }
 
-    /// Creates a new type variable representing a function (signature)
-    pub fn new_fn(&mut self, args: Handle, rety: Handle) -> Handle {
-        self.table.anon_type(TypeKind::FnSig { args, rety })
+    pub fn get_fn(&self, at: Handle, name: Sym) -> Option<(Handle, Handle)> {
+        use cl_ast::PathPart;
+        if let Some(&TypeKind::FnSig { args, rety }) = self
+            .entry(at)
+            .nav(&[PathPart::Ident(name)])
+            .as_ref()
+            .and_then(Entry::ty)
+        {
+            Some((args, rety))
+        } else {
+            None
+        }
     }
 
     /// Creates a new type variable representing a tuple
@@ -101,9 +166,68 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
         self.table.anon_type(TypeKind::Array(ty, size))
     }
 
+    /// Creates a new type variable representing a slice of contiguous memory
+    pub fn new_slice(&mut self, ty: Handle) -> Handle {
+        self.table.anon_type(TypeKind::Slice(ty))
+    }
+
+    /// Creates a new reference to a type
+    pub fn new_ref(&mut self, to: Handle) -> Handle {
+        self.table.anon_type(TypeKind::Ref(to))
+    }
+
     /// All primitives must be predefined in the standard library.
     pub fn primitive(&self, name: Sym) -> Option<Handle> {
+        // TODO: keep a map of primitives in the table root
         self.table.get_by_sym(self.table.root(), &name)
+    }
+
+    pub fn never(&mut self) -> Handle {
+        self.table.anon_type(TypeKind::Never)
+    }
+
+    pub fn empty(&mut self) -> Handle {
+        self.table.anon_type(TypeKind::Empty)
+    }
+
+    pub fn bool(&self) -> Handle {
+        self.primitive("bool".into())
+            .expect("There should be a type named bool.")
+    }
+
+    pub fn char(&self) -> Handle {
+        self.primitive("char".into())
+            .expect("There should be a type named char.")
+    }
+
+    pub fn str(&self) -> Handle {
+        self.primitive("str".into())
+            .expect("There should be a type named str.")
+    }
+
+    pub fn u32(&self) -> Handle {
+        self.primitive("u32".into())
+            .expect("There should be a type named u32.")
+    }
+
+    pub fn usize(&self) -> Handle {
+        self.primitive("usize".into())
+            .expect("There should be a type named usize.")
+    }
+
+    /// Creates a new inferred-integer literal
+    pub fn integer_literal(&mut self) -> Handle {
+        let h = self.table.new_entry(self.at, NodeKind::Local);
+        self.table
+            .set_ty(h, TypeKind::Primitive(Primitive::Integer));
+        h
+    }
+
+    /// Creates a new inferred-float literal
+    pub fn float_literal(&mut self) -> Handle {
+        let h = self.table.new_entry(self.at, NodeKind::Local);
+        self.table.set_ty(h, TypeKind::Primitive(Primitive::Float));
+        h
     }
 
     /// Enters a new scope
@@ -124,13 +248,16 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
     pub fn set_instance(&mut self, to: Handle, of: Handle) {
         let mut e = self.table.entry_mut(to);
         match e.as_ref().ty() {
-            Some(TypeKind::Uninferred) => {
+            Some(TypeKind::Inferred) => {
                 if let Some(ty) = self.table.ty(of) {
                     self.table.set_ty(to, ty.clone());
                 }
                 None
             }
-            Some(TypeKind::Variable) => e.set_ty(TypeKind::Instance(of)),
+            Some(TypeKind::Variable)
+            | Some(TypeKind::Primitive(Primitive::Float | Primitive::Integer)) => {
+                e.set_ty(TypeKind::Instance(of))
+            }
             other => todo!("Cannot set {} to instance of: {other:?}", e.as_ref()),
         };
     }
@@ -142,11 +269,11 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
             return false;
         };
         match ty {
-            TypeKind::Uninferred => false,
+            TypeKind::Inferred => false,
             TypeKind::Variable => true,
             &TypeKind::Array(h, _) => self.is_generic(h),
             &TypeKind::Instance(h) => self.is_generic(h),
-            TypeKind::Intrinsic(_) => false,
+            TypeKind::Primitive(_) => false,
             TypeKind::Adt(Adt::Enum(tys)) => tys
                 .iter()
                 .any(|(_, ty)| ty.is_some_and(|ty| self.is_generic(ty))),
@@ -277,10 +404,10 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
             TypeKind::FnSig { args, rety } => {
                 self.occurs_in(this, *args) || self.occurs_in(this, *rety)
             }
-            TypeKind::Uninferred
+            TypeKind::Inferred
             | TypeKind::Variable
             | TypeKind::Adt(Adt::UnitStruct)
-            | TypeKind::Intrinsic(_)
+            | TypeKind::Primitive(_)
             | TypeKind::Empty
             | TypeKind::Never
             | TypeKind::Module => false,
@@ -296,11 +423,11 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
         };
 
         match (a, b) {
-            (TypeKind::Uninferred, _) => {
+            (TypeKind::Inferred, _) => {
                 self.set_instance(ah, bh);
                 Ok(())
             }
-            (_, TypeKind::Uninferred) => self.unify(bh, ah),
+            (_, TypeKind::Inferred) => self.unify(bh, ah),
 
             (TypeKind::Variable, _) => {
                 self.set_instance(ah, bh);
@@ -311,9 +438,26 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
                 Ok(())
             }
             (TypeKind::Instance(_), _) => Err(InferenceError::Recursive(ah, bh)),
-            (_, TypeKind::Variable) | (_, TypeKind::Instance(_)) => self.unify(bh, ah),
 
-            (TypeKind::Intrinsic(ia), TypeKind::Intrinsic(ib)) if ia == ib => Ok(()),
+            (TypeKind::Primitive(Primitive::Float), TypeKind::Primitive(Primitive::Integer))
+            | (TypeKind::Primitive(Primitive::Integer), TypeKind::Primitive(Primitive::Float)) => {
+                Err(InferenceError::Mismatch(ah, bh))
+            }
+
+            // Primitives have their own set of vars which only unify with primitives.
+            (TypeKind::Primitive(Primitive::Integer), TypeKind::Primitive(i)) if i.is_integer() => {
+                self.set_instance(ah, bh);
+                Ok(())
+            }
+            (TypeKind::Primitive(Primitive::Float), TypeKind::Primitive(f)) if f.is_float() => {
+                self.set_instance(ah, bh);
+                Ok(())
+            }
+
+            (_, TypeKind::Variable)
+            | (_, TypeKind::Instance(_))
+            | (TypeKind::Primitive(_), TypeKind::Primitive(Primitive::Integer))
+            | (TypeKind::Primitive(_), TypeKind::Primitive(Primitive::Float)) => self.unify(bh, ah),
             (TypeKind::Adt(Adt::Enum(ia)), TypeKind::Adt(Adt::Enum(ib)))
                 if ia.len() == ib.len() =>
             {
@@ -356,6 +500,9 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
             }
             (TypeKind::Ref(a), TypeKind::Ref(b)) => self.unify(*a, *b),
             (TypeKind::Slice(a), TypeKind::Slice(b)) => self.unify(*a, *b),
+            // Slice unifies with array
+            (TypeKind::Array(a, _), TypeKind::Slice(b)) => self.unify(*a, *b),
+            (TypeKind::Slice(_), TypeKind::Array(_, _)) => self.unify(bh, ah),
             (TypeKind::Array(a, sa), TypeKind::Array(b, sb)) if sa == sb => self.unify(*a, *b),
             (TypeKind::Tuple(a), TypeKind::Tuple(b)) => {
                 if a.len() != b.len() {
@@ -376,9 +523,8 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
             {
                 Ok(())
             }
-            (TypeKind::Empty, TypeKind::Empty) => Ok(()),
             (TypeKind::Never, _) | (_, TypeKind::Never) => Ok(()),
-            (TypeKind::Module, TypeKind::Module) => Ok(()),
+            (a, b) if a == b => Ok(()),
             _ => Err(InferenceError::Mismatch(ah, bh)),
         }
     }

@@ -143,9 +143,9 @@ impl<'a> Table<'a> {
         entry
     }
 
-    pub(crate) fn uninferred_type(&mut self) -> Handle {
+    pub(crate) fn inferred_type(&mut self) -> Handle {
         let handle = self.new_entry(self.root, NodeKind::Type);
-        self.types.insert(handle, TypeKind::Uninferred);
+        self.types.insert(handle, TypeKind::Inferred);
         handle
     }
 

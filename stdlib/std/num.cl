@@ -1,51 +1,51 @@
 //! The primitive numeric types
 
-#[intrinsic = "bool"]
+#[lang = "bool"]
 pub type bool;
 
-#[intrinsic = "char"]
+#[lang = "char"]
 pub type char;
 
-#[intrinsic = "i8"]
+#[lang = "i8"]
 pub type i8;
 
-#[intrinsic = "i16"]
+#[lang = "i16"]
 pub type i16;
 
-#[intrinsic = "i32"]
+#[lang = "i32"]
 pub type i32;
 
-#[intrinsic = "i64"]
+#[lang = "i64"]
 pub type i64;
 
-#[intrinsic = "i128"]
+#[lang = "i128"]
 pub type i128;
 
-#[intrinsic = "isize"]
+#[lang = "isize"]
 pub type isize;
 
-#[intrinsic = "u8"]
+#[lang = "u8"]
 pub type u8;
 
-#[intrinsic = "u16"]
+#[lang = "u16"]
 pub type u16;
 
-#[intrinsic = "u32"]
+#[lang = "u32"]
 pub type u32;
 
-#[intrinsic = "u64"]
+#[lang = "u64"]
 pub type u64;
 
-#[intrinsic = "u128"]
+#[lang = "u128"]
 pub type u128;
 
-#[intrinsic = "usize"]
+#[lang = "usize"]
 pub type usize;
 
-#[intrinsic = "f32"]
+#[lang = "f32"]
 pub type f32;
 
-#[intrinsic = "f64"]
+#[lang = "f64"]
 pub type f64;
 
 // Contains implementations for (TODO) overloaded operators on num types

@@ -11,13 +11,13 @@ mod display;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum TypeKind {
     /// A type that is yet to be inferred!
-    Uninferred,
-    /// A type variable, to be filled in later
+    Inferred,
+    /// A type variable, to be monomorphized
     Variable,
     /// An alias for an already-defined type
     Instance(Handle),
     /// A primitive type, built-in to the compiler
-    Intrinsic(Intrinsic),
+    Primitive(Primitive),
     /// A user-defined aromatic data type
     Adt(Adt),
     /// A reference to an already-defined type: &T
@@ -59,42 +59,64 @@ pub enum Adt {
 /// The set of compiler-intrinsic types.
 /// These primitive types have native implementations of the basic operations.
 #[rustfmt::skip]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Intrinsic {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Primitive {
     I8, I16, I32, I64, I128, Isize, // Signed integers
     U8, U16, U32, U64, U128, Usize, // Unsigned integers
     F8, F16, F32, F64, F128, Fsize, // Floating point numbers
+    Integer, Float,                 // Inferred int and float
     Bool,                           // boolean value
     Char,                           // Unicode codepoint
 }
 
+#[rustfmt::skip]
+impl Primitive {
+    /// Checks whether self is an integer
+    pub fn is_integer(self) -> bool {
+        matches!(
+            self, 
+            | Self::I8 | Self::I16 | Self::I32 | Self::I64 | Self::I128 | Self::Isize
+            | Self::U8 | Self::U16 | Self::U32 | Self::U64 | Self::U128 | Self::Usize
+            | Self::Integer
+        )
+    }
+    /// Checks whether self is a floating point number
+    pub fn is_float(self) -> bool {
+        matches!(
+            self, 
+            | Self::F8 | Self::F16 | Self::F32 | Self::F64 | Self::F128 | Self::Fsize
+            | Self::Float
+        )
+    }
+}
+
 // Author's note: the fsize type is a meme
 
-impl FromStr for Intrinsic {
+impl FromStr for Primitive {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
-            "i8" => Intrinsic::I8,
-            "i16" => Intrinsic::I16,
-            "i32" => Intrinsic::I32,
-            "i64" => Intrinsic::I64,
-            "i128" => Intrinsic::I128,
-            "isize" => Intrinsic::Isize,
-            "u8" => Intrinsic::U8,
-            "u16" => Intrinsic::U16,
-            "u32" => Intrinsic::U32,
-            "u64" => Intrinsic::U64,
-            "u128" => Intrinsic::U128,
-            "usize" => Intrinsic::Usize,
-            "f8" => Intrinsic::F8,
-            "f16" => Intrinsic::F16,
-            "f32" => Intrinsic::F32,
-            "f64" => Intrinsic::F64,
-            "f128" => Intrinsic::F128,
-            "fsize" => Intrinsic::Fsize,
-            "bool" => Intrinsic::Bool,
-            "char" => Intrinsic::Char,
+            "i8" => Primitive::I8,
+            "i16" => Primitive::I16,
+            "i32" => Primitive::I32,
+            "i64" => Primitive::I64,
+            "i128" => Primitive::I128,
+            "isize" => Primitive::Isize,
+            "u8" => Primitive::U8,
+            "u16" => Primitive::U16,
+            "u32" => Primitive::U32,
+            "u64" => Primitive::U64,
+            "u128" => Primitive::U128,
+            "usize" => Primitive::Usize,
+            "f8" => Primitive::F8,
+            "f16" => Primitive::F16,
+            "f32" => Primitive::F32,
+            "f64" => Primitive::F64,
+            "f128" => Primitive::F128,
+            "fsize" => Primitive::Fsize,
+            "bool" => Primitive::Bool,
+            "char" => Primitive::Char,
             _ => Err(())?,
         })
     }

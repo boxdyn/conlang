@@ -13,9 +13,9 @@ use cl_ast::*;
 pub fn categorize(table: &mut Table, node: Handle) -> CatResult<()> {
     if let Some(meta) = table.meta(node) {
         for meta @ Meta { name, kind } in meta {
-            if let ("intrinsic", MetaKind::Equals(Literal::String(s))) = (&**name, kind) {
+            if let ("lang", MetaKind::Equals(Literal::String(s))) = (&**name, kind) {
                 let kind =
-                    TypeKind::Intrinsic(s.parse().map_err(|_| Error::BadMeta(meta.clone()))?);
+                    TypeKind::Primitive(s.parse().map_err(|_| Error::BadMeta(meta.clone()))?);
                 table.set_ty(node, kind);
                 return Ok(());
             }
@@ -206,7 +206,6 @@ type CatResult<T> = Result<T, Error>;
 #[derive(Clone, Debug)]
 pub enum Error {
     BadMeta(Meta),
-    Recursive(Handle),
     TypeEval(TypeEval, &'static str),
 }
 
@@ -219,10 +218,7 @@ impl From<TypeEval> for Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::BadMeta(meta) => write!(f, "Unknown meta attribute: #[{meta}]"),
-            Error::Recursive(id) => {
-                write!(f, "Encountered recursive type without indirection: {id}")
-            }
+            Error::BadMeta(meta) => write!(f, "Unknown attribute: #[{meta}]"),
             Error::TypeEval(e, during) => write!(f, "{e}{during}"),
         }
     }
