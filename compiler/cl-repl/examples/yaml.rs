@@ -284,8 +284,11 @@ pub mod yamlify {
     }
     impl Yamlify for Enum {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { name,gens, variants: kind } = self;
-            y.key("Enum").pair("gens", gens).pair("name", name).yaml(kind);
+            let Self { name, gens, variants: kind } = self;
+            y.key("Enum")
+                .pair("gens", gens)
+                .pair("name", name)
+                .yaml(kind);
         }
     }
     impl Yamlify for Variant {
