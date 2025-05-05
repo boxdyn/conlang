@@ -844,7 +844,6 @@ pub mod clangify {
         fn print(&self, y: &mut CLangifier) {
             match self {
                 PathPart::SuperKw => y.p("super"),
-                PathPart::SelfKw => y.p("self"),
                 PathPart::SelfTy => y.p("Self"),
                 PathPart::Ident(i) => y.p(i),
             };
