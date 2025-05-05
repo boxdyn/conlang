@@ -1,6 +1,9 @@
 //! Collects the "Upvars" of a function at the point of its creation, allowing variable capture
 use crate::{convalue::ConValue, env::Environment};
-use cl_ast::{Function, Let, Path, PathPart, Pattern, Sym, ast_visitor::visit::*};
+use cl_ast::{
+    Function, Let, Path, PathPart, Pattern, Sym,
+    ast_visitor::{visit::*, walk::Walk},
+};
 use std::collections::{HashMap, HashSet};
 
 pub fn collect_upvars(f: &Function, env: &Environment) -> super::Upvars {
@@ -43,8 +46,7 @@ impl<'a> Visit<'a> for CollectUpvars<'_> {
         let blacklist = self.blacklist.clone();
 
         // visit the block
-        let cl_ast::Block { stmts } = b;
-        stmts.iter().for_each(|s| self.visit_stmt(s));
+        b.children(self);
 
         // restore the blacklist
         self.blacklist = blacklist;
@@ -53,13 +55,10 @@ impl<'a> Visit<'a> for CollectUpvars<'_> {
     fn visit_let(&mut self, l: &'a cl_ast::Let) {
         let Let { mutable, name, ty, init } = l;
         self.visit_mutability(mutable);
-        if let Some(ty) = ty {
-            self.visit_ty(ty);
-        }
+
+        ty.visit_in(self);
         // visit the initializer, which may use the bound name
-        if let Some(init) = init {
-            self.visit_expr(init)
-        }
+        init.visit_in(self);
         // a bound name can never be an upvar
         self.visit_pattern(name);
     }
@@ -67,10 +66,8 @@ impl<'a> Visit<'a> for CollectUpvars<'_> {
     fn visit_function(&mut self, f: &'a cl_ast::Function) {
         let Function { name: _, gens: _, sign: _, bind, body } = f;
         // parameters can never be upvars
-        self.visit_pattern(bind);
-        if let Some(body) = body {
-            self.visit_expr(body);
-        }
+        bind.visit_in(self);
+        body.visit_in(self);
     }
 
     fn visit_for(&mut self, f: &'a cl_ast::For) {
@@ -106,35 +103,8 @@ impl<'a> Visit<'a> for CollectUpvars<'_> {
             Pattern::Name(name) => {
                 self.bind_name(name);
             }
-            Pattern::Literal(literal) => self.visit_literal(literal),
-            Pattern::Rest(Some(name)) => {
-                self.visit_pattern(name);
-            }
-            Pattern::Rest(None) => {}
-            Pattern::Ref(mutability, pattern) => {
-                self.visit_mutability(mutability);
-                self.visit_pattern(pattern);
-            }
-            Pattern::RangeExc(_, _) => {}
-            Pattern::RangeInc(_, _) => {}
-            Pattern::Tuple(patterns) => {
-                patterns.iter().for_each(|p| self.visit_pattern(p));
-            }
-            Pattern::Array(patterns) => {
-                patterns.iter().for_each(|p| self.visit_pattern(p));
-            }
-            Pattern::Struct(path, items) => {
-                self.visit_path(path);
-                items.iter().for_each(|(_name, bind)| {
-                    bind.as_ref().inspect(|bind| {
-                        self.visit_pattern(bind);
-                    });
-                });
-            }
-            Pattern::TupleStruct(path, items) => {
-                self.visit_path(path);
-                items.iter().for_each(|bind| self.visit_pattern(bind));
-            }
+            Pattern::RangeExc(_, _) | Pattern::RangeInc(_, _) => {}
+            _ => p.children(self),
         }
     }
 }

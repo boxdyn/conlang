@@ -33,7 +33,7 @@ impl<'t, 'a> Populator<'t, 'a> {
 
 impl<'a> Visit<'a> for Populator<'_, 'a> {
     fn visit_item(&mut self, i: &'a cl_ast::Item) {
-        let cl_ast::Item { span, attrs, vis, kind } = i;
+        let cl_ast::Item { span, attrs, vis: _, kind } = i;
         // TODO: this, better, better.
         let entry_kind = match kind {
             ItemKind::Alias(_) => NodeKind::Type,
@@ -53,10 +53,7 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         entry.inner.set_span(*span);
         entry.inner.set_meta(&attrs.meta);
 
-        entry.visit_span(span);
-        entry.visit_attrs(attrs);
-        entry.visit_visibility(vis);
-        entry.visit_item_kind(kind);
+        entry.visit_children(i);
 
         if let (Some(name), child) = (entry.name, entry.inner.id()) {
             self.inner.add_child(name, child);
@@ -68,9 +65,7 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         self.inner.set_source(Source::Alias(a));
         self.set_name(*name);
 
-        if let Some(t) = from {
-            self.visit_ty(t)
-        }
+        self.visit(from);
     }
 
     fn visit_const(&mut self, c: &'a cl_ast::Const) {
@@ -79,8 +74,8 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         self.inner.set_body(init);
         self.set_name(*name);
 
-        self.visit_ty(ty);
-        self.visit_expr(init);
+        self.visit(ty);
+        self.visit(init);
     }
 
     fn visit_static(&mut self, s: &'a cl_ast::Static) {
@@ -89,9 +84,9 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         self.inner.set_body(init);
         self.set_name(*name);
 
-        self.visit_mutability(mutable);
-        self.visit_ty(ty);
-        self.visit_expr(init);
+        self.visit(mutable);
+        self.visit(ty);
+        self.visit(init);
     }
 
     fn visit_module(&mut self, m: &'a cl_ast::Module) {
@@ -99,9 +94,7 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         self.inner.set_source(Source::Module(m));
         self.set_name(*name);
 
-        if let Some(file) = file {
-            self.visit_file(file);
-        }
+        self.visit(file);
     }
 
     fn visit_function(&mut self, f: &'a cl_ast::Function) {
@@ -110,11 +103,12 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         self.inner.set_source(Source::Function(f));
         self.set_name(*name);
 
-        self.visit_ty_fn(sign);
-        self.visit_pattern(bind);
+        self.visit(sign);
+        self.visit(bind);
+
         if let Some(b) = body {
             self.inner.set_body(b);
-            self.visit_expr(b)
+            self.visit(b);
         }
     }
 
@@ -124,7 +118,7 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         self.inner.set_source(Source::Struct(s));
         self.set_name(*name);
 
-        self.visit_struct_kind(kind);
+        self.visit(kind);
     }
 
     fn visit_enum(&mut self, e: &'a cl_ast::Enum) {
@@ -133,9 +127,7 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         self.inner.set_source(Source::Enum(e));
         self.set_name(*name);
 
-        if let Some(variants) = variants {
-            variants.iter().for_each(|v| self.visit_variant(v));
-        }
+        self.visit(variants);
     }
 
     fn visit_impl(&mut self, i: &'a cl_ast::Impl) {
@@ -143,8 +135,8 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         self.inner.set_source(Source::Impl(i));
         self.inner.mark_impl_item();
 
-        self.visit_impl_kind(target);
-        self.visit_file(body);
+        self.visit(target);
+        self.visit(body);
     }
 
     fn visit_use(&mut self, u: &'a cl_ast::Use) {
@@ -152,6 +144,6 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         self.inner.set_source(Source::Use(u));
         self.inner.mark_use_item();
 
-        self.visit_use_tree(tree);
+        self.visit(tree);
     }
 }
