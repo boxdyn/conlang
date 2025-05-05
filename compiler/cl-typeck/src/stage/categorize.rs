@@ -65,7 +65,6 @@ fn cat_alias(table: &mut Table, node: Handle, a: &Alias) -> CatResult<()> {
 }
 
 fn cat_struct(table: &mut Table, node: Handle, s: &Struct) -> CatResult<()> {
-    let parent = parent(table, node);
     let Struct { name: _, gens: _, kind } = s;
     // TODO: Generics
     let kind = match kind {
@@ -73,7 +72,7 @@ fn cat_struct(table: &mut Table, node: Handle, s: &Struct) -> CatResult<()> {
         StructKind::Tuple(types) => {
             let mut out = vec![];
             for ty in types {
-                out.push((Visibility::Public, ty.evaluate(table, parent)?))
+                out.push((Visibility::Public, ty.evaluate(table, node)?))
             }
             TypeKind::Adt(Adt::TupleStruct(out))
         }
@@ -122,14 +121,13 @@ fn cat_variant<'a>(
     node: Handle,
     v: &'a Variant,
 ) -> CatResult<(Sym, Option<Handle>)> {
-    let parent = parent(table, node);
     let Variant { name, kind } = v;
     match kind {
         VariantKind::Plain => Ok((*name, None)),
         VariantKind::CLike(c) => todo!("enum-variant constant {c}"),
         VariantKind::Tuple(ty) => {
             let ty = ty
-                .evaluate(table, parent)
+                .evaluate(table, node)
                 .map_err(|e| Error::TypeEval(e, " while categorizing a variant"))?;
             Ok((*name, Some(ty)))
         }
@@ -170,10 +168,9 @@ fn cat_static(table: &mut Table, node: Handle, s: &Static) -> CatResult<()> {
 }
 
 fn cat_function(table: &mut Table, node: Handle, f: &Function) -> CatResult<()> {
-    let parent = parent(table, node);
     let kind = TypeKind::Instance(
         f.sign
-            .evaluate(table, parent)
+            .evaluate(table, node)
             .map_err(|e| Error::TypeEval(e, " while categorizing a function"))?,
     );
     table.set_ty(node, kind);
