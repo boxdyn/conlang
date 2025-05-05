@@ -19,4 +19,11 @@ impl Option {
             None => true,
         }
     }
+    /// Maps from one option space to another
+    // pub fn map<U>(self: Self, f: fn(T) -> U) -> Option<U> {
+    //     match self {
+    //         Some(value) => Some(f(value)),
+    //         None => None,
+    //     }
+    // }
 }
