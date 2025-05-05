@@ -274,9 +274,7 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
             &TypeKind::Array(h, _) => self.is_generic(h),
             &TypeKind::Instance(h) => self.is_generic(h),
             TypeKind::Primitive(_) => false,
-            TypeKind::Adt(Adt::Enum(tys)) => tys
-                .iter()
-                .any(|(_, ty)| ty.is_some_and(|ty| self.is_generic(ty))),
+            TypeKind::Adt(Adt::Enum(tys)) => tys.iter().any(|(_, ty)| self.is_generic(*ty)),
             TypeKind::Adt(Adt::Struct(tys)) => tys.iter().any(|&(_, _, ty)| self.is_generic(ty)),
             TypeKind::Adt(Adt::TupleStruct(tys)) => tys.iter().any(|&(_, ty)| self.is_generic(ty)),
             TypeKind::Adt(Adt::UnitStruct) => false,
@@ -313,7 +311,7 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
             TypeKind::Adt(Adt::Enum(tys)) => {
                 let tys = tys
                     .into_iter()
-                    .map(|(name, ty)| (name, ty.map(|ty| self.deep_clone(ty))))
+                    .map(|(name, ty)| (name, self.deep_clone(ty)))
                     .collect();
                 self.table.anon_type(TypeKind::Adt(Adt::Enum(tys)))
             }
@@ -385,9 +383,9 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
         };
         match ty {
             TypeKind::Instance(other) => self.occurs_in(this, *other),
-            TypeKind::Adt(Adt::Enum(items)) => items
-                .iter()
-                .any(|(_, i)| i.is_some_and(|other| self.occurs_in(this, other))),
+            TypeKind::Adt(Adt::Enum(items)) => {
+                items.iter().any(|(_, other)| self.occurs_in(this, *other))
+            }
             TypeKind::Adt(Adt::Struct(items)) => items
                 .iter()
                 .any(|(_, _, other)| self.occurs_in(this, *other)),
@@ -462,10 +460,9 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
                 if ia.len() == ib.len() =>
             {
                 for ((na, a), (nb, b)) in ia.clone().into_iter().zip(ib.clone().into_iter()) {
-                    if na != nb || a.is_some() != b.is_some() {
+                    if na != nb {
                         return Err(InferenceError::Mismatch(ah, bh));
                     }
-                    let (Some(a), Some(b)) = (a, b) else { continue };
                     self.unify(a, b)?;
                 }
                 Ok(())

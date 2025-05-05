@@ -4,8 +4,12 @@ use crate::{
     handle::Handle,
     source::Source,
     table::{NodeKind, Table},
+    type_kind::{Primitive, TypeKind},
 };
-use cl_ast::{ItemKind, Sym, ast_visitor::Visit};
+use cl_ast::{
+    ItemKind, Sym,
+    ast_visitor::{Visit, Walk},
+};
 
 #[derive(Debug)]
 pub struct Populator<'t, 'a> {
@@ -60,6 +64,17 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         }
     }
 
+    fn visit_generics(&mut self, value: &'a cl_ast::Generics) {
+        let cl_ast::Generics { vars } = value;
+        for var in vars {
+            let mut entry = self.inner.new_entry(NodeKind::Type);
+            entry.set_ty(TypeKind::Variable);
+
+            let id = entry.id();
+            self.inner.add_child(*var, id);
+        }
+    }
+
     fn visit_alias(&mut self, a: &'a cl_ast::Alias) {
         let cl_ast::Alias { name, from } = a;
         self.inner.set_source(Source::Alias(a));
@@ -98,11 +113,12 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
     }
 
     fn visit_function(&mut self, f: &'a cl_ast::Function) {
-        let cl_ast::Function { name, gens: _, sign, bind, body } = f;
+        let cl_ast::Function { name, gens, sign, bind, body } = f;
         // TODO: populate generics?
         self.inner.set_source(Source::Function(f));
         self.set_name(*name);
 
+        self.visit(gens);
         self.visit(sign);
         self.visit(bind);
 
@@ -113,21 +129,51 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
     }
 
     fn visit_struct(&mut self, s: &'a cl_ast::Struct) {
-        let cl_ast::Struct { name, gens: _, kind } = s;
-        // TODO: populate generics?
+        let cl_ast::Struct { name, gens, kind } = s;
         self.inner.set_source(Source::Struct(s));
         self.set_name(*name);
 
+        self.visit(gens);
         self.visit(kind);
     }
 
     fn visit_enum(&mut self, e: &'a cl_ast::Enum) {
-        let cl_ast::Enum { name, gens: _, variants } = e;
-        // TODO: populate generics?
+        let cl_ast::Enum { name, gens, variants } = e;
         self.inner.set_source(Source::Enum(e));
         self.set_name(*name);
 
+        self.visit(gens);
         self.visit(variants);
+        let mut children = Vec::new();
+        for variant in variants.iter().flatten() {
+            let mut entry = self.new_entry(NodeKind::Type);
+            variant.visit_in(&mut entry);
+            children.push((variant.name, entry.inner.id()));
+        }
+        self.inner
+            .set_ty(TypeKind::Adt(crate::type_kind::Adt::Enum(children)));
+    }
+
+    fn visit_variant(&mut self, value: &'a cl_ast::Variant) {
+        let cl_ast::Variant { name, kind } = value;
+        let mut entry = self.new_entry(NodeKind::Type);
+        entry.inner.set_source(Source::Variant(value));
+        entry.visit(kind);
+
+        let child = entry.inner.id();
+        self.inner.add_child(*name, child);
+    }
+
+    fn visit_variant_kind(&mut self, value: &'a cl_ast::VariantKind) {
+        match value {
+            cl_ast::VariantKind::Plain => self.inner.set_ty(TypeKind::Empty),
+            cl_ast::VariantKind::CLike(body) => {
+                self.inner.set_body(body);
+                self.inner.set_ty(TypeKind::Primitive(Primitive::Integer))
+            }
+            cl_ast::VariantKind::Tuple(_) => None,
+            cl_ast::VariantKind::Struct(_) => None,
+        };
     }
 
     fn visit_impl(&mut self, i: &'a cl_ast::Impl) {

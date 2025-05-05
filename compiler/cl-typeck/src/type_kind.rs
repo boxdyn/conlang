@@ -42,7 +42,7 @@ pub enum TypeKind {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Adt {
     /// A union-like enum type
-    Enum(Vec<(Sym, Option<Handle>)>),
+    Enum(Vec<(Sym, Handle)>),
 
     /// A structural product type with named members
     Struct(Vec<(Sym, Visibility, Handle)>),

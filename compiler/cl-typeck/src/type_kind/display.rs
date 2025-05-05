@@ -38,10 +38,7 @@ impl Display for Adt {
                 let mut variants = variants.iter();
                 separate(", ", || {
                     let (name, def) = variants.next()?;
-                    Some(move |f: &mut Delimit<_>| match def {
-                        Some(def) => write!(f, "{name}: #{def}"),
-                        None => write!(f, "{name}"),
-                    })
+                    Some(move |f: &mut Delimit<_>| write!(f, "{name}: #{def}"))
                 })(f.delimit_with("enum {", "}"))
             }
             Adt::Struct(members) => {

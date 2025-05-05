@@ -66,12 +66,9 @@ fn write_adt(adt: &Adt, h: &Entry, f: &mut impl Write) -> fmt::Result {
             let mut variants = variants.iter();
             separate(", ", || {
                 variants.next().map(|(name, def)| {
-                    move |f: &mut Delimit<_>| match def {
-                        Some(def) => {
-                            write!(f, "{name}: ")?;
-                            write_name_or(h.with_id(*def), f)
-                        }
-                        None => write!(f, "{name}"),
+                    move |f: &mut Delimit<_>| {
+                        write!(f, "{name}: ")?;
+                        write_name_or(h.with_id(*def), f)
                     }
                 })
             })(f.delimit_with("enum {", "}"))

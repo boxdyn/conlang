@@ -31,7 +31,7 @@ pub fn categorize(table: &mut Table, node: Handle) -> CatResult<()> {
         Source::Module(_) => Ok(()),
         Source::Alias(a) => cat_alias(table, node, a),
         Source::Enum(e) => cat_enum(table, node, e),
-        Source::Variant(_) => Ok(()),
+        Source::Variant(v) => cat_variant(table, node, v),
         Source::Struct(s) => cat_struct(table, node, s),
         Source::Const(c) => cat_const(table, node, c),
         Source::Static(s) => cat_static(table, node, s),
@@ -98,51 +98,51 @@ fn cat_member(
     Ok((*name, *vis, ty.evaluate(table, node)?))
 }
 
-fn cat_enum<'a>(table: &mut Table<'a>, node: Handle, e: &'a Enum) -> CatResult<()> {
-    let Enum { name: _, gens: _, variants: kind } = e;
-    // TODO: Genereics
-    let kind = match kind {
-        None => TypeKind::Adt(Adt::Enum(vec![])),
-        Some(variants) => {
-            let mut out_vars = vec![];
-            for v in variants {
-                out_vars.push(cat_variant(table, node, v)?)
-            }
-            TypeKind::Adt(Adt::Enum(out_vars))
-        }
-    };
+fn cat_enum<'a>(_table: &mut Table<'a>, _node: Handle, e: &'a Enum) -> CatResult<()> {
+    let Enum { name: _, gens: _, variants: _ } = e;
 
-    table.set_ty(node, kind);
+    // table.set_ty(node, kind);
     Ok(())
 }
 
-fn cat_variant<'a>(
-    table: &mut Table<'a>,
-    node: Handle,
-    v: &'a Variant,
-) -> CatResult<(Sym, Option<Handle>)> {
+fn cat_variant<'a>(table: &mut Table<'a>, node: Handle, v: &'a Variant) -> CatResult<()> {
     let Variant { name, kind } = v;
+    let parent = table.parent(node).copied().unwrap_or(table.root());
+    table.add_child(parent, *name, node);
     match kind {
-        VariantKind::Plain => Ok((*name, None)),
-        VariantKind::CLike(c) => todo!("enum-variant constant {c}"),
+        VariantKind::Plain => {
+            table.set_ty(node, TypeKind::Instance(parent));
+            Ok(())
+        }
+        VariantKind::CLike(c) => {
+            table.set_body(node, c);
+            table.set_ty(node, TypeKind::Instance(parent));
+            Ok(())
+        }
         VariantKind::Tuple(ty) => {
             let ty = ty
                 .evaluate(table, node)
                 .map_err(|e| Error::TypeEval(e, " while categorizing a variant"))?;
-            Ok((*name, Some(ty)))
+            table.set_ty(node, TypeKind::Instance(ty));
+            Ok(())
         }
         VariantKind::Struct(members) => {
             let mut out = vec![];
-            for m in members {
-                out.push(cat_member(table, node, m)?)
-            }
-            let kind = TypeKind::Adt(Adt::Struct(out));
+            for StructMember { vis, name, ty } in members {
+                let ty = ty.evaluate(table, node)?;
+                out.push((*name, *vis, ty));
 
-            let mut h = node.to_entry_mut(table);
-            let mut variant = h.new_entry(NodeKind::Type);
-            variant.set_source(Source::Variant(v));
-            variant.set_ty(kind);
-            Ok((*name, Some(variant.id())))
+                let mut this = node.to_entry_mut(table);
+                let mut child = this.new_entry(NodeKind::Type);
+                child.set_source(Source::Variant(v));
+                child.set_ty(TypeKind::Instance(ty));
+
+                let child = child.id();
+                this.add_child(*name, child);
+            }
+
+            table.set_ty(node, TypeKind::Adt(Adt::Struct(out)));
+            Ok(())
         }
     }
 }
