@@ -1,4 +1,5 @@
 //! The optional type, representing the presence or absence of a thing.
+use super::preamble::*;
 
 pub enum Option<T> {
     Some(T),

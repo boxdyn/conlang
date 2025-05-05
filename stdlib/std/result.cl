@@ -1,4 +1,5 @@
 //! The Result type, indicating a fallible operation.
+use super::preamble::*;
 
 pub enum Result<T, E> {
     Ok(T),

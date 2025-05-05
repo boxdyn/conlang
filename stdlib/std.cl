@@ -3,7 +3,9 @@
 pub mod preamble {
     pub use super::{
         num::*,
+        option::Option,
         range::{RangeExc, RangeInc},
+        result::Result,
         str::str,
     };
 }
