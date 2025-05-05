@@ -325,12 +325,26 @@ pub enum ExprKind {
     /// An empty expression: `(` `)`
     #[default]
     Empty,
+    /// A [Tuple] expression: `(` [`Expr`] (`,` [`Expr`])+ `)`
+    Tuple(Tuple),
+    /// A [Struct creation](Structor) expression: [Path] `{` ([Fielder] `,`)* [Fielder]? `}`
+    Structor(Structor),
+    /// An [Array] literal: `[` [`Expr`] (`,` [`Expr`])\* `]`
+    Array(Array),
+    /// An Array literal constructed with [repeat syntax](ArrayRep)
+    /// `[` [Expr] `;` [Literal] `]`
+    ArrayRep(ArrayRep),
+    /// An address-of expression: `&` `mut`? [`Expr`]
+    AddrOf(AddrOf),
     /// A backtick-quoted expression
     Quote(Quote),
-    /// A local bind instruction, `let` [`Sym`] `=` [`Expr`]
-    Let(Let),
-    /// A [Match] expression: `match` [Expr] `{` ([MatchArm] `,`)* [MatchArm]? `}`
-    Match(Match),
+    /// A [Literal]: 0x42, 1e123, 2.4, "Hello"
+    Literal(Literal),
+    /// A [Grouping](Group) expression `(` [`Expr`] `)`
+    Group(Group),
+    /// A [Block] expression: `{` [`Stmt`]\* [`Expr`]? `}`
+    Block(Block),
+
     /// An [Assign]ment expression: [`Expr`] (`=` [`Expr`])\+
     Assign(Assign),
     /// A [Modify]-assignment expression: [`Expr`] ([`ModifyKind`] [`Expr`])\+
@@ -339,31 +353,18 @@ pub enum ExprKind {
     Binary(Binary),
     /// A [Unary] expression: [`UnaryKind`]\* [`Expr`]
     Unary(Unary),
-    /// A [Cast] expression: [`Expr`] `as` [`Ty`]
-    Cast(Cast),
     /// A [Member] access expression: [`Expr`] [`MemberKind`]\*
     Member(Member),
     /// An Array [Index] expression: a[10, 20, 30]
     Index(Index),
-    /// A [Struct creation](Structor) expression: [Path] `{` ([Fielder] `,`)* [Fielder]? `}`
-    Structor(Structor),
+    /// A [Cast] expression: [`Expr`] `as` [`Ty`]
+    Cast(Cast),
     /// A [path expression](Path): `::`? [PathPart] (`::` [PathPart])*
     Path(Path),
-    /// A [Literal]: 0x42, 1e123, 2.4, "Hello"
-    Literal(Literal),
-    /// An [Array] literal: `[` [`Expr`] (`,` [`Expr`])\* `]`
-    Array(Array),
-    /// An Array literal constructed with [repeat syntax](ArrayRep)
-    /// `[` [Expr] `;` [Literal] `]`
-    ArrayRep(ArrayRep),
-    /// An address-of expression: `&` `mut`? [`Expr`]
-    AddrOf(AddrOf),
-    /// A [Block] expression: `{` [`Stmt`]\* [`Expr`]? `}`
-    Block(Block),
-    /// A [Grouping](Group) expression `(` [`Expr`] `)`
-    Group(Group),
-    /// A [Tuple] expression: `(` [`Expr`] (`,` [`Expr`])+ `)`
-    Tuple(Tuple),
+    /// A local bind instruction, `let` [`Sym`] `=` [`Expr`]
+    Let(Let),
+    /// A [Match] expression: `match` [Expr] `{` ([MatchArm] `,`)* [MatchArm]? `}`
+    Match(Match),
     /// A [While] expression: `while` [`Expr`] [`Block`] [`Else`]?
     While(While),
     /// An [If] expression: `if` [`Expr`] [`Block`] [`Else`]?
@@ -378,46 +379,81 @@ pub enum ExprKind {
     Continue,
 }
 
+/// A [Tuple] expression: `(` [`Expr`] (`,` [`Expr`])+ `)`
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Tuple {
+    pub exprs: Vec<Expr>,
+}
+
+/// A [Struct creation](Structor) expression: [Path] `{` ([Fielder] `,`)* [Fielder]? `}`
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Structor {
+    pub to: Path,
+    pub init: Vec<Fielder>,
+}
+
+/// A [Struct field initializer] expression: [Sym] (`=` [Expr])?
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Fielder {
+    pub name: Sym,
+    pub init: Option<Box<Expr>>,
+}
+
+/// An [Array] literal: `[` [`Expr`] (`,` [`Expr`])\* `]`
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Array {
+    pub values: Vec<Expr>,
+}
+
+/// An Array literal constructed with [repeat syntax](ArrayRep)
+/// `[` [Expr] `;` [Literal] `]`
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ArrayRep {
+    pub value: Box<Expr>,
+    pub repeat: usize,
+}
+
+/// An address-of expression: `&` `mut`? [`Expr`]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct AddrOf {
+    pub mutable: Mutability,
+    pub expr: Box<Expr>,
+}
+
+/// A cast expression: [`Expr`] `as` [`Ty`]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Cast {
+    pub head: Box<Expr>,
+    pub ty: Ty,
+}
+
 /// A backtick-quoted subexpression-literal
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Quote {
     pub quote: Box<Expr>,
 }
 
-/// A local variable declaration [Stmt]
+/// A [Literal]: 0x42, 1e123, 2.4, "Hello"
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Let {
-    pub mutable: Mutability,
-    pub name: Pattern,
-    pub ty: Option<Box<Ty>>,
-    pub init: Option<Box<Expr>>,
+pub enum Literal {
+    Bool(bool),
+    Char(char),
+    Int(u128),
+    Float(u64),
+    String(String),
 }
 
-/// A [Pattern] meta-expression (any [`ExprKind`] that fits pattern rules)
+/// A [Grouping](Group) expression `(` [`Expr`] `)`
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Pattern {
-    Name(Sym),
-    Literal(Literal),
-    Rest(Option<Box<Pattern>>),
-    Ref(Mutability, Box<Pattern>),
-    RangeExc(Box<Pattern>, Box<Pattern>),
-    RangeInc(Box<Pattern>, Box<Pattern>),
-    Tuple(Vec<Pattern>),
-    Array(Vec<Pattern>),
-    Struct(Path, Vec<(Sym, Option<Pattern>)>),
-    TupleStruct(Path, Vec<Pattern>),
+pub struct Group {
+    pub expr: Box<Expr>,
 }
 
-/// A `match` expression: `match` `{` ([MatchArm] `,`)* [MatchArm]? `}`
+/// A [Block] expression: `{` [`Stmt`]\* [`Expr`]? `}`
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Match {
-    pub scrutinee: Box<Expr>,
-    pub arms: Vec<MatchArm>,
+pub struct Block {
+    pub stmts: Vec<Stmt>,
 }
-
-/// A single arm of a [Match] expression: [`Pattern`] `=>` [`Expr`]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct MatchArm(pub Pattern, pub Expr);
 
 /// An [Assign]ment expression: [`Expr`] ([`ModifyKind`] [`Expr`])\+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -503,13 +539,6 @@ pub enum UnaryKind {
     Tilde,
 }
 
-/// A cast expression: [`Expr`] `as` [`Ty`]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Cast {
-    pub head: Box<Expr>,
-    pub ty: Ty,
-}
-
 /// A [Member] access expression: [`Expr`] [`MemberKind`]\*
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Member {
@@ -532,67 +561,39 @@ pub struct Index {
     pub indices: Vec<Expr>,
 }
 
-/// A [Literal]: 0x42, 1e123, 2.4, "Hello"
+/// A local variable declaration [Stmt]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Literal {
-    Bool(bool),
-    Char(char),
-    Int(u128),
-    Float(u64),
-    String(String),
-}
-
-/// A [Struct creation](Structor) expression: [Path] `{` ([Fielder] `,`)* [Fielder]? `}`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Structor {
-    pub to: Path,
-    pub init: Vec<Fielder>,
-}
-
-/// A [Struct field initializer] expression: [Sym] (`=` [Expr])?
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Fielder {
-    pub name: Sym,
+pub struct Let {
+    pub mutable: Mutability,
+    pub name: Pattern,
+    pub ty: Option<Box<Ty>>,
     pub init: Option<Box<Expr>>,
 }
 
-/// An [Array] literal: `[` [`Expr`] (`,` [`Expr`])\* `]`
+/// A `match` expression: `match` `{` ([MatchArm] `,`)* [MatchArm]? `}`
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Array {
-    pub values: Vec<Expr>,
+pub struct Match {
+    pub scrutinee: Box<Expr>,
+    pub arms: Vec<MatchArm>,
 }
 
-/// An Array literal constructed with [repeat syntax](ArrayRep)
-/// `[` [Expr] `;` [Literal] `]`
+/// A single arm of a [Match] expression: [`Pattern`] `=>` [`Expr`]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ArrayRep {
-    pub value: Box<Expr>,
-    pub repeat: usize,
-}
+pub struct MatchArm(pub Pattern, pub Expr);
 
-/// An address-of expression: `&` `mut`? [`Expr`]
+/// A [Pattern] meta-expression (any [`ExprKind`] that fits pattern rules)
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct AddrOf {
-    pub mutable: Mutability,
-    pub expr: Box<Expr>,
-}
-
-/// A [Block] expression: `{` [`Stmt`]\* [`Expr`]? `}`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Block {
-    pub stmts: Vec<Stmt>,
-}
-
-/// A [Grouping](Group) expression `(` [`Expr`] `)`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Group {
-    pub expr: Box<Expr>,
-}
-
-/// A [Tuple] expression: `(` [`Expr`] (`,` [`Expr`])+ `)`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Tuple {
-    pub exprs: Vec<Expr>,
+pub enum Pattern {
+    Name(Sym),
+    Literal(Literal),
+    Rest(Option<Box<Pattern>>),
+    Ref(Mutability, Box<Pattern>),
+    RangeExc(Box<Pattern>, Box<Pattern>),
+    RangeInc(Box<Pattern>, Box<Pattern>),
+    Tuple(Vec<Pattern>),
+    Array(Vec<Pattern>),
+    Struct(Path, Vec<(Sym, Option<Pattern>)>),
+    TupleStruct(Path, Vec<Pattern>),
 }
 
 /// A [While] expression: `while` [`Expr`] [`Block`] [`Else`]?
