@@ -183,7 +183,7 @@ pub struct Variant {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum VariantKind {
     Plain,
-    CLike(u128),
+    CLike(Box<Expr>),
     Tuple(Ty),
     Struct(Vec<StructMember>),
 }

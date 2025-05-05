@@ -40,7 +40,6 @@ impl_from! {
         // TODO: Struct members in struct
     }
     impl From for VariantKind {
-        u128 => VariantKind::CLike,
         Ty => VariantKind::Tuple,
         // TODO: enum struct variants
     }

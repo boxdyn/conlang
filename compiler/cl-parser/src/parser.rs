@@ -603,13 +603,8 @@ impl Parse<'_> for VariantKind {
         const P: Parsing = Parsing::VariantKind;
         Ok(match p.peek_kind(P)? {
             TokenKind::Eq => {
-                p.match_type(TokenKind::Eq, P)?;
-                let tok = p.match_type(TokenKind::Literal, P)?;
-
-                VariantKind::CLike(match tok.data() {
-                    TokenData::Integer(i) => *i,
-                    _ => panic!("Expected token data for {tok:?} while parsing {P}"),
-                })
+                p.consume_peeked();
+                VariantKind::CLike(Box::new(p.parse()?))
             }
             TokenKind::LCurly => VariantKind::Struct(delim(
                 sep(StructMember::parse, TokenKind::Comma, TokenKind::RCurly, P),

@@ -159,7 +159,10 @@ impl Interpret for Enum {
             for (idx, Variant { name, kind }) in variants.iter().enumerate() {
                 match kind {
                     VariantKind::Plain => env.insert(*name, Some(ConValue::Int(idx as _))),
-                    VariantKind::CLike(idx) => env.insert(*name, Some(ConValue::Int(*idx as _))),
+                    VariantKind::CLike(idx) => {
+                        let idx = idx.interpret(env)?;
+                        env.insert(*name, Some(idx))
+                    }
                     VariantKind::Tuple(ty) => eprintln!("TODO: Enum-tuple variants: {ty}"),
                     VariantKind::Struct(_) => eprintln!("TODO: Enum-struct members: {kind}"),
                 }
