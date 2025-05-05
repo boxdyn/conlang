@@ -124,6 +124,9 @@ fn live_desugar() -> Result<(), RlError> {
         let code = Parser::new("", Lexer::new(line)).parse::<Stmt>()?;
         println!("Raw, as parsed:\n{C_LISTING}{code}\x1b[0m");
 
+        let code = ConstantFolder.fold_stmt(code);
+        println!("ConstantFolder\n{C_LISTING}{code}\x1b[0m");
+
         let code = SquashGroups.fold_stmt(code);
         println!("SquashGroups\n{C_LISTING}{code}\x1b[0m");
 
