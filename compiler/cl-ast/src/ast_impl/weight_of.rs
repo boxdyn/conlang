@@ -567,13 +567,19 @@ impl<T: WeightOf> WeightOf for Option<T> {
 
 impl<T: WeightOf> WeightOf for [T] {
     fn weight_of(&self) -> usize {
-        self.iter().map(|t| t.weight_of()).sum()
+        self.iter().map(WeightOf::weight_of).sum()
+    }
+}
+
+impl<T: WeightOf> WeightOf for Vec<T> {
+    fn weight_of(&self) -> usize {
+        size_of::<Self>() + self.iter().map(WeightOf::weight_of).sum::<usize>()
     }
 }
 
 impl<T: WeightOf> WeightOf for Box<T> {
     fn weight_of(&self) -> usize {
-        (**self).weight_of()
+        (**self).weight_of() + size_of::<Self>()
     }
 }
 
