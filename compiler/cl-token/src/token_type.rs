@@ -33,7 +33,6 @@ pub enum TokenKind {
     Mut,      // "mut"
     Pub,      // "pub"
     Return,   // "return"
-    SelfKw,   // "self"
     SelfTy,   // "Self"
     Static,   // "static"
     Struct,   // "struct"
@@ -127,7 +126,6 @@ impl Display for TokenKind {
             TokenKind::Mut => "mut".fmt(f),
             TokenKind::Pub => "pub".fmt(f),
             TokenKind::Return => "return".fmt(f),
-            TokenKind::SelfKw => "self".fmt(f),
             TokenKind::SelfTy => "Self".fmt(f),
             TokenKind::Static => "static".fmt(f),
             TokenKind::Struct => "struct".fmt(f),
@@ -220,7 +218,6 @@ impl FromStr for TokenKind {
             "mut" => Self::Mut,
             "pub" => Self::Pub,
             "return" => Self::Return,
-            "self" => Self::SelfKw,
             "Self" => Self::SelfTy,
             "static" => Self::Static,
             "struct" => Self::Struct,

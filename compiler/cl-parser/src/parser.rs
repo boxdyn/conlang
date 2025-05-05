@@ -188,11 +188,7 @@ macro literal_like() {
 
 /// Expands to a pattern which matches path-like [TokenKinds](TokenKind)
 macro path_like() {
-    TokenKind::Super
-        | TokenKind::SelfKw
-        | TokenKind::SelfTy
-        | TokenKind::Identifier
-        | TokenKind::ColonColon
+    TokenKind::Super | TokenKind::SelfTy | TokenKind::Identifier | TokenKind::ColonColon
 }
 
 pub trait Parse<'t>: Sized {
@@ -689,7 +685,7 @@ impl Parse<'_> for UseTree {
                 CURLIES,
                 P,
             )(p)?),
-            TokenKind::SelfKw | TokenKind::Super | TokenKind::Identifier => {
+            TokenKind::Super | TokenKind::Identifier => {
                 let name = PathPart::parse(p)?;
                 if p.match_type(TokenKind::ColonColon, P).is_ok() {
                     UseTree::Path(name, Box::new(UseTree::parse(p)?))
@@ -864,7 +860,6 @@ impl Parse<'_> for PathPart {
         const P: Parsing = Parsing::PathPart;
         let out = match p.peek_kind(P)? {
             TokenKind::Super => PathPart::SuperKw,
-            TokenKind::SelfKw => PathPart::SelfKw,
             TokenKind::SelfTy => PathPart::SelfTy,
             TokenKind::Identifier => PathPart::Ident(Sym::parse(p)?),
             t => return Err(p.error(Unexpected(t), P)),

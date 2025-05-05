@@ -664,7 +664,6 @@ pub mod yamlify {
         fn yaml(&self, y: &mut Yamler) {
             match self {
                 PathPart::SuperKw => y.value("super"),
-                PathPart::SelfKw => y.value("self"),
                 PathPart::SelfTy => y.value("Self"),
                 PathPart::Ident(i) => y.yaml(i),
             };

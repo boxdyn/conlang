@@ -285,7 +285,6 @@ pub struct Path {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum PathPart {
     SuperKw,
-    SelfKw,
     SelfTy,
     Ident(Sym),
 }

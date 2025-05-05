@@ -210,7 +210,6 @@ pub trait Fold {
     fn fold_path_part(&mut self, p: PathPart) -> PathPart {
         match p {
             PathPart::SuperKw => PathPart::SuperKw,
-            PathPart::SelfKw => PathPart::SelfKw,
             PathPart::SelfTy => PathPart::SelfTy,
             PathPart::Ident(i) => PathPart::Ident(self.fold_sym(i)),
         }

@@ -464,7 +464,6 @@ impl Walk for PathPart {
     fn children<'a, V: Visit<'a>>(&'a self, v: &mut V) {
         match self {
             PathPart::SuperKw => {}
-            PathPart::SelfKw => {}
             PathPart::SelfTy => {}
             PathPart::Ident(sym) => sym.visit_in(v),
         }

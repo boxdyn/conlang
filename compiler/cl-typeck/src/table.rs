@@ -245,6 +245,14 @@ impl<'a> Table<'a> {
         }
     }
 
+    pub fn super_of(&self, node: Handle) -> Option<Handle> {
+        match self.kinds.get(node)? {
+            NodeKind::Root => None,
+            NodeKind::Module => self.parent(node).copied(),
+            _ => self.super_of(*self.parent(node)?),
+        }
+    }
+
     pub fn name(&self, node: Handle) -> Option<Sym> {
         self.source(node).and_then(|s| s.name())
     }
@@ -280,8 +288,7 @@ impl<'a> Table<'a> {
     /// Does path traversal relative to the provided `node`.
     pub fn nav(&self, node: Handle, path: &[PathPart]) -> Option<Handle> {
         match path {
-            [PathPart::SuperKw, rest @ ..] => self.nav(*self.parent(node)?, rest),
-            [PathPart::SelfKw, rest @ ..] => self.nav(node, rest),
+            [PathPart::SuperKw, rest @ ..] => self.nav(self.super_of(node)?, rest),
             [PathPart::SelfTy, rest @ ..] => self.nav(self.selfty(node)?, rest),
             [PathPart::Ident(name), rest @ ..] => self.nav(self.get_by_sym(node, name)?, rest),
             [] => Some(node),

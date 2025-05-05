@@ -370,7 +370,6 @@ impl Display for PathPart {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PathPart::SuperKw => "super".fmt(f),
-            PathPart::SelfKw => "self".fmt(f),
             PathPart::SelfTy => "Self".fmt(f),
             PathPart::Ident(id) => id.fmt(f),
         }

@@ -264,7 +264,6 @@ impl WeightOf for PathPart {
     fn weight_of(&self) -> usize {
         match self {
             PathPart::SuperKw => size_of_val(self),
-            PathPart::SelfKw => size_of_val(self),
             PathPart::SelfTy => size_of_val(self),
             PathPart::Ident(interned) => interned.weight_of(),
         }

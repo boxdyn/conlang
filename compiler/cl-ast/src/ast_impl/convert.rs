@@ -4,7 +4,6 @@ use super::*;
 impl<T: AsRef<str>> From<T> for PathPart {
     fn from(value: T) -> Self {
         match value.as_ref() {
-            "self" => PathPart::SelfKw,
             "super" => PathPart::SuperKw,
             ident => PathPart::Ident(ident.into()),
         }

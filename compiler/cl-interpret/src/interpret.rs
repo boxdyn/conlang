@@ -512,7 +512,6 @@ mod assignment {
                     _ => Err(Error::NotIndexable()),
                 }
             }
-            [PathPart::SelfKw, rest @ ..] => project_path_in_namespace(env, rest),
             [PathPart::SelfTy, ..] => todo!("calc_address for `Self`"),
             [PathPart::SuperKw, ..] => todo!("calc_address for `super`"),
         }
@@ -764,7 +763,6 @@ impl Interpret for Structor {
 
         let name = match parts.last() {
             Some(PathPart::Ident(name)) => *name,
-            Some(PathPart::SelfKw) => "self".into(),
             Some(PathPart::SelfTy) => "Self".into(),
             Some(PathPart::SuperKw) => "super".into(),
             None => "".into(),
