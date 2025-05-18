@@ -153,25 +153,26 @@ impl Interpret for Struct {
 }
 impl Interpret for Enum {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Self { name, gens: _, variants: kind } = self;
-        if let Some(variants) = kind {
-            env.push_frame(name.to_ref(), Default::default());
-            for (idx, Variant { name, kind }) in variants.iter().enumerate() {
-                match kind {
-                    VariantKind::Plain => env.insert(*name, Some(ConValue::Int(idx as _))),
-                    VariantKind::CLike(idx) => {
-                        let idx = idx.interpret(env)?;
-                        env.insert(*name, Some(idx))
-                    }
-                    VariantKind::Tuple(ty) => eprintln!("TODO: Enum-tuple variants: {ty}"),
-                    VariantKind::Struct(_) => eprintln!("TODO: Enum-struct members: {kind}"),
+        let Self { name, gens: _, variants } = self;
+        env.push_frame(name.to_ref(), Default::default());
+        for (idx, Variant { name, kind, body }) in variants.iter().enumerate() {
+            match (kind, body) {
+                (StructKind::Empty, None) => env.insert(*name, Some(ConValue::Int(idx as _))),
+                (StructKind::Empty, Some(idx)) => {
+                    let idx = idx.interpret(env)?;
+                    env.insert(*name, Some(idx))
                 }
+                (StructKind::Tuple(_), None) => eprintln!("TODO: Enum-tuple variants: {kind}"),
+                (StructKind::Struct(_), None) => {
+                    eprintln!("TODO: Enum-struct members: {kind}")
+                }
+                _ => eprintln!("Well-formedness error in {self}"),
             }
-            let (frame, _) = env
-                .pop_frame()
-                .expect("Frame stack should remain balanced.");
-            env.insert(*name, Some(ConValue::Module(Box::new(frame))));
         }
+        let (frame, _) = env
+            .pop_frame()
+            .expect("Frame stack should remain balanced.");
+        env.insert(*name, Some(ConValue::Module(Box::new(frame))));
         Ok(ConValue::Empty)
     }
 }

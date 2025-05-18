@@ -134,29 +134,14 @@ impl WeightOf for StructMember {
 impl WeightOf for Enum {
     fn weight_of(&self) -> usize {
         let Self { name, gens, variants } = self;
-        name.weight_of()
-            + gens.weight_of()
-            + variants
-                .as_ref()
-                .map_or(size_of_val(variants), |v| v.weight_of())
+        name.weight_of() + gens.weight_of() + variants.weight_of()
     }
 }
 
 impl WeightOf for Variant {
     fn weight_of(&self) -> usize {
-        let Self { name, kind } = self;
-        name.weight_of() + kind.weight_of()
-    }
-}
-
-impl WeightOf for VariantKind {
-    fn weight_of(&self) -> usize {
-        match self {
-            VariantKind::Plain => size_of_val(self),
-            VariantKind::CLike(v) => v.weight_of(),
-            VariantKind::Tuple(ty) => ty.weight_of(),
-            VariantKind::Struct(m) => m.weight_of(),
-        }
+        let Self { name, kind, body } = self;
+        name.weight_of() + kind.weight_of() + body.weight_of()
     }
 }
 
@@ -559,7 +544,7 @@ impl WeightOf for Return {
 impl<T: WeightOf> WeightOf for Option<T> {
     fn weight_of(&self) -> usize {
         match self {
-            Some(t) => t.weight_of(),
+            Some(t) => t.weight_of().max(size_of_val(t)),
             None => size_of_val(self),
         }
     }

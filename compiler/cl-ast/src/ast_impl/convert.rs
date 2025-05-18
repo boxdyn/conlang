@@ -39,10 +39,6 @@ impl_from! {
         Vec<Ty> => StructKind::Tuple,
         // TODO: Struct members in struct
     }
-    impl From for VariantKind {
-        Ty => VariantKind::Tuple,
-        // TODO: enum struct variants
-    }
     impl From for TyKind {
         Path => TyKind::Path,
         TyTuple => TyKind::Tuple,

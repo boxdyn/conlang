@@ -106,9 +106,6 @@ pub trait Visit<'a>: Sized {
     fn visit_variant(&mut self, value: &'a Variant) {
         value.children(self)
     }
-    fn visit_variant_kind(&mut self, value: &'a VariantKind) {
-        value.children(self)
-    }
     fn visit_impl(&mut self, value: &'a Impl) {
         value.children(self)
     }

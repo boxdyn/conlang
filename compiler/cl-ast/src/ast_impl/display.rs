@@ -227,29 +227,19 @@ impl Display for StructMember {
 
 impl Display for Enum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self { name, gens, variants: kind } = self;
+        let Self { name, gens, variants } = self;
         write!(f, "enum {name}{gens}")?;
-        match kind {
-            Some(v) => separate(v, ",\n")(f.delimit(SPACED_BRACES)),
-            None => ";".fmt(f),
-        }
+        separate(variants, ",\n")(f.delimit(SPACED_BRACES))
     }
 }
 
 impl Display for Variant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self { name, kind } = self;
-        write!(f, "{name}{kind}")
-    }
-}
-
-impl Display for VariantKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            VariantKind::Plain => Ok(()),
-            VariantKind::CLike(n) => write!(f, " = {n}"),
-            VariantKind::Tuple(v) => v.fmt(f),
-            VariantKind::Struct(v) => separate(v, ", ")(f.delimit(INLINE_BRACES)),
+        let Self { name, kind, body } = self;
+        write!(f, "{name}{kind}")?;
+        match body {
+            Some(body) => write!(f, " {body}"),
+            None => Ok(()),
         }
     }
 }

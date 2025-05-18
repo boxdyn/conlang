@@ -276,9 +276,7 @@ impl Walk for Enum {
         let Enum { name, gens, variants } = self;
         name.visit_in(v);
         gens.visit_in(v);
-        if let Some(variants) = variants {
-            variants.visit_in(v);
-        }
+        variants.visit_in(v);
     }
 }
 impl Walk for Variant {
@@ -287,23 +285,10 @@ impl Walk for Variant {
         v.visit_variant(self);
     }
     fn children<'a, V: Visit<'a>>(&'a self, v: &mut V) {
-        let Variant { name, kind } = self;
+        let Variant { name, kind, body } = self;
         name.visit_in(v);
         kind.visit_in(v);
-    }
-}
-impl Walk for VariantKind {
-    #[inline]
-    fn visit_in<'a, V: Visit<'a>>(&'a self, v: &mut V) {
-        v.visit_variant_kind(self);
-    }
-    fn children<'a, V: Visit<'a>>(&'a self, v: &mut V) {
-        match self {
-            VariantKind::Plain => {}
-            VariantKind::CLike(_) => {}
-            VariantKind::Tuple(t) => t.visit_in(v),
-            VariantKind::Struct(m) => m.visit_in(v),
-        }
+        body.visit_in(v);
     }
 }
 impl Walk for Impl {

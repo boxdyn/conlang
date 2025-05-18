@@ -169,23 +169,15 @@ pub struct StructMember {
 pub struct Enum {
     pub name: Sym,
     pub gens: Generics,
-    pub variants: Option<Vec<Variant>>,
+    pub variants: Vec<Variant>,
 }
 
 /// A single [Enum] variant
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Variant {
     pub name: Sym,
-    pub kind: VariantKind,
-}
-
-/// Whether the [Variant] has a C-like constant value, a tuple, or [StructMember]s
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum VariantKind {
-    Plain,
-    CLike(Box<Expr>),
-    Tuple(Ty),
-    Struct(Vec<StructMember>),
+    pub kind: StructKind,
+    pub body: Option<Box<Expr>>,
 }
 
 /// Sub-[items](Item) (associated functions, etc.) for a [Ty]

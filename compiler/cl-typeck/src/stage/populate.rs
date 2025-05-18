@@ -4,7 +4,7 @@ use crate::{
     handle::Handle,
     source::Source,
     table::{NodeKind, Table},
-    type_kind::{Primitive, TypeKind},
+    type_kind::TypeKind,
 };
 use cl_ast::{
     ItemKind, Sym,
@@ -145,7 +145,7 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         self.visit(gens);
         self.visit(variants);
         let mut children = Vec::new();
-        for variant in variants.iter().flatten() {
+        for variant in variants.iter() {
             let mut entry = self.new_entry(NodeKind::Type);
             variant.visit_in(&mut entry);
             children.push((variant.name, entry.inner.id()));
@@ -155,25 +155,16 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
     }
 
     fn visit_variant(&mut self, value: &'a cl_ast::Variant) {
-        let cl_ast::Variant { name, kind } = value;
+        let cl_ast::Variant { name, kind, body } = value;
         let mut entry = self.new_entry(NodeKind::Type);
         entry.inner.set_source(Source::Variant(value));
         entry.visit(kind);
+        if let Some(body) = body {
+            entry.inner.set_body(body);
+        }
 
         let child = entry.inner.id();
         self.inner.add_child(*name, child);
-    }
-
-    fn visit_variant_kind(&mut self, value: &'a cl_ast::VariantKind) {
-        match value {
-            cl_ast::VariantKind::Plain => self.inner.set_ty(TypeKind::Empty),
-            cl_ast::VariantKind::CLike(body) => {
-                self.inner.set_body(body);
-                self.inner.set_ty(TypeKind::Primitive(Primitive::Integer))
-            }
-            cl_ast::VariantKind::Tuple(_) => None,
-            cl_ast::VariantKind::Struct(_) => None,
-        };
     }
 
     fn visit_impl(&mut self, i: &'a cl_ast::Impl) {

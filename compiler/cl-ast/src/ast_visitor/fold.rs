@@ -143,16 +143,17 @@ pub trait Fold {
         Enum {
             name: self.fold_sym(name),
             gens: self.fold_generics(gens),
-            variants: kind.map(|v| v.into_iter().map(|v| self.fold_variant(v)).collect()),
+            variants: kind.into_iter().map(|v| self.fold_variant(v)).collect(),
         }
     }
     fn fold_variant(&mut self, v: Variant) -> Variant {
-        let Variant { name, kind } = v;
+        let Variant { name, kind, body } = v;
 
-        Variant { name: self.fold_sym(name), kind: self.fold_variant_kind(kind) }
-    }
-    fn fold_variant_kind(&mut self, kind: VariantKind) -> VariantKind {
-        or_fold_variant_kind(self, kind)
+        Variant {
+            name: self.fold_sym(name),
+            kind: self.fold_struct_kind(kind),
+            body: body.map(|e| Box::new(self.fold_expr(*e))),
+        }
     }
     fn fold_impl(&mut self, i: Impl) -> Impl {
         let Impl { target, body } = i;
@@ -479,21 +480,6 @@ pub fn or_fold_struct_kind<F: Fold + ?Sized>(folder: &mut F, kind: StructKind) -
             StructKind::Tuple(tys.into_iter().map(|t| folder.fold_ty(t)).collect())
         }
         StructKind::Struct(mem) => StructKind::Struct(
-            mem.into_iter()
-                .map(|m| folder.fold_struct_member(m))
-                .collect(),
-        ),
-    }
-}
-
-#[inline]
-/// Folds a [VariantKind] in the default way
-pub fn or_fold_variant_kind<F: Fold + ?Sized>(folder: &mut F, kind: VariantKind) -> VariantKind {
-    match kind {
-        VariantKind::Plain => VariantKind::Plain,
-        VariantKind::CLike(n) => VariantKind::CLike(n),
-        VariantKind::Tuple(t) => VariantKind::Tuple(folder.fold_ty(t)),
-        VariantKind::Struct(mem) => VariantKind::Struct(
             mem.into_iter()
                 .map(|m| folder.fold_struct_member(m))
                 .collect(),

@@ -529,22 +529,19 @@ impl Parse<'_> for StructKind {
     /// Parses the various [kinds of Struct](StructKind)
     fn parse(p: &mut Parser<'_>) -> PResult<Self> {
         const P: Parsing = Parsing::StructKind;
-        Ok(match p.peek_kind(P)? {
-            TokenKind::LParen => StructKind::Tuple(delim(
+        Ok(match p.peek_kind(P) {
+            Ok(TokenKind::LParen) => StructKind::Tuple(delim(
                 sep(Ty::parse, TokenKind::Comma, PARENS.1, P),
                 PARENS,
                 P,
             )(p)?),
-            TokenKind::LCurly => StructKind::Struct(delim(
+            Ok(TokenKind::LCurly) => StructKind::Struct(delim(
                 sep(StructMember::parse, TokenKind::Comma, CURLIES.1, P),
                 CURLIES,
                 P,
             )(p)?),
-            TokenKind::Semi => {
-                p.consume_peeked();
-                StructKind::Empty
-            }
-            got => Err(p.error(ExpectedToken { want: TokenKind::Semi, got }, P))?,
+            Ok(_) | Err(Error { reason: ErrorKind::EndOfInput, .. }) => StructKind::Empty,
+            Err(e) => Err(e)?,
         })
     }
 }
@@ -574,15 +571,11 @@ impl Parse<'_> for Enum {
             variants: {
                 const P: Parsing = Parsing::EnumKind;
                 match p.peek_kind(P)? {
-                    TokenKind::LCurly => Some(delim(
+                    TokenKind::LCurly => delim(
                         sep(Variant::parse, TokenKind::Comma, TokenKind::RCurly, P),
                         CURLIES,
                         P,
-                    )(p)?),
-                    TokenKind::Semi => {
-                        p.consume_peeked();
-                        None
-                    }
+                    )(p)?,
                     t => Err(p.error(Unexpected(t), P))?,
                 }
             },
@@ -593,34 +586,19 @@ impl Parse<'_> for Enum {
 impl Parse<'_> for Variant {
     /// Parses an [`enum`](Enum) [Variant]
     fn parse(p: &mut Parser) -> PResult<Variant> {
-        Ok(Variant { name: Sym::parse(p)?, kind: VariantKind::parse(p)? })
-    }
-}
+        let name = Sym::parse(p)?;
+        let kind;
+        let body;
 
-impl Parse<'_> for VariantKind {
-    /// Parses the various [kinds of Enum Variant](VariantKind)
-    fn parse(p: &mut Parser<'_>) -> PResult<Self> {
-        const P: Parsing = Parsing::VariantKind;
-        Ok(match p.peek_kind(P)? {
-            TokenKind::Eq => {
-                p.consume_peeked();
-                VariantKind::CLike(Box::new(p.parse()?))
-            }
-            TokenKind::LCurly => VariantKind::Struct(delim(
-                sep(StructMember::parse, TokenKind::Comma, TokenKind::RCurly, P),
-                CURLIES,
-                P,
-            )(p)?),
-            TokenKind::LParen => {
-                let tup = Ty::parse(p)?;
-                if !matches!(tup.kind, TyKind::Tuple(_) | TyKind::Empty) {
-                    Err(p.error(ErrorKind::ExpectedParsing { want: Parsing::TyTuple }, P))?
-                }
+        if p.match_type(TokenKind::Eq, Parsing::Variant).is_ok() {
+            kind = StructKind::Empty;
+            body = Some(Box::new(Expr::parse(p)?));
+        } else {
+            kind = StructKind::parse(p)?;
+            body = None;
+        }
 
-                VariantKind::Tuple(tup)
-            }
-            _ => VariantKind::Plain,
-        })
+        Ok(Variant { name, kind, body })
     }
 }
 

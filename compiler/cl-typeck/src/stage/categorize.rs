@@ -106,27 +106,29 @@ fn cat_enum<'a>(_table: &mut Table<'a>, _node: Handle, e: &'a Enum) -> CatResult
 }
 
 fn cat_variant<'a>(table: &mut Table<'a>, node: Handle, v: &'a Variant) -> CatResult<()> {
-    let Variant { name, kind } = v;
+    let Variant { name, kind, body } = v;
     let parent = table.parent(node).copied().unwrap_or(table.root());
     table.add_child(parent, *name, node);
-    match kind {
-        VariantKind::Plain => {
-            table.set_ty(node, TypeKind::Instance(parent));
+    match (kind, body) {
+        (StructKind::Empty, None) => {
+            table.set_ty(node, TypeKind::Adt(Adt::UnitStruct));
             Ok(())
         }
-        VariantKind::CLike(c) => {
+        (StructKind::Empty, Some(c)) => {
             table.set_body(node, c);
-            table.set_ty(node, TypeKind::Instance(parent));
+            table.set_ty(node, TypeKind::Adt(Adt::UnitStruct));
             Ok(())
         }
-        VariantKind::Tuple(ty) => {
-            let ty = ty
-                .evaluate(table, node)
-                .map_err(|e| Error::TypeEval(e, " while categorizing a variant"))?;
-            table.set_ty(node, TypeKind::Instance(ty));
+        (StructKind::Tuple(ty), None) => {
+            let ty = TypeKind::Adt(Adt::TupleStruct(
+                ty.iter()
+                    .map(|ty| ty.evaluate(table, node).map(|ty| (Visibility::Public, ty)))
+                    .collect::<Result<_, _>>()?,
+            ));
+            table.set_ty(node, ty);
             Ok(())
         }
-        VariantKind::Struct(members) => {
+        (StructKind::Struct(members), None) => {
             let mut out = vec![];
             for StructMember { vis, name, ty } in members {
                 let ty = ty.evaluate(table, node)?;
@@ -143,6 +145,9 @@ fn cat_variant<'a>(table: &mut Table<'a>, node: Handle, v: &'a Variant) -> CatRe
 
             table.set_ty(node, TypeKind::Adt(Adt::Struct(out)));
             Ok(())
+        }
+        (_, Some(body)) => {
+            panic!("Unexpected body `{body}` in enum variant `{v}`")
         }
     }
 }

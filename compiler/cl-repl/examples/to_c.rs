@@ -330,34 +330,19 @@ pub mod clangify {
         fn print(&self, y: &mut CLangifier) {
             let Self { name, gens: _, variants } = self;
             y.nest("enum ").p(name).p(" {").endl();
-            match variants {
-                Some(v) => {
-                    for (idx, variant) in v.iter().enumerate() {
-                        if idx > 0 {
-                            y.p(",").endl();
-                        }
-                        y.p(variant);
-                    }
+            for (idx, variant) in variants.iter().enumerate() {
+                if idx > 0 {
+                    y.p(",").endl();
                 }
-                None => todo!(),
+                y.p(variant);
             }
             y.endl().p("\n}");
         }
     }
     impl CLangify for Variant {
         fn print(&self, y: &mut CLangifier) {
-            let Self { name, kind } = self;
-            y.p(name).p(kind);
-        }
-    }
-    impl CLangify for VariantKind {
-        fn print(&self, y: &mut CLangifier) {
-            match self {
-                VariantKind::Plain => y,
-                VariantKind::CLike(v) => y.p(" = ").p(v),
-                VariantKind::Tuple(v) => y.p("/* TODO: ").p(v).p(" */"),
-                VariantKind::Struct(v) => y.p("/* TODO: ").p(v).p(" */"),
-            };
+            let Self { name, kind, body } = self;
+            y.p(name).p(kind).p(body);
         }
     }
     impl CLangify for Impl {

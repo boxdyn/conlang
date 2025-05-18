@@ -293,18 +293,11 @@ pub mod yamlify {
     }
     impl Yamlify for Variant {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { name, kind } = self;
-            y.key("Variant").pair("name", name).yaml(kind);
-        }
-    }
-    impl Yamlify for VariantKind {
-        fn yaml(&self, y: &mut Yamler) {
-            match self {
-                VariantKind::Plain => y,
-                VariantKind::CLike(v) => y.yaml(v),
-                VariantKind::Tuple(v) => y.yaml(v),
-                VariantKind::Struct(v) => y.yaml(v),
-            };
+            let Self { name, kind, body } = self;
+            y.key("Variant")
+                .pair("name", name)
+                .pair("kind", kind)
+                .pair("body", body);
         }
     }
     impl Yamlify for Impl {
