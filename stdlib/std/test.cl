@@ -11,7 +11,7 @@ struct StructLike {
     member2: TupleLike,
 }
 
-enum NeverLike;
+// enum NeverLike;
 
 enum EmptyLike {
     Empty,
