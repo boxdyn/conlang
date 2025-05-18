@@ -290,17 +290,13 @@ impl Parse<'_> for MetaKind {
     /// Parses data associated with a [Meta] attribute
     fn parse(p: &mut Parser) -> PResult<MetaKind> {
         const P: Parsing = Parsing::Meta;
-        let lit_tuple = delim(
-            sep(Literal::parse, TokenKind::Comma, PARENS.1, P),
-            PARENS,
-            P,
-        );
+        let tuple = delim(sep(Parse::parse, TokenKind::Comma, PARENS.1, P), PARENS, P);
         Ok(match p.peek_kind(P) {
             Ok(TokenKind::Eq) => {
                 p.consume_peeked();
-                MetaKind::Equals(Literal::parse(p)?)
+                MetaKind::Equals(p.parse()?)
             }
-            Ok(TokenKind::LParen) => MetaKind::Func(lit_tuple(p)?),
+            Ok(TokenKind::LParen) => MetaKind::Func(tuple(p)?),
             _ => MetaKind::Plain,
         })
     }
@@ -329,15 +325,15 @@ impl Parse<'_> for ItemKind {
     /// See also: [Item::parse]
     fn parse(p: &mut Parser) -> PResult<Self> {
         Ok(match p.peek_kind(Parsing::Item)? {
-            TokenKind::Type => Alias::parse(p)?.into(),
-            TokenKind::Const => Const::parse(p)?.into(),
-            TokenKind::Static => Static::parse(p)?.into(),
-            TokenKind::Mod => Module::parse(p)?.into(),
-            TokenKind::Fn => Function::parse(p)?.into(),
-            TokenKind::Struct => Struct::parse(p)?.into(),
-            TokenKind::Enum => Enum::parse(p)?.into(),
-            TokenKind::Impl => Impl::parse(p)?.into(),
-            TokenKind::Use => Use::parse(p)?.into(),
+            TokenKind::Type => ItemKind::Alias(p.parse()?),
+            TokenKind::Const => ItemKind::Const(p.parse()?),
+            TokenKind::Static => ItemKind::Static(p.parse()?),
+            TokenKind::Mod => ItemKind::Module(p.parse()?),
+            TokenKind::Fn => ItemKind::Function(p.parse()?),
+            TokenKind::Struct => ItemKind::Struct(p.parse()?),
+            TokenKind::Enum => ItemKind::Enum(p.parse()?),
+            TokenKind::Impl => ItemKind::Impl(p.parse()?),
+            TokenKind::Use => ItemKind::Use(p.parse()?),
             t => Err(p.error(Unexpected(t), Parsing::Item))?,
         })
     }
@@ -367,7 +363,7 @@ impl Parse<'_> for Alias {
         let out = Ok(Alias {
             name: Sym::parse(p)?,
             from: if p.match_type(TokenKind::Eq, P).is_ok() {
-                Some(Ty::parse(p)?.into())
+                Some(p.parse()?)
             } else {
                 None
             },
@@ -391,7 +387,7 @@ impl Parse<'_> for Const {
             },
             init: {
                 p.match_type(TokenKind::Eq, P)?;
-                Expr::parse(p)?.into()
+                p.parse()?
             },
         });
         p.match_type(TokenKind::Semi, P)?;
@@ -410,11 +406,11 @@ impl Parse<'_> for Static {
             name: Sym::parse(p)?,
             ty: {
                 p.match_type(TokenKind::Colon, P)?;
-                Ty::parse(p)?.into()
+                p.parse()?
             },
             init: {
                 p.match_type(TokenKind::Eq, P)?;
-                Expr::parse(p)?.into()
+                p.parse()?
             },
         });
         p.match_type(TokenKind::Semi, P)?;
@@ -770,7 +766,7 @@ impl Parse<'_> for TyRef {
             }
             p.consume_peeked();
         }
-        Ok(TyRef { count, mutable: Mutability::parse(p)?, to: Box::new(Ty::parse(p)?) })
+        Ok(TyRef { count, mutable: p.parse()?, to: p.parse()? })
     }
 }
 
@@ -869,8 +865,8 @@ impl Parse<'_> for StmtKind {
     fn parse(p: &mut Parser) -> PResult<StmtKind> {
         Ok(match p.peek_kind(Parsing::StmtKind)? {
             TokenKind::Semi => StmtKind::Empty,
-            item_like!() => Item::parse(p)?.into(),
-            _ => Expr::parse(p)?.into(),
+            item_like!() => StmtKind::Item(p.parse()?),
+            _ => StmtKind::Expr(p.parse()?),
         })
     }
 }
@@ -925,15 +921,15 @@ impl Parse<'_> for Let {
     fn parse(p: &mut Parser) -> PResult<Let> {
         p.consume_peeked();
         Ok(Let {
-            mutable: Mutability::parse(p)?,
-            name: Pattern::parse(p)?,
+            mutable: p.parse()?,
+            name: p.parse()?,
             ty: if p.match_type(TokenKind::Colon, Parsing::Let).is_ok() {
-                Some(Ty::parse(p)?.into())
+                Some(p.parse()?)
             } else {
                 None
             },
             init: if p.match_type(TokenKind::Eq, Parsing::Let).is_ok() {
-                Some(Expr::parse(p)?.into())
+                Some(p.parse()?)
             } else {
                 None
             },
@@ -972,7 +968,7 @@ impl Parse<'_> for Fielder {
         Ok(Fielder {
             name: Sym::parse(p)?,
             init: match p.match_type(TokenKind::Colon, P) {
-                Ok(_) => Some(Box::new(Expr::parse(p)?)),
+                Ok(_) => Some(p.parse()?),
                 Err(_) => None,
             },
         })
@@ -986,7 +982,7 @@ impl Parse<'_> for AddrOf {
         match p.peek_kind(P)? {
             TokenKind::Amp => {
                 p.consume_peeked();
-                Ok(AddrOf { mutable: Mutability::parse(p)?, expr: Expr::parse(p)?.into() })
+                Ok(AddrOf { mutable: p.parse()?, expr: p.parse()? })
             }
             TokenKind::AmpAmp => {
                 let start = p.loc();
@@ -996,7 +992,7 @@ impl Parse<'_> for AddrOf {
                     expr: Expr {
                         kind: ExprKind::AddrOf(AddrOf {
                             mutable: Mutability::parse(p)?,
-                            expr: Expr::parse(p)?.into(),
+                            expr: p.parse()?,
                         }),
                         span: Span(start, p.loc()),
                     }
@@ -1051,13 +1047,10 @@ impl Parse<'_> for For {
     /// [For]: `for` [Pattern] `in` [Expr] [Block] [Else]?
     #[rustfmt::skip]
     fn parse(p: &mut Parser) -> PResult<For> {
-        p.match_type(TokenKind::For, Parsing::For)?;
-        let bind = Pattern::parse(p)?;
-        p.match_type(TokenKind::In, Parsing::For)?;
         Ok(For {
-            bind,
+            bind: delim(Parse::parse, (TokenKind::For, TokenKind::In), Parsing::For)(p)?,
             cond: condition(p)?.into(),
-            pass: Block::parse(p)?.into(),
+            pass: p.parse()?,
             fail: Else::parse(p)?,
         })
     }
@@ -1069,7 +1062,7 @@ impl Parse<'_> for Else {
         match p.peek_kind(Parsing::Else) {
             Ok(TokenKind::Else) => {
                 p.consume_peeked();
-                Ok(Expr::parse(p)?.into())
+                Ok(Else { body: Some(p.parse()?) })
             }
             Ok(_) | Err(Error { reason: EndOfInput, .. }) => Ok(None.into()),
             Err(e) => Err(e),
