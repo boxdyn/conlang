@@ -482,7 +482,7 @@ impl Parse<'_> for Function {
 type FnSig = (Pattern, Vec<TyKind>);
 
 impl Parse<'_> for FnSig {
-    /// Parses the [parameters](Param) associated with a Function
+    /// Parses the parameter list of a Function
     fn parse(p: &mut Parser) -> PResult<FnSig> {
         const P: Parsing = Parsing::Function;
         let (mut params, mut types) = (vec![], vec![]);
@@ -501,7 +501,7 @@ impl Parse<'_> for FnSig {
 type TypedParam = (Pattern, TyKind);
 
 impl Parse<'_> for TypedParam {
-    /// Parses a single function [parameter](Param)
+    /// Parses a single function parameter
     fn parse(p: &mut Parser) -> PResult<(Pattern, TyKind)> {
         Ok((
             Pattern::parse(p)?,

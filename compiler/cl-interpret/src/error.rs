@@ -16,7 +16,7 @@ pub struct Error {
 impl Error {
     #![allow(non_snake_case)]
 
-    /// Adds a [Span] to this [Error], if there isn't already a more specific one.
+    /// Adds a [struct Span] to this [Error], if there isn't already a more specific one.
     pub fn with_span(self, span: Span) -> Self {
         Self { span: self.span.or(Some(span)), ..self }
     }
