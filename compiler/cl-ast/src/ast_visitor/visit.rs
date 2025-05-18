@@ -8,12 +8,6 @@ use super::walk::Walk;
 /// Immutably walks the entire AST
 ///
 /// Each method acts as a customization point.
-///
-/// There are a set of default implementations for enums
-/// under the name [`or_visit_`*](or_visit_expr_kind),
-/// provided for ease of use.
-///
-/// For all other nodes, traversal is *explicit*.
 pub trait Visit<'a>: Sized {
     /// Visits a [Walker](Walk)
     #[inline]
