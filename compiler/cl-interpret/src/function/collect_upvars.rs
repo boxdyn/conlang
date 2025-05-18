@@ -7,12 +7,7 @@ use cl_ast::{
 use std::collections::{HashMap, HashSet};
 
 pub fn collect_upvars(f: &Function, env: &Environment) -> super::Upvars {
-    CollectUpvars::new(env)
-        .visit(f)
-        .finish()
-        .into_iter()
-        .map(|(k, v)| (k, env.get_id(v).cloned()))
-        .collect()
+    CollectUpvars::new(env).visit(f).finish_copied()
 }
 
 #[derive(Clone, Debug)]
@@ -29,6 +24,14 @@ impl<'env> CollectUpvars<'env> {
 
     pub fn finish(&mut self) -> HashMap<Sym, Place> {
         std::mem::take(&mut self.upvars)
+    }
+
+    pub fn finish_copied(&mut self) -> super::Upvars {
+        let Self { env, upvars, blacklist: _ } = self;
+        std::mem::take(upvars)
+            .into_iter()
+            .map(|(k, v)| (k, env.get_id(v).cloned()))
+            .collect()
     }
 
     pub fn add_upvar(&mut self, name: &Sym) {

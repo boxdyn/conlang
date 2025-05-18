@@ -99,6 +99,11 @@ impl Environment {
         function.call(self, args)
     }
 
+    /// Gets all registered globals, bound or unbound.
+    pub fn globals(&self) -> &HashMap<Sym, Option<ConValue>> {
+        &self.global
+    }
+
     /// Adds builtins
     ///
     /// # Panics

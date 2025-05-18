@@ -1,7 +1,7 @@
 use crate::{
     Callable,
     convalue::ConValue,
-    env::{Environment, Place},
+    env::Environment,
     error::{Error, ErrorKind, IResult},
     function::collect_upvars::CollectUpvars,
     interpret::Interpret,
@@ -11,11 +11,11 @@ use cl_ast::{Sym, ast_visitor::Visit};
 use std::{collections::HashMap, fmt::Display};
 
 /// Represents an ad-hoc anonymous function
-/// which captures surrounding state by reference.
+/// which captures surrounding state by COPY
 #[derive(Clone, Debug)]
 pub struct Closure {
     decl: cl_ast::Closure,
-    lift: HashMap<Sym, Place>,
+    lift: HashMap<Sym, Option<ConValue>>,
 }
 
 impl Closure {
@@ -24,7 +24,7 @@ impl Closure {
 
 impl Closure {
     pub fn new(env: &mut Environment, decl: &cl_ast::Closure) -> Self {
-        let lift = CollectUpvars::new(env).visit(decl).finish();
+        let lift = CollectUpvars::new(env).visit(decl).finish_copied();
         Self { decl: decl.clone(), lift }
     }
 }
@@ -42,8 +42,8 @@ impl Callable for Closure {
         let mut env = env.frame(Self::NAME);
 
         // place lifts in scope
-        for (name, place) in lift {
-            env.insert(*name, Some(ConValue::Ref(*place)));
+        for (name, value) in lift.clone() {
+            env.insert(name, value);
         }
 
         let mut env = env.frame("args");
