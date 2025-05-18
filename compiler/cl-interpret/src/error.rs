@@ -99,8 +99,8 @@ impl Error {
         Self { kind: ErrorKind::MatchNonexhaustive, span: None }
     }
     /// Error produced by a Builtin
-    pub fn BuiltinDebug(msg: String) -> Self {
-        Self { kind: ErrorKind::BuiltinDebug(msg), span: None }
+    pub fn BuiltinError(msg: String) -> Self {
+        Self { kind: ErrorKind::BuiltinError(msg), span: None }
     }
 }
 
@@ -156,7 +156,7 @@ pub enum ErrorKind {
     /// Fell through a non-exhaustive match
     MatchNonexhaustive,
     /// Error produced by a Builtin
-    BuiltinDebug(String),
+    BuiltinError(String),
 }
 
 impl std::error::Error for ErrorKind {}
@@ -205,7 +205,7 @@ impl std::fmt::Display for ErrorKind {
             ErrorKind::MatchNonexhaustive => {
                 write!(f, "Fell through a non-exhaustive match expression!")
             }
-            ErrorKind::BuiltinDebug(s) => write!(f, "DEBUG: {s}"),
+            ErrorKind::BuiltinError(s) => write!(f, "{s}"),
         }
     }
 }

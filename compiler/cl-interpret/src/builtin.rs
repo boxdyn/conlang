@@ -5,7 +5,7 @@ use crate::{
     env::Environment,
     error::{Error, IResult},
 };
-use std::io::{stdout, Write};
+use std::io::{Write, stdout};
 
 /// A function built into the interpreter.
 #[derive(Clone, Copy)]
@@ -98,10 +98,10 @@ pub macro builtins($(
     [$(builtin!($(#[$($meta)*])* fn $name ($($args)*) $(@$env)? $body)),*]
 }
 
-/// Creates an [Error::BuiltinDebug] using interpolation of runtime expressions.
+/// Creates an [Error::BuiltinError] using interpolation of runtime expressions.
 /// See [std::format].
 pub macro error_format ($($t:tt)*) {
-    $crate::error::Error::BuiltinDebug(format!($($t)*))
+    $crate::error::Error::BuiltinError(format!($($t)*))
 }
 
 pub const Builtins: &[Builtin] = &builtins![
@@ -143,18 +143,23 @@ pub const Builtins: &[Builtin] = &builtins![
         Ok(())
     }
 
+    fn panic(message) {
+        Err(error_format!("Panic: {message}"))?;
+        Ok(())
+    }
+
     /// Dumps the environment
     fn dump() @env {
         println!("{env}");
         Ok(())
     }
 
-    // fn builtins() @env {
-    //     for builtin in env.builtins().values().flatten() {
-    //         println!("{builtin}");
-    //     }
-    //     Ok(())
-    // }
+    fn builtins() @env {
+        for builtin in env.globals().values().flatten().filter(|v| matches!(v, ConValue::Builtin(_))) {
+            println!("{builtin}")
+        }
+        Ok(())
+    }
 
     /// Returns the length of the input list as a [ConValue::Int]
     fn len(list) @env {
@@ -166,6 +171,16 @@ pub const Builtins: &[Builtin] = &builtins![
             }
             ConValue::Array(t) => t.len() as _,
             ConValue::Tuple(t) => t.len() as _,
+            _ => Err(Error::TypeError())?,
+        })
+    }
+
+    fn chars(string) @env {
+        Ok(match string {
+            ConValue::String(s) => ConValue::Array(s.chars().map(Into::into).collect()),
+            ConValue::Ref(r) => {
+                return chars(env, &[env.get_id(*r).ok_or(Error::StackOverflow(*r))?.clone()])
+            }
             _ => Err(Error::TypeError())?,
         })
     }
