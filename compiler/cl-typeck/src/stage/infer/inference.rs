@@ -15,19 +15,21 @@ use cl_ast::*;
 
 // TODO: "Infer" the types of Items
 
+type IfResult = Result<Handle, InferenceError>;
+
 pub trait Inference<'a> {
     /// Performs type inference
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError>;
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult;
 }
 
 impl<'a> Inference<'a> for cl_ast::Expr {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         self.kind.infer(e)
     }
 }
 
 impl<'a> Inference<'a> for cl_ast::ExprKind {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         match self {
             ExprKind::Empty => Ok(e.empty()),
             ExprKind::Closure(_) => todo!("Infer the type of a closure"),
@@ -64,7 +66,7 @@ impl<'a> Inference<'a> for cl_ast::ExprKind {
 }
 
 impl<'a> Inference<'a> for Tuple {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Tuple { exprs } = self;
         exprs
             .iter()
@@ -78,7 +80,7 @@ impl<'a> Inference<'a> for Tuple {
 }
 
 impl<'a> Inference<'a> for Structor {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Structor { to, init } = self;
         // Evaluate the path in the current context
         let to = to.infer(e)?;
@@ -119,7 +121,7 @@ impl<'a> Inference<'a> for Structor {
 }
 
 impl<'a> Inference<'a> for Array {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Array { values } = self;
         let out = e.new_var();
         for value in values {
@@ -131,7 +133,7 @@ impl<'a> Inference<'a> for Array {
 }
 
 impl<'a> Inference<'a> for ArrayRep {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let ArrayRep { value, repeat } = self;
         let ty = value.infer(e)?;
         Ok(e.new_array(ty, *repeat))
@@ -139,7 +141,7 @@ impl<'a> Inference<'a> for ArrayRep {
 }
 
 impl<'a> Inference<'a> for AddrOf {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let AddrOf { mutable: _, expr } = self;
         // TODO: mut ref
         let ty = expr.infer(e)?;
@@ -148,13 +150,13 @@ impl<'a> Inference<'a> for AddrOf {
 }
 
 impl<'a> Inference<'a> for Quote {
-    fn infer(&'a self, _e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, _e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         todo!("Quote: {self}")
     }
 }
 
 impl<'a> Inference<'a> for Literal {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let ty = match self {
             Literal::Bool(_) => e.bool(),
             Literal::Char(_) => e.char(),
@@ -170,14 +172,14 @@ impl<'a> Inference<'a> for Literal {
 }
 
 impl<'a> Inference<'a> for Group {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Group { expr } = self;
         expr.infer(e)
     }
 }
 
 impl<'a> Inference<'a> for Block {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Block { stmts } = self;
         let mut e = e.block_scope();
         let empty = e.empty();
@@ -209,7 +211,7 @@ impl<'a> Inference<'a> for Block {
 }
 
 impl<'a> Inference<'a> for Assign {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Assign { parts } = self;
         let (head, tail) = parts.as_ref();
         // Infer the tail expression
@@ -224,7 +226,7 @@ impl<'a> Inference<'a> for Assign {
 }
 
 impl<'a> Inference<'a> for Modify {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Modify { kind: _, parts } = self;
         let (head, tail) = parts.as_ref();
         // Infer the tail expression
@@ -239,7 +241,7 @@ impl<'a> Inference<'a> for Modify {
 }
 
 impl<'a> Inference<'a> for Binary {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         use BinaryKind as Bk;
         let Binary { kind, parts } = self;
         let (head, tail) = parts.as_ref();
@@ -308,7 +310,7 @@ impl<'a> Inference<'a> for Binary {
 }
 
 impl<'a> Inference<'a> for Unary {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Unary { kind, tail } = self;
         match kind {
             UnaryKind::Deref => {
@@ -344,7 +346,7 @@ impl<'a> Inference<'a> for Unary {
 }
 
 impl<'a> Inference<'a> for Member {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Member { head, kind } = self;
         // Infer the head expression
         let head = head.infer(e)?;
@@ -390,7 +392,7 @@ impl<'a> Inference<'a> for Member {
 }
 
 impl<'a> Inference<'a> for Index {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Index { head, indices } = self;
         let usize = e.usize();
         // Infer the head expression
@@ -424,7 +426,7 @@ impl<'a> Inference<'a> for Index {
 }
 
 impl<'a> Inference<'a> for Cast {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Cast { head, ty } = self;
         // Infer the head expression
         let _head = head.infer(e)?;
@@ -440,14 +442,14 @@ impl<'a> Inference<'a> for Cast {
 }
 
 impl<'a> Inference<'a> for Path {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         e.by_name(self)
             .map_err(|_| InferenceError::NotFound(self.clone()))
     }
 }
 
 impl<'a> Inference<'a> for Let {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Let { mutable: _, name, ty, init } = self;
         // Deep copy the ty, if it exists
         let ty = match ty {
@@ -477,7 +479,7 @@ impl<'a> Inference<'a> for Let {
 }
 
 impl<'a> Inference<'a> for Match {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Match { scrutinee, arms } = self;
         // Infer the scrutinee
         let scrutinee = scrutinee.infer(e)?;
@@ -508,7 +510,7 @@ impl<'a> Inference<'a> for Match {
 
 impl<'a> Inference<'a> for Pattern {
     // TODO: This is the wrong way to typeck pattern matching.
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         match self {
             Pattern::Name(name) => {
                 // Evaluating a pattern creates and enters a new scope.
@@ -572,7 +574,7 @@ impl<'a> Inference<'a> for Pattern {
 }
 
 impl<'a> Inference<'a> for While {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let While { cond, pass, fail } = self;
         // Infer the condition
         let cond = cond.infer(e)?;
@@ -597,7 +599,7 @@ impl<'a> Inference<'a> for While {
 }
 
 impl<'a> Inference<'a> for If {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let If { cond, pass, fail } = self;
         // Do inference on the condition'
         let cond = cond.infer(e)?;
@@ -616,7 +618,7 @@ impl<'a> Inference<'a> for If {
 }
 
 impl<'a> Inference<'a> for For {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let For { bind, cond, pass, fail } = self;
         let mut e = e.block_scope();
 
@@ -654,13 +656,13 @@ impl<'a> Inference<'a> for For {
 }
 
 impl<'a> Inference<'a> for Else {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         self.body.infer(e)
     }
 }
 
 impl<'a> Inference<'a> for Break {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Break { body } = self;
         // Infer the body of the break
         let ty = body.infer(e)?;
@@ -672,7 +674,7 @@ impl<'a> Inference<'a> for Break {
 }
 
 impl<'a> Inference<'a> for Return {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Return { body } = self;
         // Infer the body of the return
         let ty = body.infer(e)?;
@@ -684,7 +686,7 @@ impl<'a> Inference<'a> for Return {
 }
 
 impl<'a, I: Inference<'a>> Inference<'a> for Option<I> {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         match self {
             Some(expr) => expr.infer(e),
             None => Ok(e.empty()),
@@ -692,7 +694,7 @@ impl<'a, I: Inference<'a>> Inference<'a> for Option<I> {
     }
 }
 impl<'a, I: Inference<'a>> Inference<'a> for Box<I> {
-    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         self.as_ref().infer(e)
     }
 }
