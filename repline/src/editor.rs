@@ -237,9 +237,18 @@ impl<'a> Editor<'a> {
         self.head.len() + self.tail.len()
     }
 
+    /// Returns true if the cursor is at the beginning
+    pub fn at_start(&self) -> bool {
+        self.head.is_empty()
+    }
+    /// Returns true if the cursor is at the end
+    pub fn at_end(&self) -> bool {
+        self.tail.is_empty()
+    }
+
     /// Returns true if the buffer is empty.
     pub fn is_empty(&self) -> bool {
-        self.head.is_empty() && self.tail.is_empty()
+        self.at_start() && self.at_end()
     }
 
     /// Returns true if the buffer ends with a given pattern

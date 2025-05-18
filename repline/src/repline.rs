@@ -5,7 +5,7 @@
 use crate::{editor::Editor, error::*, iter::*, raw::raw};
 use std::{
     collections::VecDeque,
-    io::{stdout, Bytes, Read, Result, Write},
+    io::{Bytes, Read, Result, Write, stdout},
 };
 
 /// Prompts the user, reads the lines. Not much more to it than that.
@@ -81,7 +81,12 @@ impl<'a, R: Read> Repline<'a, R> {
                 // ignore newlines, process line feeds. Not sure how cross-platform this is.
                 '\n' => {}
                 '\r' => {
-                    self.ed.push('\n', stdout)?;
+                    if self.ed.at_end() {
+                        self.ed.push('\n', stdout)?;
+                    } else {
+                        self.ed.end(stdout)?;
+                        writeln!(stdout)?;
+                    }
                     return Ok(self.ed.to_string());
                 }
                 // Ctrl+Backspace in my terminal
