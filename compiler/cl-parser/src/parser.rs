@@ -258,7 +258,8 @@ impl Parse<'_> for File {
             Ok(_) => true,
             Err(e) => Err(e)?,
         } {
-            items.push(Item::parse(p)?)
+            items.push(Item::parse(p)?);
+            let _ = p.match_type(TokenKind::Semi, Parsing::File);
         }
         Ok(File { name: p.file.to_ref(), items })
     }
@@ -929,7 +930,7 @@ impl Parse<'_> for Let {
                 None
             },
             init: if p.match_type(TokenKind::Eq, Parsing::Let).is_ok() {
-                Some(p.parse()?)
+                Some(condition(p)?.into())
             } else {
                 None
             },
@@ -1127,7 +1128,7 @@ fn pathpattern(p: &mut Parser<'_>) -> PResult<Pattern> {
 impl Parse<'_> for Pattern {
     fn parse(p: &mut Parser<'_>) -> PResult<Self> {
         const P: Parsing = Parsing::Pattern;
-        Ok(match p.peek_kind(P)? {
+        let head = match p.peek_kind(P)? {
             // Name, Path, Struct, TupleStruct
             TokenKind::Identifier => pathpattern(p)?,
             // Literal
@@ -1173,7 +1174,19 @@ impl Parse<'_> for Pattern {
                 let bad_expr = p.parse()?;
                 Err(p.error(ErrorKind::InvalidPattern(bad_expr), P))?
             }
-        })
+        };
+
+        match p.peek_kind(P) {
+            Ok(TokenKind::DotDot) => {
+                p.consume_peeked();
+                Ok(Pattern::RangeExc(head.into(), p.parse()?))
+            }
+            Ok(TokenKind::DotDotEq) => {
+                p.consume_peeked();
+                Ok(Pattern::RangeInc(head.into(), p.parse()?))
+            }
+            _ => Ok(head),
+        }
     }
 }
 
