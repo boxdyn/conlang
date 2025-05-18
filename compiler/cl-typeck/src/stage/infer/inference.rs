@@ -451,14 +451,10 @@ impl<'a> Inference<'a> for Path {
 impl<'a> Inference<'a> for Let {
     fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Let { mutable: _, name, ty, init } = self;
-        // Deep copy the ty, if it exists
         let ty = match ty {
-            Some(ty) => {
-                let ty = ty
-                    .evaluate(e.table, e.at)
-                    .map_err(InferenceError::AnnotationEval)?;
-                e.deep_clone(ty)
-            }
+            Some(ty) => ty
+                .evaluate(e.table, e.at)
+                .map_err(InferenceError::AnnotationEval)?,
             None => e.new_var(),
         };
         // Infer the initializer
@@ -467,6 +463,8 @@ impl<'a> Inference<'a> for Let {
             let initty = init.infer(e)?;
             e.unify(ty, initty)?;
         }
+        // Deep copy the ty, if it exists
+        let ty = e.deep_clone(ty);
         // Enter a local scope (modifies the current scope)
         e.local_scope();
         // Infer the pattern
