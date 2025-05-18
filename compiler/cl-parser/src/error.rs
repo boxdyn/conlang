@@ -97,6 +97,7 @@ pub enum Parsing {
 
     Expr,
     ExprKind,
+    Closure,
     Assign,
     AssignKind,
     Binary,
@@ -214,6 +215,7 @@ impl Display for Parsing {
 
             Parsing::Expr => "an expression",
             Parsing::ExprKind => "an expression",
+            Parsing::Closure => "an anonymous function",
             Parsing::Assign => "an assignment",
             Parsing::AssignKind => "an assignment operator",
             Parsing::Binary => "a binary expression",

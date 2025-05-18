@@ -17,8 +17,9 @@ use super::walk::Walk;
 pub trait Visit<'a>: Sized {
     /// Visits a [Walker](Walk)
     #[inline]
-    fn visit<W: Walk>(&mut self, walker: &'a W) {
-        walker.visit_in(self)
+    fn visit<W: Walk>(&mut self, walker: &'a W) -> &mut Self {
+        walker.visit_in(self);
+        self
     }
     /// Visits the children of a [Walker](Walk)
     fn visit_children<W: Walk>(&mut self, walker: &'a W) {
@@ -158,6 +159,9 @@ pub trait Visit<'a>: Sized {
         value.children(self)
     }
     fn visit_expr_kind(&mut self, value: &'a ExprKind) {
+        value.children(self)
+    }
+    fn visit_closure(&mut self, value: &'a Closure) {
         value.children(self)
     }
     fn visit_quote(&mut self, value: &'a Quote) {

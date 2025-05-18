@@ -402,6 +402,7 @@ impl Display for ExprKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ExprKind::Empty => "()".fmt(f),
+            ExprKind::Closure(v) => v.fmt(f),
             ExprKind::Quote(v) => v.fmt(f),
             ExprKind::Let(v) => v.fmt(f),
             ExprKind::Match(v) => v.fmt(f),
@@ -428,6 +429,17 @@ impl Display for ExprKind {
             ExprKind::Return(v) => v.fmt(f),
             ExprKind::Continue => "continue".fmt(f),
         }
+    }
+}
+
+impl Display for Closure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self { arg, body } = self;
+        match arg.as_ref() {
+            Pattern::Tuple(args) => separate(args, ", ")(f.delimit_with("|", "|")),
+            _ => arg.fmt(f),
+        }?;
+        write!(f, " {body}")
     }
 }
 

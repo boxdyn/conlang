@@ -3,7 +3,7 @@
 //! The most permanent fix is a temporary one.
 use cl_ast::{Expr, Sym, format::FmtAdapter};
 
-use crate::env::Place;
+use crate::{closure::Closure, env::Place};
 
 use super::{
     Callable, Environment,
@@ -71,6 +71,8 @@ pub enum ConValue {
     Quote(Box<Expr>),
     /// A callable thing
     Function(Rc<Function>),
+    /// A closure, capturing by reference
+    Closure(Rc<Closure>),
     /// A built-in function
     Builtin(&'static Builtin),
 }
@@ -140,6 +142,7 @@ impl Callable for ConValue {
     fn name(&self) -> Sym {
         match self {
             ConValue::Function(func) => func.name(),
+            ConValue::Closure(func) => func.name(),
             ConValue::Builtin(func) => func.name(),
             _ => "".into(),
         }
@@ -147,6 +150,7 @@ impl Callable for ConValue {
     fn call(&self, interpreter: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
         match self {
             Self::Function(func) => func.call(interpreter, args),
+            Self::Closure(func) => func.call(interpreter, args),
             Self::Builtin(func) => func.call(interpreter, args),
             _ => Err(Error::NotCallable(self.clone())),
         }
@@ -367,6 +371,9 @@ impl std::fmt::Display for ConValue {
             }
             ConValue::Function(func) => {
                 write!(f, "{}", func.decl())
+            }
+            ConValue::Closure(func) => {
+                write!(f, "{}", func.as_ref())
             }
             ConValue::Builtin(func) => {
                 write!(f, "{}", func.description())

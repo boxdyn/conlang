@@ -51,6 +51,7 @@ impl_from! {
     }
     impl From for ExprKind {
         Let => ExprKind::Let,
+        Closure => ExprKind::Closure,
         Quote => ExprKind::Quote,
         Match => ExprKind::Match,
         Assign => ExprKind::Assign,

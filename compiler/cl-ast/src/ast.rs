@@ -317,6 +317,8 @@ pub enum ExprKind {
     /// An empty expression: `(` `)`
     #[default]
     Empty,
+    /// A [Closure] expression: `|` [`Expr`] `|` ( -> [`Ty`])? [`Expr`]
+    Closure(Closure),
     /// A [Tuple] expression: `(` [`Expr`] (`,` [`Expr`])+ `)`
     Tuple(Tuple),
     /// A [Struct creation](Structor) expression: [Path] `{` ([Fielder] `,`)* [Fielder]? `}`
@@ -369,6 +371,13 @@ pub enum ExprKind {
     Return(Return),
     /// A continue expression: `continue`
     Continue,
+}
+
+/// A Closure [expression](Expr): `|` [`Expr`] `|` ( -> [`Ty`])? [`Expr`]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Closure {
+    pub arg: Box<Pattern>,
+    pub body: Box<Expr>,
 }
 
 /// A [Tuple] expression: `(` [`Expr`] (`,` [`Expr`])+ `)`

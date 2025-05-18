@@ -236,6 +236,10 @@ pub trait Fold {
     fn fold_expr_kind(&mut self, kind: ExprKind) -> ExprKind {
         or_fold_expr_kind(self, kind)
     }
+    fn fold_closure(&mut self, value: Closure) -> Closure {
+        let Closure { arg, body } = value;
+        Closure { arg: Box::new(self.fold_pattern(*arg)), body: Box::new(self.fold_expr(*body)) }
+    }
     fn fold_let(&mut self, l: Let) -> Let {
         let Let { mutable, name, ty, init } = l;
         Let {
@@ -547,6 +551,7 @@ pub fn or_fold_stmt_kind<F: Fold + ?Sized>(folder: &mut F, kind: StmtKind) -> St
 pub fn or_fold_expr_kind<F: Fold + ?Sized>(folder: &mut F, kind: ExprKind) -> ExprKind {
     match kind {
         ExprKind::Empty => ExprKind::Empty,
+        ExprKind::Closure(c) => ExprKind::Closure(folder.fold_closure(c)),
         ExprKind::Quote(q) => ExprKind::Quote(q), // quoted expressions are left unmodified
         ExprKind::Let(l) => ExprKind::Let(folder.fold_let(l)),
         ExprKind::Match(m) => ExprKind::Match(folder.fold_match(m)),

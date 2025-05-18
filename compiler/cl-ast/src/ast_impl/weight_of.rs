@@ -283,6 +283,7 @@ impl WeightOf for ExprKind {
     fn weight_of(&self) -> usize {
         match self {
             ExprKind::Empty => size_of_val(self),
+            ExprKind::Closure(v) => v.weight_of(),
             ExprKind::Quote(v) => v.weight_of(),
             ExprKind::Let(v) => v.weight_of(),
             ExprKind::Match(v) => v.weight_of(),
@@ -309,6 +310,13 @@ impl WeightOf for ExprKind {
             ExprKind::Return(v) => v.weight_of(),
             ExprKind::Continue => size_of_val(self),
         }
+    }
+}
+
+impl WeightOf for Closure {
+    fn weight_of(&self) -> usize {
+        let Self { arg, body } = self;
+        arg.weight_of() + body.weight_of()
     }
 }
 

@@ -884,6 +884,31 @@ impl Parse<'_> for Expr {
     }
 }
 
+impl Parse<'_> for Closure {
+    fn parse(p: &mut Parser<'_>) -> PResult<Self> {
+        let args = sep(
+            Pattern::parse,
+            TokenKind::Comma,
+            TokenKind::Bar,
+            Parsing::Closure,
+        );
+
+        let arg = match p.peek_kind(Parsing::Closure)? {
+            TokenKind::BarBar => {
+                p.consume_peeked();
+                Box::new(Pattern::Tuple(vec![]))
+            }
+            _ => Box::new(delim(
+                |p| args(p).map(Pattern::Tuple),
+                (TokenKind::Bar, TokenKind::Bar),
+                Parsing::Closure,
+            )(p)?),
+        };
+        let body = p.parse()?;
+        Ok(Closure { arg, body })
+    }
+}
+
 impl Parse<'_> for Quote {
     fn parse(p: &mut Parser<'_>) -> PResult<Self> {
         let quote = delim(
@@ -1104,6 +1129,12 @@ impl Parse<'_> for MatchArm {
 fn ret_body(p: &mut Parser, while_parsing: Parsing) -> PResult<Option<Box<Expr>>> {
     Ok(match p.peek_kind(while_parsing)? {
         TokenKind::Semi => None,
-        _ => Some(Expr::parse(p)?.into()),
+        _ => Some(p.parse()?),
     })
+}
+
+impl<'t, P: Parse<'t>> Parse<'t> for Box<P> {
+    fn parse(p: &mut Parser<'t>) -> PResult<Self> {
+        p.parse().map(Box::new)
+    }
 }

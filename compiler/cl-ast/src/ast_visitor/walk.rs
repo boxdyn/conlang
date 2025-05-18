@@ -504,25 +504,26 @@ impl Walk for ExprKind {
     fn children<'a, V: Visit<'a>>(&'a self, v: &mut V) {
         match self {
             ExprKind::Empty => {}
+            ExprKind::Closure(value) => value.visit_in(v),
+            ExprKind::Tuple(value) => value.visit_in(v),
+            ExprKind::Structor(value) => value.visit_in(v),
+            ExprKind::Array(value) => value.visit_in(v),
+            ExprKind::ArrayRep(value) => value.visit_in(v),
+            ExprKind::AddrOf(value) => value.visit_in(v),
             ExprKind::Quote(value) => value.visit_in(v),
-            ExprKind::Let(value) => value.visit_in(v),
-            ExprKind::Match(value) => value.visit_in(v),
+            ExprKind::Literal(value) => value.visit_in(v),
+            ExprKind::Group(value) => value.visit_in(v),
+            ExprKind::Block(value) => value.visit_in(v),
             ExprKind::Assign(value) => value.visit_in(v),
             ExprKind::Modify(value) => value.visit_in(v),
             ExprKind::Binary(value) => value.visit_in(v),
             ExprKind::Unary(value) => value.visit_in(v),
-            ExprKind::Cast(value) => value.visit_in(v),
             ExprKind::Member(value) => value.visit_in(v),
             ExprKind::Index(value) => value.visit_in(v),
-            ExprKind::Structor(value) => value.visit_in(v),
+            ExprKind::Cast(value) => value.visit_in(v),
             ExprKind::Path(value) => value.visit_in(v),
-            ExprKind::Literal(value) => value.visit_in(v),
-            ExprKind::Array(value) => value.visit_in(v),
-            ExprKind::ArrayRep(value) => value.visit_in(v),
-            ExprKind::AddrOf(value) => value.visit_in(v),
-            ExprKind::Block(value) => value.visit_in(v),
-            ExprKind::Group(value) => value.visit_in(v),
-            ExprKind::Tuple(value) => value.visit_in(v),
+            ExprKind::Let(value) => value.visit_in(v),
+            ExprKind::Match(value) => value.visit_in(v),
             ExprKind::While(value) => value.visit_in(v),
             ExprKind::If(value) => value.visit_in(v),
             ExprKind::For(value) => value.visit_in(v),
@@ -530,6 +531,18 @@ impl Walk for ExprKind {
             ExprKind::Return(value) => value.visit_in(v),
             ExprKind::Continue => v.visit_continue(),
         }
+    }
+}
+
+impl Walk for Closure {
+    fn visit_in<'a, V: Visit<'a>>(&'a self, v: &mut V) {
+        v.visit_closure(self);
+    }
+
+    fn children<'a, V: Visit<'a>>(&'a self, v: &mut V) {
+        let Self { arg, body } = self;
+        v.visit_pattern(arg);
+        v.visit_expr(body);
     }
 }
 

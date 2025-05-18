@@ -159,30 +159,14 @@ impl Environment {
         }
     }
 
-    pub(crate) fn get_local(&self, name: Sym) -> IResult<ConValue> {
-        for EnvFrame { binds, .. } in self.frames.iter().skip(2).rev() {
-            if let Some(var) = binds.get(&name) {
-                if let Some(var) = self.values.get(*var) {
-                    return match var {
-                        Some(value) => Ok(value.clone()),
-                        None => Err(Error::NotInitialized(name)),
-                    };
-                }
-            }
-        }
-        Err(Error::NotDefined(name))
-    }
-
+    /// Resolves the [Place] associated with a [Sym]
     pub fn id_of(&self, name: Sym) -> IResult<Place> {
         for EnvFrame { binds, .. } in self.frames.iter().rev() {
             if let Some(id) = binds.get(&name).copied() {
                 return Ok(Place::Local(id));
             }
         }
-        self.global
-            .contains_key(&name)
-            .then_some(Place::Global(name))
-            .ok_or(Error::NotDefined(name))
+        Ok(Place::Global(name))
     }
 
     pub fn get_id(&self, at: Place) -> Option<&ConValue> {

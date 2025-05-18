@@ -295,6 +295,7 @@ impl Interpret for ExprKind {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         match self {
             ExprKind::Empty => Ok(ConValue::Empty),
+            ExprKind::Closure(v) => v.interpret(env),
             ExprKind::Quote(q) => q.interpret(env),
             ExprKind::Let(v) => v.interpret(env),
             ExprKind::Match(v) => v.interpret(env),
@@ -321,6 +322,14 @@ impl Interpret for ExprKind {
             ExprKind::Return(v) => v.interpret(env),
             ExprKind::Continue => Err(Error::Continue()),
         }
+    }
+}
+
+impl Interpret for Closure {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        Ok(ConValue::Closure(
+            crate::closure::Closure::new(env, self).into(),
+        ))
     }
 }
 

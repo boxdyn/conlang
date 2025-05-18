@@ -370,6 +370,7 @@ pub mod yamlify {
     impl Yamlify for ExprKind {
         fn yaml(&self, y: &mut Yamler) {
             match self {
+                ExprKind::Closure(k) => k.yaml(y),
                 ExprKind::Quote(k) => k.yaml(y),
                 ExprKind::Let(k) => k.yaml(y),
                 ExprKind::Match(k) => k.yaml(y),
@@ -399,6 +400,12 @@ pub mod yamlify {
                     y.key("Continue");
                 }
             }
+        }
+    }
+    impl Yamlify for Closure {
+        fn yaml(&self, y: &mut Yamler) {
+            let Self { arg, body } = self;
+            y.key("Closure").pair("arg", arg).pair("body", body);
         }
     }
     impl Yamlify for Quote {

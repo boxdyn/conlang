@@ -30,6 +30,7 @@ impl<'a> Inference<'a> for cl_ast::ExprKind {
     fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> Result<Handle, InferenceError> {
         match self {
             ExprKind::Empty => Ok(e.empty()),
+            ExprKind::Closure(_) => todo!("Infer the type of a closure"),
             ExprKind::Tuple(tuple) => tuple.infer(e),
             ExprKind::Structor(structor) => structor.infer(e),
             ExprKind::Array(array) => array.infer(e),

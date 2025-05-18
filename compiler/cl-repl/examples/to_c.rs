@@ -428,6 +428,7 @@ pub mod clangify {
     impl CLangify for ExprKind {
         fn print(&self, y: &mut CLangifier) {
             match self {
+                ExprKind::Closure(k) => todo!("Downgrade {k}"),
                 ExprKind::Quote(k) => k.print(y),
                 ExprKind::Let(k) => k.print(y),
                 ExprKind::Match(k) => k.print(y),

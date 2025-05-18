@@ -23,6 +23,8 @@ pub mod interpret;
 
 pub mod function;
 
+pub mod closure;
+
 pub mod builtin;
 
 pub mod pattern;

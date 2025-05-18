@@ -1,5 +1,5 @@
 //! Collects the "Upvars" of a function at the point of its creation, allowing variable capture
-use crate::{convalue::ConValue, env::Environment};
+use crate::env::{Environment, Place};
 use cl_ast::{
     Function, Let, Path, PathPart, Pattern, Sym,
     ast_visitor::{visit::*, walk::Walk},
@@ -7,13 +7,18 @@ use cl_ast::{
 use std::collections::{HashMap, HashSet};
 
 pub fn collect_upvars(f: &Function, env: &Environment) -> super::Upvars {
-    CollectUpvars::new(env).get_upvars(f)
+    CollectUpvars::new(env)
+        .visit(f)
+        .finish()
+        .into_iter()
+        .map(|(k, v)| (k, env.get_id(v).cloned()))
+        .collect()
 }
 
 #[derive(Clone, Debug)]
 pub struct CollectUpvars<'env> {
     env: &'env Environment,
-    upvars: HashMap<Sym, Option<ConValue>>,
+    upvars: HashMap<Sym, Place>,
     blacklist: HashSet<Sym>,
 }
 
@@ -21,9 +26,9 @@ impl<'env> CollectUpvars<'env> {
     pub fn new(env: &'env Environment) -> Self {
         Self { upvars: HashMap::new(), blacklist: HashSet::new(), env }
     }
-    pub fn get_upvars(mut self, f: &cl_ast::Function) -> HashMap<Sym, Option<ConValue>> {
-        self.visit_function(f);
-        self.upvars
+
+    pub fn finish(&mut self) -> HashMap<Sym, Place> {
+        std::mem::take(&mut self.upvars)
     }
 
     pub fn add_upvar(&mut self, name: &Sym) {
@@ -31,8 +36,8 @@ impl<'env> CollectUpvars<'env> {
         if blacklist.contains(name) || upvars.contains_key(name) {
             return;
         }
-        if let Ok(upvar) = env.get_local(*name) {
-            upvars.insert(*name, Some(upvar));
+        if let Ok(place) = env.id_of(*name) {
+            upvars.insert(*name, place);
         }
     }
 
