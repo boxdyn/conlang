@@ -345,9 +345,12 @@ impl Interpret for Let {
         let Let { mutable: _, name, ty: _, init } = self;
         match init.as_ref().map(|i| i.interpret(env)).transpose()? {
             Some(value) => {
-                for (name, value) in pattern::substitution(name, value)? {
-                    env.insert(*name, Some(value));
-                }
+                if let Ok(sub) = pattern::substitution(name, value) {
+                    for (name, value) in sub {
+                        env.insert(*name, Some(value));
+                    }
+                    return Ok(ConValue::Bool(true));
+                };
             }
             None => {
                 for name in pattern::variables(name) {
@@ -355,7 +358,7 @@ impl Interpret for Let {
                 }
             }
         }
-        Ok(ConValue::Empty)
+        Ok(ConValue::Bool(false))
     }
 }
 
