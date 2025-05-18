@@ -162,10 +162,8 @@ impl Interpret for Enum {
                     let idx = idx.interpret(env)?;
                     env.insert(*name, Some(idx))
                 }
-                (StructKind::Tuple(_), None) => eprintln!("TODO: Enum-tuple variants: {kind}"),
-                (StructKind::Struct(_), None) => {
-                    eprintln!("TODO: Enum-struct members: {kind}")
-                }
+                (StructKind::Tuple(_), None) => {}
+                (StructKind::Struct(_), None) => {}
                 _ => eprintln!("Well-formedness error in {self}"),
             }
         }
