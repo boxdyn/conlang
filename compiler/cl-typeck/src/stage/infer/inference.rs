@@ -519,6 +519,11 @@ impl<'a> Inference<'a> for Pattern {
                 e.at = node;
                 Ok(node)
             }
+            Pattern::Path(path) => {
+                // Evaluating a path pattern puts type constraints on the scrutinee
+                path.evaluate(e.table, e.at)
+                    .map_err(|_| InferenceError::NotFound(path.clone()))
+            }
             Pattern::Literal(literal) => literal.infer(e),
             Pattern::Rest(Some(pat)) => pat.infer(e), // <-- glaring soundness holes
             Pattern::Rest(_) => todo!("Fix glaring soundness holes in pattern"),

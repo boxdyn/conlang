@@ -286,7 +286,6 @@ fn structor_body(p: &mut Parser, to: Path) -> PResult<Structor> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Precedence {
     Assign,
-    Pattern,   // A pattern can contain a structor
     Structor,  // A structor is never a valid conditional
     Condition, // Anything that syntactically needs a block following it
     Logic,

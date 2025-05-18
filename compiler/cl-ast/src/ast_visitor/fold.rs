@@ -253,6 +253,7 @@ pub trait Fold {
     fn fold_pattern(&mut self, p: Pattern) -> Pattern {
         match p {
             Pattern::Name(sym) => Pattern::Name(self.fold_sym(sym)),
+            Pattern::Path(path) => Pattern::Path(self.fold_path(path)),
             Pattern::Literal(literal) => Pattern::Literal(self.fold_literal(literal)),
             Pattern::Rest(Some(name)) => Pattern::Rest(Some(self.fold_pattern(*name).into())),
             Pattern::Rest(None) => Pattern::Rest(None),

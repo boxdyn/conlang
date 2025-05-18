@@ -793,6 +793,7 @@ impl Walk for Pattern {
     fn children<'a, V: Visit<'a>>(&'a self, v: &mut V) {
         match self {
             Pattern::Name(sym) => sym.visit_in(v),
+            Pattern::Path(path) => path.visit_in(v),
             Pattern::Literal(literal) => literal.visit_in(v),
             Pattern::Rest(pattern) => pattern.visit_in(v),
             Pattern::Ref(mutability, pattern) => {

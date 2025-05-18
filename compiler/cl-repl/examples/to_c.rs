@@ -508,6 +508,7 @@ pub mod clangify {
             // TODO: Pattern match desugaring!!!
             match self {
                 Pattern::Name(name) => y.p(name),
+                Pattern::Path(path) => y.p(path),
                 Pattern::Literal(literal) => y.p(literal),
                 Pattern::Rest(name) => y.p("..").p(name),
                 Pattern::Ref(mutability, pattern) => y.p("&").p(mutability).p(pattern),

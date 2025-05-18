@@ -586,6 +586,7 @@ pub struct MatchArm(pub Pattern, pub Expr);
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Pattern {
     Name(Sym),
+    Path(Path),
     Literal(Literal),
     Rest(Option<Box<Pattern>>),
     Ref(Mutability, Box<Pattern>),

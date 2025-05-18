@@ -338,6 +338,7 @@ impl WeightOf for Pattern {
     fn weight_of(&self) -> usize {
         match self {
             Pattern::Name(s) => size_of_val(s),
+            Pattern::Path(p) => p.weight_of(),
             Pattern::Literal(literal) => literal.weight_of(),
             Pattern::Rest(Some(pattern)) => pattern.weight_of(),
             Pattern::Rest(None) => 0,

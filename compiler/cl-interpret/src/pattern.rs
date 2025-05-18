@@ -14,8 +14,9 @@ use std::collections::{HashMap, VecDeque};
 pub fn variables(pat: &Pattern) -> Vec<&Sym> {
     fn patvars<'p>(set: &mut Vec<&'p Sym>, pat: &'p Pattern) {
         match pat {
-            Pattern::Name(name) if &**name == "_" => {}
+            Pattern::Name(name) if name.to_ref() == "_" => {}
             Pattern::Name(name) => set.push(name),
+            Pattern::Path(_) => {}
             Pattern::Literal(_) => {}
             Pattern::Rest(Some(pattern)) => patvars(set, pattern),
             Pattern::Rest(None) => {}

@@ -428,6 +428,7 @@ pub mod yamlify {
         fn yaml(&self, y: &mut Yamler) {
             match self {
                 Pattern::Name(name) => y.value(name),
+                Pattern::Path(path) => y.value(path),
                 Pattern::Literal(literal) => y.value(literal),
                 Pattern::Rest(name) => y.pair("Rest", name),
                 Pattern::Ref(mutability, pattern) => y.yaml(mutability).pair("Pat", pattern),

@@ -1093,10 +1093,94 @@ impl Parse<'_> for Return {
     }
 }
 
+fn pathpattern(p: &mut Parser<'_>) -> PResult<Pattern> {
+    const P: Parsing = Parsing::Pattern;
+    let name = Path::parse(p)?;
+
+    let struct_members = |p: &mut Parser| {
+        let name = p.parse()?;
+        let pat = if p.match_type(TokenKind::Colon, P).is_ok() {
+            Some(p.parse()?)
+        } else {
+            None
+        };
+        Ok((name, pat))
+    };
+
+    Ok(match p.peek_kind(Parsing::Pattern)? {
+        TokenKind::LCurly => Pattern::Struct(
+            name,
+            delim(
+                sep(struct_members, TokenKind::Comma, TokenKind::RCurly, P),
+                CURLIES,
+                P,
+            )(p)?,
+        ),
+        TokenKind::LParen => Pattern::TupleStruct(
+            name,
+            delim(
+                sep(Parse::parse, TokenKind::Comma, TokenKind::RParen, P),
+                PARENS,
+                P,
+            )(p)?,
+        ),
+        _ => name
+            .as_sym()
+            .map(Pattern::Name)
+            .unwrap_or(Pattern::Path(name)),
+    })
+}
+
 impl Parse<'_> for Pattern {
     fn parse(p: &mut Parser<'_>) -> PResult<Self> {
-        let value = prec::expr(p, prec::Precedence::Pattern.level())?;
-        Pattern::try_from(value).map_err(|e| p.error(InvalidPattern(e.into()), Parsing::Pattern))
+        const P: Parsing = Parsing::Pattern;
+        Ok(match p.peek_kind(P)? {
+            // Name, Path, Struct, TupleStruct
+            TokenKind::Identifier => pathpattern(p)?,
+            // Literal
+            TokenKind::Literal => Pattern::Literal(p.parse()?),
+            // Rest
+            TokenKind::DotDot => {
+                p.consume_peeked();
+                if matches!(
+                    p.peek_kind(P),
+                    Ok(TokenKind::Identifier | TokenKind::Literal)
+                ) {
+                    Pattern::Rest(Some(p.parse()?))
+                } else {
+                    Pattern::Rest(None)
+                }
+            }
+            // Ref
+            TokenKind::Amp => {
+                p.consume_peeked();
+                Pattern::Ref(p.parse()?, p.parse()?)
+            }
+            // Ref(Ref)
+            TokenKind::AmpAmp => {
+                p.consume_peeked();
+                Pattern::Ref(
+                    Mutability::Not,
+                    Box::new(Pattern::Ref(p.parse()?, p.parse()?)),
+                )
+            }
+            // Tuple
+            TokenKind::LParen => Pattern::Tuple(delim(
+                sep(Parse::parse, TokenKind::Comma, TokenKind::RParen, P),
+                PARENS,
+                P,
+            )(p)?),
+            // Array
+            TokenKind::LBrack => Pattern::Array(delim(
+                sep(Parse::parse, TokenKind::Comma, TokenKind::RBrack, P),
+                BRACKETS,
+                P,
+            )(p)?),
+            _ => {
+                let bad_expr = p.parse()?;
+                Err(p.error(ErrorKind::InvalidPattern(bad_expr), P))?
+            }
+        })
     }
 }
 
