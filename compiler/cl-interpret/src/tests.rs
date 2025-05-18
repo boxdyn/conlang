@@ -1,5 +1,5 @@
 #![allow(unused_imports)]
-use crate::{convalue::ConValue, env::Environment, Interpret};
+use crate::{Interpret, convalue::ConValue, env::Environment};
 use cl_ast::*;
 use cl_lexer::Lexer;
 use cl_parser::Parser;
@@ -403,7 +403,7 @@ mod operators {
         env_eq!(env.is_10_ne_20, true); //  !=
         env_eq!(env.is_10_ge_20, false); // >=
         env_eq!(env.is_10_gt_20, false); // >
-                                         // Equal to
+        // Equal to
         env_eq!(env.is_10_lt_10, false);
         env_eq!(env.is_10_le_10, true);
         env_eq!(env.is_10_eq_10, true);
@@ -528,6 +528,25 @@ mod control_flow {
             let evaluated = if false { "pass" } else { "fail" }
         );
         env_eq!(env.evaluated, "fail");
+    }
+
+    #[test]
+    fn while_evaluates_fail_block_on_false() {
+        let mut env = Default::default();
+        assert_eval!(env,
+            let cond = true;
+            let evaluated = while cond { cond = false } else { true }
+        );
+        env_eq!(env.evaluated, true);
+    }
+
+    #[test]
+    fn while_does_not_evaluate_fail_block_on_break() {
+        let mut env = Default::default();
+        assert_eval!(env,
+            let evaluated = while true { break true } else { false }
+        );
+        env_eq!(env.evaluated, true);
     }
 
     #[test]
