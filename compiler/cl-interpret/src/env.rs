@@ -99,6 +99,11 @@ impl Environment {
         function.call(self, args)
     }
 
+    /// Binds a value to the given name in the current scope.
+    pub fn bind(&mut self, name: &str, value: impl Into<ConValue>) {
+        self.insert(name.into(), Some(value.into()));
+    }
+
     /// Gets all registered globals, bound or unbound.
     pub fn globals(&self) -> &HashMap<Sym, Option<ConValue>> {
         &self.global
