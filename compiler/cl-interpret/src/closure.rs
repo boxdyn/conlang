@@ -15,7 +15,7 @@ use std::{collections::HashMap, fmt::Display};
 #[derive(Clone, Debug)]
 pub struct Closure {
     decl: cl_ast::Closure,
-    lift: HashMap<Sym, Option<ConValue>>,
+    lift: HashMap<Sym, ConValue>,
 }
 
 impl Closure {
@@ -48,8 +48,8 @@ impl Callable for Closure {
 
         let mut env = env.frame("args");
 
-        for (name, value) in pattern::substitution(&decl.arg, ConValue::Tuple(args.into()))? {
-            env.insert(*name, Some(value));
+        for (name, value) in pattern::substitution(&env, &decl.arg, ConValue::Tuple(args.into()))? {
+            env.insert(name, value);
         }
 
         let res = decl.body.interpret(&mut env);
@@ -63,6 +63,6 @@ impl Callable for Closure {
     }
 
     fn name(&self) -> cl_ast::Sym {
-        "{closure}".into()
+        Self::NAME.into()
     }
 }

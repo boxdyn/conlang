@@ -154,11 +154,24 @@ pub const Builtins: &[Builtin] = &builtins![
         Ok(())
     }
 
+    /// Gets all global variables in the environment
+    fn globals() @env {
+        let globals = env.globals();
+        Ok(ConValue::Slice(globals.base, globals.binds.len()))
+    }
+
     fn builtins() @env {
-        for builtin in env.globals().values().flatten().filter(|v| matches!(v, ConValue::Builtin(_))) {
-            println!("{builtin}")
+        let len = env.globals().binds.len();
+        for builtin in 0..len {
+            if let Some(value @ ConValue::Builtin(_)) = env.get_id(builtin) {
+                println!("{builtin}: {value}")
+            }
         }
         Ok(())
+    }
+
+    fn alloca(ConValue::Int(len)) @env {
+        Ok(env.alloca(ConValue::Empty, *len as usize))
     }
 
     /// Returns the length of the input list as a [ConValue::Int]
@@ -169,10 +182,23 @@ pub const Builtins: &[Builtin] = &builtins![
             ConValue::Ref(r) => {
                 return len(env, &[env.get_id(*r).ok_or(Error::StackOverflow(*r))?.clone()])
             }
-            ConValue::Array(t) => t.len() as _,
+            ConValue::Slice(_, len) => *len as _,
+            ConValue::Array(arr) => arr.len() as _,
             ConValue::Tuple(t) => t.len() as _,
             _ => Err(Error::TypeError())?,
         })
+    }
+
+    fn push(ConValue::Ref(index), item) @env{
+        let Some(ConValue::Array(v)) = env.get_id_mut(*index) else {
+            Err(Error::TypeError())?
+        };
+
+        let mut items = std::mem::take(v).into_vec();
+        items.push(item.clone());
+        *v = items.into_boxed_slice();
+
+        Ok(ConValue::Empty)
     }
 
     fn chars(string) @env {
@@ -296,23 +322,30 @@ pub const Math: &[Builtin] = &builtins![
     }
 
     #[allow(non_snake_case)]
-    fn RangeExc(start, end) {
+    fn RangeExc(start, end) @env {
         Ok(ConValue::TupleStruct(Box::new((
             "RangeExc", Box::new([start.clone(), end.clone()])
         ))))
     }
 
     #[allow(non_snake_case)]
-    fn RangeInc(start, end) {
+    fn RangeInc(start, end) @env {
         Ok(ConValue::TupleStruct(Box::new((
             "RangeInc", Box::new([start.clone(), end.clone()])
         ))))
     }
 
     #[allow(non_snake_case)]
-    fn RangeTo(end) {
+    fn RangeTo(end) @env {
         Ok(ConValue::TupleStruct(Box::new((
-            "RangeInc", Box::new([end.clone()])
+            "RangeTo", Box::new([end.clone()])
+        ))))
+    }
+
+    #[allow(non_snake_case)]
+    fn RangeToInc(end) @env {
+        Ok(ConValue::TupleStruct(Box::new((
+            "RangeToInc", Box::new([end.clone()])
         ))))
     }
 

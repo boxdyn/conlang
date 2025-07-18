@@ -1,6 +1,6 @@
 //! Lexical and non-lexical scoping for variables
 
-use crate::builtin::Builtin;
+use crate::{builtin::Builtin, constructor::Constructor, modules::ModuleTree};
 
 use super::{
     Callable, Interpret,
@@ -17,37 +17,25 @@ use std::{
     rc::Rc,
 };
 
-type StackFrame = HashMap<Sym, Option<ConValue>>;
+pub type StackFrame = HashMap<Sym, ConValue>;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Place {
-    Global(Sym),
-    Local(usize),
-}
-
-impl Display for Place {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Place::Global(name) => name.fmt(f),
-            Place::Local(id) => id.fmt(f),
-        }
-    }
-}
+pub type StackBinds = HashMap<Sym, usize>;
 
 #[derive(Clone, Debug, Default)]
-struct EnvFrame {
-    /// The length of the array when this stack frame was constructed
+pub(crate) struct EnvFrame {
     pub name: Option<&'static str>,
+    /// The length of the array when this stack frame was constructed
     pub base: usize,
-    pub binds: HashMap<Sym, usize>,
+    /// The bindings of name to stack position
+    pub binds: StackBinds,
 }
 
 /// Implements a nested lexical scope
 #[derive(Clone, Debug)]
 pub struct Environment {
-    global: HashMap<Sym, Option<ConValue>>,
-    values: Vec<Option<ConValue>>,
+    values: Vec<ConValue>,
     frames: Vec<EnvFrame>,
+    modules: ModuleTree,
 }
 
 impl Display for Environment {
@@ -55,21 +43,24 @@ impl Display for Environment {
         for EnvFrame { name, base: _, binds } in self.frames.iter().rev() {
             writeln!(
                 f,
-                "--- {} ---",
-                if let Some(name) = name { name } else { "" }
+                "--- {}[{}] ---",
+                if let Some(name) = name { name } else { "" },
+                binds.len(),
             )?;
-            for (var, val) in binds {
-                write!(f, "{var}: ")?;
-                match self.values.get(*val) {
-                    Some(Some(value)) => writeln!(f, "\t{value}"),
-                    Some(None) => writeln!(f, "<undefined>"),
-                    None => writeln!(f, "ERROR: {var} address blows the stack!"),
+            let mut binds: Vec<_> = binds.iter().collect();
+            binds.sort_by(|(_, a), (_, b)| a.cmp(b));
+            for (name, idx) in binds {
+                write!(f, "{idx:4} {name}: ")?;
+                match self.values.get(*idx) {
+                    Some(value) => writeln!(f, "\t{value}"),
+                    None => writeln!(f, "ERROR: {name}'s address blows the stack!"),
                 }?
             }
         }
         Ok(())
     }
 }
+
 impl Default for Environment {
     fn default() -> Self {
         let mut this = Self::no_builtins();
@@ -84,7 +75,11 @@ impl Environment {
     }
     /// Creates an [Environment] with no [builtins](super::builtin)
     pub fn no_builtins() -> Self {
-        Self { values: Vec::new(), global: HashMap::new(), frames: vec![] }
+        Self {
+            values: Vec::new(),
+            frames: vec![EnvFrame::default()],
+            modules: ModuleTree::default(),
+        }
     }
 
     /// Reflexively evaluates a node
@@ -92,38 +87,60 @@ impl Environment {
         node.interpret(self)
     }
 
-    /// Calls a function inside the interpreter's scope,
+    /// Calls a function inside the Environment's scope,
     /// and returns the result
     pub fn call(&mut self, name: Sym, args: &[ConValue]) -> IResult<ConValue> {
         let function = self.get(name)?;
         function.call(self, args)
     }
 
+    pub fn modules_mut(&mut self) -> &mut ModuleTree {
+        &mut self.modules
+    }
+
+    pub fn modules(&self) -> &ModuleTree {
+        &self.modules
+    }
+
     /// Binds a value to the given name in the current scope.
-    pub fn bind(&mut self, name: &str, value: impl Into<ConValue>) {
-        self.insert(name.into(), Some(value.into()));
+    pub fn bind(&mut self, name: impl Into<Sym>, value: impl Into<ConValue>) {
+        self.insert(name.into(), value.into());
+    }
+
+    pub fn bind_raw(&mut self, name: Sym, id: usize) -> Option<()> {
+        let EnvFrame { name: _, base: _, binds } = self.frames.last_mut()?;
+        binds.insert(name, id);
+        Some(())
     }
 
     /// Gets all registered globals, bound or unbound.
-    pub fn globals(&self) -> &HashMap<Sym, Option<ConValue>> {
-        &self.global
+    pub(crate) fn globals(&self) -> &EnvFrame {
+        self.frames.first().unwrap()
     }
 
     /// Adds builtins
     ///
     /// # Panics
     ///
-    /// Will panic if globals table is non-empty!
+    /// Will panic if stack contains more than the globals frame!
     pub fn add_builtins(&mut self, builtins: &'static [Builtin]) -> &mut Self {
-        let Self { global, .. } = self;
-        for builtin in builtins {
-            global.insert(builtin.name(), Some(builtin.into()));
+        if self.frames.len() != 1 {
+            panic!("Cannot add builtins to full stack: {self}")
         }
+
+        for builtin in builtins {
+            self.insert(builtin.name(), builtin.into());
+        }
+
         self
     }
 
     pub fn push_frame(&mut self, name: &'static str, frame: StackFrame) {
-        self.enter(name);
+        self.frames.push(EnvFrame {
+            name: Some(name),
+            base: self.values.len(),
+            binds: HashMap::new(),
+        });
         for (k, v) in frame {
             self.insert(k, v);
         }
@@ -133,7 +150,7 @@ impl Environment {
         let mut out = HashMap::new();
         let EnvFrame { name, base, binds } = self.frames.pop()?;
         for (k, v) in binds {
-            out.insert(k, self.values.get_mut(v).and_then(std::mem::take));
+            out.insert(k, self.values.get_mut(v).map(std::mem::take)?);
         }
         self.values.truncate(base);
         Some((out, name.unwrap_or("")))
@@ -146,10 +163,22 @@ impl Environment {
         Frame::new(self, name)
     }
 
+    /// Enters a nested scope, assigning the contents of `frame`,
+    /// and returning a [`Frame`] stack-guard.
+    ///
+    /// [`Frame`] implements Deref/DerefMut for [`Environment`].
+    pub fn with_frame<'e>(&'e mut self, name: &'static str, frame: StackFrame) -> Frame<'e> {
+        let mut scope = self.frame(name);
+        for (k, v) in frame {
+            scope.insert(k, v);
+        }
+        scope
+    }
+
     /// Resolves a variable mutably.
     ///
     /// Returns a mutable reference to the variable's record, if it exists.
-    pub fn get_mut(&mut self, name: Sym) -> IResult<&mut Option<ConValue>> {
+    pub fn get_mut(&mut self, name: Sym) -> IResult<&mut ConValue> {
         let at = self.id_of(name)?;
         self.get_id_mut(at).ok_or(Error::NotDefined(name))
     }
@@ -159,47 +188,40 @@ impl Environment {
     /// Returns a reference to the variable's contents, if it is defined and initialized.
     pub fn get(&self, name: Sym) -> IResult<ConValue> {
         let id = self.id_of(name)?;
-        let res = match id {
-            Place::Global(name) => self.global.get(&name),
-            Place::Local(id) => self.values.get(id),
-        };
-        match res.ok_or(Error::NotDefined(name))? {
-            Some(value) => Ok(value.clone()),
-            None => Err(Error::NotInitialized(name)),
-        }
+        let res = self.values.get(id);
+        Ok(res.ok_or(Error::NotDefined(name))?.clone())
     }
 
-    /// Resolves the [Place] associated with a [Sym]
-    pub fn id_of(&self, name: Sym) -> IResult<Place> {
+    /// Resolves the index associated with a [Sym]
+    pub fn id_of(&self, name: Sym) -> IResult<usize> {
         for EnvFrame { binds, .. } in self.frames.iter().rev() {
             if let Some(id) = binds.get(&name).copied() {
-                return Ok(Place::Local(id));
+                return Ok(id);
             }
         }
-        Ok(Place::Global(name))
+        Err(Error::NotDefined(name))
     }
 
-    pub fn get_id(&self, at: Place) -> Option<&ConValue> {
-        let res = match at {
-            Place::Global(name) => self.global.get(&name),
-            Place::Local(id) => self.values.get(id),
-        }?;
-        res.as_ref()
+    pub fn get_id(&self, id: usize) -> Option<&ConValue> {
+        self.values.get(id)
     }
 
-    pub fn get_id_mut(&mut self, at: Place) -> Option<&mut Option<ConValue>> {
-        match at {
-            Place::Global(name) => self.global.get_mut(&name),
-            Place::Local(id) => self.values.get_mut(id),
-        }
+    pub fn get_id_mut(&mut self, id: usize) -> Option<&mut ConValue> {
+        self.values.get_mut(id)
+    }
+
+    pub fn get_slice(&self, start: usize, len: usize) -> Option<&[ConValue]> {
+        self.values.get(start..start + len)
+    }
+
+    pub fn get_slice_mut(&mut self, start: usize, len: usize) -> Option<&mut [ConValue]> {
+        self.values.get_mut(start..start + len)
     }
 
     /// Inserts a new [ConValue] into this [Environment]
-    pub fn insert(&mut self, k: Sym, v: Option<ConValue>) {
+    pub fn insert(&mut self, k: Sym, v: ConValue) {
         if self.bind_raw(k, self.values.len()).is_some() {
             self.values.push(v);
-        } else {
-            self.global.insert(k, v);
         }
     }
 
@@ -207,42 +229,33 @@ impl Environment {
     pub fn insert_fn(&mut self, decl: &FnDecl) {
         let FnDecl { name, .. } = decl;
         let (name, function) = (*name, Rc::new(Function::new(decl)));
-        self.insert(name, Some(ConValue::Function(function.clone())));
+        self.insert(name, ConValue::Function(function.clone()));
         // Tell the function to lift its upvars now, after it's been declared
         function.lift_upvars(self);
+    }
+
+    pub fn insert_tup_constructor(&mut self, name: Sym, arity: usize) {
+        let cs = Constructor { arity: arity as _, name };
+        self.insert(name, ConValue::TupleConstructor(cs));
+    }
+
+    /// Gets the current stack top position
+    pub fn pos(&self) -> usize {
+        self.values.len()
     }
 
     /// Allocates a local variable
     pub fn stack_alloc(&mut self, value: ConValue) -> IResult<usize> {
         let adr = self.values.len();
-        self.values.push(Some(value));
+        self.values.push(value);
         Ok(adr)
     }
 
-    pub fn bind_raw(&mut self, name: Sym, id: usize) -> Option<()> {
-        let EnvFrame { name: _, base: _, binds } = self.frames.last_mut()?;
-        binds.insert(name, id);
-        Some(())
-    }
-}
-
-/// Functions which aid in the implementation of [`Frame`]
-impl Environment {
-    /// Enters a scope, creating a new namespace for variables
-    fn enter(&mut self, name: &'static str) -> &mut Self {
-        let new_frame =
-            EnvFrame { name: Some(name), base: self.values.len(), binds: HashMap::new() };
-        self.frames.push(new_frame);
-        self
-    }
-
-    /// Exits the scope, destroying all local variables and
-    /// returning the outer scope, if there is one
-    fn exit(&mut self) -> &mut Self {
-        if let Some(frame) = self.frames.pop() {
-            self.values.truncate(frame.base);
-        }
-        self
+    /// Allocates some space on the stack
+    pub fn alloca(&mut self, value: ConValue, len: usize) -> ConValue {
+        let idx = self.values.len();
+        self.values.extend(std::iter::repeat_n(value, len));
+        ConValue::Slice(idx, len)
     }
 }
 
@@ -253,7 +266,28 @@ pub struct Frame<'scope> {
 }
 impl<'scope> Frame<'scope> {
     fn new(scope: &'scope mut Environment, name: &'static str) -> Self {
-        Self { scope: scope.enter(name) }
+        scope.frames.push(EnvFrame {
+            name: Some(name),
+            base: scope.values.len(),
+            binds: HashMap::new(),
+        });
+
+        Self { scope }
+    }
+
+    pub fn pop_values(mut self) -> Option<StackFrame> {
+        let mut out = HashMap::new();
+        let binds = std::mem::take(&mut self.frames.last_mut()?.binds);
+        for (k, v) in binds {
+            out.insert(k, self.values.get_mut(v).map(std::mem::take)?);
+        }
+        Some(out)
+    }
+
+    pub fn into_binds(mut self) -> Option<StackBinds> {
+        let EnvFrame { name: _, base: _, binds } = self.frames.pop()?;
+        std::mem::forget(self);
+        Some(binds)
     }
 }
 impl Deref for Frame<'_> {
@@ -269,6 +303,8 @@ impl DerefMut for Frame<'_> {
 }
 impl Drop for Frame<'_> {
     fn drop(&mut self) {
-        self.scope.exit();
+        if let Some(frame) = self.frames.pop() {
+            self.values.truncate(frame.base);
+        }
     }
 }

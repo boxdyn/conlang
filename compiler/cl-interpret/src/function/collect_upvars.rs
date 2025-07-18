@@ -1,5 +1,5 @@
 //! Collects the "Upvars" of a function at the point of its creation, allowing variable capture
-use crate::env::{Environment, Place};
+use crate::env::Environment;
 use cl_ast::{
     Function, Let, Path, PathPart, Pattern, Sym,
     ast_visitor::{visit::*, walk::Walk},
@@ -13,7 +13,7 @@ pub fn collect_upvars(f: &Function, env: &Environment) -> super::Upvars {
 #[derive(Clone, Debug)]
 pub struct CollectUpvars<'env> {
     env: &'env Environment,
-    upvars: HashMap<Sym, Place>,
+    upvars: HashMap<Sym, usize>,
     blacklist: HashSet<Sym>,
 }
 
@@ -22,7 +22,7 @@ impl<'env> CollectUpvars<'env> {
         Self { upvars: HashMap::new(), blacklist: HashSet::new(), env }
     }
 
-    pub fn finish(&mut self) -> HashMap<Sym, Place> {
+    pub fn finish(&mut self) -> HashMap<Sym, usize> {
         std::mem::take(&mut self.upvars)
     }
 
@@ -30,7 +30,7 @@ impl<'env> CollectUpvars<'env> {
         let Self { env, upvars, blacklist: _ } = self;
         std::mem::take(upvars)
             .into_iter()
-            .map(|(k, v)| (k, env.get_id(v).cloned()))
+            .filter_map(|(k, v)| env.get_id(v).cloned().map(|v| (k, v)))
             .collect()
     }
 
@@ -47,17 +47,21 @@ impl<'env> CollectUpvars<'env> {
     pub fn bind_name(&mut self, name: &Sym) {
         self.blacklist.insert(*name);
     }
+
+    pub fn scope(&mut self, f: impl Fn(&mut CollectUpvars<'env>)) {
+        let blacklist = self.blacklist.clone();
+
+        // visit the scope
+        f(self);
+
+        // restore the blacklist
+        self.blacklist = blacklist;
+    }
 }
 
 impl<'a> Visit<'a> for CollectUpvars<'_> {
     fn visit_block(&mut self, b: &'a cl_ast::Block) {
-        let blacklist = self.blacklist.clone();
-
-        // visit the block
-        b.children(self);
-
-        // restore the blacklist
-        self.blacklist = blacklist;
+        self.scope(|cu| b.children(cu));
     }
 
     fn visit_let(&mut self, l: &'a cl_ast::Let) {
@@ -69,21 +73,6 @@ impl<'a> Visit<'a> for CollectUpvars<'_> {
         init.visit_in(self);
         // a bound name can never be an upvar
         self.visit_pattern(name);
-    }
-
-    fn visit_function(&mut self, f: &'a cl_ast::Function) {
-        let Function { name: _, gens: _, sign: _, bind, body } = f;
-        // parameters can never be upvars
-        bind.visit_in(self);
-        body.visit_in(self);
-    }
-
-    fn visit_for(&mut self, f: &'a cl_ast::For) {
-        let cl_ast::For { bind, cond, pass, fail } = f;
-        self.visit_expr(cond);
-        self.visit_else(fail);
-        self.visit_pattern(bind);
-        self.visit_block(pass);
     }
 
     fn visit_path(&mut self, p: &'a cl_ast::Path) {
@@ -106,13 +95,18 @@ impl<'a> Visit<'a> for CollectUpvars<'_> {
         }
     }
 
-    fn visit_pattern(&mut self, p: &'a cl_ast::Pattern) {
-        match p {
+    fn visit_pattern(&mut self, value: &'a cl_ast::Pattern) {
+        match value {
             Pattern::Name(name) => {
                 self.bind_name(name);
             }
             Pattern::RangeExc(_, _) | Pattern::RangeInc(_, _) => {}
-            _ => p.children(self),
+            _ => value.children(self),
         }
+    }
+
+    fn visit_match_arm(&mut self, value: &'a cl_ast::MatchArm) {
+        // MatchArms bind variables with a very small local scope
+        self.scope(|cu| value.children(cu));
     }
 }

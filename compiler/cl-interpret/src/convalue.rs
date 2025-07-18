@@ -3,7 +3,7 @@
 //! The most permanent fix is a temporary one.
 use cl_ast::{Expr, Sym, format::FmtAdapter};
 
-use crate::{closure::Closure, env::Place};
+use crate::{closure::Closure, constructor::Constructor};
 
 use super::{
     Callable, Environment,
@@ -54,23 +54,27 @@ pub enum ConValue {
     /// A string
     String(Sym),
     /// A reference
-    Ref(Place),
+    Ref(usize),
     /// A reference to an array
-    Slice(Place, usize),
+    Slice(usize, usize),
     /// An Array
     Array(Box<[ConValue]>),
     /// A tuple
     Tuple(Box<[ConValue]>),
     /// A value of a product type
-    Struct(Box<(Sym, HashMap<Sym, ConValue>)>),
+    Struct(Box<(&'static str, HashMap<Sym, ConValue>)>),
     /// A value of a product type with anonymous members
     TupleStruct(Box<(&'static str, Box<[ConValue]>)>),
     /// An entire namespace
-    Module(Box<HashMap<Sym, Option<ConValue>>>),
+    Module(Box<HashMap<Sym, ConValue>>),
+    /// A namespace, sans storage
+    Module2(HashMap<Sym, usize>),
     /// A quoted expression
     Quote(Box<Expr>),
     /// A callable thing
     Function(Rc<Function>),
+    /// A tuple constructor
+    TupleConstructor(Constructor),
     /// A closure, capturing by reference
     Closure(Rc<Closure>),
     /// A built-in function
@@ -86,33 +90,65 @@ impl ConValue {
         }
     }
 
-    #[allow(non_snake_case)]
-    pub fn TupleStruct(name: Sym, values: Box<[ConValue]>) -> Self {
-        Self::TupleStruct(Box::new((name.to_ref(), values)))
-    }
-    #[allow(non_snake_case)]
-    pub fn Struct(name: Sym, values: HashMap<Sym, ConValue>) -> Self {
-        Self::Struct(Box::new((name, values)))
+    pub fn typename(&self) -> IResult<&'static str> {
+        Ok(match self {
+            ConValue::Empty => "Empty",
+            ConValue::Int(_) => "i64",
+            ConValue::Float(_) => "f64",
+            ConValue::Bool(_) => "bool",
+            ConValue::Char(_) => "char",
+            ConValue::String(_) => "String",
+            ConValue::Ref(_) => "Ref",
+            ConValue::Slice(_, _) => "Slice",
+            ConValue::Array(_) => "Array",
+            ConValue::Tuple(_) => "Tuple",
+            ConValue::Struct(_) => "Struct",
+            ConValue::TupleStruct(_) => "TupleStruct",
+            ConValue::Module(_) => "",
+            ConValue::Module2(_) => "",
+            ConValue::Quote(_) => "Quote",
+            ConValue::Function(_) => "Fn",
+            ConValue::TupleConstructor(_) => "Fn",
+            ConValue::Closure(_) => "Fn",
+            ConValue::Builtin(_) => "Fn",
+        })
     }
 
-    pub fn index(&self, index: &Self, env: &Environment) -> IResult<ConValue> {
-        let Self::Int(index) = index else {
+    #[allow(non_snake_case)]
+    pub fn TupleStruct(id: Sym, values: Box<[ConValue]>) -> Self {
+        Self::TupleStruct(Box::new((id.to_ref(), values)))
+    }
+    #[allow(non_snake_case)]
+    pub fn Struct(id: Sym, values: HashMap<Sym, ConValue>) -> Self {
+        Self::Struct(Box::new((id.to_ref(), values)))
+    }
+
+    pub fn index(&self, index: &Self, _env: &Environment) -> IResult<ConValue> {
+        let &Self::Int(index) = index else {
             Err(Error::TypeError())?
         };
         match self {
             ConValue::String(string) => string
                 .chars()
-                .nth(*index as _)
+                .nth(index as _)
                 .map(ConValue::Char)
-                .ok_or(Error::OobIndex(*index as usize, string.chars().count())),
+                .ok_or(Error::OobIndex(index as usize, string.chars().count())),
             ConValue::Array(arr) => arr
-                .get(*index as usize)
+                .get(index as usize)
                 .cloned()
-                .ok_or(Error::OobIndex(*index as usize, arr.len())),
-            ConValue::Slice(id, start) => env
-                .get_id(*id)
-                .ok_or(Error::StackOverflow(*id))?
-                .index(&ConValue::Int((*index as usize + start) as isize), env),
+                .ok_or(Error::OobIndex(index as usize, arr.len())),
+            &ConValue::Slice(id, len) => {
+                let index = if index < 0 {
+                    len.wrapping_add_signed(index)
+                } else {
+                    index as usize
+                };
+                if index < len {
+                    Ok(ConValue::Ref(id + index))
+                } else {
+                    Err(Error::OobIndex(index, len))
+                }
+            }
             _ => Err(Error::TypeError()),
         }
     }
@@ -147,11 +183,24 @@ impl Callable for ConValue {
             _ => "".into(),
         }
     }
-    fn call(&self, interpreter: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
+    fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
         match self {
-            Self::Function(func) => func.call(interpreter, args),
-            Self::Closure(func) => func.call(interpreter, args),
-            Self::Builtin(func) => func.call(interpreter, args),
+            Self::Function(func) => func.call(env, args),
+            Self::TupleConstructor(func) => func.call(env, args),
+            Self::Closure(func) => func.call(env, args),
+            Self::Builtin(func) => func.call(env, args),
+            Self::Module(m) => {
+                if let Some(func) = m.get(&"call".into()) {
+                    func.call(env, args)
+                } else {
+                    Err(Error::NotCallable(self.clone()))
+                }
+            }
+            &Self::Ref(ptr) => {
+                // Move onto stack, and call
+                let func = env.get_id(ptr).ok_or(Error::StackOverflow(ptr))?.clone();
+                func.call(env, args)
+            }
             _ => Err(Error::NotCallable(self.clone())),
         }
     }
@@ -307,7 +356,7 @@ impl std::fmt::Display for ConValue {
             ConValue::Char(v) => v.fmt(f),
             ConValue::String(v) => v.fmt(f),
             ConValue::Ref(v) => write!(f, "&<{}>", v),
-            ConValue::Slice(v, len) => write!(f, "&<{v}>[{len}..]"),
+            ConValue::Slice(id, len) => write!(f, "&<{id}>[{len}..]"),
             ConValue::Array(array) => {
                 '['.fmt(f)?;
                 for (idx, element) in array.iter().enumerate() {
@@ -329,10 +378,8 @@ impl std::fmt::Display for ConValue {
                 ')'.fmt(f)
             }
             ConValue::TupleStruct(parts) => {
-                let (name, tuple) = parts.as_ref();
-                if !name.is_empty() {
-                    write!(f, "{name}")?;
-                }
+                let (id, tuple) = parts.as_ref();
+                write!(f, "{id}")?;
                 '('.fmt(f)?;
                 for (idx, element) in tuple.iter().enumerate() {
                     if idx > 0 {
@@ -343,11 +390,9 @@ impl std::fmt::Display for ConValue {
                 ')'.fmt(f)
             }
             ConValue::Struct(parts) => {
-                let (name, map) = parts.as_ref();
+                let (id, map) = parts.as_ref();
                 use std::fmt::Write;
-                if !name.is_empty() {
-                    write!(f, "{name} ")?;
-                }
+                write!(f, "{id} ")?;
                 let mut f = f.delimit_with("{", "\n}");
                 for (k, v) in map.iter() {
                     write!(f, "\n{k}: {v},")?;
@@ -358,11 +403,15 @@ impl std::fmt::Display for ConValue {
                 use std::fmt::Write;
                 let mut f = f.delimit_with("{", "\n}");
                 for (k, v) in module.iter() {
-                    write!(f, "\n{k}: ")?;
-                    match v {
-                        Some(v) => write!(f, "{v},"),
-                        None => write!(f, "_,"),
-                    }?
+                    write!(f, "\n{k}: {v},")?;
+                }
+                Ok(())
+            }
+            ConValue::Module2(module) => {
+                use std::fmt::Write;
+                let mut f = f.delimit_with("{", "\n}");
+                for (k, v) in module.iter() {
+                    write!(f, "\n{k}: <{v}>,")?;
                 }
                 Ok(())
             }
@@ -371,6 +420,9 @@ impl std::fmt::Display for ConValue {
             }
             ConValue::Function(func) => {
                 write!(f, "{}", func.decl())
+            }
+            ConValue::TupleConstructor(Constructor { name: index, arity }) => {
+                write!(f, "{index}(..{arity})")
             }
             ConValue::Closure(func) => {
                 write!(f, "{}", func.as_ref())

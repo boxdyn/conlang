@@ -14,7 +14,7 @@ use std::{
 
 pub mod collect_upvars;
 
-type Upvars = HashMap<Sym, Option<ConValue>>;
+type Upvars = HashMap<Sym, ConValue>;
 
 /// Represents a block of code which persists inside the Interpreter
 #[derive(Clone, Debug)]
@@ -23,16 +23,12 @@ pub struct Function {
     decl: Rc<FnDecl>,
     /// Stores data from the enclosing scopes
     upvars: RefCell<Upvars>,
-    is_constructor: bool,
 }
 
 impl Function {
     pub fn new(decl: &FnDecl) -> Self {
         // let upvars = collect_upvars(decl, env);
-        Self { decl: decl.clone().into(), upvars: Default::default(), is_constructor: false }
-    }
-    pub fn new_constructor(decl: FnDecl) -> Self {
-        Self { decl: decl.into(), upvars: Default::default(), is_constructor: true }
+        Self { decl: decl.clone().into(), upvars: Default::default() }
     }
     pub fn decl(&self) -> &FnDecl {
         &self.decl
@@ -57,27 +53,21 @@ impl Callable for Function {
         let FnDecl { name, gens: _, bind, body, sign: _ } = &*self.decl;
 
         // Check arg mapping
-        if self.is_constructor {
-            return Ok(ConValue::TupleStruct(Box::new((
-                name.to_ref(),
-                args.into(),
-            ))));
-        }
         let Some(body) = body else {
             return Err(Error::NotDefined(*name));
         };
 
         let upvars = self.upvars.take();
-        env.push_frame("upvars", upvars);
+        let mut env = env.with_frame("upvars", upvars);
 
         // TODO: completely refactor data storage
         let mut frame = env.frame("fn args");
-        for (name, value) in pattern::substitution(bind, ConValue::Tuple(args.into()))? {
-            frame.insert(*name, Some(value));
+        for (name, value) in pattern::substitution(&frame, bind, ConValue::Tuple(args.into()))? {
+            frame.insert(name, value);
         }
         let res = body.interpret(&mut frame);
         drop(frame);
-        if let Some((upvars, _)) = env.pop_frame() {
+        if let Some(upvars) = env.pop_values() {
             self.upvars.replace(upvars);
         }
         match res {

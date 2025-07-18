@@ -5,6 +5,7 @@
 
 use crate::{
     convalue::ConValue,
+    env::Environment,
     error::{Error, IResult},
 };
 use cl_ast::{Literal, Pattern, Sym};
@@ -43,7 +44,8 @@ pub fn variables(pat: &Pattern) -> Vec<&Sym> {
 }
 
 fn rest_binding<'pat>(
-    sub: &mut HashMap<&'pat Sym, ConValue>,
+    env: &Environment,
+    sub: &mut HashMap<Sym, ConValue>,
     mut patterns: &'pat [Pattern],
     mut values: VecDeque<ConValue>,
 ) -> IResult<Option<(&'pat Pattern, VecDeque<ConValue>)>> {
@@ -55,7 +57,7 @@ fn rest_binding<'pat>(
         let value = values
             .pop_front()
             .ok_or_else(|| Error::PatFailed(Box::new(pattern.clone())))?;
-        append_sub(sub, pattern, value)?;
+        append_sub(env, sub, pattern, value)?;
         patterns = tail;
     }
     // Bind the tail of the list
@@ -66,7 +68,7 @@ fn rest_binding<'pat>(
         let value = values
             .pop_back()
             .ok_or_else(|| Error::PatFailed(Box::new(pattern.clone())))?;
-        append_sub(sub, pattern, value)?;
+        append_sub(env, sub, pattern, value)?;
         patterns = head;
     }
     // Bind the ..rest of the list
@@ -77,10 +79,51 @@ fn rest_binding<'pat>(
     }
 }
 
+fn rest_binding_ref<'pat>(
+    env: &Environment,
+    sub: &mut HashMap<Sym, ConValue>,
+    mut patterns: &'pat [Pattern],
+    mut head: usize,
+    mut tail: usize,
+) -> IResult<Option<(&'pat Pattern, usize, usize)>> {
+    // Bind the head of the list
+    while let [pattern, pat_tail @ ..] = patterns {
+        if matches!(pattern, Pattern::Rest(_)) {
+            break;
+        }
+        if head >= tail {
+            return Err(Error::PatFailed(Box::new(pattern.clone())));
+        }
+
+        append_sub(env, sub, pattern, ConValue::Ref(head))?;
+        head += 1;
+        patterns = pat_tail;
+    }
+    // Bind the tail of the list
+    while let [pat_head @ .., pattern] = patterns {
+        if matches!(pattern, Pattern::Rest(_)) {
+            break;
+        }
+        if head >= tail {
+            return Err(Error::PatFailed(Box::new(pattern.clone())));
+        };
+        append_sub(env, sub, pattern, ConValue::Ref(tail))?;
+        tail -= 1;
+        patterns = pat_head;
+    }
+    // Bind the ..rest of the list
+    match (patterns, tail - head) {
+        ([], 0) | ([Pattern::Rest(None)], _) => Ok(None),
+        ([Pattern::Rest(Some(pattern))], _) => Ok(Some((pattern.as_ref(), head, tail))),
+        _ => Err(Error::PatFailed(Box::new(Pattern::Array(patterns.into())))),
+    }
+}
+
 /// Appends a substitution to the provided table
-pub fn append_sub<'pat>(
-    sub: &mut HashMap<&'pat Sym, ConValue>,
-    pat: &'pat Pattern,
+pub fn append_sub(
+    env: &Environment,
+    sub: &mut HashMap<Sym, ConValue>,
+    pat: &Pattern,
     value: ConValue,
 ) -> IResult<()> {
     match (pat, value) {
@@ -122,12 +165,21 @@ pub fn append_sub<'pat>(
 
         (Pattern::Name(name), _) if "_".eq(&**name) => Ok(()),
         (Pattern::Name(name), value) => {
-            sub.insert(name, value);
+            sub.insert(*name, value);
             Ok(())
         }
 
-        (Pattern::Ref(_, pat), ConValue::Ref(r)) => {
-            todo!("Dereference <{r}> in pattern matching {pat}")
+        (Pattern::Ref(_, pat), ConValue::Ref(r)) => match env.get_id(r) {
+            Some(value) => append_sub(env, sub, pat, value.clone()),
+            None => Err(Error::PatFailed(pat.clone())),
+        },
+
+        (Pattern::Ref(_, pat), ConValue::Slice(head, len)) => {
+            let mut values = Vec::with_capacity(len);
+            for idx in head..(head + len) {
+                values.push(env.get_id(idx).cloned().ok_or(Error::StackOverflow(idx))?);
+            }
+            append_sub(env, sub, pat, ConValue::Array(values.into_boxed_slice()))
         }
 
         (Pattern::RangeExc(head, tail), value) => match (head.as_ref(), tail.as_ref(), value) {
@@ -195,48 +247,64 @@ pub fn append_sub<'pat>(
         },
 
         (Pattern::Array(patterns), ConValue::Array(values)) => {
-            match rest_binding(sub, patterns, values.into_vec().into())? {
+            match rest_binding(env, sub, patterns, values.into_vec().into())? {
                 Some((pattern, values)) => {
-                    append_sub(sub, pattern, ConValue::Array(Vec::from(values).into()))
+                    append_sub(env, sub, pattern, ConValue::Array(Vec::from(values).into()))
                 }
                 _ => Ok(()),
             }
         }
 
+        (Pattern::Array(patterns), ConValue::Slice(head, len)) => {
+            match rest_binding_ref(env, sub, patterns, head, head + len)? {
+                Some((pat, head, tail)) => {
+                    append_sub(env, sub, pat, ConValue::Slice(head, tail - head))
+                }
+                None => Ok(()),
+            }
+        }
+
         (Pattern::Tuple(patterns), ConValue::Empty) if patterns.is_empty() => Ok(()),
         (Pattern::Tuple(patterns), ConValue::Tuple(values)) => {
-            match rest_binding(sub, patterns, values.into_vec().into())? {
+            match rest_binding(env, sub, patterns, values.into_vec().into())? {
                 Some((pattern, values)) => {
-                    append_sub(sub, pattern, ConValue::Tuple(Vec::from(values).into()))
+                    append_sub(env, sub, pattern, ConValue::Tuple(Vec::from(values).into()))
                 }
                 _ => Ok(()),
             }
         }
 
         (Pattern::TupleStruct(path, patterns), ConValue::TupleStruct(parts)) => {
-            let (name, values) = *parts;
-            if !path.ends_with(name) {
-                Err(Error::TypeError())?
+            let (id, values) = *parts;
+
+            let tid = path
+                .as_sym()
+                .ok_or_else(|| Error::PatFailed(pat.clone().into()))?;
+            if id != tid.to_ref() {
+                return Err(Error::PatFailed(pat.clone().into()));
             }
-            match rest_binding(sub, patterns, values.into_vec().into())? {
+            match rest_binding(env, sub, patterns, values.into_vec().into())? {
                 Some((pattern, values)) => {
-                    append_sub(sub, pattern, ConValue::Tuple(Vec::from(values).into()))
+                    append_sub(env, sub, pattern, ConValue::Tuple(Vec::from(values).into()))
                 }
                 _ => Ok(()),
             }
         }
 
         (Pattern::Struct(path, patterns), ConValue::Struct(parts)) => {
-            let (name, mut values) = *parts;
-            if !path.ends_with(&name) {
-                Err(Error::TypeError())?
+            let (id, mut values) = *parts;
+            let tid = path
+                .as_sym()
+                .ok_or_else(|| Error::PatFailed(pat.clone().into()))?;
+            if id != tid.to_ref() {
+                return Err(Error::PatFailed(pat.clone().into()));
             }
             for (name, pat) in patterns {
                 let value = values.remove(name).ok_or(Error::TypeError())?;
                 match pat {
-                    Some(pat) => append_sub(sub, pat, value)?,
+                    Some(pat) => append_sub(env, sub, pat, value)?,
                     None => {
-                        sub.insert(name, value);
+                        sub.insert(*name, value);
                     }
                 }
             }
@@ -251,8 +319,12 @@ pub fn append_sub<'pat>(
 }
 
 /// Constructs a substitution from a pattern and a value
-pub fn substitution(pat: &Pattern, value: ConValue) -> IResult<HashMap<&Sym, ConValue>> {
+pub fn substitution(
+    env: &Environment,
+    pat: &Pattern,
+    value: ConValue,
+) -> IResult<HashMap<Sym, ConValue>> {
     let mut sub = HashMap::new();
-    append_sub(&mut sub, pat, value)?;
+    append_sub(env, &mut sub, pat, value)?;
     Ok(sub)
 }

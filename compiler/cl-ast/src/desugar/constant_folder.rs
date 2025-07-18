@@ -78,7 +78,8 @@ impl Fold for ConstantFolder {
             Ek::Unary(Unary { kind, tail }) => {
                 un_rule! (match (kind, self.fold_expr(*tail)) {
                     (Not, std::ops::Not::not, Int, Bool),
-                    (Neg, std::ops::Not::not, Int, Bool),
+                    (Neg, std::ops::Not::not, Bool),
+                    (Neg, |i| -(i as i128) as u128, Int),
                     (Neg, |f| (-f64::from_bits(f)).to_bits(), Float),
                     (At, std::ops::Not::not, Float), /* Lmao */
                 })

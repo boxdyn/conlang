@@ -23,18 +23,36 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
             menu::clear();
             Ok(ConValue::Empty)
         }
-        /// Evaluates a quoted expression
-        fn eval(ConValue::Quote(quote)) @env {
-            env.eval(quote.as_ref())
+
+        fn eval(string) @env {
+            use cl_interpret::error::Error;
+            let string = match *string {
+                ConValue::String(string) => string,
+                ConValue::Ref(v) => {
+                    let string = env.get_id(v).cloned().unwrap_or_default();
+                    return eval(env, &[string])
+                }
+                _ => Err(Error::TypeError())?
+            };
+            match Parser::new("eval", Lexer::new(string.to_ref())).parse::<cl_ast::Stmt>() {
+                Err(e) => Ok(ConValue::String(format!("{e}").into())),
+                Ok(v) => v.interpret(env),
+            }
         }
+
         /// Executes a file
         fn import(ConValue::String(path)) @env {
             load_file(env, &**path).or(Ok(ConValue::Empty))
         }
 
+        fn putchar(ConValue::Char(c)) {
+            print!("{c}");
+            Ok(ConValue::Empty)
+        }
+
         /// Gets a line of input from stdin
-        fn get_line() {
-            match repline::Repline::new("", "", "").read() {
+        fn get_line(ConValue::String(prompt)) {
+            match repline::Repline::new("", prompt.to_ref(), "").read() {
                 Ok(line) => Ok(ConValue::String(line.into())),
                 Err(repline::Error::CtrlD(line)) => Ok(ConValue::String(line.into())),
                 Err(repline::Error::CtrlC(_)) => Err(cl_interpret::error::Error::Break(ConValue::Empty)),

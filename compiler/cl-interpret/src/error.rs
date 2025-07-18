@@ -3,7 +3,7 @@
 use cl_ast::{Pattern, Sym};
 use cl_structures::span::Span;
 
-use super::{convalue::ConValue, env::Place};
+use super::convalue::ConValue;
 
 pub type IResult<T> = Result<T, Error>;
 
@@ -46,7 +46,7 @@ impl Error {
         Self { kind: ErrorKind::StackUnderflow, span: None }
     }
     /// Overflowed the stack
-    pub fn StackOverflow(place: Place) -> Self {
+    pub fn StackOverflow(place: usize) -> Self {
         Self { kind: ErrorKind::StackOverflow(place), span: None }
     }
     /// Exited the last scope
@@ -129,7 +129,7 @@ pub enum ErrorKind {
     /// Underflowed the stack
     StackUnderflow,
     /// Overflowed the stack
-    StackOverflow(Place),
+    StackOverflow(usize),
     /// Exited the last scope
     ScopeExit,
     /// Type incompatibility
