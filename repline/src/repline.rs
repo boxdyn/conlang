@@ -86,12 +86,10 @@ impl<'a, R: Read> Repline<'a, R> {
                 // ignore newlines, process line feeds. Not sure how cross-platform this is.
                 '\n' => {}
                 '\r' => {
+                    self.ed.push('\n', stdout)?;
                     if self.ed.at_end() {
-                        self.ed.push('\n', stdout)?;
-                    } else {
-                        self.ed.cursor_line_end(stdout)?;
+                        return Ok(self.ed.to_string());
                     }
-                    return Ok(self.ed.to_string());
                 }
                 // Ctrl+Backspace in my terminal
                 '\x17' => self.ed.erase_word(stdout)?,
@@ -147,12 +145,11 @@ impl<'a, R: Read> Repline<'a, R> {
             'A' if self.ed.at_start() && self.hindex > 0 => {
                 self.hindex -= 1;
                 self.restore_history(w)?;
-                self.ed.cursor_start(w)?;
             }
             'A' => self.ed.cursor_up(w)?,
-            'B' if self.ed.at_end() && self.hindex < self.history.len() => {
-                self.restore_history(w)?;
+            'B' if self.ed.at_end() && self.hindex < self.history.len().saturating_sub(1) => {
                 self.hindex += 1;
+                self.restore_history(w)?;
             }
             'B' => self.ed.cursor_down(w)?,
             'C' => self.ed.cursor_forward(w)?,
@@ -187,7 +184,10 @@ impl<'a, R: Read> Repline<'a, R> {
         let Self { history, hindex, ed, .. } = self;
         if let Some(history) = history.get(*hindex) {
             ed.restore(history, w)?;
-            ed.print_err(format_args!(" History {hindex} restored!"), w)?;
+            ed.print_err(
+                format_args!("\t\x1b[30mHistory {hindex} restored!\x1b[0m"),
+                w,
+            )?;
         }
         Ok(())
     }
@@ -197,9 +197,12 @@ impl<'a, R: Read> Repline<'a, R> {
         while buf.ends_with(char::is_whitespace) {
             buf.pop();
         }
-        if !self.history.contains(&buf) {
-            self.history.push_back(buf)
-        }
+        if let Some(idx) = self.history.iter().position(|v| *v == buf) {
+            self.history
+                .remove(idx)
+                .expect("should have just found this");
+        };
+        self.history.push_back(buf);
         while self.history.len() > 20 {
             self.history.pop_front();
         }

@@ -125,6 +125,7 @@ impl<'a> Editor<'a> {
     /// Writes a character at the cursor, shifting the text around as necessary.
     pub fn push<W: Write>(&mut self, c: char, w: &mut W) -> ReplResult<()> {
         self.head.push_back(c);
+        queue!(w, Clear(ClearType::UntilNewLine))?;
         self.putchar(c, w)?;
         match c {
             '\n' => self.redraw_tail(w),
