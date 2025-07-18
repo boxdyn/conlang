@@ -7,7 +7,7 @@
 
 pub use cl_interpret::{convalue::ConValue as Value, env::Environment};
 
-use cl_ast::{Block, Module, ast_visitor::Fold};
+use cl_ast::{Block, File, Module, ast_visitor::Fold};
 use cl_interpret::{convalue::ConValue, interpret::Interpret};
 use cl_lexer::Lexer;
 use cl_parser::{Parser, error::Error as ParseError, inliner::ModuleInliner};
@@ -40,7 +40,7 @@ use std::{path::Path, sync::OnceLock};
 /// # Ok(())
 /// # }
 /// ```
-pub macro conlang (
+pub macro conlang(
     $($t:tt)*
 ) {{
     // Parse once
@@ -49,11 +49,13 @@ pub macro conlang (
     |env: &mut Environment| -> Result<ConValue, EvalError> {
         FN.get_or_init(|| {
             // TODO: embed the full module tree at compile time
-            let path = AsRef::<Path>::as_ref(&concat!(env!("CARGO_MANIFEST_DIR"),"/../../", file!())).with_extension("");
+            let path =
+                AsRef::<Path>::as_ref(&concat!(env!("CARGO_MANIFEST_DIR"), "/../../", file!()))
+                    .with_extension("");
             let mut mi = ModuleInliner::new(path);
             let code = mi.fold_block(
                 Parser::new(
-                    concat!(file!(), ":", line!(), ":"),
+                    concat!(file!(), ":", line!(), ":", column!()),
                     Lexer::new(stringify!({ $($t)* })),
                 )
                 .parse::<Block>()?,
@@ -74,6 +76,60 @@ pub macro conlang (
         .map_err(Into::into)
     }
 }}
+
+pub macro conlang_include{
+    ($path:literal, $name:ident) => {
+        |env: &mut Environment| -> Result<ConValue, EvalError> {
+            // TODO: embed the full module tree at compile time
+            let path = AsRef::<Path>::as_ref(&concat!(env!("CARGO_MANIFEST_DIR"), "/../../", file!()))
+                .with_file_name(concat!($path));
+            let mut mi = ModuleInliner::new(path);
+            let code = mi.fold_module(Module {
+                name: stringify!($name).into(),
+                file: Some(
+                    Parser::new(
+                        concat!(file!(), ":", line!(), ":", column!()),
+                        Lexer::new(include_str!($path)),
+                    )
+                    .parse()?,
+                ),
+            });
+            if let Some((ie, pe)) = mi.into_errs() {
+                for (file, err) in ie {
+                    eprintln!("{}: {err}", file.display());
+                }
+                for (file, err) in pe {
+                    eprintln!("{}: {err}", file.display());
+                }
+            }
+            code.interpret(env).map_err(Into::into)
+        }
+    },
+    ($path:literal) => {
+        |env: &mut Environment| -> Result<ConValue, EvalError> {
+            // TODO: embed the full module tree at compile time
+            let path = AsRef::<Path>::as_ref(&concat!(env!("CARGO_MANIFEST_DIR"), "/../../", file!()))
+                .with_file_name(concat!($path));
+            let mut mi = ModuleInliner::new(path);
+            let code = mi.fold_file(
+                Parser::new(
+                    concat!(file!(), ":", line!(), ":", column!()),
+                    Lexer::new(include_str!($path)),
+                )
+                .parse()?,
+            );
+            if let Some((ie, pe)) = mi.into_errs() {
+                for (file, err) in ie {
+                    eprintln!("{}: {err}", file.display());
+                }
+                for (file, err) in pe {
+                    eprintln!("{}: {err}", file.display());
+                }
+            }
+            code.interpret(env).map_err(Into::into)
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub enum EvalError {

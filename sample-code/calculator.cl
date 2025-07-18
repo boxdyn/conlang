@@ -1,34 +1,40 @@
 #!/usr/bin/env -S conlang-run 
 //! A simple five-function pn calculator
 
-// TODO: enum constructors in the interpreter
-struct Atom(f64);
-struct Op(char, [Expr]);
-
 enum Expr {
     Atom(f64),
     Op(char, [Expr]),
 }
 
 
-// Evaluates an expression
-fn eval(expr: Expr) -> isize {
+/// executes an expression
+fn execute(expr: Expr) -> f64 {
     match expr {
-        Atom(value) => value,
-        Op('*', [lhs, rhs]) => eval(lhs) * eval(rhs),
-        Op('/', [lhs, rhs]) => eval(lhs) / eval(rhs),
-        Op('%', [lhs, rhs]) => eval(lhs) % eval(rhs),
-        Op('+', [lhs, rhs]) => eval(lhs) + eval(rhs),
-        Op('-', [lhs, rhs]) => eval(lhs) - eval(rhs),
-        Op('-', [lhs]) => - eval(lhs),
-        Op(other, ..rest) => {
-            panic("ERROR: Unknown operator: " + other)
-        },
+        Expr::Atom(value) => value,
+        Expr::Op('*', [lhs, rhs]) => execute(lhs) * execute(rhs),
+        Expr::Op('/', [lhs, rhs]) => execute(lhs) / execute(rhs),
+        Expr::Op('%', [lhs, rhs]) => execute(lhs) % execute(rhs),
+        Expr::Op('+', [lhs, rhs]) => execute(lhs) + execute(rhs),
+        Expr::Op('-', [lhs, rhs]) => execute(lhs) - execute(rhs),
+        Expr::Op('-', [lhs]) => - execute(lhs),
         other => {
-            println(other);
-            panic("ERROR: Unknown operation ^")
+            panic("Unknown operation: " + fmt(other))
         }
     }
+}
+
+
+/// Pretty-prints an expression
+fn fmt_expr(expr: Expr) -> str {
+    match expr {
+        Expr::Atom(value) => fmt(value),
+        Expr::Op(operator, [lhs, rhs]) => fmt('(', fmt_expr(lhs), ' ', operator, ' ', fmt_expr(rhs), ')'),
+        Expr::Op(operator, [rhs]) => fmt(operator, fmt_expr(rhs)),
+        _ => println("Unexpected expr: ", expr),
+    }
+}
+fn print_expr(expr: Expr) {
+    println(fmt_expr(expr))
 }
 
 
@@ -42,9 +48,11 @@ fn parse(line: [char], power: i32) -> (Expr, [char]) {
 
     let (lhs, line) = match line {
         ['0'..='9', ..] => number(line),
-        [op, ..rest] => {
-            parse(rest, pre_bp(op)).map(|lhs| Op(op, [lhs]))
-        },
+        ['(', ..rest] => match parse(rest, Power::None) {
+                (expr, [')', ..rest]) => (expr, rest),
+                (expr, rest) => panic(fmt("Expected ')', got ", expr, ", ", rest)),
+            },
+        [op, ..rest] => parse(rest, pre_bp(op)).map(|lhs| Expr::Op(op, [lhs])),
         _ => panic("Unexpected end of input"),
     };
 
@@ -53,7 +61,7 @@ fn parse(line: [char], power: i32) -> (Expr, [char]) {
         if before < power {
             break;
         };
-        (lhs, line) = parse(rest, after).map(|rhs| Op(op, [lhs, rhs]));
+        (lhs, line) = parse(rest, after).map(|rhs| Expr::Op(op, [lhs, rhs]));
     };
     (lhs, line)
 }
@@ -61,35 +69,49 @@ fn parse(line: [char], power: i32) -> (Expr, [char]) {
 fn number(line: [char]) -> (Expr, [char]) {
     let value = 0.0;
     while (let [first, ..rest] = line) && (let '0'..='9' = first) {
-        value = value * 10.0 + (first as f64 - '0' as f64);
-        line = rest;
-    };
-    (Atom(value), line)
+        (value, line) = (value * 10.0 + (first as f64 - '0' as f64), rest)
+    } else (Expr::Atom(value), line)
 }
 
 fn space(line: [char]) -> [char] {
     match line {
         [' ', ..rest] => space(rest),
+        ['\n', ..rest] => space(rest),
         line => line
     }
+}
+
+enum Power {
+    None,
+    Factor,
+    Term,
+    Exponent,
+    Unary,
 }
 
 fn inf_bp(op: char) -> (i32, i32) {
     (|x| (2 * x, 2 * x + 1))(
     match op {
-        '*' => 2,
-        '/' => 2,
-        '%' => 2,
-        '+' => 1,
-        '-' => 1,
-        _ => -1,
+        '*' => Power::Term,
+        '/' => Power::Term,
+        '%' => Power::Term,
+        '+' => Power::Factor,
+        '-' => Power::Factor,
+        _ => panic("Unknown operation: " + op),
     })
 }
 
 fn pre_bp(op: char) -> i32 {
     (|x| 2 * x + 1)(
     match op {
-        '-' => 9,
-        _ => -1,
+        '-' => Power::Unary,
+        _ => panic("Unknown unary operator: " + op),
     })
+}
+
+fn my_eval(input: str) {
+    let (expr, rest) = input.chars().parse(0);
+    println(expr, " ", rest);
+
+    execute(expr)
 }

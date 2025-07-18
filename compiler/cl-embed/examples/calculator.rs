@@ -1,25 +1,27 @@
+//! Demonstrates the cl_embed library
+
 use cl_embed::*;
 use repline::{Response, prebaked};
 
 fn main() -> Result<(), repline::Error> {
-    prebaked::read_and("", "calc >", "   ? >", |line| {
-        calc(line).map_err(Into::into)
-    })
-}
-
-fn calc(line: &str) -> Result<Response, EvalError> {
     let mut env = Environment::new();
-    env.bind("line", line);
 
-    let res = conlang!(
-        mod expression;
-        use expression::{eval, parse};
+    if let Err(e) = conlang_include!("calculator/expression.cl")(&mut env) {
+        panic!("{e}")
+    }
 
-        let (expr, rest) = parse(line.chars(), 0);
-        eval(expr)
-    )(&mut env)?;
+    prebaked::read_and("", "calc >", "   ? >", |line| {
+        env.bind("line", line);
 
-    println!("{res}");
+        let res = conlang! {
 
-    Ok(Response::Accept)
+            let (expr, rest) = parse(line.chars(), Power::None);
+            execute(expr)
+
+        }(&mut env)?;
+
+        println!("{res}");
+
+        Ok(Response::Accept)
+    })
 }
