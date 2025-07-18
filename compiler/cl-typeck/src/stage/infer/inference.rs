@@ -7,7 +7,6 @@ use std::iter;
 use super::{engine::InferenceEngine, error::InferenceError};
 use crate::{
     handle::Handle,
-    table::NodeKind,
     type_expression::TypeExpression,
     type_kind::{Adt, TypeKind},
 };
@@ -22,9 +21,227 @@ pub trait Inference<'a> {
     fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult;
 }
 
+impl<'a> Inference<'a> for File {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
+        let Self { name: _, items } = self;
+        for item in items {
+            item.infer(e)?;
+        }
+        Ok(e.empty())
+    }
+}
+
+impl<'a> Inference<'a> for Item {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
+        let Self { span: _, attrs: _, vis: _, kind } = self;
+        kind.infer(e)
+    }
+}
+
+impl<'a> Inference<'a> for ItemKind {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
+        match self {
+            ItemKind::Module(v) => v.infer(e),
+            ItemKind::Alias(v) => v.infer(e),
+            ItemKind::Enum(v) => v.infer(e),
+            ItemKind::Struct(v) => v.infer(e),
+            ItemKind::Const(v) => v.infer(e),
+            ItemKind::Static(v) => v.infer(e),
+            ItemKind::Function(v) => v.infer(e),
+            ItemKind::Impl(v) => v.infer(e),
+            ItemKind::Use(_v) => Ok(e.empty()),
+        }
+    }
+}
+
+impl<'a> Inference<'a> for Generics {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
+        // bind names
+        for name in &self.vars {
+            let ty = e.new_var();
+            e.table.add_child(e.at, *name, ty);
+        }
+        Ok(e.empty())
+    }
+}
+
+impl<'a> Inference<'a> for Module {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
+        let Self { name, file } = self;
+        let Some(file) = file else {
+            return Err(InferenceError::NotFound((*name).into()));
+        };
+        let module = e.by_name(name)?;
+        e.at(module).infer(file)
+    }
+}
+
+impl<'a> Inference<'a> for Alias {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
+        Ok(e.empty())
+    }
+}
+
+impl<'a> Inference<'a> for Const {
+    #[allow(unused)]
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
+        let Self { name, ty, init } = self;
+        // Same as static
+        let node = e.by_name(name)?;
+        let ty = e.infer(ty)?;
+        let mut scope = e.at(node);
+        // infer body
+        let body = scope.infer(init)?;
+        // unify with ty
+        e.unify(body, ty)?;
+
+        Ok(node)
+    }
+}
+
+impl<'a> Inference<'a> for Static {
+    #[allow(unused)]
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
+        let Static { mutable, name, ty, init } = self;
+        let node = e.by_name(name)?;
+        let ty = e.infer(ty)?;
+        let mut scope = e.at(node);
+        // infer body
+        let body = scope.infer(init)?;
+        // unify with ty
+        e.unify(body, ty)?;
+
+        Ok(node)
+    }
+}
+
+impl<'a> Inference<'a> for Function {
+    #[allow(unused)]
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
+        let Self { name, gens, sign, bind, body } = self;
+        // bind name to signature
+        let node = e.by_name(name)?;
+        let node = e.deep_clone(node);
+        let fnty = e.by_name(sign)?;
+        e.unify(node, fnty)?;
+
+        // bind gens to new variables at function scope
+        let mut scope = e.at(node);
+        scope.infer(gens)?;
+
+        // bind binds to args
+        let pat = scope.infer(bind)?;
+        let arg = scope.by_name(sign.args.as_ref())?;
+        scope.unify(pat, arg);
+
+        let mut retscope = scope.open_rset();
+
+        // infer body
+        let bodty = retscope.infer(body)?;
+        let rety = sign.rety.infer(&mut retscope)?;
+        // unify body with rety
+        retscope.unify(bodty, rety)?;
+        // unify rset with rety
+        if let Some(rset) = retscope.rset.get() {
+            scope.unify(rset, rety)?;
+        }
+        Ok(node)
+    }
+}
+
+// TODO: do we need type inference/checking in struct definitions?
+// there are no bodies
+
+impl<'a> Inference<'a> for Enum {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
+        let Self { name, gens, variants } = self;
+        let node = e.by_name(name)?;
+        let mut scope = e.at(node);
+
+        scope.infer(gens)?;
+        for variant in variants {
+            let var_ty = scope.infer(variant)?;
+            scope.unify(var_ty, node)?;
+        }
+        Ok(node)
+    }
+}
+
+impl<'a> Inference<'a> for Variant {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
+        let Self { name: _, kind: _, body } = self;
+        let ty = e.new_inferred();
+
+        // TODO: evaluate kind
+
+        if let Some(body) = body {
+            let value = body.infer(e)?;
+            e.unify(ty, value)?;
+        }
+
+        Ok(ty)
+    }
+}
+
+impl<'a> Inference<'a> for Struct {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
+        Ok(e.new_inferred())
+    }
+}
+
+impl<'a> Inference<'a> for Impl {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
+        let Self { gens: _, target, body } = self;
+        // TODO: match gens to target gens
+        // gens.infer(e)?;
+        let instance = target.infer(e)?;
+        let instance = e.def_usage(instance);
+        let mut scope = e.at(instance);
+        scope.infer(body)
+    }
+}
+
+impl<'a> Inference<'a> for ImplKind {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
+        match self {
+            ImplKind::Type(ty) => ty.infer(e),
+            ImplKind::Trait { impl_trait: _, for_type } => for_type.infer(e),
+        }
+    }
+}
+
+impl<'a> Inference<'a> for Ty {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
+        Ok(e.by_name(self)?)
+    }
+}
+
+impl<'a> Inference<'a> for cl_ast::Stmt {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
+        let Self { span: _, kind, semi } = self;
+        let out = kind.infer(e)?;
+        Ok(match semi {
+            Semi::Terminated => e.empty(),
+            Semi::Unterminated => out,
+        })
+    }
+}
+
+impl<'a> Inference<'a> for cl_ast::StmtKind {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
+        match self {
+            StmtKind::Empty => Ok(e.empty()),
+            StmtKind::Item(item) => item.infer(e),
+            StmtKind::Expr(expr) => expr.infer(e),
+        }
+    }
+}
+
 impl<'a> Inference<'a> for cl_ast::Expr {
     fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
-        self.kind.infer(e)
+        let out = self.kind.infer(e)?;
+        println!("expr ({self}) -> {}", e.entry(out));
+        Ok(out)
     }
 }
 
@@ -32,7 +249,7 @@ impl<'a> Inference<'a> for cl_ast::ExprKind {
     fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         match self {
             ExprKind::Empty => Ok(e.empty()),
-            ExprKind::Closure(_) => todo!("Infer the type of a closure"),
+            ExprKind::Closure(closure) => closure.infer(e),
             ExprKind::Tuple(tuple) => tuple.infer(e),
             ExprKind::Structor(structor) => structor.infer(e),
             ExprKind::Array(array) => array.infer(e),
@@ -62,6 +279,23 @@ impl<'a> Inference<'a> for cl_ast::ExprKind {
             ExprKind::Return(r) => r.infer(e),
             ExprKind::Continue => Ok(e.never()),
         }
+    }
+}
+
+impl<'a> Inference<'a> for Closure {
+    fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
+        let Self { arg, body } = self;
+        let args = arg.infer(e)?;
+
+        let mut scope = e.block_scope();
+        let mut scope = scope.open_rset();
+        let rety = scope.infer(body)?;
+
+        if let Some(rset) = scope.rset.get() {
+            e.unify(rety, rset)?;
+        }
+
+        Ok(e.table.anon_type(TypeKind::FnSig { args, rety }))
     }
 }
 
@@ -123,7 +357,7 @@ impl<'a> Inference<'a> for Structor {
 impl<'a> Inference<'a> for Array {
     fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Array { values } = self;
-        let out = e.new_var();
+        let out = e.new_inferred();
         for value in values {
             let ty = value.infer(e)?;
             e.unify(out, ty)?;
@@ -136,7 +370,15 @@ impl<'a> Inference<'a> for ArrayRep {
     fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let ArrayRep { value, repeat } = self;
         let ty = value.infer(e)?;
-        Ok(e.new_array(ty, *repeat))
+        let rep = repeat.infer(e)?;
+        let usize_ty = e.usize();
+        e.unify(rep, usize_ty)?;
+        match &repeat.kind {
+            ExprKind::Literal(Literal::Int(repeat)) => Ok(e.new_array(ty, *repeat as usize)),
+            _ => {
+                todo!("TODO: constant folding before type checking?");
+            }
+        }
     }
 }
 
@@ -196,14 +438,13 @@ impl<'a> Inference<'a> for Block {
                     _ => {}
                 }
             }
-            match (&ret.kind, &ret.semi) {
-                (StmtKind::Expr(expr), Semi::Terminated) => {
-                    expr.infer(&mut e)?;
-                }
-                (StmtKind::Expr(expr), Semi::Unterminated) => {
-                    return expr.infer(&mut e);
-                }
-                _ => {}
+            let out = if let StmtKind::Expr(expr) = &ret.kind {
+                expr.infer(&mut e)?
+            } else {
+                empty
+            };
+            if Semi::Unterminated == ret.semi {
+                return Ok(out);
             }
         }
         Ok(empty)
@@ -315,10 +556,11 @@ impl<'a> Inference<'a> for Unary {
         match kind {
             UnaryKind::Deref => {
                 let tail = tail.infer(e)?;
+                let tail = e.def_usage(tail);
                 // TODO: get the base type
                 match e.entry(tail).ty() {
                     Some(&TypeKind::Ref(h)) => Ok(h),
-                    other => todo!("Deref {other:?}"),
+                    _ => todo!("Deref {}", e.entry(tail)),
                 }
             }
             UnaryKind::Loop => {
@@ -333,7 +575,10 @@ impl<'a> Inference<'a> for Unary {
                 e.unify(tail, empt)?;
 
                 // Return breakset
-                Ok(e.bset)
+                match e.bset.get() {
+                    Some(bset) => Ok(bset),
+                    None => Ok(e.never()),
+                }
             }
             _op => {
                 // Infer the tail expression
@@ -455,7 +700,7 @@ impl<'a> Inference<'a> for Let {
             Some(ty) => ty
                 .evaluate(e.table, e.at)
                 .map_err(InferenceError::AnnotationEval)?,
-            None => e.new_var(),
+            None => e.new_inferred(),
         };
         // Infer the initializer
         if let Some(init) = init {
@@ -465,8 +710,6 @@ impl<'a> Inference<'a> for Let {
         }
         // Deep copy the ty, if it exists
         let ty = e.deep_clone(ty);
-        // Enter a local scope (modifies the current scope)
-        e.local_scope();
         // Infer the pattern
         let patty = name.infer(e)?;
         // Unify the pattern and the ty
@@ -513,11 +756,9 @@ impl<'a> Inference<'a> for Pattern {
             Pattern::Name(name) => {
                 // Evaluating a pattern creates and enters a new scope.
                 // Surely this will cause zero problems.
-                let node = e.table.new_entry(e.at, NodeKind::Local);
-                e.table.set_ty(node, TypeKind::Variable);
-                e.table.add_child(e.at, *name, node);
-                e.at = node;
-                Ok(node)
+                e.local_scope(*name);
+                e.table.set_ty(e.at, TypeKind::Inferred);
+                Ok(e.at)
             }
             Pattern::Path(path) => {
                 // Evaluating a path pattern puts type constraints on the scrutinee
@@ -525,8 +766,12 @@ impl<'a> Inference<'a> for Pattern {
                     .map_err(|_| InferenceError::NotFound(path.clone()))
             }
             Pattern::Literal(literal) => literal.infer(e),
-            Pattern::Rest(Some(pat)) => pat.infer(e), // <-- glaring soundness holes
-            Pattern::Rest(_) => todo!("Fix glaring soundness holes in pattern"),
+            Pattern::Rest(Some(pat)) => {
+                eprintln!("TODO: Rest patterns in tuples?");
+                let ty = pat.infer(e)?;
+                Ok(e.new_slice(ty))
+            }
+            Pattern::Rest(_) => Ok(e.new_inferred()),
             Pattern::Ref(_, pattern) => {
                 let ty = pattern.infer(e)?;
                 Ok(e.new_ref(ty))
@@ -561,12 +806,30 @@ impl<'a> Inference<'a> for Pattern {
                     Ok(e.new_slice(ty))
                 }
                 [] => {
-                    let ty = e.new_var();
+                    let ty = e.new_inferred();
                     Ok(e.new_slice(ty))
                 }
             },
-            Pattern::Struct(_path, _items) => todo!("Struct patterns"),
-            Pattern::TupleStruct(_path, _patterns) => todo!("Tuple struct patterns"),
+            Pattern::Struct(_path, _items) => {
+                eprintln!("TODO: struct patterns: {self}");
+                Ok(e.empty())
+            }
+            Pattern::TupleStruct(path, patterns) => {
+                eprintln!("TODO: tuple struct patterns: {self}");
+                let struc = e.by_name(path)?;
+                let Some(TypeKind::Adt(Adt::TupleStruct(ts))) = e.entry(struc).ty() else {
+                    Err(InferenceError::Mismatch(struc, e.never()))?
+                };
+                let ts: Vec<_> = ts.iter().map(|(_v, h)| *h).collect();
+                let tys = patterns
+                    .iter()
+                    .map(|pat| pat.infer(e))
+                    .collect::<Result<Vec<Handle>, InferenceError>>()?;
+                let ts = e.new_tuple(ts);
+                let tup = e.new_tuple(tys);
+                e.unify(ts, tup)?;
+                Ok(struc)
+            }
         }
     }
 }
@@ -583,7 +846,7 @@ impl<'a> Inference<'a> for While {
         // Infer the fail branch
         let fail = fail.infer(e)?;
         // Unify the fail branch with breakset
-        let mut e = InferenceEngine { bset: fail, ..e.scoped() };
+        let mut e = e.open_bset();
 
         // Infer the pass branch
         let pass = pass.infer(&mut e)?;
@@ -591,8 +854,13 @@ impl<'a> Inference<'a> for While {
         let empt = e.empty();
         e.unify(pass, empt)?;
 
-        // Return breakset
-        Ok(e.bset)
+        match e.bset.get() {
+            None => Ok(e.empty()),
+            Some(bset) => {
+                e.unify(fail, bset)?;
+                Ok(fail)
+            }
+        }
     }
 }
 
@@ -638,9 +906,8 @@ impl<'a> Inference<'a> for For {
 
         // Infer the fail branch
         let fail = fail.infer(&mut e)?;
-        // Unify the fail branch with breakset
-        let mut e = InferenceEngine { bset: fail, ..e.scoped() };
-        e.bset = fail;
+        // Open a breakset
+        let mut e = e.open_bset();
 
         // Infer the pass branch
         let pass = pass.infer(&mut e)?;
@@ -649,7 +916,12 @@ impl<'a> Inference<'a> for For {
         e.unify(pass, empt)?;
 
         // Return breakset
-        Ok(e.bset)
+        if let Some(bset) = e.bset.get() {
+            e.unify(fail, bset)?;
+            Ok(fail)
+        } else {
+            Ok(e.empty())
+        }
     }
 }
 
@@ -665,7 +937,7 @@ impl<'a> Inference<'a> for Break {
         // Infer the body of the break
         let ty = body.infer(e)?;
         // Unify it with the breakset of the loop
-        e.unify(ty, e.bset)?;
+        e.bset(ty)?;
         // Return never
         Ok(e.never())
     }
@@ -677,7 +949,7 @@ impl<'a> Inference<'a> for Return {
         // Infer the body of the return
         let ty = body.infer(e)?;
         // Unify it with the return-set of the function
-        e.unify(ty, e.rset)?;
+        e.rset(ty)?;
         // Return never
         Ok(e.never())
     }

@@ -15,9 +15,9 @@ pub fn impl_one(table: &mut Table, node: Handle) -> Result<(), Handle> {
     let Some(target) = table.impl_target(node) else {
         Err(node)?
     };
-    let Table { children, imports, .. } = table;
-    if let Some(children) = children.get(&node) {
-        imports.entry(target).or_default().extend(children);
+    if let Some(children) = table.children.get_mut(&node) {
+        let children = children.clone();
+        table.children.entry(target).or_default().extend(children);
     }
     Ok(())
 }

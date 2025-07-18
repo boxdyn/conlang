@@ -31,3 +31,9 @@ impl fmt::Display for InferenceError {
         }
     }
 }
+
+impl From<crate::type_expression::Error> for InferenceError {
+    fn from(value: crate::type_expression::Error) -> Self {
+        Self::AnnotationEval(value)
+    }
+}

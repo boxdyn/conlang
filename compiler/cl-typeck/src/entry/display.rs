@@ -60,7 +60,14 @@ impl fmt::Display for Entry<'_, '_> {
                 TypeKind::Module => write!(f, "module?"),
             }
         } else {
-            write!(f, "{kind}")
+            match kind {
+                NodeKind::Type
+                | NodeKind::Const
+                | NodeKind::Static
+                | NodeKind::Temporary
+                | NodeKind::Let => write!(f, "WARNING: NO TYPE ASSIGNED FOR {}", self.id),
+                _ => write!(f, "{kind}"),
+            }
         }
     }
 }

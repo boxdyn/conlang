@@ -1,6 +1,7 @@
 //! Categorizes an entry in a table according to its embedded type information
-
+#![allow(unused)]
 use crate::{
+    entry::EntryMut,
     handle::Handle,
     source::Source,
     table::{NodeKind, Table},
@@ -11,39 +12,37 @@ use cl_ast::*;
 
 /// Ensures a type entry exists for the provided handle in the table
 pub fn categorize(table: &mut Table, node: Handle) -> CatResult<()> {
-    if let Some(meta) = table.meta(node) {
-        for meta @ Meta { name, kind } in meta {
-            if let ("lang", MetaKind::Equals(Literal::String(s))) = (&**name, kind) {
-                let kind =
-                    TypeKind::Primitive(s.parse().map_err(|_| Error::BadMeta(meta.clone()))?);
-                table.set_ty(node, kind);
-                return Ok(());
-            }
-        }
-    }
-
     let Some(source) = table.source(node) else {
         return Ok(());
     };
 
     match source {
-        Source::Root => Ok(()),
-        Source::Module(_) => Ok(()),
-        Source::Alias(a) => cat_alias(table, node, a),
-        Source::Enum(e) => cat_enum(table, node, e),
-        Source::Variant(v) => cat_variant(table, node, v),
-        Source::Struct(s) => cat_struct(table, node, s),
-        Source::Const(c) => cat_const(table, node, c),
-        Source::Static(s) => cat_static(table, node, s),
-        Source::Function(f) => cat_function(table, node, f),
-        Source::Local(l) => cat_local(table, node, l),
-        Source::Impl(i) => cat_impl(table, node, i),
-        Source::Use(_) => Ok(()),
-        Source::Ty(ty) => ty
-            .evaluate(table, node)
-            .map_err(|e| Error::TypeEval(e, " while categorizing a type"))
-            .map(drop),
+        Source::Alias(a) => cat_alias(table, node, a)?,
+        Source::Enum(e) => cat_enum(table, node, e)?,
+        Source::Variant(v) => cat_variant(table, node, v)?,
+        Source::Struct(s) => cat_struct(table, node, s)?,
+        Source::Const(c) => cat_const(table, node, c)?,
+        Source::Static(s) => cat_static(table, node, s)?,
+        Source::Function(f) => cat_function(table, node, f)?,
+        Source::Local(l) => cat_local(table, node, l)?,
+        Source::Impl(i) => cat_impl(table, node, i)?,
+        _ => {}
     }
+
+    if let Some(meta) = table.meta(node) {
+        for meta @ Meta { name, kind } in meta {
+            if let ("lang", MetaKind::Equals(Literal::String(s))) = (&**name, kind) {
+                if let Ok(prim) = s.parse() {
+                    table.set_ty(node, TypeKind::Primitive(prim));
+                } else {
+                    table.mark_lang_item(s.into(), node);
+                    continue;
+                }
+                return Ok(());
+            }
+        }
+    }
+    Ok(())
 }
 
 fn parent(table: &Table, node: Handle) -> Handle {
@@ -108,7 +107,6 @@ fn cat_enum<'a>(_table: &mut Table<'a>, _node: Handle, e: &'a Enum) -> CatResult
 fn cat_variant<'a>(table: &mut Table<'a>, node: Handle, v: &'a Variant) -> CatResult<()> {
     let Variant { name, kind, body } = v;
     let parent = table.parent(node).copied().unwrap_or(table.root());
-    table.add_child(parent, *name, node);
     match (kind, body) {
         (StructKind::Empty, None) => {
             table.set_ty(node, TypeKind::Adt(Adt::UnitStruct));
@@ -195,7 +193,7 @@ fn cat_local(table: &mut Table, node: Handle, l: &Let) -> CatResult<()> {
 
 fn cat_impl(table: &mut Table, node: Handle, i: &Impl) -> CatResult<()> {
     let parent = parent(table, node);
-    let Impl { target, body: _ } = i;
+    let Impl { gens, target, body: _ } = i;
     let target = match target {
         ImplKind::Type(t) => t.evaluate(table, parent),
         ImplKind::Trait { impl_trait: _, for_type: t } => t.evaluate(table, parent),

@@ -1,7 +1,10 @@
+use std::{cell::Cell, collections::HashSet, rc::Rc};
+
 use super::error::InferenceError;
 use crate::{
     entry::Entry,
     handle::Handle,
+    source::Source,
     stage::infer::inference::Inference,
     table::{NodeKind, Table},
     type_expression::TypeExpression,
@@ -28,14 +31,16 @@ use cl_ast::Sym;
       - for<T, R> type T -> R           // on a per-case basis!
 */
 
+type HandleSet = Rc<Cell<Option<Handle>>>;
+
 pub struct InferenceEngine<'table, 'a> {
     pub(super) table: &'table mut Table<'a>,
     /// The current working node
     pub(crate) at: Handle,
     /// The current breakset
-    pub(crate) bset: Handle,
+    pub(crate) bset: HandleSet,
     /// The current returnset
-    pub(crate) rset: Handle,
+    pub(crate) rset: HandleSet,
 }
 
 impl<'table, 'a> InferenceEngine<'table, 'a> {
@@ -46,48 +51,69 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
 
     /// Constructs a new [`InferenceEngine`], scoped around a [`Handle`] in a [`Table`].
     pub fn new(table: &'table mut Table<'a>, at: Handle) -> Self {
-        let never = table.anon_type(TypeKind::Never);
-        Self { at, table, bset: never, rset: never }
+        Self { at, table, bset: Default::default(), rset: Default::default() }
     }
 
     /// Constructs an [`InferenceEngine`] that borrows the same table as `self`,
     /// but with a shortened lifetime.
     pub fn scoped(&mut self) -> InferenceEngine<'_, 'a> {
-        InferenceEngine { at: self.at, table: self.table, bset: self.bset, rset: self.rset }
+        InferenceEngine {
+            at: self.at,
+            table: self.table,
+            bset: self.bset.clone(),
+            rset: self.rset.clone(),
+        }
     }
 
     pub fn infer_all(&mut self) -> Vec<(Handle, InferenceError)> {
-        let iter = self.table.handle_iter();
+        let queue = std::mem::take(&mut self.table.unchecked);
         let mut res = Vec::new();
-        for handle in iter {
+        for handle in queue {
             let mut eng = self.at(handle);
-            // TODO: use sources instead of bodies, and infer the type globally
-            let Some(body) = eng.table.body(handle) else {
+            let Some(source) = eng.table.source(handle) else {
+                eprintln!("No source found for {handle}");
                 continue;
             };
-            eprintln!("Evaluating body {body}");
-            match body.infer(&mut eng) {
-                Ok(ty) => println!("=> {}", eng.table.entry(ty)),
-                Err(e) => {
-                    match &e {
-                        &InferenceError::Mismatch(a, b) => {
-                            eprintln!(
-                                "=> Mismatched types: {}, {}",
-                                eng.table.entry(a),
-                                eng.table.entry(b)
-                            );
-                        }
-                        &InferenceError::Recursive(a, b) => {
-                            eprintln!(
-                                "=> Recursive types: {}, {}",
-                                eng.table.entry(a),
-                                eng.table.entry(b)
-                            );
-                        }
-                        e => eprintln!("=> {e}"),
-                    }
-                    res.push((handle, e))
+
+            println!("Inferring {source}");
+
+            let ret = match source {
+                Source::Module(v) => v.infer(&mut eng),
+                Source::Alias(v) => v.infer(&mut eng),
+                Source::Enum(v) => v.infer(&mut eng),
+                Source::Variant(v) => v.infer(&mut eng),
+                Source::Struct(v) => v.infer(&mut eng),
+                Source::Const(v) => v.infer(&mut eng),
+                Source::Static(v) => v.infer(&mut eng),
+                Source::Function(v) => v.infer(&mut eng),
+                Source::Local(v) => v.infer(&mut eng),
+                Source::Impl(v) => v.infer(&mut eng),
+                _ => Ok(eng.empty()),
+            };
+
+            match &ret {
+                &Ok(handle) => println!("=> {}", eng.entry(handle)),
+                Err(err @ InferenceError::AnnotationEval(_)) => eprintln!("=> ERROR: {err}"),
+                Err(InferenceError::FieldCount(h, want, got)) => {
+                    eprintln!("=> ERROR: Field count {want} != {got} in {}", eng.entry(*h))
                 }
+                Err(err @ InferenceError::NotFound(_)) => eprintln!("=> ERROR: {err}"),
+                Err(InferenceError::Mismatch(h1, h2)) => eprintln!(
+                    "=> ERROR: Type mismatch {} != {}",
+                    eng.entry(*h1),
+                    eng.entry(*h2)
+                ),
+                Err(InferenceError::Recursive(h1, h2)) => eprintln!(
+                    "=> ERROR: Cycle found in types {}, {}",
+                    eng.entry(*h1),
+                    eng.entry(*h2)
+                ),
+            }
+            println!();
+
+            if let Err(err) = ret {
+                res.push((handle, err));
+                eng.table.mark_unchecked(handle);
             }
         }
         res
@@ -99,22 +125,36 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
     }
 
     pub fn open_bset(&mut self) -> InferenceEngine<'_, 'a> {
-        InferenceEngine { bset: self.new_var(), ..self.scoped() }
+        InferenceEngine { bset: Default::default(), ..self.scoped() }
     }
 
     pub fn open_rset(&mut self) -> InferenceEngine<'_, 'a> {
-        InferenceEngine { rset: self.new_var(), ..self.scoped() }
+        InferenceEngine { rset: Default::default(), ..self.scoped() }
+    }
+
+    pub fn bset(&mut self, ty: Handle) -> Result<(), InferenceError> {
+        match self.bset.get() {
+            Some(bset) => self.unify(ty, bset),
+            None => {
+                self.bset.set(Some(ty));
+                Ok(())
+            }
+        }
+    }
+
+    pub fn rset(&mut self, ty: Handle) -> Result<(), InferenceError> {
+        match self.rset.get() {
+            Some(rset) => self.unify(ty, rset),
+            None => {
+                self.rset.set(Some(ty));
+                Ok(())
+            }
+        }
     }
 
     /// Constructs an [Entry] out of a [Handle], for ease of use
     pub fn entry(&self, of: Handle) -> Entry<'_, 'a> {
         self.table.entry(of)
-    }
-
-    #[deprecated = "Use dedicated methods instead."]
-    pub fn from_type_kind(&mut self, kind: TypeKind) -> Handle {
-        // TODO: preserve type heirarchy (for, i.e., reference types)
-        self.table.anon_type(kind)
     }
 
     pub fn by_name<Out, N: TypeExpression<Out>>(
@@ -127,6 +167,10 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
     /// Creates a new unbound [type variable](Handle)
     pub fn new_var(&mut self) -> Handle {
         self.table.type_variable()
+    }
+
+    pub fn new_inferred(&mut self) -> Handle {
+        self.table.inferred_type()
     }
 
     /// Creates a variable that is a new instance of another [Type](Handle)
@@ -217,7 +261,7 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
 
     /// Creates a new inferred-integer literal
     pub fn integer_literal(&mut self) -> Handle {
-        let h = self.table.new_entry(self.at, NodeKind::Local);
+        let h = self.table.new_entry(self.at, NodeKind::Temporary);
         self.table
             .set_ty(h, TypeKind::Primitive(Primitive::Integer));
         h
@@ -225,20 +269,22 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
 
     /// Creates a new inferred-float literal
     pub fn float_literal(&mut self) -> Handle {
-        let h = self.table.new_entry(self.at, NodeKind::Local);
+        let h = self.table.new_entry(self.at, NodeKind::Temporary);
         self.table.set_ty(h, TypeKind::Primitive(Primitive::Float));
         h
     }
 
     /// Enters a new scope
-    pub fn local_scope(&mut self) {
-        let scope = self.table.new_entry(self.at, NodeKind::Local);
+    pub fn local_scope(&mut self, name: Sym) {
+        let scope = self.table.new_entry(self.at, NodeKind::Scope);
+        self.table.add_child(self.at, name, scope);
         self.at = scope;
     }
 
     /// Creates a new locally-scoped InferenceEngine.
     pub fn block_scope(&mut self) -> InferenceEngine<'_, 'a> {
-        let scope = self.table.new_entry(self.at, NodeKind::Local);
+        let scope = self.table.new_entry(self.at, NodeKind::Scope);
+        self.table.add_child(self.at, "".into(), scope);
         self.at(scope)
     }
 
@@ -264,27 +310,44 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
 
     /// Checks whether there are any unbound type variables in this type
     pub fn is_generic(&self, ty: Handle) -> bool {
-        let entry = self.table.entry(ty);
-        let Some(ty) = entry.ty() else {
-            return false;
-        };
-        match ty {
-            TypeKind::Inferred => false,
-            TypeKind::Variable => true,
-            &TypeKind::Array(h, _) => self.is_generic(h),
-            &TypeKind::Instance(h) => self.is_generic(h),
-            TypeKind::Primitive(_) => false,
-            TypeKind::Adt(Adt::Enum(tys)) => tys.iter().any(|(_, ty)| self.is_generic(*ty)),
-            TypeKind::Adt(Adt::Struct(tys)) => tys.iter().any(|&(_, _, ty)| self.is_generic(ty)),
-            TypeKind::Adt(Adt::TupleStruct(tys)) => tys.iter().any(|&(_, ty)| self.is_generic(ty)),
-            TypeKind::Adt(Adt::UnitStruct) => false,
-            TypeKind::Adt(Adt::Union(tys)) => tys.iter().any(|&(_, ty)| self.is_generic(ty)),
-            &TypeKind::Ref(h) => self.is_generic(h),
-            &TypeKind::Slice(h) => self.is_generic(h),
-            TypeKind::Tuple(handles) => handles.iter().any(|&ty| self.is_generic(ty)),
-            &TypeKind::FnSig { args, rety } => self.is_generic(args) || self.is_generic(rety),
-            TypeKind::Empty | TypeKind::Never | TypeKind::Module => false,
+        fn is_generic_rec(this: &InferenceEngine, ty: Handle, seen: &mut HashSet<Handle>) -> bool {
+            if !seen.insert(ty) {
+                return false;
+            }
+            let entry = this.table.entry(ty);
+            let Some(ty) = entry.ty() else {
+                return false;
+            };
+            match ty {
+                TypeKind::Inferred => false,
+                TypeKind::Variable => true,
+                &TypeKind::Array(ty, _) => is_generic_rec(this, ty, seen),
+                &TypeKind::Instance(ty) => is_generic_rec(this, ty, seen),
+                TypeKind::Primitive(_) => false,
+                TypeKind::Adt(Adt::Enum(tys)) => {
+                    tys.iter().any(|&(_, ty)| is_generic_rec(this, ty, seen))
+                }
+                TypeKind::Adt(Adt::Struct(tys)) => {
+                    tys.iter().any(|&(_, _, ty)| is_generic_rec(this, ty, seen))
+                }
+                TypeKind::Adt(Adt::TupleStruct(tys)) => {
+                    tys.iter().any(|&(_, ty)| is_generic_rec(this, ty, seen))
+                }
+                TypeKind::Adt(Adt::UnitStruct) => false,
+                TypeKind::Adt(Adt::Union(tys)) => {
+                    tys.iter().any(|&(_, ty)| is_generic_rec(this, ty, seen))
+                }
+                &TypeKind::Ref(ty) => is_generic_rec(this, ty, seen),
+                &TypeKind::Ptr(ty) => is_generic_rec(this, ty, seen),
+                &TypeKind::Slice(ty) => is_generic_rec(this, ty, seen),
+                TypeKind::Tuple(tys) => tys.iter().any(|&ty| is_generic_rec(this, ty, seen)),
+                &TypeKind::FnSig { args, rety } => {
+                    is_generic_rec(this, args, seen) || is_generic_rec(this, rety, seen)
+                }
+                TypeKind::Empty | TypeKind::Never | TypeKind::Module => false,
+            }
         }
+        is_generic_rec(self, ty, &mut HashSet::new())
     }
 
     /// Makes a deep copy of a type expression.
@@ -298,8 +361,10 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
         let Some(ty) = entry.ty().cloned() else {
             return ty;
         };
+
+        // TODO: Parent the deep clone into a new "monomorphs" branch of tree
         match ty {
-            TypeKind::Variable => self.new_var(),
+            TypeKind::Variable => self.new_inferred(),
             TypeKind::Array(h, s) => {
                 let ty = self.deep_clone(h);
                 self.table.anon_type(TypeKind::Array(ty, s))
@@ -396,6 +461,7 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
                 items.iter().any(|(_, other)| self.occurs_in(this, *other))
             }
             TypeKind::Ref(other) => self.occurs_in(this, *other),
+            TypeKind::Ptr(other) => self.occurs_in(this, *other),
             TypeKind::Slice(other) => self.occurs_in(this, *other),
             TypeKind::Array(other, _) => self.occurs_in(this, *other),
             TypeKind::Tuple(handles) => handles.iter().any(|&other| self.occurs_in(this, other)),
@@ -415,6 +481,9 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
     /// Unifies two types
     pub fn unify(&mut self, this: Handle, other: Handle) -> Result<(), InferenceError> {
         let (ah, bh) = (self.prune(this), self.prune(other));
+        if ah == bh {
+            return Ok(());
+        }
         let (a, b) = (self.table.entry(ah), self.table.entry(bh));
         let (Some(a), Some(b)) = (a.ty(), b.ty()) else {
             return Err(InferenceError::Mismatch(ah, bh));
@@ -427,10 +496,7 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
             }
             (_, TypeKind::Inferred) => self.unify(bh, ah),
 
-            (TypeKind::Variable, _) => {
-                self.set_instance(ah, bh);
-                Ok(())
-            }
+            (TypeKind::Variable, _) => Err(InferenceError::Mismatch(ah, bh)),
             (TypeKind::Instance(a), TypeKind::Instance(b)) if !self.occurs_in(*a, *b) => {
                 self.set_instance(*a, *b);
                 Ok(())
@@ -466,6 +532,26 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
                     self.unify(a, b)?;
                 }
                 Ok(())
+            }
+            (TypeKind::Adt(Adt::Enum(en)), TypeKind::Adt(_)) => {
+                #[allow(unused)]
+                let Some(other_parent) = self.table.parent(bh) else {
+                    Err(InferenceError::Mismatch(ah, bh))?
+                };
+
+                if ah != *other_parent {
+                    Err(InferenceError::Mismatch(ah, *other_parent))?
+                }
+
+                #[allow(unused)]
+                for (sym, handle) in en {
+                    let handle = self.def_usage(*handle);
+                    if handle == bh {
+                        return Ok(());
+                    }
+                }
+
+                Err(InferenceError::Mismatch(ah, bh))
             }
             (TypeKind::Adt(Adt::Struct(ia)), TypeKind::Adt(Adt::Struct(ib)))
                 if ia.len() == ib.len() =>

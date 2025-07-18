@@ -72,6 +72,7 @@ fn main_menu(prj: &mut Table) -> Result<(), RlError> {
             match line {
                 "c" | "code" => enter_code(prj)?,
                 "clear" => clear()?,
+                "dump" => dump(prj)?,
                 "d" | "desugar" => live_desugar()?,
                 "e" | "exit" => return Ok(Response::Break),
                 "f" | "file" => import_files(prj)?,
@@ -254,7 +255,7 @@ fn infer_all(table: &mut Table) -> Result<(), Box<dyn Error>> {
             }
             e => eprint!("{e}"),
         }
-        eprintln!(" in {} ({id})", id.to_entry(table))
+        eprintln!(" in {id}\n({})\n", id.to_entry(table).source().unwrap())
     }
 
     println!("...Inferred!");
@@ -402,6 +403,30 @@ fn inline_modules(code: cl_ast::File, path: impl AsRef<path::Path>) -> cl_ast::F
         }
         Ok(code) => code,
     }
+}
+
+fn dump(table: &Table) -> Result<(), Box<dyn Error>> {
+    fn dump_recursive(
+        name: cl_ast::Sym,
+        entry: Entry,
+        depth: usize,
+        to_file: &mut std::fs::File,
+    ) -> std::io::Result<()> {
+        use std::io::Write;
+        write!(to_file, "{:w$}{name}: {entry}", "", w = depth)?;
+        if let Some(children) = entry.children() {
+            writeln!(to_file, " {{")?;
+            for (name, child) in children {
+                dump_recursive(*name, entry.with_id(*child), depth + 2, to_file)?;
+            }
+            write!(to_file, "{:w$}}}", "", w = depth)?;
+        }
+        writeln!(to_file)
+    }
+
+    let mut file = std::fs::File::create("typeck-table.ron")?;
+    dump_recursive("root".into(), table.root_entry(), 0, &mut file)?;
+    Ok(())
 }
 
 fn clear() -> Result<(), Box<dyn Error>> {

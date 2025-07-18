@@ -57,8 +57,10 @@ pub struct Table<'a> {
     sources: HashMap<Handle, Source<'a>>,
     impl_targets: HashMap<Handle, Handle>,
     anon_types: HashMap<TypeKind, Handle>,
+    lang_items: HashMap<Sym, Handle>,
 
     // --- Queues for algorithms ---
+    pub(crate) unchecked: Vec<Handle>,
     pub(crate) impls: Vec<Handle>,
     pub(crate) uses: Vec<Handle>,
 }
@@ -84,6 +86,8 @@ impl<'a> Table<'a> {
             sources: HashMap::new(),
             impl_targets: HashMap::new(),
             anon_types: HashMap::new(),
+            lang_items: HashMap::new(),
+            unchecked: Vec::new(),
             impls: Vec::new(),
             uses: Vec::new(),
         }
@@ -111,6 +115,10 @@ impl<'a> Table<'a> {
         self.imports.entry(parent).or_default().insert(name, import)
     }
 
+    pub fn mark_unchecked(&mut self, item: Handle) {
+        self.unchecked.push(item);
+    }
+
     pub fn mark_use_item(&mut self, item: Handle) {
         let parent = self.parents[item];
         self.use_items.entry(parent).or_default().push(item);
@@ -119,6 +127,10 @@ impl<'a> Table<'a> {
 
     pub fn mark_impl_item(&mut self, item: Handle) {
         self.impls.push(item);
+    }
+
+    pub fn mark_lang_item(&mut self, name: Sym, item: Handle) {
+        self.lang_items.insert(name, item);
     }
 
     pub fn handle_iter(&self) -> impl Iterator<Item = Handle> + use<> {
@@ -209,7 +221,12 @@ impl<'a> Table<'a> {
         self.impl_targets.get(&node).copied()
     }
 
+    pub fn reparent(&mut self, node: Handle, parent: Handle) -> Handle {
+        self.parents.replace(node, parent)
+    }
+
     pub fn set_body(&mut self, node: Handle, body: &'a Expr) -> Option<&'a Expr> {
+        self.mark_unchecked(node);
         self.bodies.insert(node, body)
     }
 
@@ -311,7 +328,8 @@ pub enum NodeKind {
     Static,
     Function,
     Temporary,
-    Local,
+    Let,
+    Scope,
     Impl,
     Use,
 }
@@ -329,7 +347,8 @@ mod display {
                 NodeKind::Static => write!(f, "static"),
                 NodeKind::Function => write!(f, "fn"),
                 NodeKind::Temporary => write!(f, "temp"),
-                NodeKind::Local => write!(f, "local"),
+                NodeKind::Let => write!(f, "let"),
+                NodeKind::Scope => write!(f, "scope"),
                 NodeKind::Use => write!(f, "use"),
                 NodeKind::Impl => write!(f, "impl"),
             }

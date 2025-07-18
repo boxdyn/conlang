@@ -94,27 +94,16 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
     }
 
     fn visit_static(&mut self, s: &'a cl_ast::Static) {
-        let cl_ast::Static { mutable, name, ty, init } = s;
+        let cl_ast::Static { name, init, .. } = s;
         self.inner.set_source(Source::Static(s));
         self.inner.set_body(init);
         self.set_name(*name);
 
-        self.visit(mutable);
-        self.visit(ty);
-        self.visit(init);
-    }
-
-    fn visit_module(&mut self, m: &'a cl_ast::Module) {
-        let cl_ast::Module { name, file } = m;
-        self.inner.set_source(Source::Module(m));
-        self.set_name(*name);
-
-        self.visit(file);
+        s.children(self);
     }
 
     fn visit_function(&mut self, f: &'a cl_ast::Function) {
         let cl_ast::Function { name, gens, sign, bind, body } = f;
-        // TODO: populate generics?
         self.inner.set_source(Source::Function(f));
         self.set_name(*name);
 
@@ -126,6 +115,14 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
             self.inner.set_body(b);
             self.visit(b);
         }
+    }
+
+    fn visit_module(&mut self, m: &'a cl_ast::Module) {
+        let cl_ast::Module { name, file } = m;
+        self.inner.set_source(Source::Module(m));
+        self.set_name(*name);
+
+        self.visit(file);
     }
 
     fn visit_struct(&mut self, s: &'a cl_ast::Struct) {
@@ -143,12 +140,14 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         self.set_name(*name);
 
         self.visit(gens);
-        self.visit(variants);
         let mut children = Vec::new();
         for variant in variants.iter() {
             let mut entry = self.new_entry(NodeKind::Type);
             variant.visit_in(&mut entry);
-            children.push((variant.name, entry.inner.id()));
+            let child = entry.inner.id();
+            children.push((variant.name, child));
+
+            self.inner.add_child(variant.name, child);
         }
         self.inner
             .set_ty(TypeKind::Adt(crate::type_kind::Adt::Enum(children)));
@@ -156,23 +155,27 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
 
     fn visit_variant(&mut self, value: &'a cl_ast::Variant) {
         let cl_ast::Variant { name, kind, body } = value;
-        let mut entry = self.new_entry(NodeKind::Type);
-        entry.inner.set_source(Source::Variant(value));
-        entry.visit(kind);
+        self.inner.set_source(Source::Variant(value));
+        self.set_name(*name);
+        self.visit(kind);
         if let Some(body) = body {
-            entry.inner.set_body(body);
+            self.inner.set_body(body);
         }
-
-        let child = entry.inner.id();
-        self.inner.add_child(*name, child);
     }
 
     fn visit_impl(&mut self, i: &'a cl_ast::Impl) {
-        let cl_ast::Impl { target, body } = i;
+        let cl_ast::Impl { gens, target: _, body } = i;
         self.inner.set_source(Source::Impl(i));
         self.inner.mark_impl_item();
 
-        self.visit(target);
+        // We don't know if target is generic yet -- that's checked later.
+        for generic in &gens.vars {
+            let mut entry = self.new_entry(NodeKind::Type);
+            entry.inner.set_ty(TypeKind::Inferred);
+
+            let child = entry.inner.id();
+            self.inner.add_child(*generic, child);
+        }
         self.visit(body);
     }
 

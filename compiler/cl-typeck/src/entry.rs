@@ -20,6 +20,7 @@ use crate::{
     type_kind::TypeKind,
 };
 
+mod debug;
 mod display;
 
 impl Handle {
@@ -31,10 +32,57 @@ impl Handle {
     }
 }
 
-#[derive(Debug)]
 pub struct Entry<'t, 'a> {
     table: &'t Table<'a>,
     id: Handle,
+}
+
+macro_rules! impl_entry_ {
+    () => {
+        pub const fn id(&self) -> Handle {
+            self.id
+        }
+
+        pub const fn inner(&'t self) -> &'t Table<'a> {
+            self.table
+        }
+
+        pub fn kind(&self) -> Option<&NodeKind> {
+            self.table.kind(self.id)
+        }
+
+        pub const fn root(&self) -> Handle {
+            self.table.root()
+        }
+
+        pub fn children(&self) -> Option<&HashMap<Sym, Handle>> {
+            self.table.children(self.id)
+        }
+
+        pub fn imports(&self) -> Option<&HashMap<Sym, Handle>> {
+            self.table.imports(self.id)
+        }
+
+        pub fn bodies(&self) -> Option<&'a Expr> {
+            self.table.body(self.id)
+        }
+
+        pub fn span(&self) -> Option<&Span> {
+            self.table.span(self.id)
+        }
+
+        pub fn meta(&self) -> Option<&[Meta]> {
+            self.table.meta(self.id)
+        }
+
+        pub fn source(&self) -> Option<&Source<'a>> {
+            self.table.source(self.id)
+        }
+
+        pub fn name(&self) -> Option<Sym> {
+            self.table.name(self.id)
+        }
+    };
 }
 
 impl<'t, 'a> Entry<'t, 'a> {
@@ -42,13 +90,7 @@ impl<'t, 'a> Entry<'t, 'a> {
         Self { table, id }
     }
 
-    pub const fn id(&self) -> Handle {
-        self.id
-    }
-
-    pub fn inner(&self) -> &'t Table<'a> {
-        self.table
-    }
+    impl_entry_!();
 
     pub const fn with_id(&self, id: Handle) -> Entry<'t, 'a> {
         Self { table: self.table, id }
@@ -58,44 +100,12 @@ impl<'t, 'a> Entry<'t, 'a> {
         Some(Entry { id: self.table.nav(self.id, path)?, table: self.table })
     }
 
-    pub const fn root(&self) -> Handle {
-        self.table.root()
-    }
-
-    pub fn kind(&self) -> Option<&'t NodeKind> {
-        self.table.kind(self.id)
-    }
-
     pub fn parent(&self) -> Option<Entry<'t, 'a>> {
         Some(Entry { id: *self.table.parent(self.id)?, ..*self })
     }
 
-    pub fn children(&self) -> Option<&'t HashMap<Sym, Handle>> {
-        self.table.children(self.id)
-    }
-
-    pub fn imports(&self) -> Option<&'t HashMap<Sym, Handle>> {
-        self.table.imports(self.id)
-    }
-
-    pub fn bodies(&self) -> Option<&'a Expr> {
-        self.table.body(self.id)
-    }
-
     pub fn ty(&self) -> Option<&'t TypeKind> {
         self.table.ty(self.id)
-    }
-
-    pub fn span(&self) -> Option<&'t Span> {
-        self.table.span(self.id)
-    }
-
-    pub fn meta(&self) -> Option<&'a [Meta]> {
-        self.table.meta(self.id)
-    }
-
-    pub fn source(&self) -> Option<&'t Source<'a>> {
-        self.table.source(self.id)
     }
 
     pub fn impl_target(&self) -> Option<Entry<'_, 'a>> {
@@ -104,10 +114,6 @@ impl<'t, 'a> Entry<'t, 'a> {
 
     pub fn selfty(&self) -> Option<Entry<'_, 'a>> {
         Some(Entry { id: self.table.selfty(self.id)?, ..*self })
-    }
-
-    pub fn name(&self) -> Option<Sym> {
-        self.table.name(self.id)
     }
 }
 
@@ -122,12 +128,18 @@ impl<'t, 'a> EntryMut<'t, 'a> {
         Self { table, id }
     }
 
-    pub fn as_ref(&self) -> Entry<'_, 'a> {
-        Entry { table: self.table, id: self.id }
+    impl_entry_!();
+
+    pub fn ty(&self) -> Option<&TypeKind> {
+        self.table.ty(self.id)
     }
 
-    pub const fn id(&self) -> Handle {
-        self.id
+    pub fn inner_mut(&mut self) -> &mut Table<'a> {
+        self.table
+    }
+
+    pub fn as_ref(&self) -> Entry<'_, 'a> {
+        Entry { table: self.table, id: self.id }
     }
 
     /// Evaluates a [TypeExpression] in this entry's context
@@ -180,6 +192,10 @@ impl<'t, 'a> EntryMut<'t, 'a> {
 
     pub fn set_impl_target(&mut self, target: Handle) -> Option<Handle> {
         self.table.set_impl_target(self.id, target)
+    }
+
+    pub fn mark_unchecked(&mut self) {
+        self.table.mark_unchecked(self.id)
     }
 
     pub fn mark_use_item(&mut self) {
