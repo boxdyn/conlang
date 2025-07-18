@@ -15,8 +15,8 @@ mod tests;
 pub mod lexer_iter {
     //! Iterator over a [`Lexer`], returning [`LResult<Token>`]s
     use super::{
-        error::{LResult, Reason},
         Lexer, Token,
+        error::{LResult, Reason},
     };
 
     /// Iterator over a [`Lexer`], returning [`LResult<Token>`]s
@@ -374,6 +374,7 @@ impl Lexer<'_> {
 impl Lexer<'_> {
     fn int_with_base(&mut self) -> LResult<Token> {
         match self.peek() {
+            Ok('~') => self.consume()?.digits::<36>(),
             Ok('x') => self.consume()?.digits::<16>(),
             Ok('d') => self.consume()?.digits::<10>(),
             Ok('o') => self.consume()?.digits::<8>(),
