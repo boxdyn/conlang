@@ -5,10 +5,6 @@ struct Student {
     age: i32,
 }
 
-fn Student(name: str, age: i32) -> Student {
-    Student { name, age }
-}
-
 fn match_test(student: Student) {
     match student {
         Student { name: "shark", age } => println("Found a shark of ", age, " year(s)"),
