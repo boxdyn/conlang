@@ -43,6 +43,7 @@ impl_from! {
         Path => TyKind::Path,
         TyTuple => TyKind::Tuple,
         TyRef => TyKind::Ref,
+        TyPtr => TyKind::Ptr,
         TyFn => TyKind::Fn,
     }
     impl From for StmtKind {

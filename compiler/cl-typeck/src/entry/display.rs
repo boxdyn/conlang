@@ -28,6 +28,11 @@ impl fmt::Display for Entry<'_, '_> {
                     let h_id = self.with_id(id);
                     write_name_or(h_id, f)
                 }
+                &TypeKind::Ptr(id) => {
+                    f.write_str("*")?;
+                    let h_id = self.with_id(id);
+                    write_name_or(h_id, f)
+                }
                 TypeKind::Slice(id) => {
                     write_name_or(self.with_id(*id), &mut f.delimit_with("[", "]"))
                 }
@@ -66,10 +71,7 @@ fn write_adt(adt: &Adt, h: &Entry, f: &mut impl Write) -> fmt::Result {
             let mut variants = variants.iter();
             separate(", ", || {
                 variants.next().map(|(name, def)| {
-                    move |f: &mut Delimit<_>| {
-                        write!(f, "{name}: ")?;
-                        write_name_or(h.with_id(*def), f)
-                    }
+                    move |f: &mut Delimit<_>| write!(f, "{name}: {}", h.with_id(*def))
                 })
             })(f.delimit_with("enum {", "}"))
         }
@@ -77,20 +79,14 @@ fn write_adt(adt: &Adt, h: &Entry, f: &mut impl Write) -> fmt::Result {
             let mut members = members.iter();
             separate(", ", || {
                 let (name, vis, id) = members.next()?;
-                Some(move |f: &mut Delimit<_>| {
-                    write!(f, "{vis}{name}: ")?;
-                    write_name_or(h.with_id(*id), f)
-                })
+                Some(move |f: &mut Delimit<_>| write!(f, "{vis}{name}: {}", h.with_id(*id)))
             })(f.delimit_with("struct {", "}"))
         }
         Adt::TupleStruct(members) => {
             let mut members = members.iter();
             separate(", ", || {
                 let (vis, def) = members.next()?;
-                Some(move |f: &mut Delimit<_>| {
-                    write!(f, "{vis}")?;
-                    write_name_or(h.with_id(*def), f)
-                })
+                Some(move |f: &mut Delimit<_>| write!(f, "{vis}{}", h.with_id(*def)))
             })(f.delimit_with("struct (", ")"))
         }
         Adt::UnitStruct => write!(f, "struct"),

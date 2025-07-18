@@ -83,7 +83,7 @@ pub mod yamler {
         pub fn key(&mut self, name: impl Yamlify) -> Section {
             println!();
             self.print_indentation(&mut std::io::stdout().lock());
-            print!("- ");
+            print!("  ");
             name.yaml(self);
             print!(":");
             self.indent()
@@ -103,8 +103,10 @@ pub mod yamler {
         }
 
         pub fn list<D: Yamlify>(&mut self, list: &[D]) -> &mut Self {
-            for (idx, value) in list.iter().enumerate() {
-                self.pair(idx, value);
+            for value in list {
+                println!();
+                self.print_indentation(&mut std::io::stdout().lock());
+                self.yaml(&"- ").yaml(value);
             }
             self
         }
@@ -302,8 +304,11 @@ pub mod yamlify {
     }
     impl Yamlify for Impl {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { target, body } = self;
-            y.key("Impl").pair("target", target).pair("body", body);
+            let Self { gens, target, body } = self;
+            y.key("Impl")
+                .pair("gens", gens)
+                .pair("target", target)
+                .pair("body", body);
         }
     }
     impl Yamlify for ImplKind {
@@ -536,7 +541,10 @@ pub mod yamlify {
     impl Yamlify for Index {
         fn yaml(&self, y: &mut Yamler) {
             let Self { head, indices } = self;
-            y.key("Index").pair("head", head).list(indices);
+            y.key("Index")
+                .pair("head", head)
+                .key("indices")
+                .list(indices);
         }
     }
     impl Yamlify for Structor {
@@ -589,7 +597,7 @@ pub mod yamlify {
     impl Yamlify for Else {
         fn yaml(&self, y: &mut Yamler) {
             let Self { body } = self;
-            y.key("Else").yaml(body);
+            y.key("fail").yaml(body);
         }
     }
     impl Yamlify for If {
@@ -633,8 +641,8 @@ pub mod yamlify {
     }
     impl Yamlify for Ty {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { span: _, kind } = self;
-            y.key("Ty").yaml(kind);
+            let Self { span: _, kind, gens } = self;
+            y.key("Ty").yaml(kind).yaml(gens);
         }
     }
     impl Yamlify for TyKind {
@@ -646,6 +654,7 @@ pub mod yamlify {
                 TyKind::Path(t) => y.yaml(t),
                 TyKind::Tuple(t) => y.yaml(t),
                 TyKind::Ref(t) => y.yaml(t),
+                TyKind::Ptr(t) => y.yaml(t),
                 TyKind::Fn(t) => y.yaml(t),
                 TyKind::Slice(t) => y.yaml(t),
                 TyKind::Array(t) => y.yaml(t),
@@ -659,9 +668,7 @@ pub mod yamlify {
             if *absolute {
                 y.pair("absolute", absolute);
             }
-            for part in parts {
-                y.pair("part", part);
-            }
+            y.yaml(parts);
         }
     }
     impl Yamlify for PathPart {
@@ -703,6 +710,13 @@ pub mod yamlify {
                 .pair("to", to);
         }
     }
+    impl Yamlify for TyPtr {
+        fn yaml(&self, y: &mut Yamler) {
+            let Self { to } = self;
+            y.key("TyPtr")
+                .pair("to", to);
+        }
+    }
     impl Yamlify for TyFn {
         fn yaml(&self, y: &mut Yamler) {
             let Self { args, rety } = self;
@@ -726,9 +740,7 @@ pub mod yamlify {
     }
     impl<T: Yamlify> Yamlify for Vec<T> {
         fn yaml(&self, y: &mut Yamler) {
-            for thing in self {
-                y.yaml(thing);
-            }
+            y.list(self);
         }
     }
     impl Yamlify for () {

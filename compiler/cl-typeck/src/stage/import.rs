@@ -70,7 +70,7 @@ fn import_tree<'a>(
         UseTree::Path(part, rest) => {
             let source = table
                 .nav(src, slice::from_ref(part))
-                .ok_or_else(|| Error::NotFound(src, part.clone()))?;
+                .ok_or(Error::NotFound(src, *part))?;
             import_tree(table, source, dst, rest, seen)
         }
         UseTree::Alias(src_name, dst_name) => {

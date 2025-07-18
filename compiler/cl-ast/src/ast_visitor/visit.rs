@@ -131,6 +131,9 @@ pub trait Visit<'a>: Sized {
     fn visit_ty_ref(&mut self, value: &'a TyRef) {
         value.children(self)
     }
+    fn visit_ty_ptr(&mut self, value: &'a TyPtr) {
+        value.children(self)
+    }
     fn visit_ty_fn(&mut self, value: &'a TyFn) {
         value.children(self)
     }

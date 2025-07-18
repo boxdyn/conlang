@@ -273,7 +273,7 @@ pub mod clangify {
         fn print(&self, y: &mut CLangifier) {
             let Self { name, gens: _, sign, bind, body } = self;
             let TyFn { args, rety } = sign;
-            let types = match args.as_ref() {
+            let types = match &args.kind {
                 TyKind::Tuple(TyTuple { types }) => types.as_slice(),
                 TyKind::Empty => &[],
                 _ => panic!("Unsupported function args: {args}"),
@@ -282,13 +282,7 @@ pub mod clangify {
                 Pattern::Tuple(tup) => tup.as_slice(),
                 _ => panic!("Unsupported function binders: {args}"),
             };
-            match rety {
-                Some(ty) => y.p(ty),
-                None => y.p("void"),
-            }
-            .p(" ")
-            .p(name)
-            .p(" (");
+            y.p(rety).p(" ").p(name).p(" (");
             for (idx, (bind, ty)) in bind.iter().zip(types).enumerate() {
                 if idx > 0 {
                     y.p(", ");
@@ -347,8 +341,8 @@ pub mod clangify {
     }
     impl CLangify for Impl {
         fn print(&self, y: &mut CLangifier) {
-            let Self { target, body } = self;
-            y.nest("/* TODO: impl ").p(target).p(" { */ ");
+            let Self { gens, target, body } = self;
+            y.nest("/* TODO: impl ").p(gens).p(target).p(" { */ ");
             y.p(body);
             y.p("/* } // impl ").p(target).p(" */ ");
         }
@@ -477,7 +471,7 @@ pub mod clangify {
                 }
                 TyKind::Fn(TyFn { args, rety }) => {
                     y.nest("(").p(rety).p(" *").p(mutable).p(name).p(")(");
-                    match args.as_ref() {
+                    match &args.kind {
                         TyKind::Empty => {}
                         TyKind::Tuple(TyTuple { types }) => {
                             for (idx, ty) in types.iter().enumerate() {
@@ -688,14 +682,14 @@ pub mod clangify {
     impl CLangify for ArrayRep {
         fn print(&self, y: &mut CLangifier) {
             let Self { value, repeat } = self;
+            let ExprKind::Literal(Literal::Int(repeat)) = &repeat.kind else {
+                eprintln!("Constant needs folding: {repeat}");
+                return;
+            };
             {
                 let mut y = y.nest("{");
-                y.endl();
-                for idx in 0..*repeat {
-                    if idx > 0 {
-                        y.p(", ");
-                    }
-                    y.p(value);
+                for _ in 0..*repeat {
+                    y.endl().p(value).p(",");
                 }
             }
             y.endl().p("}");
@@ -797,7 +791,7 @@ pub mod clangify {
     }
     impl CLangify for Ty {
         fn print(&self, y: &mut CLangifier) {
-            let Self { span: _, kind } = self;
+            let Self { span: _, kind, gens: _ } = self;
             y.p(kind);
         }
     }
@@ -806,10 +800,11 @@ pub mod clangify {
             match self {
                 TyKind::Never => y.p("Never"),
                 TyKind::Empty => y.p("Empty"),
-                TyKind::Infer => y.p("Any"),
+                TyKind::Infer => y.p("auto"),
                 TyKind::Path(t) => y.p(t),
                 TyKind::Tuple(t) => y.p(t),
                 TyKind::Ref(t) => y.p(t),
+                TyKind::Ptr(t) => y.p(t),
                 TyKind::Fn(t) => y.p(t),
                 TyKind::Slice(t) => y.p(t),
                 TyKind::Array(t) => y.p(t),
@@ -873,12 +868,18 @@ pub mod clangify {
             }
         }
     }
+    impl CLangify for TyPtr {
+        fn print(&self, y: &mut CLangifier) {
+            let Self { to } = self;
+            y.p(to).p("*");
+        }
+    }
     impl CLangify for TyFn {
         fn print(&self, y: &mut CLangifier) {
             let Self { args, rety } = self;
             // TODO: function pointer syntax
             y.nest("(").p(rety).p(" *)(");
-            match args.as_ref() {
+            match &args.kind {
                 TyKind::Empty => y,
                 TyKind::Tuple(TyTuple { types }) => {
                     for (idx, ty) in types.iter().enumerate() {

@@ -2,7 +2,7 @@
 //! construct type bindings in a [Table]'s typing context.
 
 use crate::{handle::Handle, table::Table, type_kind::TypeKind};
-use cl_ast::{PathPart, Ty, TyArray, TyFn, TyKind, TyRef, TySlice, TyTuple};
+use cl_ast::{PathPart, Sym, Ty, TyArray, TyFn, TyKind, TyPtr, TyRef, TySlice, TyTuple};
 
 #[derive(Clone, Debug, PartialEq, Eq)] // TODO: impl Display and Error
 pub enum Error {
@@ -48,6 +48,7 @@ impl TypeExpression for TyKind {
             TyKind::Slice(s) => s.evaluate(table, node),
             TyKind::Tuple(t) => t.evaluate(table, node),
             TyKind::Ref(r) => r.evaluate(table, node),
+            TyKind::Ptr(r) => r.evaluate(table, node),
             TyKind::Fn(f) => f.evaluate(table, node),
         }
     }
@@ -65,6 +66,15 @@ impl TypeExpression for [PathPart] {
         table
             .nav(node, self)
             .ok_or_else(|| Error::BadPath { parent: node, path: self.to_owned() })
+    }
+}
+
+impl TypeExpression for Sym {
+    fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Handle, Error> {
+        let path = [PathPart::Ident(*self)];
+        table
+            .nav(node, &path)
+            .ok_or_else(|| Error::BadPath { parent: node, path: path.to_vec() })
     }
 }
 
@@ -107,15 +117,21 @@ impl TypeExpression for TyRef {
     }
 }
 
+impl TypeExpression for TyPtr {
+    fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Handle, Error> {
+        let Self { to } = self;
+        let mut t = to.evaluate(table, node)?;
+        t = table.anon_type(TypeKind::Ptr(t));
+        Ok(t)
+    }
+}
+
 impl TypeExpression for TyFn {
     fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Handle, Error> {
         let Self { args, rety } = self;
         let kind = TypeKind::FnSig {
             args: args.evaluate(table, node)?,
-            rety: match rety {
-                Some(ty) => ty.evaluate(table, node)?,
-                None => TyKind::Empty.evaluate(table, node)?,
-            },
+            rety: rety.evaluate(table, node)?,
         };
         Ok(table.anon_type(kind))
     }

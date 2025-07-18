@@ -14,6 +14,7 @@ impl Display for TypeKind {
             TypeKind::Primitive(i) => i.fmt(f),
             TypeKind::Adt(a) => a.fmt(f),
             TypeKind::Ref(def) => write!(f, "&{def}"),
+            TypeKind::Ptr(def) => write!(f, "*{def}"),
             TypeKind::Slice(def) => write!(f, "slice [#{def}]"),
             TypeKind::Array(def, size) => write!(f, "array [#{def}; {size}]"),
             TypeKind::Tuple(defs) => {
@@ -92,6 +93,7 @@ impl Display for Primitive {
             Primitive::Float => f.write_str("{float}"),
             Primitive::Bool => f.write_str("bool"),
             Primitive::Char => f.write_str("char"),
+            Primitive::Str => f.write_str("str"),
         }
     }
 }

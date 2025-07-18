@@ -183,6 +183,7 @@ pub struct Variant {
 /// Sub-[items](Item) (associated functions, etc.) for a [Ty]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Impl {
+    pub gens: Generics,
     pub target: ImplKind,
     pub body: File,
 }
@@ -216,6 +217,7 @@ pub enum UseTree {
 pub struct Ty {
     pub span: Span,
     pub kind: TyKind,
+    pub gens: Generics,
 }
 
 /// Information about a [Ty]pe expression
@@ -229,26 +231,27 @@ pub enum TyKind {
     Slice(TySlice),
     Tuple(TyTuple),
     Ref(TyRef),
+    Ptr(TyPtr),
     Fn(TyFn),
 }
 
 /// An array of [`T`](Ty)
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TyArray {
-    pub ty: Box<TyKind>,
+    pub ty: Box<Ty>,
     pub count: usize,
 }
 
 /// A [Ty]pe slice expression: `[T]`
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TySlice {
-    pub ty: Box<TyKind>,
+    pub ty: Box<Ty>,
 }
 
 /// A tuple of [Ty]pes
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TyTuple {
-    pub types: Vec<TyKind>,
+    pub types: Vec<Ty>,
 }
 
 /// A [Ty]pe-reference expression as (number of `&`, [Path])
@@ -259,11 +262,17 @@ pub struct TyRef {
     pub to: Box<Ty>,
 }
 
+/// A [Ty]pe-reference expression as (number of `&`, [Path])
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct TyPtr {
+    pub to: Box<Ty>,
+}
+
 /// The args and return value for a function pointer [Ty]pe
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TyFn {
-    pub args: Box<TyKind>,
-    pub rety: Option<Box<Ty>>,
+    pub args: Box<Ty>,
+    pub rety: Box<Ty>,
 }
 
 /// A path to an [Item] in the [Module] tree
@@ -274,7 +283,7 @@ pub struct Path {
 }
 
 /// A single component of a [Path]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PathPart {
     SuperKw,
     SelfTy,
@@ -411,7 +420,7 @@ pub struct Array {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ArrayRep {
     pub value: Box<Expr>,
-    pub repeat: usize,
+    pub repeat: Box<Expr>,
 }
 
 /// An address-of expression: `&` `mut`? [`Expr`]

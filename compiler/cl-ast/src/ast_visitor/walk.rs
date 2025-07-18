@@ -297,7 +297,8 @@ impl Walk for Impl {
         v.visit_impl(self);
     }
     fn children<'a, V: Visit<'a>>(&'a self, v: &mut V) {
-        let Impl { target, body } = self;
+        let Impl { gens, target, body } = self;
+        gens.visit_in(v);
         target.visit_in(v);
         body.visit_in(v);
     }
@@ -354,9 +355,10 @@ impl Walk for Ty {
         v.visit_ty(self);
     }
     fn children<'a, V: Visit<'a>>(&'a self, v: &mut V) {
-        let Ty { span, kind } = self;
+        let Ty { span, kind, gens } = self;
         span.visit_in(v);
         kind.visit_in(v);
+        gens.visit_in(v);
     }
 }
 impl Walk for TyKind {
@@ -374,6 +376,7 @@ impl Walk for TyKind {
             TyKind::Slice(value) => value.visit_in(v),
             TyKind::Tuple(value) => value.visit_in(v),
             TyKind::Ref(value) => value.visit_in(v),
+            TyKind::Ptr(value) => value.visit_in(v),
             TyKind::Fn(value) => value.visit_in(v),
         }
     }
@@ -417,6 +420,16 @@ impl Walk for TyRef {
     fn children<'a, V: Visit<'a>>(&'a self, v: &mut V) {
         let TyRef { mutable, count: _, to } = self;
         mutable.children(v);
+        to.children(v);
+    }
+}
+impl Walk for TyPtr {
+    #[inline]
+    fn visit_in<'a, V: Visit<'a>>(&'a self, v: &mut V) {
+        v.visit_ty_ptr(self);
+    }
+    fn children<'a, V: Visit<'a>>(&'a self, v: &mut V) {
+        let TyPtr { to } = self;
         to.children(v);
     }
 }
@@ -852,10 +865,10 @@ impl Walk for For {
     }
     fn children<'a, V: Visit<'a>>(&'a self, v: &mut V) {
         let For { bind, cond, pass, fail } = self;
-        bind.visit_in(v);
         cond.visit_in(v);
-        pass.visit_in(v);
         fail.visit_in(v);
+        bind.visit_in(v);
+        pass.visit_in(v);
     }
 }
 impl Walk for Else {

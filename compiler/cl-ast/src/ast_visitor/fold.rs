@@ -156,8 +156,12 @@ pub trait Fold {
         }
     }
     fn fold_impl(&mut self, i: Impl) -> Impl {
-        let Impl { target, body } = i;
-        Impl { target: self.fold_impl_kind(target), body: self.fold_file(body) }
+        let Impl { gens, target, body } = i;
+        Impl {
+            gens: self.fold_generics(gens),
+            target: self.fold_impl_kind(target),
+            body: self.fold_file(body),
+        }
     }
     fn fold_impl_kind(&mut self, kind: ImplKind) -> ImplKind {
         or_fold_impl_kind(self, kind)
@@ -170,39 +174,39 @@ pub trait Fold {
         or_fold_use_tree(self, tree)
     }
     fn fold_ty(&mut self, t: Ty) -> Ty {
-        let Ty { span, kind } = t;
-        Ty { span: self.fold_span(span), kind: self.fold_ty_kind(kind) }
+        let Ty { span, kind, gens } = t;
+        Ty {
+            span: self.fold_span(span),
+            kind: self.fold_ty_kind(kind),
+            gens: self.fold_generics(gens),
+        }
     }
     fn fold_ty_kind(&mut self, kind: TyKind) -> TyKind {
         or_fold_ty_kind(self, kind)
     }
     fn fold_ty_array(&mut self, a: TyArray) -> TyArray {
         let TyArray { ty, count } = a;
-        TyArray { ty: Box::new(self.fold_ty_kind(*ty)), count }
+        TyArray { ty: Box::new(self.fold_ty(*ty)), count }
     }
     fn fold_ty_slice(&mut self, s: TySlice) -> TySlice {
         let TySlice { ty } = s;
-        TySlice { ty: Box::new(self.fold_ty_kind(*ty)) }
+        TySlice { ty: Box::new(self.fold_ty(*ty)) }
     }
     fn fold_ty_tuple(&mut self, t: TyTuple) -> TyTuple {
         let TyTuple { types } = t;
-        TyTuple {
-            types: types
-                .into_iter()
-                .map(|kind| self.fold_ty_kind(kind))
-                .collect(),
-        }
+        TyTuple { types: types.into_iter().map(|kind| self.fold_ty(kind)).collect() }
     }
     fn fold_ty_ref(&mut self, t: TyRef) -> TyRef {
         let TyRef { mutable, count, to } = t;
         TyRef { mutable: self.fold_mutability(mutable), count, to: Box::new(self.fold_ty(*to)) }
     }
+    fn fold_ty_ptr(&mut self, t: TyPtr) -> TyPtr {
+        let TyPtr { to } = t;
+        TyPtr { to: Box::new(self.fold_ty(*to)) }
+    }
     fn fold_ty_fn(&mut self, t: TyFn) -> TyFn {
         let TyFn { args, rety } = t;
-        TyFn {
-            args: Box::new(self.fold_ty_kind(*args)),
-            rety: rety.map(|t| Box::new(self.fold_ty(*t))),
-        }
+        TyFn { args: Box::new(self.fold_ty(*args)), rety: Box::new(self.fold_ty(*rety)) }
     }
     fn fold_path(&mut self, p: Path) -> Path {
         let Path { absolute, parts } = p;
@@ -534,6 +538,7 @@ pub fn or_fold_ty_kind<F: Fold + ?Sized>(folder: &mut F, kind: TyKind) -> TyKind
         TyKind::Slice(s) => TyKind::Slice(folder.fold_ty_slice(s)),
         TyKind::Tuple(t) => TyKind::Tuple(folder.fold_ty_tuple(t)),
         TyKind::Ref(t) => TyKind::Ref(folder.fold_ty_ref(t)),
+        TyKind::Ptr(t) => TyKind::Ptr(folder.fold_ty_ptr(t)),
         TyKind::Fn(t) => TyKind::Fn(folder.fold_ty_fn(t)),
     }
 }

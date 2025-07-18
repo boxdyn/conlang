@@ -147,8 +147,8 @@ impl WeightOf for Variant {
 
 impl WeightOf for Impl {
     fn weight_of(&self) -> usize {
-        let Self { target, body } = self;
-        target.weight_of() + body.weight_of()
+        let Self { gens, target, body } = self;
+        gens.weight_of() + target.weight_of() + body.weight_of()
     }
 }
 
@@ -184,8 +184,8 @@ impl WeightOf for UseTree {
 
 impl WeightOf for Ty {
     fn weight_of(&self) -> usize {
-        let Self { span, kind } = self;
-        span.weight_of() + kind.weight_of()
+        let Self { span, kind, gens } = self;
+        span.weight_of() + kind.weight_of() + gens.weight_of()
     }
 }
 
@@ -198,6 +198,7 @@ impl WeightOf for TyKind {
             TyKind::Slice(v) => v.weight_of(),
             TyKind::Tuple(v) => v.weight_of(),
             TyKind::Ref(v) => v.weight_of(),
+            TyKind::Ptr(v) => v.weight_of(),
             TyKind::Fn(v) => v.weight_of(),
         }
     }
@@ -228,6 +229,13 @@ impl WeightOf for TyRef {
     fn weight_of(&self) -> usize {
         let Self { mutable, count, to } = self;
         mutable.weight_of() + count.weight_of() + to.weight_of()
+    }
+}
+
+impl WeightOf for TyPtr {
+    fn weight_of(&self) -> usize {
+        let Self { to } = self;
+        to.weight_of()
     }
 }
 

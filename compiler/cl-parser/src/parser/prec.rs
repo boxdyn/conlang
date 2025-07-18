@@ -204,13 +204,7 @@ fn exprkind_array_rep(p: &mut Parser) -> PResult<ExprKind> {
             value: first.into(),
             repeat: {
                 p.consume_peeked();
-                let value = p.match_type(TokenKind::Literal, Parsing::ArrayRep)?;
-                match value.data() {
-                    TokenData::Integer(size) => *size as usize,
-                    _ => {
-                        Err(p.error(ErrorKind::Unexpected(TokenKind::Literal), Parsing::ArrayRep))?
-                    }
-                }
+                p.parse()?
             },
         }
         .into(),

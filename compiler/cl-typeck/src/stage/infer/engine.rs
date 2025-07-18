@@ -496,6 +496,7 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
                 todo!()
             }
             (TypeKind::Ref(a), TypeKind::Ref(b)) => self.unify(*a, *b),
+            (TypeKind::Ptr(a), TypeKind::Ptr(b)) => self.unify(*a, *b),
             (TypeKind::Slice(a), TypeKind::Slice(b)) => self.unify(*a, *b),
             // Slice unifies with array
             (TypeKind::Array(a, _), TypeKind::Slice(b)) => self.unify(*a, *b),

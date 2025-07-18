@@ -163,7 +163,7 @@ impl Display for Module {
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self { name, gens, sign: sign @ TyFn { args, rety }, bind, body } = self;
-        let types = match **args {
+        let types = match args.kind {
             TyKind::Tuple(TyTuple { ref types }) => types.as_slice(),
             TyKind::Empty => Default::default(),
             _ => {
@@ -191,9 +191,10 @@ impl Display for Function {
                 write!(f, "{arg}: {ty}")?;
             }
         }
-        if let Some(rety) = rety {
-            write!(f, " -> {rety}")?;
+        if TyKind::Empty != rety.kind {
+            write!(f, " -> {rety}")?
         }
+
         match body {
             Some(body) => write!(f, " {body}"),
             None => ';'.fmt(f),
@@ -246,8 +247,8 @@ impl Display for Variant {
 
 impl Display for Impl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self { target, body } = self;
-        write!(f, "impl {target} ")?;
+        let Self { gens, target, body } = self;
+        write!(f, "impl{gens} {target} ")?;
         write!(f.delimit(BRACES), "{body}")
     }
 }
@@ -285,7 +286,8 @@ impl Display for UseTree {
 
 impl Display for Ty {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.kind.fmt(f)
+        let Self { span: _, kind, gens } = self;
+        write!(f, "{kind}{gens}")
     }
 }
 
@@ -300,6 +302,7 @@ impl Display for TyKind {
             TyKind::Slice(v) => v.fmt(f),
             TyKind::Tuple(v) => v.fmt(f),
             TyKind::Ref(v) => v.fmt(f),
+            TyKind::Ptr(v) => v.fmt(f),
             TyKind::Fn(v) => v.fmt(f),
         }
     }
@@ -335,14 +338,21 @@ impl Display for TyRef {
     }
 }
 
+impl Display for TyPtr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self { to } = self;
+        write!(f, "*{to}")
+    }
+}
+
 impl Display for TyFn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self { args, rety } = self;
         write!(f, "fn {args}")?;
-        match rety {
-            Some(v) => write!(f, " -> {v}"),
-            None => Ok(()),
+        if TyKind::Empty != rety.kind {
+            write!(f, " -> {rety}")?;
         }
+        Ok(())
     }
 }
 

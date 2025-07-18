@@ -46,7 +46,7 @@ impl Fold for NormalizePaths {
 
         if !absolute {
             for segment in self.path.parts.iter().rev() {
-                tree = UseTree::Path(segment.clone(), Box::new(tree))
+                tree = UseTree::Path(*segment, Box::new(tree))
             }
         }
 

@@ -22,6 +22,8 @@ pub enum TypeKind {
     Adt(Adt),
     /// A reference to an already-defined type: &T
     Ref(Handle),
+    /// A raw pointer to an already-defined type: &T
+    Ptr(Handle),
     /// A contiguous view of dynamically sized memory
     Slice(Handle),
     /// A contiguous view of statically sized memory
@@ -67,6 +69,7 @@ pub enum Primitive {
     Integer, Float,                 // Inferred int and float
     Bool,                           // boolean value
     Char,                           // Unicode codepoint
+    Str,                            // UTF-8 string
 }
 
 #[rustfmt::skip]
@@ -117,6 +120,7 @@ impl FromStr for Primitive {
             "fsize" => Primitive::Fsize,
             "bool" => Primitive::Bool,
             "char" => Primitive::Char,
+            "str" => Primitive::Str,
             _ => Err(())?,
         })
     }

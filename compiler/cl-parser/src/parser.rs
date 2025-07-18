@@ -191,6 +191,17 @@ macro path_like() {
     TokenKind::Super | TokenKind::SelfTy | TokenKind::Identifier | TokenKind::ColonColon
 }
 
+type Spanned<T> = (T, Span);
+
+impl<'t, T: Parse<'t>> Parse<'t> for Spanned<T> {
+    fn parse(p: &mut Parser<'t>) -> PResult<Self> {
+        let head = p.loc();
+        let body = p.parse()?;
+        let tail = p.loc();
+        Ok((body, Span(head, tail)))
+    }
+}
+
 pub trait Parse<'t>: Sized {
     /// Parses a Self from the provided [Parser]
     fn parse(p: &mut Parser<'t>) -> PResult<Self>;
@@ -343,8 +354,8 @@ impl Parse<'_> for ItemKind {
 impl Parse<'_> for Generics {
     fn parse(p: &mut Parser<'_>) -> PResult<Self> {
         const P: Parsing = Parsing::Generics;
-        let vars = match p.peek_kind(P)? {
-            TokenKind::Lt => delim(
+        let vars = match p.peek_kind(P) {
+            Ok(TokenKind::Lt) => delim(
                 sep(Sym::parse, TokenKind::Comma, TokenKind::Gt, P),
                 (TokenKind::Lt, TokenKind::Gt),
                 P,
@@ -451,17 +462,16 @@ impl Parse<'_> for Function {
 
         let name = Sym::parse(p)?;
         let gens = Generics::parse(p)?;
-        let (bind, types) = delim(FnSig::parse, PARENS, P)(p)?;
+        let ((bind, types), span) = delim(Spanned::<FnSig>::parse, PARENS, P)(p)?;
         let sign = TyFn {
             args: Box::new(match types.len() {
-                0 => TyKind::Empty,
-                _ => TyKind::Tuple(TyTuple { types }),
+                0 => Ty { span, kind: TyKind::Empty, gens: Default::default() },
+                _ => Ty { span, kind: TyKind::Tuple(TyTuple { types }), gens: Default::default() },
             }),
-            rety: Ok(match p.match_type(TokenKind::Arrow, Parsing::TyFn) {
-                Ok(_) => Some(Ty::parse(p)?),
-                Err(_) => None,
-            })?
-            .map(Box::new),
+            rety: Box::new(match p.match_type(TokenKind::Arrow, Parsing::TyFn) {
+                Ok(_) => Ty::parse(p)?,
+                Err(_) => Ty { span, kind: TyKind::Empty, gens: Generics { vars: vec![] } },
+            }),
         };
         Ok(Function {
             name,
@@ -479,7 +489,7 @@ impl Parse<'_> for Function {
     }
 }
 
-type FnSig = (Pattern, Vec<TyKind>);
+type FnSig = (Pattern, Vec<Ty>);
 
 impl Parse<'_> for FnSig {
     /// Parses the parameter list of a Function
@@ -498,17 +508,17 @@ impl Parse<'_> for FnSig {
     }
 }
 
-type TypedParam = (Pattern, TyKind);
+type TypedParam = (Pattern, Ty);
 
 impl Parse<'_> for TypedParam {
     /// Parses a single function parameter
-    fn parse(p: &mut Parser) -> PResult<(Pattern, TyKind)> {
+    fn parse(p: &mut Parser) -> PResult<(Pattern, Ty)> {
         Ok((
             Pattern::parse(p)?,
             if p.match_type(TokenKind::Colon, Parsing::Param).is_ok() {
-                TyKind::parse(p)?
+                Ty::parse(p)?
             } else {
-                TyKind::Infer
+                Ty { span: Span::dummy(), kind: TyKind::Infer, gens: Default::default() }
             },
         ))
     }
@@ -604,7 +614,11 @@ impl Parse<'_> for Impl {
         const P: Parsing = Parsing::Impl;
         p.match_type(TokenKind::Impl, P)?;
 
-        Ok(Impl { target: ImplKind::parse(p)?, body: delim(File::parse, CURLIES, P)(p)? })
+        Ok(Impl {
+            gens: Generics::parse(p)?,
+            target: ImplKind::parse(p)?,
+            body: delim(File::parse, CURLIES, P)(p)?,
+        })
     }
 }
 
@@ -682,8 +696,9 @@ impl Parse<'_> for Ty {
     ///
     /// See also: [TyKind::parse]
     fn parse(p: &mut Parser<'_>) -> PResult<Self> {
-        let start = p.loc();
-        Ok(Ty { kind: TyKind::parse(p)?, span: Span(start, p.loc()) })
+        let (kind, span) = p.parse()?;
+        let gens = p.parse()?;
+        Ok(Ty { span, kind, gens })
     }
 }
 
@@ -699,9 +714,10 @@ impl Parse<'_> for TyKind {
                 TyKind::Never
             }
             TokenKind::Amp | TokenKind::AmpAmp => TyRef::parse(p)?.into(),
+            TokenKind::Star => TyPtr::parse(p)?.into(),
             TokenKind::LBrack => {
                 p.match_type(BRACKETS.0, Parsing::TySlice)?;
-                let ty = TyKind::parse(p)?;
+                let ty = p.parse()?;
                 let (out, kind) = match p.match_type(TokenKind::Semi, Parsing::TyArray).is_ok() {
                     true => {
                         let literal = p.match_type(TokenKind::Literal, Parsing::TyArray)?;
@@ -709,14 +725,11 @@ impl Parse<'_> for TyKind {
                             Err(p.error(Unexpected(TokenKind::Literal), Parsing::TyArray))?
                         };
                         (
-                            TyKind::Array(TyArray { ty: Box::new(ty), count: count as _ }),
+                            TyKind::Array(TyArray { ty, count: count as _ }),
                             Parsing::TyArray,
                         )
                     }
-                    false => (
-                        TyKind::Slice(TySlice { ty: Box::new(ty) }),
-                        Parsing::TySlice,
-                    ),
+                    false => (TyKind::Slice(TySlice { ty }), Parsing::TySlice),
                 };
                 p.match_type(BRACKETS.1, kind)?;
                 out
@@ -748,9 +761,7 @@ impl Parse<'_> for TyTuple {
     /// [TyTuple] = `(` ([Ty] `,`)* [Ty]? `)`
     fn parse(p: &mut Parser) -> PResult<TyTuple> {
         const P: Parsing = Parsing::TyTuple;
-        Ok(TyTuple {
-            types: delim(sep(TyKind::parse, TokenKind::Comma, PARENS.1, P), PARENS, P)(p)?,
-        })
+        Ok(TyTuple { types: delim(sep(Ty::parse, TokenKind::Comma, PARENS.1, P), PARENS, P)(p)? })
     }
 }
 
@@ -771,24 +782,36 @@ impl Parse<'_> for TyRef {
     }
 }
 
+impl Parse<'_> for TyPtr {
+    /// [TyPtr] = `*` [Ty]
+    fn parse(p: &mut Parser) -> PResult<TyPtr> {
+        const P: Parsing = Parsing::TyRef;
+        p.match_type(TokenKind::Star, P)?;
+        Ok(TyPtr { to: p.parse()? })
+    }
+}
+
 impl Parse<'_> for TyFn {
     /// [TyFn] = `fn` [TyTuple] (-> [Ty])?
     fn parse(p: &mut Parser) -> PResult<TyFn> {
         const P: Parsing = Parsing::TyFn;
         p.match_type(TokenKind::Fn, P)?;
 
-        let args = delim(sep(TyKind::parse, TokenKind::Comma, PARENS.1, P), PARENS, P)(p)?;
+        let head = p.loc();
+        let args = delim(sep(Ty::parse, TokenKind::Comma, PARENS.1, P), PARENS, P)(p)?;
+        let span = Span(head, p.loc());
 
         Ok(TyFn {
             args: Box::new(match args {
-                t if t.is_empty() => TyKind::Empty,
-                types => TyKind::Tuple(TyTuple { types }),
+                t if t.is_empty() => Ty { kind: TyKind::Empty, span, gens: Default::default() },
+                types => {
+                    Ty { kind: TyKind::Tuple(TyTuple { types }), span, gens: Default::default() }
+                }
             }),
-            rety: match p.match_type(TokenKind::Arrow, Parsing::TyFn) {
-                Ok(_) => Some(Ty::parse(p)?),
-                Err(_) => None,
-            }
-            .map(Into::into),
+            rety: Box::new(match p.match_type(TokenKind::Arrow, Parsing::TyFn) {
+                Ok(_) => Ty::parse(p)?,
+                Err(_) => Ty { span, kind: TyKind::Empty, gens: Generics { vars: vec![] } },
+            }),
         })
     }
 }
@@ -847,15 +870,12 @@ impl Parse<'_> for Stmt {
     ///
     /// See also: [StmtKind::parse]
     fn parse(p: &mut Parser) -> PResult<Stmt> {
-        let start = p.loc();
-        Ok(Stmt {
-            kind: StmtKind::parse(p)?,
-            semi: match p.match_type(TokenKind::Semi, Parsing::Stmt) {
-                Ok(_) => Semi::Terminated,
-                _ => Semi::Unterminated,
-            },
-            span: Span(start, p.loc()),
-        })
+        let (kind, span) = Spanned::<StmtKind>::parse(p)?;
+        let semi = match p.match_type(TokenKind::Semi, Parsing::Stmt) {
+            Ok(_) => Semi::Terminated,
+            _ => Semi::Unterminated,
+        };
+        Ok(Stmt { span, kind, semi })
     }
 }
 
@@ -1132,7 +1152,7 @@ impl Parse<'_> for Pattern {
             // Name, Path, Struct, TupleStruct
             TokenKind::Identifier => pathpattern(p)?,
             // Literal
-            TokenKind::Literal => Pattern::Literal(p.parse()?),
+            TokenKind::True | TokenKind::False | TokenKind::Literal => Pattern::Literal(p.parse()?),
             // Rest
             TokenKind::DotDot => {
                 p.consume_peeked();
