@@ -6,24 +6,31 @@ pub enum Option<T> {
     None,
 }
 
-impl Option {
-    pub fn is_some(self: &Self) -> bool {
-        match self {
-            Some(_) => true,
-            None => false,
-        }
-    }
-    pub fn is_none(self: &Self) -> bool {
-        match self {
-            Some(_) => false,
-            None => true,
-        }
-    }
-    /// Maps from one option space to another
+impl<T> Option<T> {
+    // pub fn is_some(self) -> bool {
+    //     match self {
+    //         Option::Some(_) => true,
+    //         Option::None() => false,
+    //     }
+    // }
+    // pub fn is_none(self: &Self) -> bool {
+    //     match self {
+    //         Option::Some(_) => false,
+    //         Option::None() => true,
+    //     }
+    // }
+    // /// Maps from one option space to another
     // pub fn map<U>(self: Self, f: fn(T) -> U) -> Option<U> {
     //     match self {
-    //         Some(value) => Some(f(value)),
-    //         None => None,
+    //         Option::Some(value) => Option::Some(f(value)),
+    //         Option::None() => Option::None(),
+    //     }
+    // }
+
+    // pub fn and_then<U>(self: Self, f: fn(T) -> Option<U>) -> Option<U> {
+    //     match self {
+    //         Option::Some(value) => f(value),
+    //         Option::None() => Option::None(),
     //     }
     // }
 }

@@ -32,12 +32,13 @@ fn noop () -> bool {
         
     } else break loop if false {
         
-    } else break true;
+    } else break true
 }
 
 fn while_else() -> i32 {
+    let (conditional, pass, fail) = (true, 10, 100 as i32);
     while conditional {
-        pass
+        pass;
     } else {
         fail
     }
@@ -66,7 +67,7 @@ fn if_else() -> i32 {
 mod horrible_imports {
     mod foo {
         use super::{bar::*, baz::*};
-        struct Foo(&Foo, &Bar)
+        struct Foo(&Bar, &Baz)
     }
     mod bar {
         use super::{foo::*, baz::*};
