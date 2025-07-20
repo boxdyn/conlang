@@ -139,6 +139,9 @@ pub fn append_sub(
         (Pattern::Literal(Literal::Int(a)), ConValue::Int(b)) => {
             (b == *a as _).then_some(()).ok_or(Error::NotAssignable())
         }
+        (Pattern::Literal(Literal::String(a)), ConValue::Str(b)) => {
+            (*a == *b).then_some(()).ok_or(Error::NotAssignable())
+        }
         (Pattern::Literal(Literal::String(a)), ConValue::String(b)) => {
             (*a == *b).then_some(()).ok_or(Error::NotAssignable())
         }
@@ -156,6 +159,9 @@ pub fn append_sub(
             }
             (Pattern::Literal(Literal::Float(a)), ConValue::Float(b)) => {
                 (b < *a as _).then_some(()).ok_or(Error::NotAssignable())
+            }
+            (Pattern::Literal(Literal::String(a)), ConValue::Str(b)) => {
+                (&*b < a).then_some(()).ok_or(Error::NotAssignable())
             }
             (Pattern::Literal(Literal::String(a)), ConValue::String(b)) => {
                 (&*b < a).then_some(()).ok_or(Error::NotAssignable())
@@ -207,8 +213,15 @@ pub fn append_sub(
             (
                 Pattern::Literal(Literal::String(a)),
                 Pattern::Literal(Literal::String(c)),
-                ConValue::String(b),
+                ConValue::Str(b),
             ) => (a.as_str() <= b.to_ref() && b.to_ref() < c.as_str())
+                .then_some(())
+                .ok_or(Error::NotAssignable()),
+            (
+                Pattern::Literal(Literal::String(a)),
+                Pattern::Literal(Literal::String(c)),
+                ConValue::String(b),
+            ) => (a.as_str() <= b.as_str() && b.as_str() < c.as_str())
                 .then_some(())
                 .ok_or(Error::NotAssignable()),
             _ => Err(Error::NotAssignable()),
@@ -239,8 +252,15 @@ pub fn append_sub(
             (
                 Pattern::Literal(Literal::String(a)),
                 Pattern::Literal(Literal::String(c)),
-                ConValue::String(b),
+                ConValue::Str(b),
             ) => (a.as_str() <= b.to_ref() && b.to_ref() <= c.as_str())
+                .then_some(())
+                .ok_or(Error::NotAssignable()),
+            (
+                Pattern::Literal(Literal::String(a)),
+                Pattern::Literal(Literal::String(c)),
+                ConValue::String(b),
+            ) => (a.as_str() <= b.as_str() && b.as_str() <= c.as_str())
                 .then_some(())
                 .ok_or(Error::NotAssignable()),
             _ => Err(Error::NotAssignable()),

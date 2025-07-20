@@ -26,23 +26,29 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
 
         fn eval(string) @env {
             use cl_interpret::error::Error;
-            let string = match *string {
-                ConValue::String(string) => string,
+            let string = match string {
+                ConValue::Str(string) => string.to_ref(),
+                ConValue::String(string) => string.as_str(),
                 ConValue::Ref(v) => {
-                    let string = env.get_id(v).cloned().unwrap_or_default();
+                    let string = env.get_id(*v).cloned().unwrap_or_default();
                     return eval(env, &[string])
                 }
                 _ => Err(Error::TypeError())?
             };
-            match Parser::new("eval", Lexer::new(string.to_ref())).parse::<cl_ast::Stmt>() {
-                Err(e) => Ok(ConValue::String(format!("{e}").into())),
+            match Parser::new("eval", Lexer::new(string)).parse::<cl_ast::Stmt>() {
+                Err(e) => Ok(ConValue::Str(format!("{e}").into())),
                 Ok(v) => v.interpret(env),
             }
         }
 
         /// Executes a file
-        fn import(ConValue::String(path)) @env {
-            load_file(env, &**path).or(Ok(ConValue::Empty))
+        fn import(path) @env {
+            use cl_interpret::error::Error;
+            match path {
+                ConValue::Str(path) => load_file(env, &**path).or(Ok(ConValue::Empty)),
+                ConValue::String(path) => load_file(env, &**path).or(Ok(ConValue::Empty)),
+                _ => Err(Error::TypeError())
+            }
         }
 
         fn putchar(ConValue::Char(c)) {
@@ -51,12 +57,18 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
         }
 
         /// Gets a line of input from stdin
-        fn get_line(ConValue::String(prompt)) {
-            match repline::Repline::new("", prompt.to_ref(), "").read() {
-                Ok(line) => Ok(ConValue::String(line.into())),
-                Err(repline::Error::CtrlD(line)) => Ok(ConValue::String(line.into())),
+        fn get_line(prompt) {
+            use cl_interpret::error::Error;
+            let prompt = match prompt {
+                ConValue::Str(prompt) => prompt.to_ref(),
+                ConValue::String(prompt) => prompt.as_str(),
+                _ => Err(Error::TypeError())?,
+            };
+            match repline::Repline::new("", prompt, "").read() {
+                Ok(line) => Ok(ConValue::String(line)),
+                Err(repline::Error::CtrlD(line)) => Ok(ConValue::String(line)),
                 Err(repline::Error::CtrlC(_)) => Err(cl_interpret::error::Error::Break(ConValue::Empty)),
-                Err(e) => Ok(ConValue::String(e.to_string().into())),
+                Err(e) => Ok(ConValue::Str(e.to_string().into())),
             }
         }
     });

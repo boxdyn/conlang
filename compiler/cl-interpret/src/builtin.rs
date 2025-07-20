@@ -178,6 +178,7 @@ pub const Builtins: &[Builtin] = &builtins![
     fn len(list) @env {
         Ok(match list {
             ConValue::Empty => 0,
+            ConValue::Str(s) => s.chars().count() as _,
             ConValue::String(s) => s.chars().count() as _,
             ConValue::Ref(r) => {
                 return len(env, &[env.get_id(*r).ok_or(Error::StackOverflow(*r))?.clone()])
@@ -203,6 +204,7 @@ pub const Builtins: &[Builtin] = &builtins![
 
     fn chars(string) @env {
         Ok(match string {
+            ConValue::Str(s) => ConValue::Array(s.chars().map(Into::into).collect()),
             ConValue::String(s) => ConValue::Array(s.chars().map(Into::into).collect()),
             ConValue::Ref(r) => {
                 return chars(env, &[env.get_id(*r).ok_or(Error::StackOverflow(*r))?.clone()])
@@ -259,7 +261,15 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a + b),
-            (ConValue::String(a), ConValue::String(b)) => (a.to_string() + &b.to_string()).into(),
+            (ConValue::Str(a), ConValue::Str(b)) => (a.to_string() + b).into(),
+            (ConValue::Str(a), ConValue::String(b)) => (a.to_string() + b).into(),
+            (ConValue::String(a), ConValue::Str(b)) => (a.to_string() + b).into(),
+            (ConValue::String(a), ConValue::String(b)) => (a.to_string() + b).into(),
+            (ConValue::Str(s), ConValue::Char(c)) => { let mut s = s.to_string(); s.push(*c); s.into() }
+            (ConValue::String(s), ConValue::Char(c)) => { let mut s = s.to_string(); s.push(*c); s.into() }
+            (ConValue::Char(a), ConValue::Char(b)) => {
+                ConValue::String([a, b].into_iter().collect::<String>())
+            }
             _ => Err(Error::TypeError())?
         })
     }
@@ -375,6 +385,9 @@ pub const Math: &[Builtin] = &builtins![
             (ConValue::Int(a), ConValue::Int(b)) => a.cmp(b) as _,
             (ConValue::Bool(a), ConValue::Bool(b)) => a.cmp(b) as _,
             (ConValue::Char(a), ConValue::Char(b)) => a.cmp(b) as _,
+            (ConValue::Str(a), ConValue::Str(b)) => a.cmp(b) as _,
+            (ConValue::Str(a), ConValue::String(b)) => a.to_ref().cmp(b.as_str()) as _,
+            (ConValue::String(a), ConValue::Str(b)) => a.as_str().cmp(b.to_ref()) as _,
             (ConValue::String(a), ConValue::String(b)) => a.cmp(b) as _,
             _ => Err(error_format!("Incomparable values: {head}, {tail}"))?
         }))

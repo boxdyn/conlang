@@ -2,6 +2,7 @@
 fn f(__fmt: str) -> str {
     let __out = "";
     let __expr = "";
+    let __label = "";
     let __depth = 0;
     for __c in chars(__fmt) {
         match __c {
@@ -14,19 +15,26 @@ fn f(__fmt: str) -> str {
             '}' => {
                 __depth -= 1
                 if __depth <= 0 {
-                    __out += fmt(eval(__expr))
-                    __expr = ""
+                    __out = fmt(__out, __label, eval(__expr));
+                    (__expr, __label) = ("", "");
                     continue
                 }
             },
-            ':' => if __depth == 1 {
-                __out += __expr + ": "
+            ':' => if __depth == 1 && __label.len() == 0 {
+                __label = __expr + __c
+                continue
+            },
+            '=' => if __depth == 1 && __label.len() == 0 {
+                __label = __expr + __c
+                continue
             },
             _ => {}
         }
-        if __depth > 0 {
-            __expr += __c
-        } else __out += __c;
+        match (__depth, __label.len()) {
+            (0, _) => __out += __c,
+            (_, 0) => __expr += __c,
+            (_, _) => __label += __c,
+        }
     }
     __out
 }

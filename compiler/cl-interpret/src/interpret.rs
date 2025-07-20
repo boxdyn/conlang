@@ -699,7 +699,7 @@ fn cast(env: &Environment, value: ConValue, ty: Sym) -> IResult<ConValue> {
         // TODO: This, better
         ConValue::Float(_) if ty.starts_with('f') => return Ok(value),
         ConValue::Float(f) => f as _,
-        _ if (*ty).eq("str") => return Ok(ConValue::String(format!("{value}").into())),
+        _ if (*ty).eq("str") => return Ok(ConValue::Str(format!("{value}").into())),
         _ => Err(Error::TypeError())?,
     };
     Ok(match &*ty {
@@ -958,7 +958,7 @@ impl Interpret for For {
             &ConValue::Slice(head, len) => Box::new((head..head + len).map(ConValue::Ref)),
             // In the production compiler this may be fully unrolled
             ConValue::Tuple(t) => Box::new(t.iter().cloned()),
-            ConValue::String(s) => Box::new(s.chars().map(ConValue::Char)),
+            ConValue::Str(s) => Box::new(s.chars().map(ConValue::Char)),
             _ => Err(Error::TypeError())?,
         };
         loop {

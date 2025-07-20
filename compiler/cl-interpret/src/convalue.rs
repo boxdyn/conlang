@@ -51,8 +51,10 @@ pub enum ConValue {
     Bool(bool),
     /// A unicode character
     Char(char),
-    /// A string
-    String(Sym),
+    /// A string literal
+    Str(Sym),
+    /// A dynamic string
+    String(String),
     /// A reference
     Ref(usize),
     /// A reference to an array
@@ -97,6 +99,7 @@ impl ConValue {
             ConValue::Float(_) => "f64",
             ConValue::Bool(_) => "bool",
             ConValue::Char(_) => "char",
+            ConValue::Str(_) => "str",
             ConValue::String(_) => "String",
             ConValue::Ref(_) => "Ref",
             ConValue::Slice(_, _) => "Slice",
@@ -128,6 +131,11 @@ impl ConValue {
             Err(Error::TypeError())?
         };
         match self {
+            ConValue::Str(string) => string
+                .chars()
+                .nth(index as _)
+                .map(ConValue::Char)
+                .ok_or(Error::OobIndex(index as usize, string.chars().count())),
             ConValue::String(string) => string
                 .chars()
                 .nth(index as _)
@@ -216,6 +224,9 @@ macro cmp ($($fn:ident: $empty:literal, $op:tt);*$(;)?) {$(
             (Self::Float(a), Self::Float(b)) => Ok(Self::Bool(a $op b)),
             (Self::Bool(a), Self::Bool(b)) => Ok(Self::Bool(a $op b)),
             (Self::Char(a), Self::Char(b)) => Ok(Self::Bool(a $op b)),
+            (Self::Str(a), Self::Str(b)) => Ok(Self::Bool(&**a $op &**b)),
+            (Self::Str(a), Self::String(b)) => Ok(Self::Bool(&**a $op &**b)),
+            (Self::String(a), Self::Str(b)) => Ok(Self::Bool(&**a $op &**b)),
             (Self::String(a), Self::String(b)) => Ok(Self::Bool(&**a $op &**b)),
             _ => Err(Error::TypeError())
         }
@@ -235,7 +246,7 @@ macro from ($($T:ty => $v:expr),*$(,)?) {
 }
 impl From<&Sym> for ConValue {
     fn from(value: &Sym) -> Self {
-        ConValue::String(*value)
+        ConValue::Str(*value)
     }
 }
 from! {
@@ -243,11 +254,11 @@ from! {
     f64 => ConValue::Float,
     bool => ConValue::Bool,
     char => ConValue::Char,
-    Sym => ConValue::String,
-    &str => ConValue::String,
+    Sym => ConValue::Str,
+    &str => ConValue::Str,
     Expr => ConValue::Quote,
     String => ConValue::String,
-    Rc<str> => ConValue::String,
+    Rc<str> => ConValue::Str,
     Function => ConValue::Function,
     Vec<ConValue> => ConValue::Tuple,
     &'static Builtin => ConValue::Builtin,
@@ -282,10 +293,14 @@ ops! {
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_add(b)),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a + b),
+        (ConValue::Str(a), ConValue::Str(b)) => (a.to_string() + &*b).into(),
+        (ConValue::Str(a), ConValue::String(b)) => (a.to_string() + &*b).into(),
+        (ConValue::String(a), ConValue::Str(b)) => (a.to_string() + &*b).into(),
         (ConValue::String(a), ConValue::String(b)) => (a.to_string() + &*b).into(),
+        (ConValue::Str(s), ConValue::Char(c)) => { let mut s = s.to_string(); s.push(c); s.into() }
         (ConValue::String(s), ConValue::Char(c)) => { let mut s = s.to_string(); s.push(c); s.into() }
         (ConValue::Char(a), ConValue::Char(b)) => {
-            ConValue::String([a, b].into_iter().collect::<String>().into())
+            ConValue::String([a, b].into_iter().collect::<String>())
         }
         _ => Err(Error::TypeError())?
         ]
@@ -354,6 +369,7 @@ impl std::fmt::Display for ConValue {
             ConValue::Float(v) => v.fmt(f),
             ConValue::Bool(v) => v.fmt(f),
             ConValue::Char(v) => v.fmt(f),
+            ConValue::Str(v) => v.fmt(f),
             ConValue::String(v) => v.fmt(f),
             ConValue::Ref(v) => write!(f, "&<{}>", v),
             ConValue::Slice(id, len) => write!(f, "&<{id}>[{len}..]"),
