@@ -39,10 +39,10 @@ impl Path {
 
     /// Checks whether this path refers to the sinkhole identifier, `_`
     pub fn is_sinkhole(&self) -> bool {
-        if let [PathPart::Ident(id)] = self.parts.as_slice() {
-            if let "_" = id.to_ref() {
-                return true;
-            }
+        if let [PathPart::Ident(id)] = self.parts.as_slice()
+            && let "_" = id.to_ref()
+        {
+            return true;
         }
         false
     }

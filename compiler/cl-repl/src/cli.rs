@@ -78,10 +78,10 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
     }
 
     if repl {
-        if let Some(file) = file {
-            if let Err(e) = load_file(&mut env, file) {
-                eprintln!("{e}")
-            }
+        if let Some(file) = file
+            && let Err(e) = load_file(&mut env, file)
+        {
+            eprintln!("{e}")
         }
         let mut ctx = Context::with_env(env);
         match mode {
@@ -106,7 +106,7 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn format_path_for_display(path: Option<&Path>) -> Cow<str> {
+fn format_path_for_display(path: Option<&Path>) -> Cow<'_, str> {
     match path {
         Some(file) => file
             .to_str()

@@ -72,7 +72,7 @@ pub mod clangifier {
             Self::default()
         }
 
-        pub fn indent(&mut self) -> Section {
+        pub fn indent(&mut self) -> Section<'_> {
             Section::new(self)
         }
 
@@ -104,7 +104,7 @@ pub mod clangifier {
         }
 
         /// Prints a section header and increases indentation
-        pub fn nest(&mut self, name: impl Display) -> Section {
+        pub fn nest(&mut self, name: impl Display) -> Section<'_> {
             print!("{name}");
             self.indent()
         }
