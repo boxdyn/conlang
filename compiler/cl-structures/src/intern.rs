@@ -44,9 +44,8 @@ pub mod interned {
 
     impl<T: ?Sized + Debug> Debug for Interned<'_, T> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("Interned")
-                .field("value", &self.value)
-                .finish()
+            write!(f, "~")?;
+            self.value.fmt(f)
         }
     }
     impl<'a, T: ?Sized> Interned<'a, T> {
