@@ -14,7 +14,7 @@ fn n_digit(n: u32) -> char {
     }) as char
 }
 
-fn in_range(num: u32, start: u32, end: u32) -> bool {
+fn in_range(&num: &u32, start: u32, end: u32) -> bool {
     (start <= num) && (num <= end )
 }
 
