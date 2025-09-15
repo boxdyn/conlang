@@ -5,7 +5,7 @@ use cl_structures::span::Loc;
 use cl_token::{TokenKind as Kind, *};
 use std::{
     iter::Peekable,
-    str::{Chars, FromStr},
+    str::{CharIndices, FromStr},
 };
 use unicode_ident::*;
 
@@ -76,409 +76,370 @@ pub mod lexer_iter {
 /// ```
 #[derive(Clone, Debug)]
 pub struct Lexer<'t> {
-    iter: Peekable<Chars<'t>>,
-    start: usize,
-    start_loc: (u32, u32),
-    current: usize,
-    current_loc: (u32, u32),
+    /// The source text
+    text: &'t str,
+    /// A peekable iterator over the source text
+    iter: Peekable<CharIndices<'t>>,
+    /// The end of the current token
+    head: usize,
+    /// The (line, col) end of the current token
+    head_loc: (u32, u32),
+    /// The start of the current token
+    tail: usize,
+    /// The (line, col) start of the current token
+    tail_loc: (u32, u32),
 }
 
 impl<'t> Lexer<'t> {
     /// Creates a new [Lexer] over a [str]
     pub fn new(text: &'t str) -> Self {
         Self {
-            iter: text.chars().peekable(),
-            start: 0,
-            start_loc: (1, 1),
-            current: 0,
-            current_loc: (1, 1),
+            text,
+            iter: text.char_indices().peekable(),
+            head: 0,
+            head_loc: (1, 1),
+            tail: 0,
+            tail_loc: (1, 1),
         }
     }
-    /// Scans through the text, searching for the next [Token]
-    pub fn scan(&mut self) -> LResult<Token> {
-        match self.skip_whitespace().peek()? {
-            '{' => self.consume()?.produce_op(Kind::LCurly),
-            '}' => self.consume()?.produce_op(Kind::RCurly),
-            '[' => self.consume()?.produce_op(Kind::LBrack),
-            ']' => self.consume()?.produce_op(Kind::RBrack),
-            '(' => self.consume()?.produce_op(Kind::LParen),
-            ')' => self.consume()?.produce_op(Kind::RParen),
-            '&' => self.consume()?.amp(),
-            '@' => self.consume()?.produce_op(Kind::At),
-            '\\' => self.consume()?.produce_op(Kind::Backslash),
-            '!' => self.consume()?.bang(),
-            '|' => self.consume()?.bar(),
-            ':' => self.consume()?.colon(),
-            ',' => self.consume()?.produce_op(Kind::Comma),
-            '.' => self.consume()?.dot(),
-            '=' => self.consume()?.equal(),
-            '`' => self.consume()?.produce_op(Kind::Grave),
-            '>' => self.consume()?.greater(),
-            '#' => self.consume()?.hash(),
-            '<' => self.consume()?.less(),
-            '-' => self.consume()?.minus(),
-            '+' => self.consume()?.plus(),
-            '?' => self.consume()?.produce_op(Kind::Question),
-            '%' => self.consume()?.rem(),
-            ';' => self.consume()?.produce_op(Kind::Semi),
-            '/' => self.consume()?.slash(),
-            '*' => self.consume()?.star(),
-            '~' => self.consume()?.produce_op(Kind::Tilde),
-            '^' => self.consume()?.xor(),
-            '0' => self.consume()?.int_with_base(),
-            '1'..='9' => self.digits::<10>(),
-            '"' => self.consume()?.string(),
-            '\'' => self.consume()?.character(),
-            '_' => self.identifier(),
-            i if is_xid_start(i) => self.identifier(),
-            e => {
-                let err = Err(Error::unexpected_char(e, self.line(), self.col()));
-                let _ = self.consume();
-                err
-            }
-        }
-    }
+
     /// Returns the current line
     pub fn line(&self) -> u32 {
-        self.start_loc.0
+        self.tail_loc.0
     }
+
     /// Returns the current column
     pub fn col(&self) -> u32 {
-        self.start_loc.1
+        self.tail_loc.1
     }
-    fn next(&mut self) -> LResult<char> {
-        let out = self.peek();
-        self.consume()?;
-        out
+
+    /// Returns the current token's lexeme
+    fn lexeme(&mut self) -> &'t str {
+        &self.text[self.tail..self.head]
     }
-    fn peek(&mut self) -> LResult<char> {
-        self.iter
-            .peek()
-            .copied()
-            .ok_or(Error::end_of_file(self.line(), self.col()))
+
+    /// Peeks the next character without advancing the lexer
+    fn peek(&mut self) -> Option<char> {
+        self.iter.peek().map(|(_, c)| *c)
     }
-    fn produce(&mut self, kind: Kind, data: impl Into<TokenData>) -> LResult<Token> {
-        let loc = self.start_loc;
-        self.start_loc = self.current_loc;
-        self.start = self.current;
-        Ok(Token::new(kind, data, loc.0, loc.1))
-    }
-    fn produce_op(&mut self, kind: Kind) -> LResult<Token> {
-        self.produce(kind, ())
-    }
-    fn skip_whitespace(&mut self) -> &mut Self {
-        while let Ok(c) = self.peek() {
-            if !c.is_whitespace() {
-                break;
-            }
-            let _ = self.consume();
-        }
-        self.start = self.current;
-        self.start_loc = self.current_loc;
-        self
-    }
-    fn consume(&mut self) -> LResult<&mut Self> {
-        self.current += 1;
-        match self.iter.next() {
-            Some('\n') => {
-                let (line, col) = &mut self.current_loc;
+
+    /// Advances the 'tail' (current position)
+    fn advance_tail(&mut self) {
+        let (idx, c) = self.iter.peek().copied().unwrap_or((self.text.len(), '\0'));
+        let (line, col) = &mut self.head_loc;
+        let diff = idx - self.head;
+
+        self.head = idx;
+        match c {
+            '\n' => {
                 *line += 1;
                 *col = 1;
             }
-            Some(_) => self.current_loc.1 += 1,
-            None => Err(Error::end_of_file(self.line(), self.col()))?,
+            _ => *col += diff as u32,
         }
-        Ok(self)
+    }
+
+    /// Takes the last-peeked character, or the next character if none peeked.
+    pub fn take(&mut self) -> Option<char> {
+        let (_, c) = self.iter.next()?;
+        self.advance_tail();
+        Some(c)
+    }
+
+    /// Takes the next char if it matches the `expected` char
+    pub fn next_if(&mut self, expected: char) -> Option<char> {
+        let (_, c) = self.iter.next_if(|&(_, c)| c == expected)?;
+        self.advance_tail();
+        Some(c)
+    }
+
+    /// Consumes the last-peeked character, advancing the tail
+    pub fn consume(&mut self) -> &mut Self {
+        self.iter.next();
+        self.advance_tail();
+        self
+    }
+
+    /// Produces an [Error] at the start of the current token
+    fn error(&self, reason: Reason) -> Error {
+        Error { reason, line: self.line(), col: self.col() }
+    }
+
+    /// Produces a token with the current [lexeme](Lexer::lexeme) as its data
+    fn produce(&mut self, kind: Kind) -> LResult<Token> {
+        let lexeme = self.lexeme().to_owned();
+        self.produce_with(kind, lexeme)
+    }
+
+    /// Produces a token with the provided `data`
+    fn produce_with(&mut self, kind: Kind, data: impl Into<TokenData>) -> LResult<Token> {
+        let loc = self.tail_loc;
+        self.tail_loc = self.head_loc;
+        self.tail = self.head;
+        Ok(Token::new(kind, data, loc.0, loc.1))
+    }
+
+    /// Produces a token with no `data`
+    fn produce_op(&mut self, kind: Kind) -> LResult<Token> {
+        self.produce_with(kind, ())
+    }
+
+    /// Consumes 0 or more whitespace
+    fn skip_whitespace(&mut self) -> &mut Self {
+        while self.peek().is_some_and(char::is_whitespace) {
+            let _ = self.consume();
+        }
+        self
+    }
+
+    /// Starts a new token
+    fn start_token(&mut self) -> &mut Self {
+        self.tail_loc = self.head_loc;
+        self.tail = self.head;
+        self
+    }
+
+    /// Scans through the text, searching for the next [Token]
+    pub fn scan(&mut self) -> LResult<Token> {
+        use TokenKind::*;
+        // !"#%&'()*+,-./:;<=>?@[\\]^`{|}~
+        let tok = match self
+            .skip_whitespace()
+            .start_token()
+            .peek()
+            .ok_or_else(|| self.error(Reason::EndOfFile))?
+        {
+            '!' => Bang,
+            '"' => return self.string(),
+            '#' => Hash,
+            '%' => Rem,
+            '&' => Amp,
+            '\'' => return self.character(),
+            '(' => LParen,
+            ')' => RParen,
+            '*' => Star,
+            '+' => Plus,
+            ',' => Comma,
+            '-' => Minus,
+            '.' => Dot,
+            '/' => Slash,
+            '0' => TokenKind::Literal,
+            '1'..='9' => return self.digits::<10>(),
+            ':' => Colon,
+            ';' => Semi,
+            '<' => Lt,
+            '=' => Eq,
+            '>' => Gt,
+            '?' => Question,
+            '@' => At,
+            '[' => LBrack,
+            '\\' => Backslash,
+            ']' => RBrack,
+            '^' => Xor,
+            '`' => Grave,
+            '{' => LCurly,
+            '|' => Bar,
+            '}' => RCurly,
+            '~' => Tilde,
+            '_' => return self.identifier(),
+            c if is_xid_start(c) => return self.identifier(),
+            e => {
+                let err = Err(self.error(Reason::UnexpectedChar(e)));
+                let _ = self.consume();
+                err?
+            }
+        };
+
+        // Handle digraphs
+        let tok = match (tok, self.consume().peek()) {
+            (Literal, Some('b')) => return self.consume().digits::<2>(),
+            (Literal, Some('d')) => return self.consume().digits::<10>(),
+            (Literal, Some('o')) => return self.consume().digits::<8>(),
+            (Literal, Some('x')) => return self.consume().digits::<16>(),
+            (Literal, Some('~')) => return self.consume().digits::<36>(),
+            (Literal, _) => return self.digits::<10>(),
+            (Amp, Some('&')) => AmpAmp,
+            (Amp, Some('=')) => AmpEq,
+            (Bang, Some('!')) => BangBang,
+            (Bang, Some('=')) => BangEq,
+            (Bar, Some('|')) => BarBar,
+            (Bar, Some('=')) => BarEq,
+            (Colon, Some(':')) => ColonColon,
+            (Dot, Some('.')) => DotDot,
+            (Eq, Some('=')) => EqEq,
+            (Eq, Some('>')) => FatArrow,
+            (Gt, Some('=')) => GtEq,
+            (Gt, Some('>')) => GtGt,
+            (Hash, Some('!')) => HashBang,
+            (Lt, Some('=')) => LtEq,
+            (Lt, Some('<')) => LtLt,
+            (Minus, Some('=')) => MinusEq,
+            (Minus, Some('>')) => Arrow,
+            (Plus, Some('=')) => PlusEq,
+            (Rem, Some('=')) => RemEq,
+            (Slash, Some('*')) => return self.block_comment()?.produce(Kind::Comment),
+            (Slash, Some('/')) => return self.line_comment(),
+            (Slash, Some('=')) => SlashEq,
+            (Star, Some('=')) => StarEq,
+            (Xor, Some('=')) => XorEq,
+            (Xor, Some('^')) => XorXor,
+            _ => return self.produce_op(tok),
+        };
+
+        // Handle trigraphs
+        let tok = match (tok, self.consume().peek()) {
+            (HashBang, Some('/')) => return self.line_comment(),
+            (DotDot, Some('=')) => DotDotEq,
+            (GtGt, Some('=')) => GtGtEq,
+            (LtLt, Some('=')) => LtLtEq,
+            _ => return self.produce_op(tok),
+        };
+
+        self.consume().produce_op(tok)
     }
 }
-/// Digraphs and trigraphs
-impl Lexer<'_> {
-    fn amp(&mut self) -> LResult<Token> {
-        match self.peek() {
-            Ok('&') => self.consume()?.produce_op(Kind::AmpAmp),
-            Ok('=') => self.consume()?.produce_op(Kind::AmpEq),
-            _ => self.produce_op(Kind::Amp),
-        }
-    }
-    fn bang(&mut self) -> LResult<Token> {
-        match self.peek() {
-            Ok('!') => self.consume()?.produce_op(Kind::BangBang),
-            Ok('=') => self.consume()?.produce_op(Kind::BangEq),
-            _ => self.produce_op(Kind::Bang),
-        }
-    }
-    fn bar(&mut self) -> LResult<Token> {
-        match self.peek() {
-            Ok('|') => self.consume()?.produce_op(Kind::BarBar),
-            Ok('=') => self.consume()?.produce_op(Kind::BarEq),
-            _ => self.produce_op(Kind::Bar),
-        }
-    }
-    fn colon(&mut self) -> LResult<Token> {
-        match self.peek() {
-            Ok(':') => self.consume()?.produce_op(Kind::ColonColon),
-            _ => self.produce_op(Kind::Colon),
-        }
-    }
-    fn dot(&mut self) -> LResult<Token> {
-        match self.peek() {
-            Ok('.') => {
-                if let Ok('=') = self.consume()?.peek() {
-                    self.consume()?.produce_op(Kind::DotDotEq)
-                } else {
-                    self.produce_op(Kind::DotDot)
-                }
-            }
-            _ => self.produce_op(Kind::Dot),
-        }
-    }
-    fn equal(&mut self) -> LResult<Token> {
-        match self.peek() {
-            Ok('=') => self.consume()?.produce_op(Kind::EqEq),
-            Ok('>') => self.consume()?.produce_op(Kind::FatArrow),
-            _ => self.produce_op(Kind::Eq),
-        }
-    }
-    fn greater(&mut self) -> LResult<Token> {
-        match self.peek() {
-            Ok('=') => self.consume()?.produce_op(Kind::GtEq),
-            Ok('>') => {
-                if let Ok('=') = self.consume()?.peek() {
-                    self.consume()?.produce_op(Kind::GtGtEq)
-                } else {
-                    self.produce_op(Kind::GtGt)
-                }
-            }
-            _ => self.produce_op(Kind::Gt),
-        }
-    }
-    fn hash(&mut self) -> LResult<Token> {
-        match self.peek() {
-            Ok('!') => self.consume()?.hashbang(),
-            _ => self.produce_op(Kind::Hash),
-        }
-    }
-    fn hashbang(&mut self) -> LResult<Token> {
-        match self.peek() {
-            Ok('/' | '\'') => self.line_comment(),
-            _ => self.produce_op(Kind::HashBang),
-        }
-    }
-    fn less(&mut self) -> LResult<Token> {
-        match self.peek() {
-            Ok('=') => self.consume()?.produce_op(Kind::LtEq),
-            Ok('<') => {
-                if let Ok('=') = self.consume()?.peek() {
-                    self.consume()?.produce_op(Kind::LtLtEq)
-                } else {
-                    self.produce_op(Kind::LtLt)
-                }
-            }
-            _ => self.produce_op(Kind::Lt),
-        }
-    }
-    fn minus(&mut self) -> LResult<Token> {
-        match self.peek() {
-            Ok('=') => self.consume()?.produce_op(Kind::MinusEq),
-            Ok('>') => self.consume()?.produce_op(Kind::Arrow),
-            _ => self.produce_op(Kind::Minus),
-        }
-    }
-    fn plus(&mut self) -> LResult<Token> {
-        match self.peek() {
-            Ok('=') => self.consume()?.produce_op(Kind::PlusEq),
-            _ => self.produce_op(Kind::Plus),
-        }
-    }
-    fn rem(&mut self) -> LResult<Token> {
-        match self.peek() {
-            Ok('=') => self.consume()?.produce_op(Kind::RemEq),
-            _ => self.produce_op(Kind::Rem),
-        }
-    }
-    fn slash(&mut self) -> LResult<Token> {
-        match self.peek() {
-            Ok('=') => self.consume()?.produce_op(Kind::SlashEq),
-            Ok('/') => self.consume()?.line_comment(),
-            Ok('*') => self.consume()?.block_comment(),
-            _ => self.produce_op(Kind::Slash),
-        }
-    }
-    fn star(&mut self) -> LResult<Token> {
-        match self.peek() {
-            Ok('=') => self.consume()?.produce_op(Kind::StarEq),
-            _ => self.produce_op(Kind::Star),
-        }
-    }
-    fn xor(&mut self) -> LResult<Token> {
-        match self.peek() {
-            Ok('=') => self.consume()?.produce_op(Kind::XorEq),
-            Ok('^') => self.consume()?.produce_op(Kind::XorXor),
-            _ => self.produce_op(Kind::Xor),
-        }
-    }
-}
+
 /// Comments
 impl Lexer<'_> {
+    /// Consumes until the next newline '\n', producing a [Comment](Kind::Comment)
     fn line_comment(&mut self) -> LResult<Token> {
-        let mut comment = String::new();
-        while Ok('\n') != self.peek() {
-            comment.push(self.next()?);
-        }
-        self.produce(Kind::Comment, comment)
+        while self.consume().peek().is_some_and(|c| c != '\n') {}
+        self.produce(Kind::Comment)
     }
-    fn block_comment(&mut self) -> LResult<Token> {
-        let mut comment = String::new();
-        while let Ok(c) = self.next() {
-            if '*' == c && Ok('/') == self.peek() {
-                break;
-            }
-            comment.push(c);
+
+    /// Consumes nested block-comments. Does not produce by itself.
+    fn block_comment(&mut self) -> LResult<&mut Self> {
+        self.consume();
+        while let Some(c) = self.take() {
+            match (c, self.peek()) {
+                ('/', Some('*')) => self.block_comment()?,
+                ('*', Some('/')) => return Ok(self.consume()),
+                _ => continue,
+            };
         }
-        self.consume()?.produce(Kind::Comment, comment)
+        Err(self.error(Reason::UnmatchedDelimiters('/')))
     }
 }
+
 /// Identifiers
 impl Lexer<'_> {
+    /// Produces an [Identifier](Kind::Identifier) or keyword
     fn identifier(&mut self) -> LResult<Token> {
-        let mut out = String::from(self.xid_start()?);
-        while let Ok(c) = self.xid_continue() {
-            out.push(c)
-        }
-        if let Ok(keyword) = Kind::from_str(&out) {
-            self.produce(keyword, ())
+        while self.consume().peek().is_some_and(is_xid_continue) {}
+        if let Ok(keyword) = Kind::from_str(self.lexeme()) {
+            self.produce_with(keyword, ())
         } else {
-            self.produce(Kind::Identifier, TokenData::String(out))
-        }
-    }
-    fn xid_start(&mut self) -> LResult<char> {
-        match self.peek()? {
-            xid if xid == '_' || is_xid_start(xid) => {
-                self.consume()?;
-                Ok(xid)
-            }
-            bad => Err(Error::not_identifier(bad, self.line(), self.col())),
-        }
-    }
-    fn xid_continue(&mut self) -> LResult<char> {
-        match self.peek()? {
-            xid if is_xid_continue(xid) => {
-                self.consume()?;
-                Ok(xid)
-            }
-            bad => Err(Error::not_identifier(bad, self.line(), self.col())),
+            self.produce(Kind::Identifier)
         }
     }
 }
+
 /// Integers
 impl Lexer<'_> {
-    fn int_with_base(&mut self) -> LResult<Token> {
-        match self.peek() {
-            Ok('~') => self.consume()?.digits::<36>(),
-            Ok('x') => self.consume()?.digits::<16>(),
-            Ok('d') => self.consume()?.digits::<10>(),
-            Ok('o') => self.consume()?.digits::<8>(),
-            Ok('b') => self.consume()?.digits::<2>(),
-            Ok('0'..='9' | '.') => self.digits::<10>(),
-            _ => self.produce(Kind::Literal, 0),
-        }
-    }
+    /// Produces a [Literal](Kind::Literal) with an integer or float value.
     fn digits<const B: u32>(&mut self) -> LResult<Token> {
         let mut value = 0;
-        while let Ok(true) = self.peek().as_ref().map(char::is_ascii_alphanumeric) {
+        while let Some(true) = self.peek().as_ref().map(char::is_ascii_alphanumeric) {
             value = value * B as u128 + self.digit::<B>()? as u128;
         }
         // TODO: find a better way to handle floats in the tokenizer
         match self.peek() {
-            Ok('.') => {
+            Some('.') => {
                 // FIXME: hack: 0.. is not [0.0, '.']
-                if let Ok('.') = self.clone().consume()?.next() {
-                    return self.produce(Kind::Literal, value);
+                if let Some('.') = self.clone().consume().take() {
+                    return self.produce_with(Kind::Literal, value);
                 }
                 let mut float = format!("{value}.");
-                self.consume()?;
-                while let Ok(true) = self.peek().as_ref().map(char::is_ascii_digit) {
-                    float.push(self.iter.next().unwrap_or_default());
+                self.consume();
+                while let Some(true) = self.peek().as_ref().map(char::is_ascii_digit) {
+                    float.push(self.iter.next().map(|(_, c)| c).unwrap_or_default());
                 }
                 let float = f64::from_str(&float).expect("must be parsable as float");
-                self.produce(Kind::Literal, float)
+                self.produce_with(Kind::Literal, float)
             }
-            _ => self.produce(Kind::Literal, value),
+            _ => self.produce_with(Kind::Literal, value),
         }
     }
+
+    /// Consumes a single digit of base [B](Lexer::digit)
     fn digit<const B: u32>(&mut self) -> LResult<u32> {
-        let digit = self.peek()?;
-        self.consume()?;
+        let digit = self.take().ok_or_else(|| self.error(Reason::EndOfFile))?;
         digit
             .to_digit(B)
-            .ok_or(Error::invalid_digit(digit, self.line(), self.col()))
+            .ok_or_else(|| self.error(Reason::InvalidDigit(digit)))
     }
 }
+
 /// Strings and characters
 impl Lexer<'_> {
-    fn string(&mut self) -> LResult<Token> {
-        let mut value = String::new();
-        while '"'
-            != self
-                .peek()
-                .map_err(|e| e.mask_reason(Reason::UnmatchedDelimiters('"')))?
-        {
-            value.push(self.unescape()?)
+    /// Produces a [Literal](Kind::Literal) with a pre-escaped [String]
+    pub fn string(&mut self) -> Result<Token, Error> {
+        let mut lexeme = String::new();
+        self.consume();
+        loop {
+            lexeme.push(match self.take() {
+                None => Err(self.error(Reason::UnmatchedDelimiters('"')))?,
+                Some('\\') => self.unescape()?,
+                Some('"') => break,
+                Some(c) => c,
+            })
         }
-        self.consume()?.produce(Kind::Literal, value)
+        lexeme.shrink_to_fit();
+        self.produce_with(Kind::Literal, lexeme)
     }
-    fn character(&mut self) -> LResult<Token> {
-        let out = self.unescape()?;
-        match self.peek()? {
-            '\'' => self.consume()?.produce(Kind::Literal, out),
-            _ => Err(Error::unmatched_delimiters('\'', self.line(), self.col())),
+
+    /// Produces a [Literal](Kind::Literal) with a pre-escaped [char]
+    fn character(&mut self) -> Result<Token, Error> {
+        let c = match self.consume().take() {
+            Some('\\') => self.unescape()?,
+            Some(c) => c,
+            None => '\0',
+        };
+        if self.take().is_some_and(|c| c == '\'') {
+            self.produce_with(Kind::Literal, c)
+        } else {
+            Err(self.error(Reason::UnmatchedDelimiters('\'')))
         }
     }
-    /// Unescape a single character
+
+    /// Unescapes a single character
+    #[rustfmt::skip]
     fn unescape(&mut self) -> LResult<char> {
-        match self.next() {
-            Ok('\\') => (),
-            other => return other,
-        }
-        Ok(match self.next()? {
+        Ok(match self.take().ok_or_else(|| self.error(Reason::EndOfFile))? {
+            ' ' => '\u{a0}',
+            '0' => '\0',
             'a' => '\x07',
             'b' => '\x08',
+            'e' => '\x1b',
             'f' => '\x0c',
             'n' => '\n',
             'r' => '\r',
             't' => '\t',
-            'x' => self.hex_escape()?,
             'u' => self.unicode_escape()?,
-            '0' => '\0',
+            'x' => self.hex_escape()?,
             chr => chr,
         })
     }
-    /// unescape a single 2-digit hex escape
+    /// Unescapes a single 2-digit hex escape
     fn hex_escape(&mut self) -> LResult<char> {
         let out = (self.digit::<16>()? << 4) + self.digit::<16>()?;
-        char::from_u32(out).ok_or(Error::bad_unicode(out, self.line(), self.col()))
+        char::from_u32(out).ok_or_else(|| self.error(Reason::BadUnicode(out)))
     }
-    /// unescape a single \u{} unicode escape
-    fn unicode_escape(&mut self) -> LResult<char> {
+
+    /// Unescapes a single \u{} unicode escape
+    pub fn unicode_escape(&mut self) -> Result<char, Error> {
+        self.next_if('{')
+            .ok_or_else(|| self.error(Reason::InvalidEscape('u')))?;
         let mut out = 0;
-        let Ok('{') = self.peek() else {
-            return Err(Error::invalid_escape('u', self.line(), self.col()));
-        };
-        self.consume()?;
-        while let Ok(c) = self.peek() {
-            match c {
-                '}' => {
-                    self.consume()?;
-                    return char::from_u32(out).ok_or(Error::bad_unicode(
-                        out,
-                        self.line(),
-                        self.col(),
-                    ));
-                }
-                _ => out = (out << 4) + self.digit::<16>()?,
+        while let Some(c) = self.take() {
+            if c == '}' {
+                return char::from_u32(out).ok_or_else(|| self.error(Reason::BadUnicode(out)));
             }
+            out = out * 16
+                + c.to_digit(16)
+                    .ok_or_else(|| self.error(Reason::InvalidDigit(c)))?;
         }
-        Err(Error::invalid_escape('u', self.line(), self.col()))
+        Err(self.error(Reason::UnmatchedDelimiters('}')))
     }
 }
 
@@ -508,8 +469,6 @@ pub mod error {
         UnmatchedDelimiters(char),
         /// Found a character that doesn't belong to any [TokenKind](cl_token::TokenKind)
         UnexpectedChar(char),
-        /// Found a character that's not valid in identifiers while looking for an identifier
-        NotIdentifier(char),
         /// Found a character that's not valid in an escape sequence while looking for an escape
         /// sequence
         UnknownEscape(char),
@@ -517,30 +476,12 @@ pub mod error {
         InvalidEscape(char),
         /// Character is not a valid digit in the requested base
         InvalidDigit(char),
-        /// Base conversion requested, but the base character was not in the set of known
-        /// characters
-        UnknownBase(char),
         /// Unicode escape does not map to a valid unicode code-point
         BadUnicode(u32),
         /// Reached end of input
         EndOfFile,
     }
-    error_impl! {
-        unmatched_delimiters(c: char) => Reason::UnmatchedDelimiters(c),
-        unexpected_char(c: char) => Reason::UnexpectedChar(c),
-        not_identifier(c: char) => Reason::NotIdentifier(c),
-        unknown_escape(e: char) => Reason::UnknownEscape(e),
-        invalid_escape(e: char) => Reason::InvalidEscape(e),
-        invalid_digit(digit: char) => Reason::InvalidDigit(digit),
-        unknown_base(base: char) => Reason::UnknownBase(base),
-        bad_unicode(value: u32) => Reason::BadUnicode(value),
-        end_of_file => Reason::EndOfFile,
-    }
     impl Error {
-        /// Changes the [Reason] of this error
-        pub(super) fn mask_reason(self, reason: Reason) -> Self {
-            Self { reason, ..self }
-        }
         /// Returns the [Reason] for this error
         pub fn reason(&self) -> &Reason {
             &self.reason
@@ -548,14 +489,6 @@ pub mod error {
         /// Returns the (line, col) where the error happened
         pub fn location(&self) -> (u32, u32) {
             (self.line, self.col)
-        }
-    }
-    macro error_impl ($($fn:ident$(( $($p:ident: $t:ty),* ))? => $reason:expr),*$(,)?) {
-        #[allow(dead_code)]
-        impl Error {
-            $(pub(super) fn $fn ($($($p: $t),*,)? line: u32, col: u32) -> Self {
-                Self { reason: $reason, line, col }
-            })*
         }
     }
     impl std::error::Error for Error {}
@@ -567,14 +500,12 @@ pub mod error {
     impl Display for Reason {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
-                Reason::UnmatchedDelimiters(c) => write! {f, "Unmatched `{c}` in input"},
-                Reason::UnexpectedChar(c) => write!(f, "Character `{c}` not expected"),
-                Reason::NotIdentifier(c) => write!(f, "Character `{c}` not valid in identifiers"),
+                Reason::UnmatchedDelimiters(c) => write! {f, "Unmatched `{c:?}` in input"},
+                Reason::UnexpectedChar(c) => write!(f, "Character `{c:?}` not expected"),
                 Reason::UnknownEscape(c) => write!(f, "`\\{c}` is not a known escape sequence"),
                 Reason::InvalidEscape(c) => write!(f, "Escape sequence `\\{c}`... is malformed"),
-                Reason::InvalidDigit(c) => write!(f, "`{c}` is not a valid digit"),
-                Reason::UnknownBase(c) => write!(f, "`0{c}`... is not a valid base"),
-                Reason::BadUnicode(c) => write!(f, "`{c}` is not a valid unicode code-point"),
+                Reason::InvalidDigit(c) => write!(f, "`{c:?}` is not a valid digit"),
+                Reason::BadUnicode(c) => write!(f, "`\\u{{{c:x}}}` is not valid unicode"),
                 Reason::EndOfFile => write!(f, "Reached end of input"),
             }
         }
