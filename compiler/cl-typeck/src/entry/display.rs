@@ -55,8 +55,6 @@ impl fmt::Display for Entry<'_, '_> {
                     write!(f, "fn {} -> ", self.with_id(*args))?;
                     write_name_or(self.with_id(*rety), f)
                 }
-                TypeKind::Empty => write!(f, "()"),
-                TypeKind::Never => write!(f, "!"),
                 TypeKind::Module => write!(f, "module?"),
             }
         } else {

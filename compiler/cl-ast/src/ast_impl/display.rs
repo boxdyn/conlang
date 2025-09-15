@@ -165,7 +165,6 @@ impl Display for Function {
         let Self { name, gens, sign: sign @ TyFn { args, rety }, bind, body } = self;
         let types = match args.kind {
             TyKind::Tuple(TyTuple { ref types }) => types.as_slice(),
-            TyKind::Empty => Default::default(),
             _ => {
                 write!(f, "Invalid function signature: {sign}")?;
                 Default::default()
@@ -191,7 +190,9 @@ impl Display for Function {
                 write!(f, "{arg}: {ty}")?;
             }
         }
-        if TyKind::Empty != rety.kind {
+        if let TyKind::Tuple(TyTuple { types }) = &rety.kind
+            && !types.as_slice().is_empty()
+        {
             write!(f, " -> {rety}")?
         }
 
@@ -295,7 +296,6 @@ impl Display for TyKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             TyKind::Never => "!".fmt(f),
-            TyKind::Empty => "()".fmt(f),
             TyKind::Infer => "_".fmt(f),
             TyKind::Path(v) => v.fmt(f),
             TyKind::Array(v) => v.fmt(f),
@@ -349,8 +349,10 @@ impl Display for TyFn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self { args, rety } = self;
         write!(f, "fn {args}")?;
-        if TyKind::Empty != rety.kind {
-            write!(f, " -> {rety}")?;
+        if let TyKind::Tuple(TyTuple { types }) = &rety.kind
+            && !types.as_slice().is_empty()
+        {
+            write!(f, " -> {rety}")?
         }
         Ok(())
     }

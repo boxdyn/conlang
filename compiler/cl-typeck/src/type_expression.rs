@@ -40,8 +40,7 @@ impl TypeExpression for Ty {
 impl TypeExpression for TyKind {
     fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Handle, Error> {
         match self {
-            TyKind::Never => Ok(table.anon_type(TypeKind::Never)),
-            TyKind::Empty => Ok(table.anon_type(TypeKind::Empty)),
+            TyKind::Never => Ok(table.get_lang_item("never")),
             TyKind::Infer => Ok(table.inferred_type()),
             TyKind::Path(p) => p.evaluate(table, node),
             TyKind::Array(a) => a.evaluate(table, node),
@@ -97,10 +96,7 @@ impl TypeExpression for TySlice {
 impl TypeExpression for TyTuple {
     fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Handle, Error> {
         let Self { types } = self;
-        let kind = match types.len() {
-            0 => TypeKind::Empty,
-            _ => TypeKind::Tuple(types.evaluate(table, node)?),
-        };
+        let kind = TypeKind::Tuple(types.evaluate(table, node)?);
         Ok(table.anon_type(kind))
     }
 }

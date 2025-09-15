@@ -723,9 +723,12 @@ impl Interpret for Cast {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Cast { head, ty } = self;
         let value = head.interpret(env)?;
-        if TyKind::Empty == ty.kind {
+
+        if let TyKind::Tuple(TyTuple { types }) = &ty.kind
+            && types.as_slice().is_empty()
+        {
             return Ok(ConValue::Empty);
-        };
+        }
         let TyKind::Path(Path { absolute: false, parts }) = &ty.kind else {
             Err(Error::TypeError())?
         };

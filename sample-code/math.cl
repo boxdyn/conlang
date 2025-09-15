@@ -4,13 +4,11 @@
 // These two functions shouldn't actually be polymorphic, but
 // the AST interpreter doesn't know about type annotations
 // or operator overloading.
-#[generic("T")]
-pub fn max(a: T, b: T) -> T {
+pub fn max<T>(a: T, b: T) -> T {
     (if a < b { b } else { a })
 }
 
-#[generic("T")]
-pub fn min(a: T, b: T) -> T {
+pub fn min<T>(a: T, b: T) -> T {
     (if a > b { b } else { a })
 }
 

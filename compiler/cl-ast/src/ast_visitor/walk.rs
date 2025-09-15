@@ -369,7 +369,6 @@ impl Walk for TyKind {
     fn children<'a, V: Visit<'a>>(&'a self, v: &mut V) {
         match self {
             TyKind::Never => {}
-            TyKind::Empty => {}
             TyKind::Infer => {}
             TyKind::Path(value) => value.visit_in(v),
             TyKind::Array(value) => value.visit_in(v),

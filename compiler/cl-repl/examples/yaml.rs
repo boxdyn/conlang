@@ -649,7 +649,6 @@ pub mod yamlify {
         fn yaml(&self, y: &mut Yamler) {
             match self {
                 TyKind::Never => y.value("Never"),
-                TyKind::Empty => y.value("Empty"),
                 TyKind::Infer => y.value("_"),
                 TyKind::Path(t) => y.yaml(t),
                 TyKind::Tuple(t) => y.yaml(t),
@@ -713,8 +712,7 @@ pub mod yamlify {
     impl Yamlify for TyPtr {
         fn yaml(&self, y: &mut Yamler) {
             let Self { to } = self;
-            y.key("TyPtr")
-                .pair("to", to);
+            y.key("TyPtr").pair("to", to);
         }
     }
     impl Yamlify for TyFn {

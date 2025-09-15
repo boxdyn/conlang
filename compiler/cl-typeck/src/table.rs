@@ -57,7 +57,7 @@ pub struct Table<'a> {
     sources: HashMap<Handle, Source<'a>>,
     impl_targets: HashMap<Handle, Handle>,
     anon_types: HashMap<TypeKind, Handle>,
-    lang_items: HashMap<Sym, Handle>,
+    lang_items: HashMap<&'static str, Handle>,
 
     // --- Queues for algorithms ---
     pub(crate) unchecked: Vec<Handle>,
@@ -129,8 +129,15 @@ impl<'a> Table<'a> {
         self.impls.push(item);
     }
 
-    pub fn mark_lang_item(&mut self, name: Sym, item: Handle) {
+    pub fn mark_lang_item(&mut self, name: &'static str, item: Handle) {
         self.lang_items.insert(name, item);
+    }
+
+    pub fn get_lang_item(&self, name: &str) -> Handle {
+        match self.lang_items.get(name).copied() {
+            Some(handle) => handle,
+            None => todo!(),
+        }
     }
 
     pub fn handle_iter(&self) -> impl Iterator<Item = Handle> + use<> {

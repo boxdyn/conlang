@@ -81,7 +81,7 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
                 Source::Module(v) => v.infer(&mut eng),
                 Source::Alias(v) => v.infer(&mut eng),
                 Source::Enum(v) => v.infer(&mut eng),
-                Source::Variant(v) => v.infer(&mut eng),
+                // Source::Variant(v) => v.infer(&mut eng),
                 Source::Struct(v) => v.infer(&mut eng),
                 Source::Const(v) => v.infer(&mut eng),
                 Source::Static(v) => v.infer(&mut eng),
@@ -221,42 +221,37 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
     }
 
     /// All primitives must be predefined in the standard library.
-    pub fn primitive(&self, name: Sym) -> Option<Handle> {
+    pub fn primitive(&self, name: &'static str) -> Handle {
         // TODO: keep a map of primitives in the table root
-        self.table.get_by_sym(self.table.root(), &name)
+        self.table.get_lang_item(name)
     }
 
     pub fn never(&mut self) -> Handle {
-        self.table.anon_type(TypeKind::Never)
+        self.table.get_lang_item("never")
     }
 
     pub fn empty(&mut self) -> Handle {
-        self.table.anon_type(TypeKind::Empty)
+        self.table.anon_type(TypeKind::Tuple(vec![]))
     }
 
     pub fn bool(&self) -> Handle {
-        self.primitive("bool".into())
-            .expect("There should be a type named bool.")
+        self.primitive("bool")
     }
 
     pub fn char(&self) -> Handle {
-        self.primitive("char".into())
-            .expect("There should be a type named char.")
+        self.primitive("char")
     }
 
     pub fn str(&self) -> Handle {
-        self.primitive("str".into())
-            .expect("There should be a type named str.")
+        self.primitive("str")
     }
 
     pub fn u32(&self) -> Handle {
-        self.primitive("u32".into())
-            .expect("There should be a type named u32.")
+        self.primitive("u32")
     }
 
     pub fn usize(&self) -> Handle {
-        self.primitive("usize".into())
-            .expect("There should be a type named usize.")
+        self.primitive("usize")
     }
 
     /// Creates a new inferred-integer literal
@@ -344,7 +339,7 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
                 &TypeKind::FnSig { args, rety } => {
                     is_generic_rec(this, args, seen) || is_generic_rec(this, rety, seen)
                 }
-                TypeKind::Empty | TypeKind::Never | TypeKind::Module => false,
+                TypeKind::Module => false,
             }
         }
         is_generic_rec(self, ty, &mut HashSet::new())
@@ -358,12 +353,12 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
             return ty;
         };
         let entry = self.table.entry(ty);
-        let Some(ty) = entry.ty().cloned() else {
+        let Some(tykind) = entry.ty().cloned() else {
             return ty;
         };
 
         // TODO: Parent the deep clone into a new "monomorphs" branch of tree
-        match ty {
+        match tykind {
             TypeKind::Variable => self.new_inferred(),
             TypeKind::Array(h, s) => {
                 let ty = self.deep_clone(h);
@@ -405,6 +400,10 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
                 let ty = self.deep_clone(h);
                 self.table.anon_type(TypeKind::Ref(ty))
             }
+            TypeKind::Ptr(handle) => {
+                let ty = self.deep_clone(handle);
+                self.table.anon_type(TypeKind::Ptr(ty))
+            }
             TypeKind::Slice(h) => {
                 let ty = self.deep_clone(h);
                 self.table.anon_type(TypeKind::Slice(ty))
@@ -418,7 +417,7 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
                 let rety = self.deep_clone(rety);
                 self.table.anon_type(TypeKind::FnSig { args, rety })
             }
-            _ => self.table.anon_type(ty),
+            _ => ty,
         }
     }
 
@@ -472,8 +471,6 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
             | TypeKind::Variable
             | TypeKind::Adt(Adt::UnitStruct)
             | TypeKind::Primitive(_)
-            | TypeKind::Empty
-            | TypeKind::Never
             | TypeKind::Module => false,
         }
     }
@@ -490,6 +487,10 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
         };
 
         match (a, b) {
+            (TypeKind::Variable, TypeKind::Variable) => {
+                self.set_instance(ah, bh);
+                Ok(())
+            }
             (TypeKind::Inferred, _) => {
                 self.set_instance(ah, bh);
                 Ok(())
@@ -602,12 +603,8 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
                 self.unify(a1, a2)?;
                 self.unify(r1, r2)
             }
-            (TypeKind::Empty, TypeKind::Tuple(t)) | (TypeKind::Tuple(t), TypeKind::Empty)
-                if t.is_empty() =>
-            {
-                Ok(())
-            }
-            (TypeKind::Never, _) | (_, TypeKind::Never) => Ok(()),
+            (TypeKind::Primitive(Primitive::Never), _)
+            | (_, TypeKind::Primitive(Primitive::Never)) => Ok(()),
             (a, b) if a == b => Ok(()),
             _ => Err(InferenceError::Mismatch(ah, bh)),
         }

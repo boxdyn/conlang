@@ -13,11 +13,11 @@ pub fn lfsr_next() {
 }
 
 /// Returns a pseudorandom byte
-pub fn rand() -> u8 {
+pub fn rand() -> u64 {
     for _ in 0..8 {
         lfsr_next()
-    }
-    state & 0xff
+    };
+    (state & 0xff) as u64
 }
 
 // Prints a maze out of diagonal box drawing characters, ['╲', '╱']

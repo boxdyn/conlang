@@ -17,8 +17,6 @@ pub fn categorize(table: &mut Table, node: Handle) -> CatResult<()> {
     };
 
     match source {
-        Source::Alias(a) => cat_alias(table, node, a)?,
-        Source::Enum(e) => cat_enum(table, node, e)?,
         Source::Variant(v) => cat_variant(table, node, v)?,
         Source::Struct(s) => cat_struct(table, node, s)?,
         Source::Const(c) => cat_const(table, node, c)?,
@@ -26,41 +24,14 @@ pub fn categorize(table: &mut Table, node: Handle) -> CatResult<()> {
         Source::Function(f) => cat_function(table, node, f)?,
         Source::Local(l) => cat_local(table, node, l)?,
         Source::Impl(i) => cat_impl(table, node, i)?,
-        _ => {}
-    }
-
-    if let Some(meta) = table.meta(node) {
-        for meta @ Meta { name, kind } in meta {
-            if let ("lang", MetaKind::Equals(Literal::String(s))) = (&**name, kind) {
-                if let Ok(prim) = s.parse() {
-                    table.set_ty(node, TypeKind::Primitive(prim));
-                } else {
-                    table.mark_lang_item(s.into(), node);
-                    continue;
-                }
-                return Ok(());
-            }
-        }
+        // Source::Alias(_) => {table.mark_unchecked(node)},
+        _ => return Ok(()),
     }
     Ok(())
 }
 
 fn parent(table: &Table, node: Handle) -> Handle {
     table.parent(node).copied().unwrap_or(node)
-}
-
-fn cat_alias(table: &mut Table, node: Handle, a: &Alias) -> CatResult<()> {
-    let parent = parent(table, node);
-    let kind = match &a.from {
-        Some(ty) => TypeKind::Instance(
-            ty.evaluate(table, parent)
-                .map_err(|e| Error::TypeEval(e, " while categorizing an alias"))?,
-        ),
-        None => TypeKind::Empty,
-    };
-    table.set_ty(node, kind);
-
-    Ok(())
 }
 
 fn cat_struct(table: &mut Table, node: Handle, s: &Struct) -> CatResult<()> {
@@ -99,7 +70,6 @@ fn cat_member(
 
 fn cat_enum<'a>(_table: &mut Table<'a>, _node: Handle, e: &'a Enum) -> CatResult<()> {
     let Enum { name: _, gens: _, variants: _ } = e;
-
     // table.set_ty(node, kind);
     Ok(())
 }
@@ -107,17 +77,10 @@ fn cat_enum<'a>(_table: &mut Table<'a>, _node: Handle, e: &'a Enum) -> CatResult
 fn cat_variant<'a>(table: &mut Table<'a>, node: Handle, v: &'a Variant) -> CatResult<()> {
     let Variant { name, kind, body } = v;
     let parent = table.parent(node).copied().unwrap_or(table.root());
-    match (kind, body) {
-        (StructKind::Empty, None) => {
-            table.set_ty(node, TypeKind::Adt(Adt::UnitStruct));
-            Ok(())
-        }
-        (StructKind::Empty, Some(c)) => {
-            table.set_body(node, c);
-            table.set_ty(node, TypeKind::Adt(Adt::UnitStruct));
-            Ok(())
-        }
-        (StructKind::Tuple(ty), None) => {
+    match (kind) {
+        (StructKind::Empty) => Ok(()),
+        (StructKind::Empty) => Ok(()),
+        (StructKind::Tuple(ty)) => {
             let ty = TypeKind::Adt(Adt::TupleStruct(
                 ty.iter()
                     .map(|ty| ty.evaluate(table, node).map(|ty| (Visibility::Public, ty)))
@@ -126,7 +89,7 @@ fn cat_variant<'a>(table: &mut Table<'a>, node: Handle, v: &'a Variant) -> CatRe
             table.set_ty(node, ty);
             Ok(())
         }
-        (StructKind::Struct(members), None) => {
+        (StructKind::Struct(members)) => {
             let mut out = vec![];
             for StructMember { vis, name, ty } in members {
                 let ty = ty.evaluate(table, node)?;
@@ -143,9 +106,6 @@ fn cat_variant<'a>(table: &mut Table<'a>, node: Handle, v: &'a Variant) -> CatRe
 
             table.set_ty(node, TypeKind::Adt(Adt::Struct(out)));
             Ok(())
-        }
-        (_, Some(body)) => {
-            panic!("Unexpected body `{body}` in enum variant `{v}`")
         }
     }
 }

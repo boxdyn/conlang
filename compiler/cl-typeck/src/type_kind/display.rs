@@ -25,8 +25,6 @@ impl Display for TypeKind {
                 })(f.delimit_with("tuple (", ")"))
             }
             TypeKind::FnSig { args, rety } => write!(f, "fn (#{args}) -> #{rety}"),
-            TypeKind::Empty => f.write_str("()"),
-            TypeKind::Never => f.write_str("!"),
             TypeKind::Module => f.write_str("mod"),
         }
     }
@@ -94,6 +92,7 @@ impl Display for Primitive {
             Primitive::Bool => f.write_str("bool"),
             Primitive::Char => f.write_str("char"),
             Primitive::Str => f.write_str("str"),
+            Primitive::Never => f.write_str("!"),
         }
     }
 }

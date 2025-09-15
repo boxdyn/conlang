@@ -464,13 +464,18 @@ impl Parse<'_> for Function {
         let gens = Generics::parse(p)?;
         let ((bind, types), span) = delim(Spanned::<FnSig>::parse, PARENS, P)(p)?;
         let sign = TyFn {
-            args: Box::new(match types.len() {
-                0 => Ty { span, kind: TyKind::Empty, gens: Default::default() },
-                _ => Ty { span, kind: TyKind::Tuple(TyTuple { types }), gens: Default::default() },
+            args: Box::new(Ty {
+                span,
+                kind: TyKind::Tuple(TyTuple { types }),
+                gens: Default::default(),
             }),
             rety: Box::new(match p.match_type(TokenKind::Arrow, Parsing::TyFn) {
                 Ok(_) => Ty::parse(p)?,
-                Err(_) => Ty { span, kind: TyKind::Empty, gens: Generics { vars: vec![] } },
+                Err(_) => Ty {
+                    span,
+                    kind: TyKind::Tuple(TyTuple { types: vec![] }),
+                    gens: Generics { vars: vec![] },
+                },
             }),
         };
         Ok(Function {
@@ -736,10 +741,7 @@ impl Parse<'_> for TyKind {
             }
             TokenKind::LParen => {
                 let out = TyTuple::parse(p)?;
-                match out.types.is_empty() {
-                    true => TyKind::Empty,
-                    false => TyKind::Tuple(out),
-                }
+                TyKind::Tuple(out)
             }
             TokenKind::Fn => TyFn::parse(p)?.into(),
             path_like!() => {
@@ -802,15 +804,18 @@ impl Parse<'_> for TyFn {
         let span = Span(head, p.loc());
 
         Ok(TyFn {
-            args: Box::new(match args {
-                t if t.is_empty() => Ty { kind: TyKind::Empty, span, gens: Default::default() },
-                types => {
-                    Ty { kind: TyKind::Tuple(TyTuple { types }), span, gens: Default::default() }
-                }
+            args: Box::new(Ty {
+                kind: TyKind::Tuple(TyTuple { types: args }),
+                span,
+                gens: Default::default(),
             }),
             rety: Box::new(match p.match_type(TokenKind::Arrow, Parsing::TyFn) {
                 Ok(_) => Ty::parse(p)?,
-                Err(_) => Ty { span, kind: TyKind::Empty, gens: Generics { vars: vec![] } },
+                Err(_) => Ty {
+                    span,
+                    kind: TyKind::Tuple(TyTuple { types: vec![] }),
+                    gens: Generics { vars: vec![] },
+                },
             }),
         })
     }

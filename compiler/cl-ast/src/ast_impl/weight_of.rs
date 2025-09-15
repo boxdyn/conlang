@@ -192,7 +192,7 @@ impl WeightOf for Ty {
 impl WeightOf for TyKind {
     fn weight_of(&self) -> usize {
         match self {
-            TyKind::Never | TyKind::Empty | TyKind::Infer => size_of_val(self),
+            TyKind::Never | TyKind::Infer => size_of_val(self),
             TyKind::Path(v) => v.weight_of(),
             TyKind::Array(v) => v.weight_of(),
             TyKind::Slice(v) => v.weight_of(),

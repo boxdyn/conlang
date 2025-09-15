@@ -531,7 +531,6 @@ pub fn or_fold_use_tree<F: Fold + ?Sized>(folder: &mut F, tree: UseTree) -> UseT
 pub fn or_fold_ty_kind<F: Fold + ?Sized>(folder: &mut F, kind: TyKind) -> TyKind {
     match kind {
         TyKind::Never => TyKind::Never,
-        TyKind::Empty => TyKind::Empty,
         TyKind::Infer => TyKind::Infer,
         TyKind::Path(p) => TyKind::Path(folder.fold_path(p)),
         TyKind::Array(a) => TyKind::Array(folder.fold_ty_array(a)),

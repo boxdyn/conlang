@@ -275,7 +275,6 @@ pub mod clangify {
             let TyFn { args, rety } = sign;
             let types = match &args.kind {
                 TyKind::Tuple(TyTuple { types }) => types.as_slice(),
-                TyKind::Empty => &[],
                 _ => panic!("Unsupported function args: {args}"),
             };
             let bind = match bind {
@@ -472,7 +471,6 @@ pub mod clangify {
                 TyKind::Fn(TyFn { args, rety }) => {
                     y.nest("(").p(rety).p(" *").p(mutable).p(name).p(")(");
                     match &args.kind {
-                        TyKind::Empty => {}
                         TyKind::Tuple(TyTuple { types }) => {
                             for (idx, ty) in types.iter().enumerate() {
                                 if idx > 0 {
@@ -799,7 +797,6 @@ pub mod clangify {
         fn print(&self, y: &mut CLangifier) {
             match self {
                 TyKind::Never => y.p("Never"),
-                TyKind::Empty => y.p("Empty"),
                 TyKind::Infer => y.p("auto"),
                 TyKind::Path(t) => y.p(t),
                 TyKind::Tuple(t) => y.p(t),
@@ -880,7 +877,6 @@ pub mod clangify {
             // TODO: function pointer syntax
             y.nest("(").p(rety).p(" *)(");
             match &args.kind {
-                TyKind::Empty => y,
                 TyKind::Tuple(TyTuple { types }) => {
                     for (idx, ty) in types.iter().enumerate() {
                         if idx > 0 {

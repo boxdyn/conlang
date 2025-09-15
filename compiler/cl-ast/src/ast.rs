@@ -224,7 +224,6 @@ pub struct Ty {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum TyKind {
     Never,
-    Empty,
     Infer,
     Path(Path),
     Array(TyArray),

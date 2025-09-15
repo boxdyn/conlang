@@ -78,16 +78,31 @@ impl<'a> Inference<'a> for Module {
 
 impl<'a> Inference<'a> for Alias {
     fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
-        Ok(e.empty())
+        let Self { name: _, from } = self;
+        // let this = e.by_name(name)?;
+        let alias = if let Some(from) = from {
+            TypeKind::Instance(e.infer(from)?)
+        } else {
+            TypeKind::Tuple(vec![])
+        };
+
+        // This node may be a lang item referring to a primitive.
+        let mut entry = e.at.to_entry_mut(e.table);
+        if entry.ty().is_some() {
+            return Ok(e.empty());
+        }
+        entry.set_ty(alias);
+
+        Ok(entry.id())
     }
 }
 
 impl<'a> Inference<'a> for Const {
     #[allow(unused)]
     fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
-        let Self { name, ty, init } = self;
+        let Self { name: _, ty, init } = self;
         // Same as static
-        let node = e.by_name(name)?;
+        let node = e.at; //.by_name(name)?;
         let ty = e.infer(ty)?;
         let mut scope = e.at(node);
         // infer body
@@ -103,7 +118,7 @@ impl<'a> Inference<'a> for Static {
     #[allow(unused)]
     fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Static { mutable, name, ty, init } = self;
-        let node = e.by_name(name)?;
+        let node = e.at; //e.by_name(name)?;
         let ty = e.infer(ty)?;
         let mut scope = e.at(node);
         // infer body
@@ -120,7 +135,7 @@ impl<'a> Inference<'a> for Function {
     fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
         let Self { name, gens, sign, bind, body } = self;
         // bind name to signature
-        let node = e.by_name(name)?;
+        let node = e.at; // e.by_name(name)?;
         let node = e.deep_clone(node);
         let fnty = e.by_name(sign)?;
         e.unify(node, fnty)?;
@@ -154,14 +169,15 @@ impl<'a> Inference<'a> for Function {
 
 impl<'a> Inference<'a> for Enum {
     fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
-        let Self { name, gens, variants } = self;
-        let node = e.by_name(name)?;
+        let Self { name: _, gens, variants } = self;
+        let node = e.at; //e.by_name(name)?;
         let mut scope = e.at(node);
 
         scope.infer(gens)?;
         for variant in variants {
+            println!("Inferring {variant}");
             let var_ty = scope.infer(variant)?;
-            scope.unify(var_ty, node)?;
+            scope.unify(node, var_ty)?;
         }
         Ok(node)
     }
@@ -169,31 +185,46 @@ impl<'a> Inference<'a> for Enum {
 
 impl<'a> Inference<'a> for Variant {
     fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
-        let Self { name: _, kind: _, body } = self;
-        let ty = e.new_inferred();
+        let Self { name, kind: _, body } = self;
+        let node = e.by_name(name)?;
 
-        // TODO: evaluate kind
-
-        if let Some(body) = body {
-            let value = body.infer(e)?;
-            e.unify(ty, value)?;
+        // TODO: this doesn't work when some variants have bodies and some don't
+        if e.table.ty(node).is_some() {
+            println!("{node} has ty!");
+            return Ok(node);
         }
 
-        Ok(ty)
+        match body {
+            Some(body) => {
+                let mut e = e.at(node);
+                let value = e.infer(body)?;
+                e.unify(node, value)?;
+            }
+            _ => {
+                e.table.entry_mut(node).set_ty(TypeKind::Inferred);
+            }
+        };
+
+        Ok(node)
     }
 }
 
 impl<'a> Inference<'a> for Struct {
     fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
-        Ok(e.new_inferred())
+        let Self { name, gens, kind: _ } = self;
+        let node = e.by_name(name)?;
+        let mut e = e.at(node);
+        e.infer(gens)?;
+
+        Ok(node)
     }
 }
 
 impl<'a> Inference<'a> for Impl {
     fn infer(&'a self, e: &mut InferenceEngine<'_, 'a>) -> IfResult {
-        let Self { gens: _, target, body } = self;
+        let Self { gens, target, body } = self;
         // TODO: match gens to target gens
-        // gens.infer(e)?;
+        gens.infer(e)?;
         let instance = target.infer(e)?;
         let instance = e.def_usage(instance);
         let mut scope = e.at(instance);
@@ -527,8 +558,9 @@ impl<'a> Inference<'a> for Binary {
                 e.unify(tail, bool)?;
                 Ok(bool)
             }
-            Bk::RangeExc => todo!("Ranges in the type checker"),
-            Bk::RangeInc => todo!("Ranges in the type checker"),
+            // TODO: Don't return the generic form wholesale.
+            Bk::RangeExc => Ok(e.table.get_lang_item("range_exc")),
+            Bk::RangeInc => Ok(e.table.get_lang_item("range_exc")),
             Bk::Shl | Bk::Shr => {
                 let shift_amount = e.u32();
                 e.unify(tail, shift_amount)?;

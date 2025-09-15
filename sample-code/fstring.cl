@@ -1,5 +1,8 @@
+//! Implements format string evaluation in weak Conlang
 
-fn f(__fmt: str) -> str {
+
+/// Formats a string
+fn f(__fmt: &str) -> &str {
     let __out = "";
     let __expr = "";
     let __label = "";

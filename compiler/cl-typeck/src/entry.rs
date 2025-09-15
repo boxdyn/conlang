@@ -205,4 +205,8 @@ impl<'t, 'a> EntryMut<'t, 'a> {
     pub fn mark_impl_item(&mut self) {
         self.table.mark_impl_item(self.id)
     }
+
+    pub fn mark_lang_item(&mut self, lang_item: &'static str) {
+        self.table.mark_lang_item(lang_item, self.id)
+    }
 }

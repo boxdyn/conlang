@@ -7,7 +7,7 @@ use crate::{
     type_kind::TypeKind,
 };
 use cl_ast::{
-    ItemKind, Sym,
+    ItemKind, Literal, Meta, MetaKind, Sym,
     ast_visitor::{Visit, Walk},
 };
 
@@ -56,6 +56,15 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         let mut entry = self.new_entry(entry_kind);
         entry.inner.set_span(*span);
         entry.inner.set_meta(&attrs.meta);
+
+        for Meta { name, kind } in &attrs.meta {
+            if let ("lang", MetaKind::Equals(Literal::String(s))) = (name.to_ref(), kind) {
+                if let Ok(prim) = s.parse() {
+                    entry.inner.set_ty(TypeKind::Primitive(prim));
+                }
+                entry.inner.mark_lang_item(Sym::from(s).to_ref());
+            }
+        }
 
         entry.visit_children(i);
 
@@ -158,8 +167,16 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
         self.inner.set_source(Source::Variant(value));
         self.set_name(*name);
         self.visit(kind);
-        if let Some(body) = body {
-            self.inner.set_body(body);
+        match (kind, body) {
+            (cl_ast::StructKind::Empty, None) => {
+                self.inner.set_ty(TypeKind::Inferred);
+            }
+            (cl_ast::StructKind::Empty, Some(body)) => {
+                self.inner.set_body(body);
+            }
+            (cl_ast::StructKind::Tuple(_items), None) => {}
+            (cl_ast::StructKind::Struct(_struct_members), None) => {}
+            (_, Some(body)) => panic!("Unexpected body {body} in enum variant `{value}`"),
         }
     }
 

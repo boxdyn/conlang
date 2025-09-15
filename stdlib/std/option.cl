@@ -1,6 +1,7 @@
 //! The optional type, representing the presence or absence of a thing.
 use super::preamble::*;
 
+#[lang = "option"]
 pub enum Option<T> {
     Some(T),
     None,

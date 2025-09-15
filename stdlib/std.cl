@@ -25,5 +25,7 @@ pub mod result;
 
 pub mod range;
 
+pub mod never;
+
 // #[cfg("test")]
 // mod test;

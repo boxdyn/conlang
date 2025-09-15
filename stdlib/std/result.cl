@@ -1,6 +1,7 @@
 //! The Result type, indicating a fallible operation.
 use super::preamble::*;
 
+#[lang = "result"]
 pub enum Result<T, E> {
     Ok(T),
     Err(E),

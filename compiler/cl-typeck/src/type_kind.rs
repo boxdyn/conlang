@@ -32,10 +32,6 @@ pub enum TypeKind {
     Tuple(Vec<Handle>),
     /// A function which accepts multiple inputs and produces an output
     FnSig { args: Handle, rety: Handle },
-    /// The unit type
-    Empty,
-    /// The never type
-    Never,
     /// An untyped module
     Module,
 }
@@ -70,6 +66,7 @@ pub enum Primitive {
     Bool,                           // boolean value
     Char,                           // Unicode codepoint
     Str,                            // UTF-8 string
+    Never,                          // The never type
 }
 
 #[rustfmt::skip]
@@ -121,6 +118,7 @@ impl FromStr for Primitive {
             "bool" => Primitive::Bool,
             "char" => Primitive::Char,
             "str" => Primitive::Str,
+            "never" => Primitive::Never,
             _ => Err(())?,
         })
     }
