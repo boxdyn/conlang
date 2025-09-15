@@ -5,7 +5,7 @@ use std::{error::Error, path::PathBuf};
 use cl_ast::Expr;
 use cl_interpret::{convalue::ConValue, env::Environment};
 use cl_lexer::Lexer;
-use cl_parser::{inliner::ModuleInliner, Parser};
+use cl_parser::{Parser, inliner::ModuleInliner};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = std::env::args();
@@ -46,9 +46,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        match env.call(main, &args)? {
-            ConValue::Empty => {}
-            retval => println!("{retval}"),
+        match env.call(main, &args) {
+            Ok(ConValue::Empty) => {}
+            Ok(retval) => println!("{retval}"),
+            Err(e) => {
+                panic!("{e}");
+            }
         }
     }
 
