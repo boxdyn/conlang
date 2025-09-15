@@ -375,12 +375,21 @@ impl Lexer<'_> {
     /// Produces a [Literal](Kind::Literal) with a pre-escaped [String]
     pub fn string(&mut self) -> Result<Token, Error> {
         let mut lexeme = String::new();
+        let mut depth = 0;
         self.consume();
         loop {
             lexeme.push(match self.take() {
                 None => Err(self.error(Reason::UnmatchedDelimiters('"')))?,
                 Some('\\') => self.unescape()?,
-                Some('"') => break,
+                Some('"') if depth == 0 => break,
+                Some(c @ '{') => {
+                    depth += 1;
+                    c
+                }
+                Some(c @ '}') => {
+                    depth -= 1;
+                    c
+                }
                 Some(c) => c,
             })
         }
