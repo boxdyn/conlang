@@ -73,6 +73,10 @@ impl Callable for Function {
         match res {
             Err(Error { kind: ErrorKind::Return(value), .. }) => Ok(value),
             Err(Error { kind: ErrorKind::Break(value), .. }) => Err(Error::BadBreak(value)),
+            Err(Error { kind: ErrorKind::Panic(msg, depth), span: Some(span) }) => {
+                println!("{depth:>4}: {name}{bind} at {}", span.head);
+                Err(Error { kind: ErrorKind::Panic(msg, depth + 1), span: None })
+            }
             other => other,
         }
     }

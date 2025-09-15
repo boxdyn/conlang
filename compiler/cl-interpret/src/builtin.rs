@@ -143,8 +143,17 @@ pub const Builtins: &[Builtin] = &builtins![
         Ok(())
     }
 
-    fn panic(message) {
-        Err(error_format!("Panic: {message}"))?;
+    fn panic(args @ ..) @env {
+        use std::fmt::Write;
+        let mut out = String::new();
+        if let Err(e) = args.iter().try_for_each(|arg| write!(out, "{arg}")) {
+            println!("{e}");
+        }
+        let mut stdout = stdout().lock();
+        write!(stdout, "Explicit panic: `").ok();
+        args.iter().try_for_each(|arg| write!(stdout, "{arg}") ).ok();
+        writeln!(stdout, "`").ok();
+        Err(Error::Panic(out))?;
         Ok(())
     }
 

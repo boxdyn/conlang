@@ -10,7 +10,7 @@ pub type IResult<T> = Result<T, Error>;
 #[derive(Clone, Debug)]
 pub struct Error {
     pub kind: ErrorKind,
-    span: Option<Span>,
+    pub(super) span: Option<Span>,
 }
 
 impl Error {
@@ -98,6 +98,10 @@ impl Error {
     pub fn MatchNonexhaustive() -> Self {
         Self { kind: ErrorKind::MatchNonexhaustive, span: None }
     }
+    /// Explicit panic
+    pub fn Panic(msg: String) -> Self {
+        Self { kind: ErrorKind::Panic(msg, 0), span: None }
+    }
     /// Error produced by a Builtin
     pub fn BuiltinError(msg: String) -> Self {
         Self { kind: ErrorKind::BuiltinError(msg), span: None }
@@ -155,6 +159,8 @@ pub enum ErrorKind {
     PatFailed(Box<Pattern>),
     /// Fell through a non-exhaustive match
     MatchNonexhaustive,
+    /// Explicit panic
+    Panic(String, usize),
     /// Error produced by a Builtin
     BuiltinError(String),
 }
@@ -205,6 +211,7 @@ impl std::fmt::Display for ErrorKind {
             ErrorKind::MatchNonexhaustive => {
                 write!(f, "Fell through a non-exhaustive match expression!")
             }
+            ErrorKind::Panic(s, _depth) => write!(f, "Explicit panic: {s}"),
             ErrorKind::BuiltinError(s) => write!(f, "{s}"),
         }
     }
