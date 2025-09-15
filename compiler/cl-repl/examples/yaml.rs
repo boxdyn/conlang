@@ -54,7 +54,7 @@ pub mod yamler {
             Self::default()
         }
 
-        pub fn indent(&mut self) -> Section {
+        pub fn indent(&mut self) -> Section<'_> {
             Section::new(self)
         }
 
@@ -80,7 +80,7 @@ pub mod yamler {
         }
 
         /// Prints a section header and increases indentation
-        pub fn key(&mut self, name: impl Yamlify) -> Section {
+        pub fn key(&mut self, name: impl Yamlify) -> Section<'_> {
             println!();
             self.print_indentation(&mut std::io::stdout().lock());
             print!("  ");

@@ -33,7 +33,7 @@ impl Function {
     pub fn decl(&self) -> &FnDecl {
         &self.decl
     }
-    pub fn upvars(&self) -> Ref<Upvars> {
+    pub fn upvars(&self) -> Ref<'_, Upvars> {
         self.upvars.borrow()
     }
     pub fn lift_upvars(&self, env: &Environment) {

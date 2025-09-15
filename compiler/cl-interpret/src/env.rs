@@ -159,7 +159,7 @@ impl Environment {
     /// Enters a nested scope, returning a [`Frame`] stack-guard.
     ///
     /// [`Frame`] implements Deref/DerefMut for [`Environment`].
-    pub fn frame(&mut self, name: &'static str) -> Frame {
+    pub fn frame(&mut self, name: &'static str) -> Frame<'_> {
         Frame::new(self, name)
     }
 

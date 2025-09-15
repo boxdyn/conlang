@@ -328,7 +328,7 @@ pub mod collector {
             self.env.modules().get(self.module)
         }
 
-        pub fn as_node_mut(&mut self) -> ModuleNodeMut {
+        pub fn as_node_mut(&mut self) -> ModuleNodeMut<'_> {
             self.env.modules_mut().get_mut(self.module)
         }
 

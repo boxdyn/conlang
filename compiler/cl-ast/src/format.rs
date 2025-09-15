@@ -3,15 +3,15 @@ use std::fmt::Write;
 
 impl<W: Write + ?Sized> FmtAdapter for W {}
 pub trait FmtAdapter: Write {
-    fn indent(&mut self) -> Indent<Self> {
+    fn indent(&mut self) -> Indent<'_, Self> {
         Indent { f: self }
     }
 
-    fn delimit(&mut self, delim: Delimiters) -> Delimit<Self> {
+    fn delimit(&mut self, delim: Delimiters) -> Delimit<'_, Self> {
         Delimit::new(self, delim)
     }
 
-    fn delimit_with(&mut self, open: &'static str, close: &'static str) -> Delimit<Self> {
+    fn delimit_with(&mut self, open: &'static str, close: &'static str) -> Delimit<'_, Self> {
         Delimit::new(self, Delimiters { open, close })
     }
 }
