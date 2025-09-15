@@ -171,9 +171,10 @@ fn run_code(path: &str, code: &str, env: &mut Environment) -> Result<(), Box<dyn
         ret => println!("{ret}"),
     }
     if env.get("main".into()).is_ok() {
-        match env.call("main".into(), &[])? {
-            ConValue::Empty => {}
-            ret => println!("{ret}"),
+        match env.call("main".into(), &[]) {
+            Ok(ConValue::Empty) => {}
+            Ok(ret) => println!("{ret}"),
+            Err(e) => println!("Error: {e}"),
         }
     }
     Ok(())
