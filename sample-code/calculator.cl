@@ -1,4 +1,4 @@
-#!/usr/bin/env -S conlang-run 
+#!/usr/bin/env -S conlang -r false
 //! A simple five-function pn calculator
 
 enum Expr {
@@ -16,6 +16,8 @@ fn execute(expr: Expr) -> f64 {
         Expr::Op('%', [lhs, rhs]) => execute(lhs) % execute(rhs),
         Expr::Op('+', [lhs, rhs]) => execute(lhs) + execute(rhs),
         Expr::Op('-', [lhs, rhs]) => execute(lhs) - execute(rhs),
+        Expr::Op('>', [lhs, rhs]) => (execute(lhs) as u64 >> execute(rhs) as u64) as f64,
+        Expr::Op('<', [lhs, rhs]) => (execute(lhs) as u64 << execute(rhs) as u64) as f64,
         Expr::Op('-', [lhs]) => - execute(lhs),
         other => {
             panic("Unknown operation: " + fmt(other))
@@ -83,6 +85,7 @@ fn space(line: [char]) -> [char] {
 
 enum Power {
     None,
+    Shift,
     Factor,
     Term,
     Exponent,
@@ -97,7 +100,9 @@ fn inf_bp(op: char) -> (i32, i32) {
         '%' => Power::Term,
         '+' => Power::Factor,
         '-' => Power::Factor,
-        _ => panic("Unknown operation: " + op),
+        '>' => Power::Shift,
+        '<' => Power::Shift,
+        _ => Power::None,
     })
 }
 
@@ -109,9 +114,11 @@ fn pre_bp(op: char) -> i32 {
     })
 }
 
-fn my_eval(input: str) {
-    let (expr, rest) = input.chars().parse(0);
-    println(expr, " ", rest);
+fn main() {
+    loop {
+        let line = get_line("calc >");
+        let (expr, rest) = line.chars().parse(0);
 
-    execute(expr)
+        println(fmt_expr(expr), " -> ", execute(expr));
+    }
 }
