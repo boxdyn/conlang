@@ -5,6 +5,8 @@
 //! meaningless to get a pointer to one, and would be undefined behavior to dereference a pointer to
 //! one in any situation.
 
+use crate::constructor::Constructor;
+
 use super::*;
 use cl_ast::{ast_visitor::Visit, *};
 use std::borrow::Borrow;
@@ -144,12 +146,13 @@ impl Interpret for Struct {
 
         match kind {
             StructKind::Empty => {
-                frame.insert_tup_constructor("call".into(), 0);
+                let cs = Constructor { arity: 0, name: *name };
+                frame.insert("call".into(), ConValue::TupleConstructor(cs));
                 frame.insert("__nmemb".into(), ConValue::Int(0));
             }
             StructKind::Tuple(args) => {
-                // Constructs the AST from scratch. TODO: This, better.
-                frame.insert_tup_constructor("call".into(), args.len());
+                let cs = Constructor { arity: args.len() as _, name: *name };
+                frame.insert("call".into(), ConValue::TupleConstructor(cs));
                 frame.insert("__nmemb".into(), ConValue::Int(args.len() as _));
             }
             StructKind::Struct(members) => {
@@ -185,7 +188,8 @@ impl Interpret for Enum {
                     scope.insert(*name, idx)
                 }
                 (StructKind::Tuple(args), None) => {
-                    scope.insert_tup_constructor(*name, args.len());
+                    let cs = Constructor { arity: args.len() as _, name: *name };
+                    scope.insert("call".into(), ConValue::TupleConstructor(cs));
                 }
                 (StructKind::Struct(_), None) => {}
                 _ => eprintln!("Well-formedness error in {self}"),
@@ -360,7 +364,7 @@ impl Interpret for Closure {
 impl Interpret for Quote {
     fn interpret(&self, _env: &mut Environment) -> IResult<ConValue> {
         // TODO: squoosh down into a ConValue?
-        Ok(ConValue::Quote(self.quote.clone()))
+        Ok(ConValue::Quote(self.quote.as_ref().clone().into()))
     }
 }
 
@@ -506,12 +510,12 @@ pub(crate) mod assignment {
         kind: &MemberKind,
     ) -> IResult<&'v mut ConValue> {
         match (value, kind) {
-            (ConValue::Struct(s), MemberKind::Struct(id)) => {
-                s.1.get_mut(id).ok_or(Error::NotDefined(*id))
+            (ConValue::Struct(_name, s), MemberKind::Struct(id)) => {
+                s.get_mut(id).ok_or(Error::NotDefined(*id))
             }
-            (ConValue::TupleStruct(s), MemberKind::Tuple(Literal::Int(id))) => {
-                let len = s.1.len();
-                s.1.get_mut(*id as usize)
+            (ConValue::TupleStruct(_name, s), MemberKind::Tuple(Literal::Int(id))) => {
+                let len = s.len();
+                s.get_mut(*id as usize)
                     .ok_or(Error::OobIndex(*id as _, len))
             }
             (ConValue::Tuple(t), MemberKind::Tuple(Literal::Int(id))) => {
@@ -613,6 +617,46 @@ impl Interpret for Binary {
         }
 
         let tail = tail.interpret(env)?;
+
+        #[allow(unused)]
+        let operator = match kind {
+            BinaryKind::Lt => "lt",
+            BinaryKind::LtEq => "lteq",
+            BinaryKind::Equal => "eq",
+            BinaryKind::NotEq => "neq",
+            BinaryKind::GtEq => "gteq",
+            BinaryKind::Gt => "gt",
+            BinaryKind::RangeExc => "range_exc",
+            BinaryKind::RangeInc => "range_inc",
+            BinaryKind::LogAnd => "log_and",
+            BinaryKind::LogOr => "log_or",
+            BinaryKind::LogXor => "log_xor",
+            BinaryKind::BitAnd => "bit_and",
+            BinaryKind::BitOr => "bit_or",
+            BinaryKind::BitXor => "bit_xor",
+            BinaryKind::Shl => "shl",
+            BinaryKind::Shr => "shr",
+            BinaryKind::Add => "add",
+            BinaryKind::Sub => "sub",
+            BinaryKind::Mul => "mul",
+            BinaryKind::Div => "div",
+            BinaryKind::Rem => "rem",
+            BinaryKind::Call => "call",
+        };
+
+        if let ConValue::Struct(name, _) | ConValue::TupleStruct(name, _) = head
+            && let Ok(ConValue::Module(m)) = env.get_mut(name)
+            && let Some(f) = m.get(&operator.into())
+        {
+            return f.clone().call(env, &[head, tail]);
+        }
+
+        if let Ok(ConValue::Module(m)) = env.get_mut(head.typename().into())
+            && let Some(f) = m.get(&operator.into())
+        {
+            return f.clone().call(env, &[head, tail]);
+        }
+
         match kind {
             BinaryKind::Lt => head.lt(&tail),
             BinaryKind::LtEq => head.lt_eq(&tail),
@@ -645,61 +689,63 @@ impl Interpret for Binary {
 impl Interpret for Unary {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Unary { kind, tail } = self;
-        match kind {
-            UnaryKind::Loop => loop {
+        if *kind == UnaryKind::Loop {
+            loop {
                 match tail.interpret(env) {
-                    Err(Error { kind: ErrorKind::Break(value), .. }) => break Ok(value),
+                    Err(Error { kind: ErrorKind::Break(value), .. }) => return Ok(value),
                     Err(Error { kind: ErrorKind::Continue, .. }) => continue,
                     e => e?,
                 };
-            },
-            UnaryKind::Deref => {
-                let operand = tail.interpret(env)?;
-                env.call("deref".into(), &[operand])
             }
-            UnaryKind::Neg => {
-                let operand = tail.interpret(env)?;
-                env.call("neg".into(), &[operand])
-            }
-            UnaryKind::Not => {
-                let operand = tail.interpret(env)?;
-                env.call("not".into(), &[operand])
-            }
-            UnaryKind::RangeExc => {
-                let operand = tail.interpret(env)?;
-                env.call("RangeTo".into(), &[operand])
-            }
-            UnaryKind::RangeInc => {
-                let operand = tail.interpret(env)?;
-                env.call("RangeToInc".into(), &[operand])
-            }
-            UnaryKind::At => {
-                let operand = tail.interpret(env)?;
-                println!("{operand}");
-                Ok(operand)
-            }
-            UnaryKind::Tilde => unimplemented!("Tilde operator"),
         }
+
+        let operator = match kind {
+            UnaryKind::Loop => unreachable!(),
+            UnaryKind::Deref => "deref",
+            UnaryKind::Neg => "neg",
+            UnaryKind::Not => "not",
+            UnaryKind::RangeExc => "RangeTo",
+            UnaryKind::RangeInc => "RangeToInc",
+            UnaryKind::At => "at",
+            UnaryKind::Tilde => "tilde",
+        };
+
+        let operand = tail.interpret(env)?;
+
+        if let ConValue::Struct(name, _) | ConValue::TupleStruct(name, _) = operand
+            && let Ok(ConValue::Module(m)) = env.get_mut(name)
+            && let Some(f) = m.get(&operator.into())
+        {
+            return f.clone().call(env, &[operand]);
+        }
+
+        if let Ok(ConValue::Module(m)) = env.get_mut(operand.typename().into())
+            && let Some(f) = m.get(&operator.into())
+        {
+            return f.clone().call(env, &[operand]);
+        }
+
+        env.call(operator.into(), &[operand])
     }
 }
 
 fn cast(env: &Environment, value: ConValue, ty: Sym) -> IResult<ConValue> {
-    let value = match value {
-        ConValue::Empty => 0,
-        ConValue::Int(i) => i as _,
-        ConValue::Bool(b) => b as _,
-        ConValue::Char(c) => c as _,
-        ConValue::Ref(v) => {
+    let value = match (value, ty.to_ref()) {
+        (value, "str") => return Ok(ConValue::Str(format!("{value}").into())),
+        (value, "String") => return Ok(ConValue::String(format!("{value}"))),
+        (ConValue::Empty, _) => 0,
+        (ConValue::Int(i), _) => i as _,
+        (ConValue::Bool(b), _) => b as _,
+        (ConValue::Char(c), _) => c as _,
+        (ConValue::Ref(v), _) => {
             return cast(
                 env,
                 env.get_id(v).cloned().ok_or(Error::StackUnderflow())?,
                 ty,
             );
         }
-        // TODO: This, better
-        ConValue::Float(_) if ty.starts_with('f') => return Ok(value),
-        ConValue::Float(f) => f as _,
-        _ if (*ty).eq("str") => return Ok(ConValue::Str(format!("{value}").into())),
+        (ConValue::Float(f), "f32" | "f64") => return Ok(ConValue::Float(f)),
+        (ConValue::Float(f), _) => f as _,
         _ => Err(Error::TypeError())?,
     };
     Ok(match &*ty {
@@ -714,7 +760,7 @@ fn cast(env: &Environment, value: ConValue, ty: Sym) -> IResult<ConValue> {
         "f32" => ConValue::Float(value as f32 as _),
         "f64" => ConValue::Float(value as f64 as _),
         "char" => ConValue::Char(char::from_u32(value as _).unwrap_or('\u{fffd}')),
-        "bool" => ConValue::Bool(value < 0),
+        "bool" => ConValue::Bool(value != 0),
         _ => Err(Error::NotDefined(ty))?,
     })
 }
@@ -761,10 +807,10 @@ impl Interpret for Member {
 
         // Perform alternate member access
         match (&value, &kind) {
-            (ConValue::Struct(parts), MemberKind::Call(name, args))
-                if parts.1.contains_key(name) =>
+            (ConValue::Struct(_name, memb), MemberKind::Call(name, args))
+                if memb.contains_key(name) =>
             {
-                let f = parts.1.get(name).cloned().expect("function exists");
+                let f = memb.get(name).cloned().expect("function exists");
                 values.push(addr.unwrap_or(value));
                 for arg in &args.exprs {
                     values.push(arg.interpret(env)?);
@@ -801,10 +847,10 @@ impl Interpret for Structor {
         // use that definition to place the struct parts
 
         let name = match parts.last() {
-            Some(PathPart::Ident(name)) => name.to_ref(),
-            Some(PathPart::SelfTy) => "Self",
-            Some(PathPart::SuperKw) => "super",
-            None => "",
+            Some(PathPart::Ident(name)) => *name,
+            Some(PathPart::SelfTy) => "Self".into(),
+            Some(PathPart::SuperKw) => "super".into(),
+            None => "".into(),
         };
 
         let mut map = HashMap::new();
@@ -815,7 +861,7 @@ impl Interpret for Structor {
             };
             map.insert(*name, value);
         }
-        Ok(ConValue::Struct(Box::new((name, map))))
+        Ok(ConValue::Struct(name, Box::new(map)))
     }
 }
 
@@ -942,15 +988,15 @@ impl Interpret for For {
         let cond = cond.interpret(env)?;
         // TODO: A better iterator model
         let mut bounds: Box<dyn Iterator<Item = ConValue>> = match &cond {
-            ConValue::TupleStruct(inner) => match &**inner {
-                ("RangeExc", values) => match **values {
-                    [ConValue::Int(from), ConValue::Int(to)] => {
+            ConValue::TupleStruct(name, values) => match name.to_ref() {
+                "RangeExc" => match values.as_ref().as_ref() {
+                    &[ConValue::Int(from), ConValue::Int(to)] => {
                         Box::new((from..to).map(ConValue::Int))
                     }
                     _ => Err(Error::NotIterable())?,
                 },
-                ("RangeInc", values) => match **values {
-                    [ConValue::Int(from), ConValue::Int(to)] => {
+                "RangeInc" => match values.as_ref().as_ref() {
+                    &[ConValue::Int(from), ConValue::Int(to)] => {
                         Box::new((from..=to).map(ConValue::Int))
                     }
                     _ => Err(Error::NotIterable())?,

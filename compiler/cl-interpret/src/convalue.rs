@@ -63,16 +63,15 @@ pub enum ConValue {
     Array(Box<[ConValue]>),
     /// A tuple
     Tuple(Box<[ConValue]>),
+    // TODO: Instead of storing the identifier, store the index of the struct module
     /// A value of a product type
-    Struct(Box<(&'static str, HashMap<Sym, ConValue>)>),
+    Struct(Sym, Box<HashMap<Sym, ConValue>>),
     /// A value of a product type with anonymous members
-    TupleStruct(Box<(&'static str, Box<[ConValue]>)>),
+    TupleStruct(Sym, Box<Box<[ConValue]>>),
     /// An entire namespace
     Module(Box<HashMap<Sym, ConValue>>),
-    /// A namespace, sans storage
-    Module2(HashMap<Sym, usize>),
     /// A quoted expression
-    Quote(Box<Expr>),
+    Quote(Rc<Expr>),
     /// A callable thing
     Function(Rc<Function>),
     /// A tuple constructor
@@ -92,8 +91,8 @@ impl ConValue {
         }
     }
 
-    pub fn typename(&self) -> IResult<&'static str> {
-        Ok(match self {
+    pub fn typename(&self) -> &'static str {
+        match self {
             ConValue::Empty => "Empty",
             ConValue::Int(_) => "i64",
             ConValue::Float(_) => "f64",
@@ -105,25 +104,24 @@ impl ConValue {
             ConValue::Slice(_, _) => "Slice",
             ConValue::Array(_) => "Array",
             ConValue::Tuple(_) => "Tuple",
-            ConValue::Struct(_) => "Struct",
-            ConValue::TupleStruct(_) => "TupleStruct",
+            ConValue::Struct(_, _) => "Struct",
+            ConValue::TupleStruct(_, _) => "TupleStruct",
             ConValue::Module(_) => "",
-            ConValue::Module2(_) => "",
             ConValue::Quote(_) => "Quote",
             ConValue::Function(_) => "Fn",
             ConValue::TupleConstructor(_) => "Fn",
             ConValue::Closure(_) => "Fn",
             ConValue::Builtin(_) => "Fn",
-        })
+        }
     }
 
     #[allow(non_snake_case)]
     pub fn TupleStruct(id: Sym, values: Box<[ConValue]>) -> Self {
-        Self::TupleStruct(Box::new((id.to_ref(), values)))
+        Self::TupleStruct(id, Box::new(values))
     }
     #[allow(non_snake_case)]
     pub fn Struct(id: Sym, values: HashMap<Sym, ConValue>) -> Self {
-        Self::Struct(Box::new((id.to_ref(), values)))
+        Self::Struct(id, Box::new(values))
     }
 
     pub fn index(&self, index: &Self, _env: &Environment) -> IResult<ConValue> {
@@ -393,8 +391,7 @@ impl std::fmt::Display for ConValue {
                 }
                 ')'.fmt(f)
             }
-            ConValue::TupleStruct(parts) => {
-                let (id, tuple) = parts.as_ref();
+            ConValue::TupleStruct(id, tuple) => {
                 write!(f, "{id}")?;
                 '('.fmt(f)?;
                 for (idx, element) in tuple.iter().enumerate() {
@@ -405,8 +402,7 @@ impl std::fmt::Display for ConValue {
                 }
                 ')'.fmt(f)
             }
-            ConValue::Struct(parts) => {
-                let (id, map) = parts.as_ref();
+            ConValue::Struct(id, map) => {
                 use std::fmt::Write;
                 write!(f, "{id} ")?;
                 let mut f = f.delimit_with("{", "\n}");
@@ -423,14 +419,6 @@ impl std::fmt::Display for ConValue {
                 }
                 Ok(())
             }
-            ConValue::Module2(module) => {
-                use std::fmt::Write;
-                let mut f = f.delimit_with("{", "\n}");
-                for (k, v) in module.iter() {
-                    write!(f, "\n{k}: <{v}>,")?;
-                }
-                Ok(())
-            }
             ConValue::Quote(q) => {
                 write!(f, "`{q}`")
             }
@@ -444,7 +432,7 @@ impl std::fmt::Display for ConValue {
                 write!(f, "{}", func.as_ref())
             }
             ConValue::Builtin(func) => {
-                write!(f, "{}", func.description())
+                write!(f, "{}", func)
             }
         }
     }

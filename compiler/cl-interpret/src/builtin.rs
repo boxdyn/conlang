@@ -41,6 +41,12 @@ impl std::fmt::Debug for Builtin {
     }
 }
 
+impl std::fmt::Display for Builtin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.desc)
+    }
+}
+
 impl super::Callable for Builtin {
     fn call(&self, interpreter: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
         (self.func)(interpreter, args)
@@ -342,30 +348,22 @@ pub const Math: &[Builtin] = &builtins![
 
     #[allow(non_snake_case)]
     fn RangeExc(start, end) @env {
-        Ok(ConValue::TupleStruct(Box::new((
-            "RangeExc", Box::new([start.clone(), end.clone()])
-        ))))
+        Ok(ConValue::TupleStruct("RangeExc".into(), Box::new(Box::new([start.clone(), end.clone()]))))
     }
 
     #[allow(non_snake_case)]
     fn RangeInc(start, end) @env {
-        Ok(ConValue::TupleStruct(Box::new((
-            "RangeInc", Box::new([start.clone(), end.clone()])
-        ))))
+        Ok(ConValue::TupleStruct("RangeInc".into(), Box::new(Box::new([start.clone(), end.clone()]))))
     }
 
     #[allow(non_snake_case)]
     fn RangeTo(end) @env {
-        Ok(ConValue::TupleStruct(Box::new((
-            "RangeTo", Box::new([end.clone()])
-        ))))
+        Ok(ConValue::TupleStruct("RangeTo".into(), Box::new(Box::new([end.clone()]))))
     }
 
     #[allow(non_snake_case)]
     fn RangeToInc(end) @env {
-        Ok(ConValue::TupleStruct(Box::new((
-            "RangeToInc", Box::new([end.clone()])
-        ))))
+        Ok(ConValue::TupleStruct("RangeToInc".into(), Box::new(Box::new([end.clone()]))))
     }
 
     /// Negates the ConValue

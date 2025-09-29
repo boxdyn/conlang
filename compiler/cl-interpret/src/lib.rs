@@ -43,10 +43,7 @@ pub mod constructor {
         fn call(&self, _env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
             let &Self { name, arity } = self;
             if arity as usize == args.len() {
-                Ok(ConValue::TupleStruct(Box::new((
-                    name.to_ref(),
-                    args.into(),
-                ))))
+                Ok(ConValue::TupleStruct(name, Box::new(args.into())))
             } else {
                 Err(Error::ArgNumber(arity as usize, args.len()))
             }

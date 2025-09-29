@@ -294,13 +294,11 @@ pub fn append_sub(
             }
         }
 
-        (Pattern::TupleStruct(path, patterns), ConValue::TupleStruct(parts)) => {
-            let (id, values) = *parts;
-
+        (Pattern::TupleStruct(path, patterns), ConValue::TupleStruct(id, values)) => {
             let tid = path
                 .as_sym()
                 .ok_or_else(|| Error::PatFailed(pat.clone().into()))?;
-            if id != tid.to_ref() {
+            if id != tid {
                 return Err(Error::PatFailed(pat.clone().into()));
             }
             match rest_binding(env, sub, patterns, values.into_vec().into())? {
@@ -311,12 +309,11 @@ pub fn append_sub(
             }
         }
 
-        (Pattern::Struct(path, patterns), ConValue::Struct(parts)) => {
-            let (id, mut values) = *parts;
+        (Pattern::Struct(path, patterns), ConValue::Struct(id, mut values)) => {
             let tid = path
                 .as_sym()
                 .ok_or_else(|| Error::PatFailed(pat.clone().into()))?;
-            if id != tid.to_ref() {
+            if id != tid {
                 return Err(Error::PatFailed(pat.clone().into()));
             }
             for (name, pat) in patterns {
