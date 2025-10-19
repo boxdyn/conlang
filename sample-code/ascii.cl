@@ -26,7 +26,7 @@ fn ascii() {
             }
             print(n_digit(row), n_digit(col), ' ')
         }
-        print(" │")
+        print(" │");
         for col in 0..16 {
             print(ascii_picture(row << 4 | col))
         }

@@ -1,15 +1,15 @@
 //! Disjoint Set Forest implementation of the Union Find algorithm
 
-// enum TreeNode {
-//     Empty,
-//     Filled { parent: usize, rank: usize }
-// }
+enum TreeNode {
+    Empty,
+    Filled { parent: usize, rank: usize }
+}
 
 // TODO: Namespace based on type of first argument
 
 fn makeset(f, x) {
     match (*f)[x] {
-        () => (*f)[x] = Filled { parent: x, rank: 0 },
+        () => {(*f)[x] = Filled { parent: x, rank: 0 }},
         _ => {}
     }
 }
@@ -52,11 +52,11 @@ fn show(f) {
 }
 
 fn test(f) {
-    "Union Find on Disjoint Set Forest".println()
+    "Union Find on Disjoint Set Forest".println();
     for i in 0..10 { makeset(f, i) }
     for i in 10..20 { makeset(f, i) }
-    show(f)
-    println()
+    show(f);
+    println();
     
     for i in 1..10 { union(f, i*2-1, i*2) }
     for i in 5..10 { union(f, i*2+1, i*2) }
@@ -64,6 +64,6 @@ fn test(f) {
 }
 
 fn main() {
-    let f = [();20]
+    let f = [();20];
     f.test()
 }

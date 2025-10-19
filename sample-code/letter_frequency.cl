@@ -6,7 +6,7 @@ fn in_range(this: Ord, min: Ord, max: Ord) -> bool {
 }
 
 fn frequency(s: str) -> [i32; 128] {
-    let letters = [0;128];
+    let letters = [0; 128];
     for letter in s {
         if (letter).in_range(' ', letters.len() as char) {
             letters[(letter as i32)] += 1;
@@ -25,20 +25,22 @@ fn plot_freq(freq: [i32; 128]) -> str {
     buf
 }
 
-const msg: str ="letter_frequency.cl
+const msg: str = "letter_frequency.cl
 Computes the frequency of ascii characters in a block of text, and prints it bucket-sorted.
 Press Ctrl+D to quit.";
 
-fn main () {
-    println(msg)
+fn main() {
+    println(msg);
     let lines = "";
     loop {
         let line = get_line();
-        if line == "" { break() }
+        if line == "" {
+            break ();
+        }
         lines += line;
     }
 
-    let freq = frequency(lines)
-    let plot = plot_freq(freq)
+    let freq = frequency(lines);
+    let plot = plot_freq(freq);
     println(plot)
 }

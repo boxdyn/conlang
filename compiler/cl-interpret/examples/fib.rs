@@ -8,9 +8,5 @@ fn main() {
 
 /// Implements the classic recursive definition of fib()
 fn fib(a: i64) -> i64 {
-    if a > 1 {
-        fib(a - 1) + fib(a - 2)
-    } else {
-        1
-    }
+    if a > 1 { fib(a - 1) + fib(a - 2) } else { a }
 }
