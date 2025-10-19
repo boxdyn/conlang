@@ -112,35 +112,28 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
     }
 
     fn visit_function(&mut self, f: &'a cl_ast::Function) {
-        let cl_ast::Function { name, gens, sign, bind, body } = f;
         self.inner.set_source(Source::Function(f));
-        self.set_name(*name);
+        self.set_name(f.name);
 
-        self.visit(gens);
-        self.visit(sign);
-        self.visit(bind);
-
-        if let Some(b) = body {
-            self.inner.set_body(b);
-            self.visit(b);
+        if let Some(body) = &f.body {
+            self.inner.set_body(body);
         }
+
+        f.children(self);
     }
 
     fn visit_module(&mut self, m: &'a cl_ast::Module) {
-        let cl_ast::Module { name, file } = m;
         self.inner.set_source(Source::Module(m));
-        self.set_name(*name);
+        self.set_name(m.name);
 
-        self.visit(file);
+        m.children(self);
     }
 
     fn visit_struct(&mut self, s: &'a cl_ast::Struct) {
-        let cl_ast::Struct { name, gens, kind } = s;
         self.inner.set_source(Source::Struct(s));
-        self.set_name(*name);
+        self.set_name(s.name);
 
-        self.visit(gens);
-        self.visit(kind);
+        s.children(self);
     }
 
     fn visit_enum(&mut self, e: &'a cl_ast::Enum) {
@@ -181,18 +174,12 @@ impl<'a> Visit<'a> for Populator<'_, 'a> {
     }
 
     fn visit_impl(&mut self, i: &'a cl_ast::Impl) {
-        let cl_ast::Impl { gens, target: _, body } = i;
+        let cl_ast::Impl { gens: _, target: _, body } = i;
         self.inner.set_source(Source::Impl(i));
         self.inner.mark_impl_item();
 
         // We don't know if target is generic yet -- that's checked later.
-        for generic in &gens.vars {
-            let mut entry = self.new_entry(NodeKind::Type);
-            entry.inner.set_ty(TypeKind::Inferred);
 
-            let child = entry.inner.id();
-            self.inner.add_child(*generic, child);
-        }
         self.visit(body);
     }
 
