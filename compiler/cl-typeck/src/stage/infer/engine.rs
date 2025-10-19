@@ -1,4 +1,4 @@
-use std::{cell::Cell, collections::HashSet, rc::Rc};
+use std::collections::HashSet;
 
 use super::error::InferenceError;
 use crate::{
@@ -31,19 +31,19 @@ use cl_ast::Sym;
       - for<T, R> type T -> R           // on a per-case basis!
 */
 
-type HandleSet = Rc<Cell<Option<Handle>>>;
+type HandleSet<'h> = Option<&'h mut Option<Handle>>;
 
-pub struct InferenceEngine<'table, 'a> {
+pub struct InferenceEngine<'table, 'a, 'b, 'r> {
     pub(super) table: &'table mut Table<'a>,
     /// The current working node
     pub(crate) at: Handle,
     /// The current breakset
-    pub(crate) bset: HandleSet,
+    pub(crate) bset: HandleSet<'b>,
     /// The current returnset
-    pub(crate) rset: HandleSet,
+    pub(crate) rset: HandleSet<'r>,
 }
 
-impl<'table, 'a> InferenceEngine<'table, 'a> {
+impl<'table, 'a, 'b, 'r> InferenceEngine<'table, 'a, 'b, 'r> {
     /// Infers the type of an object by deferring to [`Inference::infer()`]
     pub fn infer(&mut self, inferrable: &'a impl Inference<'a>) -> Result<Handle, InferenceError> {
         inferrable.infer(self)
@@ -56,12 +56,12 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
 
     /// Constructs an [`InferenceEngine`] that borrows the same table as `self`,
     /// but with a shortened lifetime.
-    pub fn scoped(&mut self) -> InferenceEngine<'_, 'a> {
+    pub fn scoped(&mut self) -> InferenceEngine<'_, 'a, '_, '_> {
         InferenceEngine {
             at: self.at,
             table: self.table,
-            bset: self.bset.clone(),
-            rset: self.rset.clone(),
+            bset: self.bset.as_deref_mut(),
+            rset: self.rset.as_deref_mut(),
         }
     }
 
@@ -92,7 +92,7 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
             };
 
             match &ret {
-                &Ok(handle) => println!("=> {}", eng.entry(handle)),
+                Ok(handle) => println!("=> {}", eng.entry(*handle)),
                 Err(err @ InferenceError::AnnotationEval(_)) => eprintln!("=> ERROR: {err}"),
                 Err(InferenceError::FieldCount(h, want, got)) => {
                     eprintln!("=> ERROR: Field count {want} != {got} in {}", eng.entry(*h))
@@ -101,13 +101,14 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
                 Err(InferenceError::Mismatch(h1, h2)) => eprintln!(
                     "=> ERROR: Type mismatch {} != {}",
                     eng.entry(*h1),
-                    eng.entry(*h2)
+                    eng.entry(*h2),
                 ),
                 Err(InferenceError::Recursive(h1, h2)) => eprintln!(
                     "=> ERROR: Cycle found in types {}, {}",
                     eng.entry(*h1),
-                    eng.entry(*h2)
+                    eng.entry(*h2),
                 ),
+                Err(InferenceError::NoBreak | InferenceError::NoReturn) => {}
             }
             println!();
 
@@ -120,35 +121,43 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
     }
 
     /// Constructs a new InferenceEngine with the
-    pub fn at(&mut self, at: Handle) -> InferenceEngine<'_, 'a> {
+    pub fn at(&mut self, at: Handle) -> InferenceEngine<'_, 'a, '_, '_> {
         InferenceEngine { at, ..self.scoped() }
     }
 
-    pub fn open_bset(&mut self) -> InferenceEngine<'_, 'a> {
-        InferenceEngine { bset: Default::default(), ..self.scoped() }
+    pub fn open_bset<'ob>(
+        &mut self,
+        bset: &'ob mut Option<Handle>,
+    ) -> InferenceEngine<'_, 'a, 'ob, '_> {
+        InferenceEngine { bset: Some(bset), ..self.scoped() }
     }
 
-    pub fn open_rset(&mut self) -> InferenceEngine<'_, 'a> {
-        InferenceEngine { rset: Default::default(), ..self.scoped() }
+    pub fn open_rset<'or>(
+        &mut self,
+        rset: &'or mut Option<Handle>,
+    ) -> InferenceEngine<'_, 'a, '_, 'or> {
+        InferenceEngine { rset: Some(rset), ..self.scoped() }
     }
 
     pub fn bset(&mut self, ty: Handle) -> Result<(), InferenceError> {
-        match self.bset.get() {
-            Some(bset) => self.unify(ty, bset),
-            None => {
-                self.bset.set(Some(ty));
+        match self.bset.as_mut() {
+            Some(&mut &mut Some(bset)) => self.unify(ty, bset),
+            Some(none) => {
+                let _ = none.insert(ty);
                 Ok(())
             }
+            None => Err(InferenceError::NoBreak),
         }
     }
 
     pub fn rset(&mut self, ty: Handle) -> Result<(), InferenceError> {
-        match self.rset.get() {
-            Some(rset) => self.unify(ty, rset),
-            None => {
-                self.rset.set(Some(ty));
+        match self.rset.as_mut() {
+            Some(&mut &mut Some(rset)) => self.unify(ty, rset),
+            Some(none) => {
+                let _ = none.insert(ty);
                 Ok(())
             }
+            None => Err(InferenceError::NoReturn),
         }
     }
 
@@ -277,7 +286,7 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
     }
 
     /// Creates a new locally-scoped InferenceEngine.
-    pub fn block_scope(&mut self) -> InferenceEngine<'_, 'a> {
+    pub fn block_scope(&mut self) -> InferenceEngine<'_, 'a, '_, '_> {
         let scope = self.table.new_entry(self.at, NodeKind::Scope);
         self.table.add_child(self.at, "".into(), scope);
         self.at(scope)
@@ -459,8 +468,8 @@ impl<'table, 'a> InferenceEngine<'table, 'a> {
             TypeKind::Adt(Adt::Union(items)) => {
                 items.iter().any(|(_, other)| self.occurs_in(this, *other))
             }
-            TypeKind::Ref(other) => self.occurs_in(this, *other),
-            TypeKind::Ptr(other) => self.occurs_in(this, *other),
+            TypeKind::Ref(_) => false,
+            TypeKind::Ptr(_) => false,
             TypeKind::Slice(other) => self.occurs_in(this, *other),
             TypeKind::Array(other, _) => self.occurs_in(this, *other),
             TypeKind::Tuple(handles) => handles.iter().any(|&other| self.occurs_in(this, other)),

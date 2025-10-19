@@ -11,6 +11,8 @@ pub enum InferenceError {
     NotFound(Path),
     Mismatch(Handle, Handle),
     Recursive(Handle, Handle),
+    NoBreak,
+    NoReturn,
 }
 
 impl std::error::Error for InferenceError {}
@@ -28,6 +30,8 @@ impl fmt::Display for InferenceError {
             InferenceError::NotFound(p) => write!(f, "Path not visible in scope: {p}"),
             InferenceError::Mismatch(a, b) => write!(f, "Type mismatch: {a:?} != {b:?}"),
             InferenceError::Recursive(_, _) => write!(f, "Recursive type!"),
+            InferenceError::NoBreak => write!(f, "Encountered break outside loop!"),
+            InferenceError::NoReturn => write!(f, "Encountered return outside function!"),
         }
     }
 }
