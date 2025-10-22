@@ -189,7 +189,12 @@ impl Interpret for Enum {
                 }
                 (StructKind::Tuple(args), None) => {
                     let cs = Constructor { arity: args.len() as _, name: *name };
-                    scope.insert("call".into(), ConValue::TupleConstructor(cs));
+                    let mut variant = scope.frame(name.to_ref());
+                    variant.insert("call".into(), ConValue::TupleConstructor(cs));
+                    let frame = variant
+                        .pop_values()
+                        .expect("Frame stack should remain balanced.");
+                    scope.insert(*name, ConValue::Module(Box::new(frame)));
                 }
                 (StructKind::Struct(_), None) => {}
                 _ => eprintln!("Well-formedness error in {self}"),
