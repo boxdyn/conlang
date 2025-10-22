@@ -34,9 +34,9 @@ fn f(__fmt: &str) -> &str {
             _ => {}
         }
         match (__depth, __label.len()) {
-            (0, _) => __out += __c,
-            (_, 0) => __expr += __c,
-            (_, _) => __label += __c,
+            (0, _) => {__out += __c},
+            (_, 0) => {__expr += __c},
+            (_, _) => {__label += __c},
         }
     }
     __out
