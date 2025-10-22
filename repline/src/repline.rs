@@ -14,6 +14,7 @@ use std::{
 pub struct Repline<'a, R: Read> {
     input: Chars<Flatten<Result<u8>, Bytes<R>>>,
 
+    history_cap: usize,
     history: VecDeque<String>, // previous lines
     hindex: usize,             // current index into the history buffer
 
@@ -31,6 +32,7 @@ impl<'a, R: Read> Repline<'a, R> {
     pub fn with_input(input: R, color: &'a str, begin: &'a str, again: &'a str) -> Self {
         Self {
             input: Chars(Flatten(input.bytes())),
+            history_cap: 200,
             history: Default::default(),
             hindex: 0,
             ed: Editor::new(color, begin, again),
@@ -39,6 +41,7 @@ impl<'a, R: Read> Repline<'a, R> {
     pub fn swap_input<S: Read>(self, new_input: S) -> Repline<'a, S> {
         Repline {
             input: Chars(Flatten(new_input.bytes())),
+            history_cap: self.history_cap,
             history: self.history,
             hindex: self.hindex,
             ed: self.ed,
@@ -108,7 +111,10 @@ impl<'a, R: Read> Repline<'a, R> {
                 }
                 c if c.is_ascii_control() => {
                     if cfg!(debug_assertions) {
-                        self.ed.extend(c.escape_debug(), stdout)?;
+                        self.print_err(
+                            stdout,
+                            format_args!("\t\x1b[30mUnhandled ASCII C0 {c:?}\x1b[0m"),
+                        )?;
                     }
                 }
                 c => {
@@ -133,9 +139,14 @@ impl<'a, R: Read> Repline<'a, R> {
     /// Handle ANSI Escape
     fn escape<W: Write>(&mut self, w: &mut W) -> ReplResult<()> {
         match self.input.next().ok_or(Error::EndOfInput)?? {
+            '\r' => Err(Error::EndOfInput)?,
             '[' => self.csi(w)?,
             'O' => todo!("Process alternate character mode"),
-            other => self.ed.extend(other.escape_debug(), w)?,
+            other => {
+                if cfg!(debug_assertions) {
+                    self.print_err(w, format_args!("\t\x1b[30mANSI escape: {other:?}\x1b[0m"))?;
+                }
+            }
         }
         Ok(())
     }
@@ -173,7 +184,10 @@ impl<'a, R: Read> Repline<'a, R> {
             }
             other => {
                 if cfg!(debug_assertions) {
-                    self.print_err(w, other.escape_debug())?;
+                    self.print_err(
+                        w,
+                        format_args!("\t\x1b[30mUnhandled control sequence: {other:?}\x1b[0m"),
+                    )?;
                 }
             }
         }
@@ -203,7 +217,7 @@ impl<'a, R: Read> Repline<'a, R> {
                 .expect("should have just found this");
         };
         self.history.push_back(buf);
-        while self.history.len() > 20 {
+        while self.history.len() > self.history_cap {
             self.history.pop_front();
         }
     }
