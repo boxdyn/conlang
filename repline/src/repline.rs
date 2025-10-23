@@ -51,6 +51,14 @@ impl<'a, R: Read> Repline<'a, R> {
     pub fn set_color(&mut self, color: &'a str) {
         self.ed.color = color
     }
+
+    /// Set the entire terminal prompt sequence
+    pub fn set_prompt(&mut self, color: &'a str, begin: &'a str, again: &'a str) {
+        self.ed.color = color;
+        self.ed.begin = begin;
+        self.ed.again = again;
+    }
+
     /// Append line to history and clear it
     pub fn accept(&mut self) {
         self.history_append(self.ed.to_string());

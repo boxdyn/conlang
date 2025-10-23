@@ -26,8 +26,8 @@ pub struct Editor<'a> {
     tail: VecDeque<char>,
 
     pub color: &'a str,
-    begin: &'a str,
-    again: &'a str,
+    pub begin: &'a str,
+    pub again: &'a str,
 }
 
 impl<'a> Editor<'a> {
