@@ -11,4 +11,4 @@ pub const RESET: &str = "\x1b[0m";
 pub const OUTPUT: &str = "\x1b[38;5;117m";
 
 pub const CLEAR_LINES: &str = "\x1b[G\x1b[J";
-pub const CLEAR_ALL: &str = "\x1b[H\x1b[2J";
+pub const CLEAR_ALL: &str = "\x1b[H\x1b[2J\x1b[3J";

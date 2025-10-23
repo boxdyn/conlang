@@ -49,10 +49,9 @@ pub fn is_terminal() -> bool {
 /// The CLI's operating mode
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Mode {
-    #[default]
-    Menu,
     Lex,
     Fmt,
+    #[default]
     Run,
 }
 

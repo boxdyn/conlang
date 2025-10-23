@@ -18,12 +18,7 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
     let mut env = Environment::new();
 
     env.add_builtins(&builtins! {
-        /// Clears the screen
-        fn clear() {
-            menu::clear();
-            Ok(ConValue::Empty)
-        }
-
+        /// Lexes, parses, and evaluates an expression in the current env
         fn eval(string) @env {
             use cl_interpret::error::Error;
             let string = match string {
@@ -84,12 +79,7 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
             eprintln!("{e}")
         }
         let mut ctx = Context::with_env(env);
-        match mode {
-            Mode::Menu => menu::main_menu(&mut ctx)?,
-            Mode::Lex => menu::lex(&mut ctx)?,
-            Mode::Fmt => menu::fmt(&mut ctx)?,
-            Mode::Run => menu::run(&mut ctx)?,
-        }
+        menu::main_menu(mode, &mut ctx)?;
     } else {
         let path = format_path_for_display(file.as_deref());
         let code = match &file {
@@ -100,7 +90,7 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
         match mode {
             Mode::Lex => lex_code(&path, &code),
             Mode::Fmt => fmt_code(&path, &code),
-            Mode::Run | Mode::Menu => run_code(&path, &code, &mut env),
+            Mode::Run => run_code(&path, &code, &mut env),
         }?;
     }
     Ok(())
