@@ -191,6 +191,7 @@ impl Interpret for Enum {
                     let cs = Constructor { arity: args.len() as _, name: *name };
                     let mut variant = scope.frame(name.to_ref());
                     variant.insert("call".into(), ConValue::TupleConstructor(cs));
+                    variant.insert("__nmemb".into(), ConValue::Int(args.len() as _));
                     let frame = variant
                         .pop_values()
                         .expect("Frame stack should remain balanced.");
