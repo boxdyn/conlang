@@ -12,6 +12,6 @@ cl-ast = { path = "../cl-ast" }
 cl-structures = { path = "../cl-structures" }
 
 [dev-dependencies]
-repline = { path = "../../repline" }
+repline = { version = "*", registry = "soft-fish" }
 cl-lexer = { path = "../cl-lexer" }
 cl-parser = { path = "../cl-parser" }
