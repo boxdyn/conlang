@@ -1,5 +1,5 @@
 //! The Conlang REPL, based on [repline]
-//! 
+//!
 //! Uses [argwerk] for argument parsing.
 #![warn(clippy::all)]
 

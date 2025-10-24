@@ -4,7 +4,7 @@ use cl_lexer::Lexer;
 use cl_token::Token;
 use std::{
     error::Error,
-    io::{stdin, IsTerminal, Read},
+    io::{IsTerminal, Read, stdin},
     path::{Path, PathBuf},
 };
 
