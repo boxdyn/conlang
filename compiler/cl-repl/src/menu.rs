@@ -21,9 +21,9 @@ type ReplMode = (&'static str, &'static str, &'static str, ReplCallback);
 
 #[rustfmt::skip]
 const MODES: &[ReplMode] = &[
-    (ansi::CYAN,            ".>", " >", mode_run),
-    (ansi::BRIGHT_BLUE,     "l>", " >", mode_lex),
-    (ansi::BRIGHT_MAGENTA,  "f>", " >", mode_fmt),
+    (ansi::CYAN,            " .>", "  >", mode_run),
+    (ansi::BRIGHT_BLUE,     " .>", "  >", mode_lex),
+    (ansi::BRIGHT_MAGENTA,  " .>", "  >", mode_fmt),
 ];
 
 const fn get_mode(mode: Mode) -> ReplMode {
@@ -70,14 +70,17 @@ pub fn main_menu(mode: Mode, ctx: &mut ctx::Context) -> ReplResult<()> {
     mode run : Evaluate some expressions"
             ),
             _ => match mode.3(ctx, &line) {
+                Ok(Response::Continue) => continue,
+                Ok(Response::Break) => return Ok(()),
+                Ok(Response::Deny) => {}
                 Ok(Response::Accept) => {
                     rl.accept();
                     continue;
                 }
-                Ok(Response::Deny) => {}
-                Ok(Response::Break) => return Ok(()),
-                Ok(Response::Continue) => continue,
-                Err(e) => rl.print_inline(format_args!("\t\x1b[91m{e}\x1b[0m"))?,
+                Err(e) => {
+                    rl.print_inline(format_args!("\t\x1b[31m{e}\x1b[0m"))?;
+                    continue;
+                }
             },
         }
         rl.deny();
