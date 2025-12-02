@@ -2,7 +2,6 @@
 members = [
     "compiler/cl-repl",
     "compiler/cl-typeck",
-    "compiler/cl-embed",
     "compiler/cl-interpret",
     "compiler/cl-structures",
     "compiler/cl-token",
