@@ -1,5 +1,6 @@
 [package]
 name = "cl-ast"
+description = "The Conlang AST"
 repository.workspace = true
 version.workspace = true
 authors.workspace = true

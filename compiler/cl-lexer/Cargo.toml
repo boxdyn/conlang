@@ -1,5 +1,6 @@
 [package]
 name = "cl-lexer"
+description = "The Conlang Lexer"
 repository.workspace = true
 version.workspace = true
 authors.workspace = true

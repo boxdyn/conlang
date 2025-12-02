@@ -1,5 +1,6 @@
 [package]
 name = "cl-token"
+description = "The Conlang Lexer's Token structure"
 repository.workspace = true
 version.workspace = true
 authors.workspace = true

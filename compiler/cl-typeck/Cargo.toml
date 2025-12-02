@@ -1,5 +1,6 @@
 [package]
 name = "cl-typeck"
+description = "The Conlang Semantic Analyzer"
 repository.workspace = true
 version.workspace = true
 authors.workspace = true
@@ -12,6 +13,6 @@ cl-ast = { path = "../cl-ast" }
 cl-structures = { path = "../cl-structures" }
 
 [dev-dependencies]
-repline = { version = "*", registry = "soft-fish" }
+repline = "*"
 cl-lexer = { path = "../cl-lexer" }
 cl-parser = { path = "../cl-parser" }

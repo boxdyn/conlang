@@ -1,5 +1,6 @@
 [package]
 name = "cl-parser"
+description = "The Conlang Parser"
 repository.workspace = true
 version.workspace = true
 authors.workspace = true

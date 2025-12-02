@@ -1,5 +1,6 @@
 [package]
 name = "cl-interpret"
+description = "The Conlang Interpreter"
 repository.workspace = true
 version.workspace = true
 authors.workspace = true

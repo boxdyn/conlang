@@ -15,4 +15,4 @@ cl-lexer = { path = "../cl-lexer" }
 cl-parser = { path = "../cl-parser" }
 
 [dev-dependencies]
-repline = { version = "*", registry = "soft-fish" }
+repline = "*"

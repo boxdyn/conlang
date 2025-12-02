@@ -1,5 +1,6 @@
 [package]
 name = "cl-repl"
+description = "The Conlang REPL"
 repository.workspace = true
 version.workspace = true
 authors.workspace = true
@@ -17,6 +18,5 @@ cl-parser = { path = "../cl-parser" }
 cl-typeck = { path = "../cl-typeck" }
 cl-interpret = { path = "../cl-interpret" }
 cl-structures = { path = "../cl-structures" }
-cl-arena = { version = "0", registry = "soft-fish" }
-repline = { version = "*", registry = "soft-fish" }
+repline = "*"
 argwerk = "0.20.4"
