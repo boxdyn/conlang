@@ -1,32 +1,51 @@
+> "A constructed language is a language for communication between humans (i.e. not with or between computers)"
+[Wikipedia, "Constructed Language"](https://en.wikipedia.org/wiki/Constructed_language)
+
 # Conlang: Expression-Oriented Programming Language
-This project began out of a desire to merge Rust-style control flow expressions 
-with Python's fun for-else/while-else syntax. I fully intend to devote my spare time
-to conlang for the forseeable future.
+The primary function of a high-level programming language is to communicate among programmers.
+Translation into an executable program is secondary to understanding the code.
 
-## Immediate Goals:
-- [x] Decide on a minimal set of keywords and operators to support
-- [x] Lex an entire Rust source file (minus generics, paths, and lifetimes)
-- [x] Write expression grammar
-- [x] Write AST for expression grammar
-- [x] Write parser for AST
-- [ ] Create tests for parser (and AST)
-- [x] Parse `dummy.cl` into a valid AST
-- [x] Pretty printer, for debugging
-- [x] Create minimal statement grammar
-  - [x] Variable definition statements
-  - [x] Function definition statements
+In this regard, Conlang is an esoteric art-lang whose syntax and semantics mirror several common
+programming languages (to the point of near source-compatibility with a select handful of programs.)
 
-## Short Goals:
-- [x] `for` loops and `while` loops can be used on the trailing side of an assignment
-- [x] Tree-walk interpreter for prototyping and debugging
-- [x] Data structures and sum-type enums
-- [ ] Expression type-checker
-- [ ] Pattern destructuring, to take advantage of sum-type enums
-- [ ] Three-address bytecode VM for standard library development
-- [ ] Trait/Interface system
+The phonology and orthography of Conlang are identical to that of The Rust Programming Language,
+which, while being my favorite production-grade programming language of all time, falls short
+in its ability to expressively express expressions.
 
-## Long Goals:
-- [ ] Minimize the number of kinds of statements
-- [ ] Compile to LLVM IR
-- [ ] Create a standard library for the language, with Rust-like abstractions.
+The language's name is subject to change.
+
+## Code examples
+
+The file [dummy.cl](/dummy.cl) contains the earliest, and most approachable, look at Conlang syntax.
+It still runs in the interpreter, and there are no plans to break compatibility with that file
+in particular. Of course, it does not cover all language features; those language features unused
+in the file are subject to change.
+
+
+A minor goal of the project is to keep the syntax *roughly* compatible with Rust, so regex-based
+code highlighters will highlight the code in an acceptable manner. As such, Conlang's code examples
+are marked-down as "\`\`\`rust" (as follows.)
+
+
+The language is currently in a state of flux: major developments are happening in private as we
+prepare to replace the AST, parser, and all subsequent passes with newer, simpler, and remarkably
+more flexible implementations.
+
+## Development Goals
+### Immediate Goals:
+- [ ] Remove statements as a syntactic position
+  - [ ] There can be only one (expression per translation unit)
+  - [ ] Update the [Grammatical grammar](/grammar.ebnf) to match expectations
+- [ ] Carefully evaluate all situations where a value can be returned, and figure out what value
+
+### Short Goals:
+- [ ] Rebuild the type inference machinery, with The Technology
+- [ ] Expand pattern-binding to cover every way a name can be declared
+- [ ] Implement a bytecode VM for standard library development and comptime
+- [ ] Typeclass polymorphism. All functions f(self) are "extension methods", but we crave MORE
+
+### Long Goals:
+- [ ] Compile to LLVM IR, for that sweet, sweet portability.
+- [ ] Create a best-in-class standard library
+  - [ ] Consider runtime type information
 - [ ] Port the compiler to Conlang
