@@ -1,5 +1,6 @@
-> "A constructed language is a language for communication between humans (i.e. not with or between computers)"
-[Wikipedia, "Constructed Language"](https://en.wikipedia.org/wiki/Constructed_language)
+> "A constructed language is a language for communication between humans (i.e. not with or between computers)"  
+> [Wikipedia, *Constructed Language*](https://en.wikipedia.org/wiki/Constructed_language)
+
 
 # Conlang: Expression-Oriented Programming Language
 The primary function of a high-level programming language is to communicate among programmers.
@@ -12,7 +13,8 @@ The phonology and orthography of Conlang are identical to that of The Rust Progr
 which, while being my favorite production-grade programming language of all time, falls short
 in its ability to expressively express expressions.
 
-The language's name is subject to change.
+(The language's name is undeniably a misnomer.)
+
 
 ## Code examples
 
@@ -24,12 +26,31 @@ in the file are subject to change.
 
 A minor goal of the project is to keep the syntax *roughly* compatible with Rust, so regex-based
 code highlighters will highlight the code in an acceptable manner. As such, Conlang's code examples
-are marked-down as "\`\`\`rust" (as follows.)
+are marked-down as "\`\`\`rust", as follows:
+
+
+```rust
+/// This is the entrypoint to a Conlang program.
+///
+/// Functions are declared with a name, argument list,
+/// optional return type, and an expression.
+fn main ()
+    println("Hello, world!");
+
+/// Function arguments are patterns
+fn println(..args: [String]) {
+    for arg in args {
+        print(arg)
+    }
+    print('\n')
+}
+```
 
 
 The language is currently in a state of flux: major developments are happening in private as we
 prepare to replace the AST, parser, and all subsequent passes with newer, simpler, and remarkably
 more flexible implementations.
+
 
 ## Development Goals
 ### Immediate Goals:
