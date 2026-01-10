@@ -2,7 +2,7 @@
 //! Square root approximation, and example applications
 
 /// A really small nonzero number
-const EPSILON: f64 = 8.8541878188 / 1000000000000.0;
+const let EPSILON: f64 = 8.8541878188 / 1000000000000.0;
 
 /// Calcuates the absolute value of a number
 fn f64_abs(n: f64) -> f64 {

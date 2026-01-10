@@ -1,6 +1,6 @@
 //! Pseudo-random number generation using a LFSR algorithm
 
-static state: u64 = 0xdeadbeefdeadbeef;
+static let state: u64 = 0xdeadbeefdeadbeef;
 
 pub fn seed(seed: u64) {
     state = seed;

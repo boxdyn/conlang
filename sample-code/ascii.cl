@@ -35,7 +35,7 @@ fn ascii() {
 }
 
 // Start of the C0 control pictures region
-const CO_CONTROL_PICTURES: u32 = '\u{2400}' as u32;
+const let CO_CONTROL_PICTURES: u32 = '\u{2400}' as u32;
 
 fn ascii_picture(c: u32) -> char {
     if c < ' ' as u32 {                 // C0

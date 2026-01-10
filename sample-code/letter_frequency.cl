@@ -25,7 +25,7 @@ fn plot_freq(freq: [i32; 128]) -> str {
     buf
 }
 
-const msg: str = "letter_frequency.cl
+const let msg: str = "letter_frequency.cl
 Computes the frequency of ascii characters in a block of text, and prints it bucket-sorted.
 Press Ctrl+D to quit.";
 
@@ -33,7 +33,7 @@ fn main() {
     println(msg);
     let lines = "";
     loop {
-        let line = get_line();
+        let line = get_line("letters > ");
         if line == "" {
             break ();
         }

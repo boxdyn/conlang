@@ -59,9 +59,9 @@ pub mod ops {
     }
 
     impl bool {
-        pub const MIN: Self = false;
-        pub const MAX: Self = true;
-        pub const BIT_WIDTH: u32 = 1;
+        pub const let MIN: Self = false;
+        pub const let MAX: Self = true;
+        pub const let BIT_WIDTH: u32 = 1;
         pub fn default() -> Self {
             false
         }
@@ -83,9 +83,9 @@ pub mod ops {
     }
 
     impl u8 {
-        pub const MIN: Self = 0;
-        pub const MAX: Self = !0;
-        pub const BIT_WIDTH: u32 = 1;
+        pub const let MIN: Self = 0;
+        pub const let MAX: Self = !0;
+        pub const let BIT_WIDTH: u32 = 1;
         pub fn default() -> Self {
             0
         }
@@ -122,9 +122,9 @@ pub mod ops {
     }
 
     impl u16 {
-        pub const MIN: Self = 0;
-        pub const MAX: Self = !0;
-        pub const BIT_WIDTH: u32 = 2;
+        pub const let MIN: Self = 0;
+        pub const let MAX: Self = !0;
+        pub const let BIT_WIDTH: u32 = 2;
         pub fn default() -> Self {
             0
         }
@@ -161,9 +161,9 @@ pub mod ops {
     }
 
     impl u32 {
-        pub const MIN: Self = 0;
-        pub const MAX: Self = !0;
-        pub const BIT_WIDTH: u32 = 4;
+        pub const let MIN: Self = 0;
+        pub const let MAX: Self = !0;
+        pub const let BIT_WIDTH: u32 = 4;
         pub fn default() -> Self {
             0
         }
@@ -200,9 +200,9 @@ pub mod ops {
     }
 
     impl u64 {
-        pub const MIN: Self = 0;
-        pub const MAX: Self = !0;
-        pub const BIT_WIDTH: u32 = 8;
+        pub const let MIN: Self = 0;
+        pub const let MAX: Self = !0;
+        pub const let BIT_WIDTH: u32 = 8;
         pub fn default() -> Self {
             0
         }
@@ -239,9 +239,9 @@ pub mod ops {
     }
 
     impl u128 {
-        pub const MIN: Self = 0;
-        pub const MAX: Self = !0;
-        pub const BIT_WIDTH: u32 = 8;
+        pub const let MIN: Self = 0;
+        pub const let MAX: Self = !0;
+        pub const let BIT_WIDTH: u32 = 8;
         pub fn default() -> Self {
             0
         }
@@ -278,9 +278,9 @@ pub mod ops {
     }
 
     impl usize {
-        pub const MIN: Self = u64::MIN as usize; // __march_ptr_width_unsigned_min(); // TODO: intrinsics
-        pub const MAX: Self = u64::MAX as usize; // __march_ptr_width_unsigned_max(); // TODO: intrinsics
-        pub const BIT_WIDTH: u32 = u64::BIT_WIDTH; // __march_ptr_width_bits(); // TODO: intrinsics
+        pub const let MIN: Self = u64::MIN as usize; // __march_ptr_width_unsigned_min(); // TODO: intrinsics
+        pub const let MAX: Self = u64::MAX as usize; // __march_ptr_width_unsigned_max(); // TODO: intrinsics
+        pub const let BIT_WIDTH: u32 = u64::BIT_WIDTH; // __march_ptr_width_bits(); // TODO: intrinsics
         pub fn default() -> Self {
             0
         }
@@ -317,9 +317,9 @@ pub mod ops {
     }
 
     impl i8 {
-        pub const MIN: Self = -128;
-        pub const MAX: Self = 127;
-        pub const BIT_WIDTH: u32 = 1;
+        pub const let MIN: Self = -128;
+        pub const let MAX: Self = 127;
+        pub const let BIT_WIDTH: u32 = 1;
         pub fn default() -> Self {
             0
         }
@@ -356,9 +356,9 @@ pub mod ops {
     }
 
     impl i16 {
-        pub const MIN: Self = -32768;
-        pub const MAX: Self = 32767;
-        pub const BIT_WIDTH: u32 = 2;
+        pub const let MIN: Self = -32768;
+        pub const let MAX: Self = 32767;
+        pub const let BIT_WIDTH: u32 = 2;
         pub fn default() -> Self {
             0
         }
@@ -395,9 +395,9 @@ pub mod ops {
     }
 
     impl i32 {
-        pub const MIN: Self = -2147483648;
-        pub const MAX: Self = 2147483647;
-        pub const BIT_WIDTH: u32 = 4;
+        pub const let MIN: Self = -2147483648;
+        pub const let MAX: Self = 2147483647;
+        pub const let BIT_WIDTH: u32 = 4;
         pub fn default() -> Self {
             0
         }
@@ -434,9 +434,9 @@ pub mod ops {
     }
 
     impl i64 {
-        pub const MIN: Self = -9223372036854775808;
-        pub const MAX: Self = 9223372036854775807;
-        pub const BIT_WIDTH: u32 = 8;
+        pub const let MIN: Self = -9223372036854775808;
+        pub const let MAX: Self = 9223372036854775807;
+        pub const let BIT_WIDTH: u32 = 8;
         pub fn default() -> Self {
             0
         }
@@ -473,9 +473,9 @@ pub mod ops {
     }
 
     impl i128 {
-        pub const MIN: Self = !(1 << 128);
-        pub const MAX: Self = 1 << 128;
-        pub const BIT_WIDTH: u32 = 8;
+        pub const let MIN: Self = !(1 << 128);
+        pub const let MAX: Self = 1 << 128;
+        pub const let BIT_WIDTH: u32 = 8;
         pub fn default() -> Self {
             0
         }
@@ -512,9 +512,9 @@ pub mod ops {
     }
 
     impl isize {
-        pub const MIN: Self = i64::MIN as isize; // __march_ptr_width_signed_min(); // TODO: intrinsics
-        pub const MAX: Self = i64::MAX as isize; // __march_ptr_width_signed_max(); // TODO: intrinsics
-        pub const BIT_WIDTH: u32 = i64::BIT_WIDTH; // __march_ptr_width_bits(); // TODO: intrinsics
+        pub const let MIN: Self = i64::MIN as isize; // __march_ptr_width_signed_min(); // TODO: intrinsics
+        pub const let MAX: Self = i64::MAX as isize; // __march_ptr_width_signed_max(); // TODO: intrinsics
+        pub const let BIT_WIDTH: u32 = i64::BIT_WIDTH; // __march_ptr_width_bits(); // TODO: intrinsics
         pub fn default() -> Self {
             0
         }

@@ -99,6 +99,7 @@ impl TryFrom<Expr> for Pattern {
     type Error = Expr;
 
     /// Performs the conversion. On failure, returns the *first* non-pattern subexpression.
+    #[expect(clippy::result_large_err, reason = "Sure hope it is")]
     fn try_from(value: Expr) -> Result<Self, Self::Error> {
         Ok(match value.kind {
             ExprKind::Literal(literal) => Pattern::Literal(literal),

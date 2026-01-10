@@ -390,6 +390,7 @@ impl Parse<'_> for Const {
     fn parse(p: &mut Parser) -> PResult<Const> {
         const P: Parsing = Parsing::Const;
         p.consume_peeked();
+        let _ = p.match_type(TokenKind::Let, P);
 
         let out = Ok(Const {
             name: Sym::parse(p)?,
@@ -412,6 +413,7 @@ impl Parse<'_> for Static {
     fn parse(p: &mut Parser) -> PResult<Static> {
         const P: Parsing = Parsing::Static;
         p.consume_peeked();
+        let _ = p.match_type(TokenKind::Let, P);
 
         let out = Ok(Static {
             mutable: Mutability::parse(p)?,

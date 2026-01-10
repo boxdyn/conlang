@@ -1,4 +1,4 @@
-//! Never: the return type of an infinite loop
+//! Never: the type of a diverging code path
 
 #[lang = "never"]
-type Never = !;
+type Never;
