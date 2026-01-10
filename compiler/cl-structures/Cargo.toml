@@ -9,4 +9,4 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-cl-arena = { version = "0.0.7" }
+cl-arena = { version = "0.0.8", features = ["nightly"] }
