@@ -1,6 +1,6 @@
 //! The [Error] type represents any error thrown by the [Environment](super::Environment)
 
-use cl_ast::{Pattern, Sym};
+use cl_ast::{Pat, types::Symbol};
 use cl_structures::span::Span;
 
 use super::convalue::ConValue;
@@ -75,11 +75,11 @@ impl Error {
         Self { kind: ErrorKind::NotAssignable, span: None }
     }
     /// A name was not defined in scope before being used
-    pub fn NotDefined(name: Sym) -> Self {
+    pub fn NotDefined(name: Symbol) -> Self {
         Self { kind: ErrorKind::NotDefined(name), span: None }
     }
     /// A name was defined but not initialized
-    pub fn NotInitialized(name: Sym) -> Self {
+    pub fn NotInitialized(name: Symbol) -> Self {
         Self { kind: ErrorKind::NotInitialized(name), span: None }
     }
     /// A value was called, but is not callable
@@ -91,7 +91,7 @@ impl Error {
         Self { kind: ErrorKind::ArgNumber { want, got }, span: None }
     }
     /// A pattern failed to match
-    pub fn PatFailed(pat: Box<Pattern>) -> Self {
+    pub fn PatFailed(pat: Box<Pat>) -> Self {
         Self { kind: ErrorKind::PatFailed(pat), span: None }
     }
     /// Fell through a non-exhaustive match
@@ -112,7 +112,7 @@ impl std::error::Error for Error {}
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self { kind, span } = self;
-        if let Some(Span { head, tail }) = span {
+        if let Some(Span { path: _, head, tail }) = span {
             write!(f, "{head}..{tail}: ")?;
         }
         write!(f, "{kind}")
@@ -148,15 +148,15 @@ pub enum ErrorKind {
     /// An expression is not assignable
     NotAssignable,
     /// A name was not defined in scope before being used
-    NotDefined(Sym),
+    NotDefined(Symbol),
     /// A name was defined but not initialized
-    NotInitialized(Sym),
+    NotInitialized(Symbol),
     /// A value was called, but is not callable
     NotCallable(ConValue),
     /// A function was called with the wrong number of arguments
     ArgNumber { want: usize, got: usize },
     /// A pattern failed to match
-    PatFailed(Box<Pattern>),
+    PatFailed(Box<Pat>),
     /// Fell through a non-exhaustive match
     MatchNonexhaustive,
     /// Explicit panic

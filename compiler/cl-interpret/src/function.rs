@@ -1,18 +1,14 @@
 //! Represents a block of code which lives inside the Interpreter
 
-use collect_upvars::collect_upvars;
-
 use crate::error::ErrorKind;
 
-use super::{Callable, ConValue, Environment, Error, IResult, Interpret, pattern};
-use cl_ast::{Function as FnDecl, Sym};
+use super::{Callable, ConValue, Environment, Error, IResult, Interpret};
+use cl_ast::{Bind, types::Symbol as Sym};
 use std::{
     cell::{Ref, RefCell},
     collections::HashMap,
     rc::Rc,
 };
-
-pub mod collect_upvars;
 
 type Upvars = HashMap<Sym, ConValue>;
 
@@ -20,24 +16,25 @@ type Upvars = HashMap<Sym, ConValue>;
 #[derive(Clone, Debug)]
 pub struct Function {
     /// Stores the contents of the function declaration
-    decl: Rc<FnDecl>,
+    decl: Rc<Bind>,
     /// Stores data from the enclosing scopes
     upvars: RefCell<Upvars>,
 }
 
 impl Function {
-    pub fn new(decl: &FnDecl) -> Self {
+    pub fn new(decl: &Bind) -> Self {
         // let upvars = collect_upvars(decl, env);
         Self { decl: decl.clone().into(), upvars: Default::default() }
     }
-    pub fn decl(&self) -> &FnDecl {
+    pub fn decl(&self) -> &Bind {
         &self.decl
     }
     pub fn upvars(&self) -> Ref<'_, Upvars> {
         self.upvars.borrow()
     }
     pub fn lift_upvars(&self, env: &Environment) {
-        let upvars = collect_upvars(&self.decl, env);
+        // TODO: collect upvars externally. We should know them here.
+        let upvars = Default::default();
         if let Ok(mut self_upvars) = self.upvars.try_borrow_mut() {
             *self_upvars = upvars;
         }
@@ -46,38 +43,9 @@ impl Function {
 
 impl Callable for Function {
     fn name(&self) -> Sym {
-        let FnDecl { name, .. } = *self.decl;
-        name
+        todo!()
     }
     fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
-        let FnDecl { name, gens: _, bind, body, sign: _ } = &*self.decl;
-
-        // Check arg mapping
-        let Some(body) = body else {
-            return Err(Error::NotDefined(*name));
-        };
-
-        let upvars = self.upvars.take();
-        let mut env = env.with_frame("upvars", upvars);
-
-        // TODO: completely refactor data storage
-        let mut frame = env.frame("fn args");
-        for (name, value) in pattern::substitution(&frame, bind, ConValue::Tuple(args.into()))? {
-            frame.insert(name, value);
-        }
-        let res = body.interpret(&mut frame);
-        drop(frame);
-        if let Some(upvars) = env.pop_values() {
-            self.upvars.replace(upvars);
-        }
-        match res {
-            Err(Error { kind: ErrorKind::Return(value), .. }) => Ok(value),
-            Err(Error { kind: ErrorKind::Break(value), .. }) => Err(Error::BadBreak(value)),
-            Err(Error { kind: ErrorKind::Panic(msg, depth), span: Some(span) }) => {
-                println!("{depth:>4}: {name}{bind} at {}", span.head);
-                Err(Error { kind: ErrorKind::Panic(msg, depth + 1), span: None })
-            }
-            other => other,
-        }
+        todo!()
     }
 }

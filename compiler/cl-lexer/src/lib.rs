@@ -1,187 +1,149 @@
-//! Converts a text file into tokens
-#![warn(clippy::all)]
-#![feature(decl_macro)]
-use cl_structures::span::Loc;
-use cl_token::{TokenKind as Kind, *};
-use std::{
-    iter::Peekable,
-    str::{CharIndices, FromStr},
-};
-use unicode_ident::*;
+//! A lobster
+use std::{iter::Peekable, ops::Range, str::CharIndices};
+use unicode_ident::{is_xid_continue, is_xid_start};
 
-#[cfg(test)]
-mod tests;
+use cl_structures::span::Span;
+use cl_token::*;
 
-pub mod lexer_iter {
-    //! Iterator over a [`Lexer`], returning [`LResult<Token>`]s
-    use super::{
-        Lexer, Token,
-        error::{LResult, Reason},
-    };
+pub use cl_structures::intern::interned::Symbol;
 
-    /// Iterator over a [`Lexer`], returning [`LResult<Token>`]s
-    pub struct LexerIter<'t> {
-        lexer: Lexer<'t>,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LexError {
+    pub pos: Span,
+    pub res: LexFailure,
+}
+
+impl std::error::Error for LexError {}
+impl std::fmt::Display for LexError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self { pos, res } = self;
+        write!(f, "{pos}: {res}")
     }
-    impl Iterator for LexerIter<'_> {
-        type Item = LResult<Token>;
-        fn next(&mut self) -> Option<Self::Item> {
-            match self.lexer.scan() {
-                Ok(v) => Some(Ok(v)),
-                Err(e) => {
-                    if e.reason == Reason::EndOfFile {
-                        None
-                    } else {
-                        Some(Err(e))
-                    }
-                }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LexFailure {
+    /// Reached end of file
+    EOF,
+    UnexpectedEOF,
+    Unexpected(char),
+    UnterminatedBlockComment,
+    UnterminatedCharacter,
+    UnterminatedString,
+    UnterminatedUnicodeEscape,
+    InvalidUnicodeEscape(u32),
+    InvalidDigitForBase(char, u32),
+    IntegerOverflow,
+}
+use LexFailure::*;
+pub use LexFailure::{EOF, UnexpectedEOF};
+
+impl std::fmt::Display for LexFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EOF => "EOF".fmt(f),
+            Self::UnexpectedEOF => "Unexpected EOF".fmt(f),
+            Self::Unexpected(c) => write!(f, "Character {c:?}"),
+            Self::UnterminatedBlockComment => "Unterminated Block Comment".fmt(f),
+            Self::UnterminatedCharacter => "Unterminated Character".fmt(f),
+            Self::UnterminatedString => "Unterminated String".fmt(f),
+            Self::UnterminatedUnicodeEscape => "Unterminated Unicode Escape".fmt(f),
+            Self::InvalidUnicodeEscape(hex) => {
+                write!(f, "'\\u{{{hex:x}}}' is not a valid UTF-8 codepoint")
             }
-        }
-    }
-    impl<'t> IntoIterator for Lexer<'t> {
-        type Item = LResult<Token>;
-        type IntoIter = LexerIter<'t>;
-        fn into_iter(self) -> Self::IntoIter {
-            LexerIter { lexer: self }
+            Self::InvalidDigitForBase(digit, base) => {
+                write!(f, "Invalid digit {digit} for base {base}")
+            }
+            Self::IntegerOverflow => "Integer literal does not fit in 128 bits".fmt(f),
         }
     }
 }
 
-/// The Lexer iterates over the characters in a body of text, searching for [Tokens](Token).
-///
-/// # Examples
-/// ```rust
-/// # use cl_lexer::Lexer;
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// // Read in your code from somewhere
-/// let some_code = "
-/// fn main () {
-///     // TODO: code goes here!
-/// }
-/// ";
-/// // Create a lexer over your code
-/// let mut lexer = Lexer::new(some_code);
-/// // Scan for a single token
-/// let first_token = lexer.scan()?;
-/// println!("{first_token:?}");
-/// // Loop over all the rest of the tokens
-/// for token in lexer {
-/// #   let token: Result<_,()> = Ok(token?);
-///     match token {
-///         Ok(token) => println!("{token:?}"),
-///         Err(e) => eprintln!("{e:?}"),
-///     }
-/// }
-/// # Ok(()) }
-/// ```
 #[derive(Clone, Debug)]
 pub struct Lexer<'t> {
+    path: Symbol,
     /// The source text
     text: &'t str,
     /// A peekable iterator over the source text
     iter: Peekable<CharIndices<'t>>,
-    /// The end of the current token
-    head: usize,
-    /// The (line, col) end of the current token
-    head_loc: (u32, u32),
     /// The start of the current token
-    tail: usize,
-    /// The (line, col) start of the current token
-    tail_loc: (u32, u32),
+    head: u32,
+    /// The end of the current token
+    tail: u32,
 }
 
 impl<'t> Lexer<'t> {
-    /// Creates a new [Lexer] over a [str]
-    pub fn new(text: &'t str) -> Self {
-        Self {
-            text,
-            iter: text.char_indices().peekable(),
-            head: 0,
-            head_loc: (1, 1),
-            tail: 0,
-            tail_loc: (1, 1),
-        }
+    /// Constructs a new Lexer from some text
+    pub fn new(path: Symbol, text: &'t str) -> Self {
+        let iter = text.char_indices().peekable();
+        Self { path, text, iter, head: 0, tail: 0 }
     }
 
-    /// Returns the current line
-    pub fn line(&self) -> u32 {
-        self.tail_loc.0
-    }
-
-    /// Returns the current column
-    pub fn col(&self) -> u32 {
-        self.tail_loc.1
-    }
-
-    /// Returns the current token's lexeme
-    fn lexeme(&mut self) -> &'t str {
-        &self.text[self.tail..self.head]
+    /// Gets the [Span] of the current token.
+    ///
+    /// When called from outside [Lexer::scan], this will return
+    /// a zero-sized span marking the current lexer location.
+    pub const fn span(&self) -> Span {
+        Span(self.path, self.head, self.tail)
     }
 
     /// Peeks the next character without advancing the lexer
-    fn peek(&mut self) -> Option<char> {
-        self.iter.peek().map(|(_, c)| *c)
+    pub fn peek(&mut self) -> Option<char> {
+        self.iter.peek().map(|&(_, c)| c)
     }
 
-    /// Advances the 'tail' (current position)
+    /// Advances the tail to the current character index
     fn advance_tail(&mut self) {
-        let (idx, c) = self.iter.peek().copied().unwrap_or((self.text.len(), '\0'));
-        let (line, col) = &mut self.head_loc;
-        let diff = idx - self.head;
-
-        self.head = idx;
-        match c {
-            '\n' => {
-                *line += 1;
-                *col = 1;
-            }
-            _ => *col += diff as u32,
+        match self.iter.peek() {
+            Some(&(idx, _)) => self.tail = idx as u32,
+            None => self.tail = self.text.len() as _,
         }
     }
 
-    /// Takes the last-peeked character, or the next character if none peeked.
-    pub fn take(&mut self) -> Option<char> {
+    /// Takes the last character
+    fn take(&mut self) -> Option<char> {
         let (_, c) = self.iter.next()?;
         self.advance_tail();
         Some(c)
     }
 
-    /// Takes the next char if it matches the `expected` char
-    pub fn next_if(&mut self, expected: char) -> Option<char> {
+    fn next_if(&mut self, expected: char) -> Option<char> {
         let (_, c) = self.iter.next_if(|&(_, c)| c == expected)?;
         self.advance_tail();
         Some(c)
     }
 
     /// Consumes the last-peeked character, advancing the tail
-    pub fn consume(&mut self) -> &mut Self {
+    fn consume(&mut self) -> &mut Self {
         self.iter.next();
         self.advance_tail();
         self
     }
 
-    /// Produces an [Error] at the start of the current token
-    fn error(&self, reason: Reason) -> Error {
-        Error { reason, line: self.line(), col: self.col() }
+    /// Produces a [`LexError`] at the start of the current token
+    const fn error(&self, res: LexFailure) -> LexError {
+        LexError { pos: self.span(), res }
     }
 
-    /// Produces a token with the current [lexeme](Lexer::lexeme) as its data
-    fn produce(&mut self, kind: Kind) -> LResult<Token> {
-        let lexeme = self.lexeme().to_owned();
-        self.produce_with(kind, lexeme)
+    /// Gets the Lexer's current &[str] lexeme and [Span]
+    fn as_str(&self) -> (&'t str, Span) {
+        let span = self.span();
+        (&self.text[Range::from(span)], span)
     }
 
-    /// Produces a token with the provided `data`
-    fn produce_with(&mut self, kind: Kind, data: impl Into<TokenData>) -> LResult<Token> {
-        let loc = self.tail_loc;
-        self.tail_loc = self.head_loc;
-        self.tail = self.head;
-        Ok(Token::new(kind, data, loc.0, loc.1))
+    /// Produces a Token
+    fn produce(&mut self, kind: TKind) -> Token {
+        self.advance_tail();
+        let (lexeme, span) = self.as_str();
+        self.head = self.tail;
+        Token { lexeme: Lexeme::String(lexeme.to_owned()), kind, span }
     }
 
-    /// Produces a token with no `data`
-    fn produce_op(&mut self, kind: Kind) -> LResult<Token> {
-        self.produce_with(kind, ())
+    fn produce_with_lexeme(&mut self, kind: TKind, lexeme: Lexeme) -> Token {
+        self.advance_tail();
+        let span = self.span();
+        self.head = self.tail;
+        Token { lexeme, kind, span }
     }
 
     /// Consumes 0 or more whitespace
@@ -192,26 +154,25 @@ impl<'t> Lexer<'t> {
         self
     }
 
-    /// Starts a new token
-    fn start_token(&mut self) -> &mut Self {
-        self.tail_loc = self.head_loc;
-        self.tail = self.head;
+    const fn start_token(&mut self) -> &mut Self {
+        self.head = self.tail;
         self
     }
 
-    /// Scans through the text, searching for the next [Token]
-    pub fn scan(&mut self) -> LResult<Token> {
-        use TokenKind::*;
+    /// Scans forward until it finds the next Token in the input
+    pub fn scan(&mut self) -> Result<Token, LexError> {
+        use TKind::*;
         // !"#%&'()*+,-./:;<=>?@[\\]^`{|}~
         let tok = match self
             .skip_whitespace()
             .start_token()
             .peek()
-            .ok_or_else(|| self.error(Reason::EndOfFile))?
+            .ok_or_else(|| self.error(EOF))?
         {
             '!' => Bang,
             '"' => return self.string(),
             '#' => Hash,
+            '$' => Dollar,
             '%' => Rem,
             '&' => Amp,
             '\'' => return self.character(),
@@ -219,11 +180,11 @@ impl<'t> Lexer<'t> {
             ')' => RParen,
             '*' => Star,
             '+' => Plus,
-            ',' => Comma,
+            ',' => return self.consume().trailing(Comma),
             '-' => Minus,
             '.' => Dot,
             '/' => Slash,
-            '0' => TokenKind::Literal,
+            '0' => Integer,
             '1'..='9' => return self.digits::<10>(),
             ':' => Colon,
             ';' => Semi,
@@ -243,21 +204,17 @@ impl<'t> Lexer<'t> {
             '~' => Tilde,
             '_' => return self.identifier(),
             c if is_xid_start(c) => return self.identifier(),
-            e => {
-                let err = Err(self.error(Reason::UnexpectedChar(e)));
-                let _ = self.consume();
-                err?
-            }
+            c => Err(self.error(Unexpected(c)))?,
         };
 
         // Handle digraphs
         let tok = match (tok, self.consume().peek()) {
-            (Literal, Some('b')) => return self.consume().digits::<2>(),
-            (Literal, Some('d')) => return self.consume().digits::<10>(),
-            (Literal, Some('o')) => return self.consume().digits::<8>(),
-            (Literal, Some('x')) => return self.consume().digits::<16>(),
-            (Literal, Some('~')) => return self.consume().digits::<36>(),
-            (Literal, _) => return self.digits::<10>(),
+            (Integer, Some('b')) => return self.consume().digits::<2>(),
+            (Integer, Some('d')) => return self.consume().digits::<10>(),
+            (Integer, Some('o')) => return self.consume().digits::<8>(),
+            (Integer, Some('x')) => return self.consume().digits::<16>(),
+            (Integer, Some('~')) => return self.consume().digits::<36>(),
+            (Integer, _) => return self.digits::<10>(),
             (Amp, Some('&')) => AmpAmp,
             (Amp, Some('=')) => AmpEq,
             (Bang, Some('!')) => BangBang,
@@ -277,13 +234,13 @@ impl<'t> Lexer<'t> {
             (Minus, Some('>')) => Arrow,
             (Plus, Some('=')) => PlusEq,
             (Rem, Some('=')) => RemEq,
-            (Slash, Some('*')) => return self.block_comment()?.produce(Kind::Comment),
-            (Slash, Some('/')) => return self.line_comment(),
+            (Slash, Some('*')) => return Ok(self.block_comment()?.produce(Comment)),
             (Slash, Some('=')) => SlashEq,
+            (Slash, Some('/')) => return self.line_comment(),
             (Star, Some('=')) => StarEq,
             (Xor, Some('=')) => XorEq,
             (Xor, Some('^')) => XorXor,
-            _ => return self.produce_op(tok),
+            _ => return Ok(self.produce(tok)),
         };
 
         // Handle trigraphs
@@ -292,23 +249,43 @@ impl<'t> Lexer<'t> {
             (DotDot, Some('=')) => DotDotEq,
             (GtGt, Some('=')) => GtGtEq,
             (LtLt, Some('=')) => LtLtEq,
-            _ => return self.produce_op(tok),
+            _ => return Ok(self.produce(tok)),
         };
 
-        self.consume().produce_op(tok)
+        Ok(self.consume().produce(tok))
     }
-}
 
-/// Comments
-impl Lexer<'_> {
-    /// Consumes until the next newline '\n', producing a [Comment](Kind::Comment)
-    fn line_comment(&mut self) -> LResult<Token> {
+    /// Elides the trailing [Token] `kind` when it comes before a list terminator.
+    pub fn trailing(&mut self, kind: TKind) -> Result<Token, LexError> {
+        Ok(match self.skip_whitespace().peek() {
+            // Some(')') => self.consume().produce(TKind::RParen), // maybe.
+            Some(']') => self.consume().produce(TKind::RBrack),
+            Some('}') => self.consume().produce(TKind::RCurly),
+            _ => self.produce(kind),
+        })
+    }
+
+    /// Consumes characters until the lexer reaches a newline `'\n'`
+    pub fn line_comment(&mut self) -> Result<Token, LexError> {
+        let kind = match self.consume().peek() {
+            Some('/') => TKind::OutDoc,
+            Some('!') => TKind::InDoc,
+            _ => TKind::Comment,
+        };
         while self.consume().peek().is_some_and(|c| c != '\n') {}
-        self.produce(Kind::Comment)
+        let (lexeme, _) = self.as_str();
+        let lexeme = lexeme
+            .strip_prefix("///")
+            .or_else(|| lexeme.strip_prefix("//!"))
+            .map(|lexeme| lexeme.strip_prefix(" ").unwrap_or(lexeme))
+            .unwrap_or(lexeme);
+
+        Ok(self.produce_with_lexeme(kind, Lexeme::String(lexeme.into())))
     }
 
-    /// Consumes nested block-comments. Does not produce by itself.
-    fn block_comment(&mut self) -> LResult<&mut Self> {
+    /// Consumes characters until the lexer reaches the end of a *nested* block comment.
+    /// This allows you to arbitrarily comment out code, even if that code has a block comment.
+    pub fn block_comment(&mut self) -> Result<&mut Self, LexError> {
         self.consume();
         while let Some(c) = self.take() {
             match (c, self.peek()) {
@@ -317,206 +294,155 @@ impl Lexer<'_> {
                 _ => continue,
             };
         }
-        Err(self.error(Reason::UnmatchedDelimiters('/')))
+        Err(self.error(UnterminatedBlockComment))
     }
-}
 
-/// Identifiers
-impl Lexer<'_> {
-    /// Produces an [Identifier](Kind::Identifier) or keyword
-    fn identifier(&mut self) -> LResult<Token> {
+    /// Consumes characters until it reaches a character not in [`is_xid_continue`].
+    ///
+    /// Always consumes the first character.
+    ///
+    /// Maps the result to either a [`TKind::Identifier`] or a [`TKind`] keyword.
+    pub fn identifier(&mut self) -> Result<Token, LexError> {
         while self.consume().peek().is_some_and(is_xid_continue) {}
-        if let Ok(keyword) = Kind::from_str(self.lexeme()) {
-            self.produce_with(keyword, ())
-        } else {
-            self.produce(Kind::Identifier)
-        }
-    }
-}
-
-/// Integers
-impl Lexer<'_> {
-    /// Produces a [Literal](Kind::Literal) with an integer or float value.
-    fn digits<const B: u32>(&mut self) -> LResult<Token> {
-        let mut value = 0;
-        while let Some(true) = self.peek().as_ref().map(char::is_ascii_alphanumeric) {
-            value = value * B as u128 + self.digit::<B>()? as u128;
-        }
-        // TODO: find a better way to handle floats in the tokenizer
-        match self.peek() {
-            Some('.') => {
-                // FIXME: hack: 0.. is not [0.0, '.']
-                if let Some('.') = self.clone().consume().take() {
-                    return self.produce_with(Kind::Literal, value);
-                }
-                let mut float = format!("{value}.");
-                self.consume();
-                while let Some(true) = self.peek().as_ref().map(char::is_ascii_digit) {
-                    float.push(self.iter.next().map(|(_, c)| c).unwrap_or_default());
-                }
-                let float = f64::from_str(&float).expect("must be parsable as float");
-                self.produce_with(Kind::Literal, float)
-            }
-            _ => self.produce_with(Kind::Literal, value),
-        }
-    }
-
-    /// Consumes a single digit of base [B](Lexer::digit)
-    fn digit<const B: u32>(&mut self) -> LResult<u32> {
-        let digit = self.take().ok_or_else(|| self.error(Reason::EndOfFile))?;
-        digit
-            .to_digit(B)
-            .ok_or_else(|| self.error(Reason::InvalidDigit(digit)))
-    }
-}
-
-/// Strings and characters
-impl Lexer<'_> {
-    /// Produces a [Literal](Kind::Literal) with a pre-escaped [String]
-    pub fn string(&mut self) -> Result<Token, Error> {
-        let mut lexeme = String::new();
-        let mut depth = 0;
-        self.consume();
-        loop {
-            lexeme.push(match self.take() {
-                None => Err(self.error(Reason::UnmatchedDelimiters('"')))?,
-                Some('\\') => self.unescape()?,
-                Some('"') if depth == 0 => break,
-                Some(c @ '{') => {
-                    depth += 1;
-                    c
-                }
-                Some(c @ '}') => {
-                    depth -= 1;
-                    c
-                }
-                Some(c) => c,
-            })
-        }
-        lexeme.shrink_to_fit();
-        self.produce_with(Kind::Literal, lexeme)
+        let (lexeme, _span) = self.as_str();
+        let token = self.produce(TKind::Identifier);
+        Ok(Token {
+            kind: match lexeme {
+                "as" => TKind::As,
+                "break" => TKind::Break,
+                "const" => TKind::Const,
+                "continue" => TKind::Continue,
+                "do" => TKind::Do,
+                "else" => TKind::Else,
+                "enum" => TKind::Enum,
+                "false" => TKind::False,
+                "fn" => TKind::Fn,
+                "for" => TKind::For,
+                "if" => TKind::If,
+                "impl" => TKind::Impl,
+                "in" => TKind::In,
+                "let" => TKind::Let,
+                "loop" => TKind::Loop,
+                "macro" => TKind::Macro,
+                "match" => TKind::Match,
+                "mod" => TKind::Mod,
+                "mut" => TKind::Mut,
+                "pub" => TKind::Pub,
+                "return" => TKind::Return,
+                "static" => TKind::Static,
+                "struct" => TKind::Struct,
+                "then" => TKind::Do,
+                "true" => TKind::True,
+                "type" => TKind::Type,
+                "use" => TKind::Use,
+                "while" => TKind::While,
+                _ => token.kind,
+            },
+            ..token
+        })
     }
 
-    /// Produces a [Literal](Kind::Literal) with a pre-escaped [char]
-    fn character(&mut self) -> Result<Token, Error> {
+    /// Eagerly parses a character literal starting at the current lexer position.
+    pub fn character(&mut self) -> Result<Token, LexError> {
         let c = match self.consume().take() {
-            Some('\\') => self.unescape()?,
+            Some('\\') => self.escape()?,
             Some(c) => c,
             None => '\0',
         };
         if self.take().is_some_and(|c| c == '\'') {
-            self.produce_with(Kind::Literal, c)
+            Ok(self.produce_with_lexeme(TKind::Character, Lexeme::Char(c)))
         } else {
-            Err(self.error(Reason::UnmatchedDelimiters('\'')))
+            Err(self.error(UnterminatedCharacter))
         }
     }
 
-    /// Unescapes a single character
-    #[rustfmt::skip]
-    fn unescape(&mut self) -> LResult<char> {
-        Ok(match self.take().ok_or_else(|| self.error(Reason::EndOfFile))? {
-            ' ' => '\u{a0}',
-            '0' => '\0',
-            'a' => '\x07',
-            'b' => '\x08',
-            'e' => '\x1b',
-            'f' => '\x0c',
-            'n' => '\n',
-            'r' => '\r',
-            't' => '\t',
-            'u' => self.unicode_escape()?,
-            'x' => self.hex_escape()?,
-            chr => chr,
-        })
-    }
-    /// Unescapes a single 2-digit hex escape
-    fn hex_escape(&mut self) -> LResult<char> {
-        let out = (self.digit::<16>()? << 4) + self.digit::<16>()?;
-        char::from_u32(out).ok_or_else(|| self.error(Reason::BadUnicode(out)))
+    // Eagerly parses a string literal starting at the current lexer position.
+    pub fn string(&mut self) -> Result<Token, LexError> {
+        let mut lexeme = String::new();
+        self.consume();
+        loop {
+            lexeme.push(match self.take() {
+                None => Err(self.error(UnterminatedString))?,
+                Some('\\') => self.escape()?,
+                Some('"') => break,
+                Some(c) => c,
+            });
+        }
+        lexeme.shrink_to_fit();
+        Ok(self.produce_with_lexeme(TKind::String, Lexeme::String(lexeme)))
     }
 
-    /// Unescapes a single \u{} unicode escape
-    pub fn unicode_escape(&mut self) -> Result<char, Error> {
+    /// Parses a single escape sequence into its resulting char value.
+    pub fn escape(&mut self) -> Result<char, LexError> {
+        Ok(
+            match self.take().ok_or_else(|| self.error(UnexpectedEOF))? {
+                ' ' => '\u{a0}', // Non-breaking space
+                '0' => '\0',     // C0 Null Character
+                'a' => '\x07',   // C0 Acknowledge
+                'b' => '\x08',   // C0 Bell
+                'e' => '\x1b',   // C0 Escape
+                'f' => '\x0c',   // Form Feed
+                'n' => '\n',     // New Line
+                'r' => '\r',     // Carriage Return
+                't' => '\t',     // Tab
+                'u' => self.unicode_escape()?,
+                'x' => self.hex_escape()?,
+                c => c,
+            },
+        )
+    }
+
+    /// Parses two hex-digits and constructs a [char] out of them.
+    pub fn hex_escape(&mut self) -> Result<char, LexError> {
+        let out = (self.digit::<16>()? << 4) + self.digit::<16>()?;
+        char::from_u32(out).ok_or_else(|| self.error(InvalidUnicodeEscape(out)))
+    }
+
+    /// Parses a sequence of `{}`-bracketed hex-digits and constructs a [char] out of them.
+    pub fn unicode_escape(&mut self) -> Result<char, LexError> {
         self.next_if('{')
-            .ok_or_else(|| self.error(Reason::InvalidEscape('u')))?;
+            .ok_or_else(|| self.error(UnterminatedUnicodeEscape))?;
         let mut out = 0;
         while let Some(c) = self.take() {
             if c == '}' {
-                return char::from_u32(out).ok_or_else(|| self.error(Reason::BadUnicode(out)));
+                return char::from_u32(out).ok_or_else(|| self.error(InvalidUnicodeEscape(out)));
             }
-            out = out * 16
-                + c.to_digit(16)
-                    .ok_or_else(|| self.error(Reason::InvalidDigit(c)))?;
+            out = out.saturating_mul(16).saturating_add(
+                c.to_digit(16)
+                    .ok_or_else(|| self.error(InvalidDigitForBase(c, 16)))?,
+            );
         }
-        Err(self.error(Reason::UnmatchedDelimiters('}')))
+        Err(self.error(UnterminatedUnicodeEscape))
     }
-}
 
-impl<'t> From<&Lexer<'t>> for Loc {
-    fn from(value: &Lexer<'t>) -> Self {
-        Loc(value.line(), value.col())
-    }
-}
+    /// Parses a sequence of digits (and underscores) in base `BASE`, where 2 <= `BASE` <= 36.
+    ///
+    /// If the sequence of digits exceeds the bounds of a [u128], the resulting number will wrap
+    /// around 2^128.
+    pub fn digits<const BASE: u32>(&mut self) -> Result<Token, LexError> {
+        let mut int: u128 = 0;
+        while let Some(c) = self.peek() {
+            int = match c.to_digit(BASE).ok_or(c) {
+                Err('_') => int,
+                Ok(c) => int
+                    .checked_mul(BASE as _)
+                    .and_then(|int| int.checked_add(c as _))
+                    .ok_or_else(|| self.error(IntegerOverflow))?,
+                _ => break,
+            };
+            self.consume();
+        }
 
-use error::{Error, LResult, Reason};
-pub mod error {
-    //! [Error] type for the [Lexer](super::Lexer)
-    use std::fmt::Display;
+        Ok(self.produce_with_lexeme(TKind::Integer, Lexeme::Integer(int, BASE)))
+    }
 
-    /// Result type with [Err] = [Error]
-    pub type LResult<T> = Result<T, Error>;
-    #[derive(Clone, Debug, PartialEq, Eq)]
-    pub struct Error {
-        pub reason: Reason,
-        pub line: u32,
-        pub col: u32,
-    }
-    /// The reason for the [Error]
-    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    pub enum Reason {
-        /// Found an opening delimiter of type [char], but not the expected closing delimiter
-        UnmatchedDelimiters(char),
-        /// Found a character that doesn't belong to any [TokenKind](cl_token::TokenKind)
-        UnexpectedChar(char),
-        /// Found a character that's not valid in an escape sequence while looking for an escape
-        /// sequence
-        UnknownEscape(char),
-        /// Escape sequence contains invalid hexadecimal digit or unmatched braces
-        InvalidEscape(char),
-        /// Character is not a valid digit in the requested base
-        InvalidDigit(char),
-        /// Unicode escape does not map to a valid unicode code-point
-        BadUnicode(u32),
-        /// Reached end of input
-        EndOfFile,
-    }
-    impl Error {
-        /// Returns the [Reason] for this error
-        pub fn reason(&self) -> &Reason {
-            &self.reason
-        }
-        /// Returns the (line, col) where the error happened
-        pub fn location(&self) -> (u32, u32) {
-            (self.line, self.col)
-        }
-    }
-    impl std::error::Error for Error {}
-    impl Display for Error {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{}:{}: {}", self.line, self.col, self.reason)
-        }
-    }
-    impl Display for Reason {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                Reason::UnmatchedDelimiters(c) => write! {f, "Unmatched `{c:?}` in input"},
-                Reason::UnexpectedChar(c) => write!(f, "Character `{c:?}` not expected"),
-                Reason::UnknownEscape(c) => write!(f, "`\\{c}` is not a known escape sequence"),
-                Reason::InvalidEscape(c) => write!(f, "Escape sequence `\\{c}`... is malformed"),
-                Reason::InvalidDigit(c) => write!(f, "`{c:?}` is not a valid digit"),
-                Reason::BadUnicode(c) => write!(f, "`\\u{{{c:x}}}` is not valid unicode"),
-                Reason::EndOfFile => write!(f, "Reached end of input"),
-            }
+    /// Parses a single digit in base `BASE` as a u32, where 2 <= `BASE` <= 36.
+    pub fn digit<const BASE: u32>(&mut self) -> Result<u32, LexError> {
+        let digit = self.take().ok_or_else(|| self.error(UnexpectedEOF))?;
+        if let Some(digit) = digit.to_digit(BASE) {
+            Ok(digit)
+        } else {
+            Err(self.error(InvalidDigitForBase(digit, BASE)))
         }
     }
 }

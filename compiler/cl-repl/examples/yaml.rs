@@ -1,40 +1,20 @@
 //! Pretty prints a conlang AST in yaml
 
-use cl_ast::Stmt;
+use cl_ast::Expr;
 use cl_lexer::Lexer;
 use cl_parser::Parser;
-use repline::{Repline, error::Error as RlError};
-use std::error::Error;
+use cl_structures::intern::interned::Symbol;
+use repline::{Response, error::Error as RlError};
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let mut rl = Repline::new("\x1b[33m", "cl>", "? >");
-    loop {
-        let line = match rl.read() {
-            Err(RlError::CtrlC(_)) => break,
-            Err(RlError::CtrlD(line)) => {
-                rl.deny();
-                line
-            }
-            Ok(line) => line,
-            Err(e) => Err(e)?,
-        };
+fn main() -> Result<(), RlError> {
+    repline::read_and("\x1b[33m", "y> ", " > ", |line| {
+        let mut parser = Parser::new(Lexer::new(Symbol::default(), line));
+        let code = parser.parse::<Expr>(0)?;
 
-        let mut parser = Parser::new("", Lexer::new(&line));
-        let code = match parser.parse::<Stmt>() {
-            Ok(code) => {
-                rl.accept();
-                code
-            }
-            Err(e) => {
-                print!("\x1b[40G\x1bJ\x1b[91m{e}\x1b[0m");
-                continue;
-            }
-        };
-        print!("\x1b[G\x1b[J\x1b[A");
         Yamler::new().yaml(&code);
         println!();
-    }
-    Ok(())
+        Ok(Response::Accept)
+    })
 }
 
 pub use yamler::Yamler;
@@ -47,6 +27,7 @@ pub mod yamler {
     #[derive(Debug, Default)]
     pub struct Yamler {
         depth: usize,
+        needs_indent: bool,
     }
 
     impl Yamler {
@@ -65,6 +46,14 @@ pub mod yamler {
             self
         }
 
+        fn newline(&mut self) -> &mut Self {
+            if !self.needs_indent {
+                println!();
+            }
+            self.needs_indent = true;
+            self
+        }
+
         fn increase(&mut self) {
             self.depth += 1;
         }
@@ -73,40 +62,44 @@ pub mod yamler {
             self.depth -= 1;
         }
 
-        fn print_indentation(&self, writer: &mut impl Write) {
+        fn print_indentation(&mut self, writer: &mut impl Write) {
+            if !self.needs_indent {
+                return;
+            }
             for _ in 0..self.depth {
                 let _ = write!(writer, "  ");
             }
+            self.needs_indent = false
         }
 
         /// Prints a section header and increases indentation
         pub fn key(&mut self, name: impl Yamlify) -> Section<'_> {
-            println!();
             self.print_indentation(&mut std::io::stdout().lock());
-            print!("  ");
             name.yaml(self);
-            print!(":");
-            self.indent()
+            println!(":");
+            self.needs_indent = true;
+            self.newline().indent()
         }
 
         /// Prints a yaml key value pair: `- name: "value"`
         pub fn pair<D: Yamlify, T: Yamlify>(&mut self, name: D, value: T) -> &mut Self {
+            self.print_indentation(&mut std::io::stdout().lock());
             self.key(name).value(value);
             self
         }
 
         /// Prints a yaml scalar value: `"name"``
         pub fn value<D: Yamlify>(&mut self, value: D) -> &mut Self {
-            print!(" ");
+            self.print_indentation(&mut std::io::stdout().lock());
             value.yaml(self);
-            self
+            self.newline()
         }
 
         pub fn list<D: Yamlify>(&mut self, list: &[D]) -> &mut Self {
             for value in list {
-                println!();
                 self.print_indentation(&mut std::io::stdout().lock());
-                self.yaml(&"- ").yaml(value);
+                print!("- ");
+                self.yaml(value).newline();
             }
             self
         }
@@ -146,579 +139,87 @@ pub mod yamler {
 
 pub mod yamlify {
     use super::yamler::Yamler;
-    use cl_ast::*;
+    use cl_ast::{
+        AstTypes,
+        types::{Literal, Path, Symbol},
+        *,
+    };
+    use cl_structures::span::Span;
 
     pub trait Yamlify {
         fn yaml(&self, y: &mut Yamler);
     }
 
-    impl Yamlify for File {
-        fn yaml(&self, y: &mut Yamler) {
-            let File { name, items } = self;
-            y.key("File").pair("name", name).yaml(items);
-        }
-    }
-    impl Yamlify for Visibility {
-        fn yaml(&self, y: &mut Yamler) {
-            if let Visibility::Public = self {
-                y.pair("vis", "pub");
-            }
-        }
-    }
-    impl Yamlify for Mutability {
-        fn yaml(&self, y: &mut Yamler) {
-            if let Mutability::Mut = self {
-                y.pair("mut", true);
-            }
-        }
-    }
-
-    impl Yamlify for Attrs {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { meta } = self;
-            y.key("Attrs").yaml(meta);
-        }
-    }
-    impl Yamlify for Meta {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { name, kind } = self;
-            y.key("Meta").pair("name", name).yaml(kind);
-        }
-    }
-    impl Yamlify for MetaKind {
-        fn yaml(&self, y: &mut Yamler) {
-            match self {
-                MetaKind::Plain => y,
-                MetaKind::Equals(value) => y.pair("equals", value),
-                MetaKind::Func(args) => y.pair("args", args),
-            };
-        }
-    }
-
-    impl Yamlify for Item {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { span: _, attrs, vis, kind } = self;
-            y.key("Item").yaml(attrs).yaml(vis).yaml(kind);
-        }
-    }
-    impl Yamlify for ItemKind {
-        fn yaml(&self, y: &mut Yamler) {
-            match self {
-                ItemKind::Alias(f) => y.yaml(f),
-                ItemKind::Const(f) => y.yaml(f),
-                ItemKind::Static(f) => y.yaml(f),
-                ItemKind::Module(f) => y.yaml(f),
-                ItemKind::Function(f) => y.yaml(f),
-                ItemKind::Struct(f) => y.yaml(f),
-                ItemKind::Enum(f) => y.yaml(f),
-                ItemKind::Impl(f) => y.yaml(f),
-                ItemKind::Use(f) => y.yaml(f),
-            };
-        }
-    }
-    impl Yamlify for Generics {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { vars } = self;
-            y.key("Generics").value(vars);
-        }
-    }
-    impl Yamlify for Alias {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { name, from } = self;
-            y.key("Alias").pair("to", name).pair("from", from);
-        }
-    }
-    impl Yamlify for Const {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { name, ty, init } = self;
-            y.key("Const")
-                .pair("name", name)
-                .pair("ty", ty)
-                .pair("init", init);
-        }
-    }
-    impl Yamlify for Static {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { mutable, name, ty, init } = self;
-            y.key(name).yaml(mutable).pair("ty", ty).pair("init", init);
-        }
-    }
-    impl Yamlify for Module {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { name, file } = self;
-            y.key("Module").pair("name", name).yaml(file);
-        }
-    }
-    impl Yamlify for Function {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { name, gens, sign, bind, body } = self;
-            y.key("Function")
-                .pair("name", name)
-                .pair("gens", gens)
-                .pair("sign", sign)
-                .pair("bind", bind)
-                .pair("body", body);
-        }
-    }
-    impl Yamlify for Struct {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { name, gens, kind } = self;
-            y.key("Struct")
-                .pair("gens", gens)
-                .pair("name", name)
-                .yaml(kind);
-        }
-    }
-    impl Yamlify for StructKind {
-        fn yaml(&self, y: &mut Yamler) {
-            match self {
-                StructKind::Empty => y,
-                StructKind::Tuple(k) => y.yaml(k),
-                StructKind::Struct(k) => y.yaml(k),
-            };
-        }
-    }
-    impl Yamlify for StructMember {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { vis, name, ty } = self;
-            y.key("StructMember").yaml(vis).pair("name", name).yaml(ty);
-        }
-    }
-    impl Yamlify for Enum {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { name, gens, variants: kind } = self;
-            y.key("Enum")
-                .pair("gens", gens)
-                .pair("name", name)
-                .yaml(kind);
-        }
-    }
-    impl Yamlify for Variant {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { name, kind, body } = self;
-            y.key("Variant")
-                .pair("name", name)
-                .pair("kind", kind)
-                .pair("body", body);
-        }
-    }
-    impl Yamlify for Impl {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { gens, target, body } = self;
-            y.key("Impl")
-                .pair("gens", gens)
-                .pair("target", target)
-                .pair("body", body);
-        }
-    }
-    impl Yamlify for ImplKind {
-        fn yaml(&self, y: &mut Yamler) {
-            match self {
-                ImplKind::Type(t) => y.value(t),
-                ImplKind::Trait { impl_trait, for_type } => {
-                    y.pair("trait", impl_trait).pair("for_type", for_type)
-                }
-            };
-        }
-    }
-    impl Yamlify for Use {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { absolute, tree } = self;
-            y.key("Use").pair("absolute", absolute).yaml(tree);
-        }
-    }
-    impl Yamlify for UseTree {
-        fn yaml(&self, y: &mut Yamler) {
-            match self {
-                UseTree::Tree(trees) => y.pair("trees", trees),
-                UseTree::Path(path, tree) => y.pair("path", path).pair("tree", tree),
-                UseTree::Alias(from, to) => y.pair("from", from).pair("to", to),
-                UseTree::Name(name) => y.pair("name", name),
-                UseTree::Glob => y.value("Glob"),
-            };
-        }
-    }
-    impl Yamlify for Block {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { stmts } = self;
-            y.key("Block").yaml(stmts);
-        }
-    }
-    impl Yamlify for Stmt {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { span: _, kind, semi } = self;
-            y.key("Stmt").value(kind).yaml(semi);
-        }
-    }
-    impl Yamlify for Semi {
-        fn yaml(&self, y: &mut Yamler) {
-            if let Semi::Terminated = self {
-                y.pair("terminated", true);
-            }
-        }
-    }
-    impl Yamlify for StmtKind {
-        fn yaml(&self, y: &mut Yamler) {
-            match self {
-                StmtKind::Empty => y,
-                StmtKind::Item(s) => y.yaml(s),
-                StmtKind::Expr(s) => y.yaml(s),
-            };
-        }
-    }
     impl Yamlify for Expr {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { span: _, kind } = self;
-            y.yaml(kind);
-        }
-    }
-    impl Yamlify for ExprKind {
-        fn yaml(&self, y: &mut Yamler) {
             match self {
-                ExprKind::Closure(k) => k.yaml(y),
-                ExprKind::Quote(k) => k.yaml(y),
-                ExprKind::Let(k) => k.yaml(y),
-                ExprKind::Match(k) => k.yaml(y),
-                ExprKind::Assign(k) => k.yaml(y),
-                ExprKind::Modify(k) => k.yaml(y),
-                ExprKind::Binary(k) => k.yaml(y),
-                ExprKind::Unary(k) => k.yaml(y),
-                ExprKind::Cast(k) => k.yaml(y),
-                ExprKind::Member(k) => k.yaml(y),
-                ExprKind::Index(k) => k.yaml(y),
-                ExprKind::Structor(k) => k.yaml(y),
-                ExprKind::Path(k) => k.yaml(y),
-                ExprKind::Literal(k) => k.yaml(y),
-                ExprKind::Array(k) => k.yaml(y),
-                ExprKind::ArrayRep(k) => k.yaml(y),
-                ExprKind::AddrOf(k) => k.yaml(y),
-                ExprKind::Block(k) => k.yaml(y),
-                ExprKind::Empty => {}
-                ExprKind::Group(k) => k.yaml(y),
-                ExprKind::Tuple(k) => k.yaml(y),
-                ExprKind::While(k) => k.yaml(y),
-                ExprKind::If(k) => k.yaml(y),
-                ExprKind::For(k) => k.yaml(y),
-                ExprKind::Break(k) => k.yaml(y),
-                ExprKind::Return(k) => k.yaml(y),
-                ExprKind::Continue => {
-                    y.key("Continue");
-                }
-            }
-        }
-    }
-    impl Yamlify for Closure {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { arg, body } = self;
-            y.key("Closure").pair("arg", arg).pair("body", body);
-        }
-    }
-    impl Yamlify for Quote {
-        fn yaml(&self, y: &mut Yamler) {
-            y.key("Quote").value(self);
-        }
-    }
-    impl Yamlify for Let {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { mutable, name, ty, init } = self;
-            y.key("Let")
-                .pair("name", name)
-                .yaml(mutable)
-                .pair("ty", ty)
-                .pair("init", init);
+                Self::Omitted => y.yaml(&"Omitted"),
+                Self::Id(path) => y.yaml(path),
+                Self::MetId(id) => y.yaml(id),
+                Self::Lit(lit) => y.yaml(lit),
+                Self::Use(item) => y.yaml(item),
+                Self::Bind(bind) => y.yaml(bind),
+                Self::Make(make) => y.yaml(make),
+                Self::Op(op, annos) => y.pair(op, annos),
+            };
         }
     }
 
-    impl Yamlify for Pattern {
+    impl Yamlify for Pat {
         fn yaml(&self, y: &mut Yamler) {
             match self {
-                Pattern::Name(name) => y.value(name),
-                Pattern::Path(path) => y.value(path),
-                Pattern::Literal(literal) => y.value(literal),
-                Pattern::Rest(name) => y.pair("Rest", name),
-                Pattern::Ref(mutability, pattern) => y.yaml(mutability).pair("Pat", pattern),
-                Pattern::RangeInc(head, tail) => {
-                    y.key("RangeInc").pair("head", head).pair("tail", tail);
-                    y
-                }
-                Pattern::RangeExc(head, tail) => {
-                    y.key("RangeExc").pair("head", head).pair("tail", tail);
-                    y
-                }
-                Pattern::Tuple(patterns) => y.key("Tuple").list(patterns),
-                Pattern::Array(patterns) => y.key("Array").list(patterns),
-                Pattern::Struct(path, items) => {
-                    {
-                        let mut y = y.key("Struct");
-                        y.yaml(path);
-                        for (name, item) in items {
-                            y.pair(name, item);
-                        }
-                    }
-                    y
-                }
-                Pattern::TupleStruct(path, items) => {
-                    y.key("TupleStruct").yaml(path).list(items);
-                    y
-                }
+                Self::Ignore => y.yaml(&"_"),
+                Self::Never => y.yaml(&"!"),
+                Self::MetId(id) => y.pair("meta", id),
+                Self::Name(name) => y.pair("named", name),
+                Self::Value(body) => y.pair("constant", body),
+                Self::Op(op, pats) => y.pair(op, pats),
             };
-        }
-    }
-    impl Yamlify for Match {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { scrutinee, arms } = self;
-            y.key("Match")
-                .pair("scrutinee", scrutinee)
-                .pair("arms", arms);
         }
     }
 
-    impl Yamlify for MatchArm {
+    impl Yamlify for Bind {
         fn yaml(&self, y: &mut Yamler) {
-            let Self(pat, expr) = self;
-            y.pair("pat", pat).pair("expr", expr);
+            let Self(op, gens, pat, exprs) = self;
+            y.key(op)
+                .pair("generics", gens)
+                .pair("pattern", pat)
+                .pair("body", exprs);
         }
     }
-    impl Yamlify for Assign {
+
+    impl Yamlify for Make {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { parts } = self;
-            y.key("Assign")
-                .pair("head", &parts.0)
-                .pair("tail", &parts.1);
+            let Self(ty, arms) = self;
+            y.pair(ty, arms);
         }
     }
-    impl Yamlify for Modify {
+
+    impl Yamlify for MakeArm {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { kind, parts } = self;
-            y.key("Modify")
-                .pair("kind", kind)
-                .pair("head", &parts.0)
-                .pair("tail", &parts.1);
+            let Self(name, expr) = self;
+            y.pair(name, expr);
         }
     }
-    impl Yamlify for Binary {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { kind, parts } = self;
-            y.key("Binary")
-                .pair("kind", kind)
-                .pair("head", &parts.0)
-                .pair("tail", &parts.1);
-        }
-    }
-    impl Yamlify for Unary {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { kind, tail } = self;
-            y.key("Unary").pair("kind", kind).pair("tail", tail);
-        }
-    }
-    impl Yamlify for Cast {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { head, ty } = self;
-            y.key("Cast").pair("head", head).pair("ty", ty);
-        }
-    }
-    impl Yamlify for Member {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { head, kind } = self;
-            y.key("Member").pair("head", head).pair("kind", kind);
-        }
-    }
-    impl Yamlify for MemberKind {
+
+    impl Yamlify for Use {
         fn yaml(&self, y: &mut Yamler) {
             match self {
-                MemberKind::Call(id, args) => y.pair("id", id).pair("args", args),
-                MemberKind::Struct(id) => y.pair("id", id),
-                MemberKind::Tuple(id) => y.pair("id", id),
+                Self::Glob => y.yaml(&"*"),
+                Self::Name(name) => y.yaml(name),
+                Self::Alias(from, to) => y.pair(from, to),
+                Self::Path(name, rest) => y.pair(name, rest),
+                Self::Tree(items) => y.yaml(items),
             };
         }
     }
-    impl Yamlify for Tuple {
+
+    impl<T: Yamlify + Annotation, A: AstTypes> Yamlify for At<T, A>
+    where A::Annotation: Yamlify
+    {
         fn yaml(&self, y: &mut Yamler) {
-            let Self { exprs } = self;
-            y.key("Tuple").list(exprs);
-        }
-    }
-    impl Yamlify for Index {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { head, indices } = self;
-            y.key("Index")
-                .pair("head", head)
-                .key("indices")
-                .list(indices);
-        }
-    }
-    impl Yamlify for Structor {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { to, init } = self;
-            y.key("Structor").pair("to", to).list(init);
-        }
-    }
-    impl Yamlify for Fielder {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { name, init } = self;
-            y.key("Fielder").pair("name", name).pair("init", init);
-        }
-    }
-    impl Yamlify for Array {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { values } = self;
-            y.key("Array").list(values);
-        }
-    }
-    impl Yamlify for ArrayRep {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { value, repeat } = self;
-            y.key("ArrayRep")
-                .pair("value", value)
-                .pair("repeat", repeat);
-        }
-    }
-    impl Yamlify for AddrOf {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { mutable, expr } = self;
-            y.key("AddrOf").yaml(mutable).pair("expr", expr);
-        }
-    }
-    impl Yamlify for Group {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { expr } = self;
-            y.key("Group").yaml(expr);
-        }
-    }
-    impl Yamlify for While {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { cond, pass, fail } = self;
-            y.key("While")
-                .pair("cond", cond)
-                .pair("pass", pass)
-                .yaml(fail);
-        }
-    }
-    impl Yamlify for Else {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { body } = self;
-            y.key("fail").yaml(body);
-        }
-    }
-    impl Yamlify for If {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { cond, pass, fail } = self;
-            y.key("If").pair("cond", cond).pair("pass", pass).yaml(fail);
-        }
-    }
-    impl Yamlify for For {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { bind, cond, pass, fail } = self;
-            y.key("For")
-                .pair("bind", bind)
-                .pair("cond", cond)
-                .pair("pass", pass)
-                .yaml(fail);
-        }
-    }
-    impl Yamlify for Break {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { body } = self;
-            y.key("Break").yaml(body);
-        }
-    }
-    impl Yamlify for Return {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { body } = self;
-            y.key("Return").yaml(body);
-        }
-    }
-    impl Yamlify for Literal {
-        fn yaml(&self, _y: &mut Yamler) {
-            match self {
-                Literal::Bool(v) => print!("{v}"),
-                Literal::Char(v) => print!("'{}'", v.escape_debug()),
-                Literal::Int(v) => print!("{v}"),
-                Literal::Float(v) => print!("{v}"),
-                Literal::String(v) => print!("{}", v.escape_debug()),
-            }
-        }
-    }
-    impl Yamlify for Ty {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { span: _, kind, gens } = self;
-            y.key("Ty").yaml(kind).yaml(gens);
-        }
-    }
-    impl Yamlify for TyKind {
-        fn yaml(&self, y: &mut Yamler) {
-            match self {
-                TyKind::Never => y.value("Never"),
-                TyKind::Infer => y.value("_"),
-                TyKind::Path(t) => y.yaml(t),
-                TyKind::Tuple(t) => y.yaml(t),
-                TyKind::Ref(t) => y.yaml(t),
-                TyKind::Ptr(t) => y.yaml(t),
-                TyKind::Fn(t) => y.yaml(t),
-                TyKind::Slice(t) => y.yaml(t),
-                TyKind::Array(t) => y.yaml(t),
-            };
-        }
-    }
-    impl Yamlify for Path {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { absolute, parts } = self;
-            let mut y = y.key("Path");
-            if *absolute {
-                y.pair("absolute", absolute);
-            }
-            y.yaml(parts);
-        }
-    }
-    impl Yamlify for PathPart {
-        fn yaml(&self, y: &mut Yamler) {
-            match self {
-                PathPart::SuperKw => y.value("super"),
-                PathPart::SelfTy => y.value("Self"),
-                PathPart::Ident(i) => y.yaml(i),
-            };
-        }
-    }
-    impl Yamlify for TyArray {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { ty, count } = self;
-            y.key("TyArray").pair("ty", ty).pair("count", count);
-        }
-    }
-    impl Yamlify for TySlice {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { ty } = self;
-            y.key("TyArray").pair("ty", ty);
-        }
-    }
-    impl Yamlify for TyTuple {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { types } = self;
-            let mut y = y.key("TyTuple");
-            for ty in types {
-                y.yaml(ty);
-            }
-        }
-    }
-    impl Yamlify for TyRef {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { count, mutable, to } = self;
-            y.key("TyRef")
-                .pair("count", count)
-                .yaml(mutable)
-                .pair("to", to);
-        }
-    }
-    impl Yamlify for TyPtr {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { to } = self;
-            y.key("TyPtr").pair("to", to);
-        }
-    }
-    impl Yamlify for TyFn {
-        fn yaml(&self, y: &mut Yamler) {
-            let Self { args, rety } = self;
-            y.key("TyFn").pair("args", args).pair("rety", rety);
+            let Self(t, _) = self;
+            y.yaml(t);
         }
     }
 
@@ -727,7 +228,7 @@ pub mod yamlify {
             if let Some(v) = self {
                 y.yaml(v);
             } else {
-                y.value("");
+                y.yaml(&"");
             }
         }
     }
@@ -761,8 +262,20 @@ pub mod yamlify {
         };
     }
 
-    scalar! {
-        bool, char, u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, &str, String,
-        BinaryKind, UnaryKind, ModifyKind, Sym,
+    macro_rules! debug_scalar {
+        ($($t:ty),*$(,)?) => {
+            $(impl Yamlify for $t {
+                fn yaml(&self, _y: &mut Yamler) {
+                    print!("{self:?}");
+                }
+            })*
+        };
     }
+
+    scalar! {
+        bool, char, u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, str, &str, String,
+        Symbol, Path, Literal
+    }
+
+    debug_scalar!(Op, BindOp, PatOp, Span);
 }

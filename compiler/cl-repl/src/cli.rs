@@ -5,10 +5,10 @@ use crate::{
     menu,
     tools::print_token,
 };
-use cl_ast::File;
+use cl_ast::{Expr, types::Symbol};
 use cl_interpret::{builtin::builtins, convalue::ConValue, env::Environment, interpret::Interpret};
 use cl_lexer::Lexer;
-use cl_parser::Parser;
+use cl_parser::{Parser, inliner::ModuleInliner};
 use std::{borrow::Cow, error::Error, path::Path};
 
 /// Run the command line interface
@@ -30,8 +30,8 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
                 }
                 _ => Err(Error::TypeError())?
             };
-            match Parser::new("eval", Lexer::new(string)).parse::<cl_ast::Stmt>() {
-                Err(e) => Ok(ConValue::Str(format!("{e}").into())),
+            match Parser::new(Lexer::new("eval".into(), string)).parse::<Expr>(0) {
+                Err(e) => Ok(ConValue::String(format!("{e}"))),
                 Ok(v) => v.interpret(env),
             }
         }
@@ -63,7 +63,7 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
                 Ok(line) => Ok(ConValue::String(line)),
                 Err(repline::Error::CtrlD(line)) => Ok(ConValue::String(line)),
                 Err(repline::Error::CtrlC(_)) => Err(cl_interpret::error::Error::Break(ConValue::Empty)),
-                Err(e) => Ok(ConValue::Str(e.to_string().into())),
+                Err(e) => Ok(ConValue::String(e.to_string())),
             }
         }
     });
@@ -108,9 +108,10 @@ fn format_path_for_display(path: Option<&Path>) -> Cow<'_, str> {
 
 fn load_file(env: &mut Environment, path: impl AsRef<Path>) -> Result<ConValue, Box<dyn Error>> {
     let path = path.as_ref();
-    let inliner = cl_parser::inliner::ModuleInliner::new(path.with_extension(""));
+    let path_display: Symbol = path.display().to_string().as_str().into();
+    let inliner = ModuleInliner::new(path.with_extension(""));
     let file = std::fs::read_to_string(path)?;
-    let code = Parser::new(path.display().to_string(), Lexer::new(&file)).parse()?;
+    let code: Expr = Parser::new(Lexer::new(path_display, &file)).parse(0)?;
     let code = match inliner.inline(code) {
         Ok(a) => a,
         Err((code, io_errs, parse_errs)) => {
@@ -123,8 +124,8 @@ fn load_file(env: &mut Environment, path: impl AsRef<Path>) -> Result<ConValue, 
             code
         }
     };
-    use cl_ast::WeightOf;
-    eprintln!("File {} weighs {} units", code.name, code.weight_of());
+    // use cl_ast::WeightOf;
+    // eprintln!("File {} weighs {} units", code.name, code.weight_of());
 
     match env.eval(&code) {
         Ok(v) => Ok(v),
@@ -136,26 +137,24 @@ fn load_file(env: &mut Environment, path: impl AsRef<Path>) -> Result<ConValue, 
 }
 
 fn lex_code(path: &str, code: &str) -> Result<(), Box<dyn Error>> {
-    for token in Lexer::new(code) {
+    let mut lexer = Lexer::new(path.into(), code);
+    while let Ok(token) = lexer.scan() {
         if !path.is_empty() {
-            print!("{}:", path);
+            print!("{path}:");
         }
-        match token {
-            Ok(token) => print_token(&token),
-            Err(e) => println!("{e}"),
-        }
+        print_token(&token);
     }
     Ok(())
 }
 
 fn fmt_code(path: &str, code: &str) -> Result<(), Box<dyn Error>> {
-    let code = Parser::new(path, Lexer::new(code)).parse::<File>()?;
+    let code = Parser::new(Lexer::new(path.into(), code)).parse::<Expr>(0)?;
     println!("{code}");
     Ok(())
 }
 
 fn run_code(path: &str, code: &str, env: &mut Environment) -> Result<(), Box<dyn Error>> {
-    let code = Parser::new(path, Lexer::new(code)).parse::<File>()?;
+    let code = Parser::new(Lexer::new(path.into(), code)).parse::<Expr>(0)?;
     match code.interpret(env)? {
         ConValue::Empty => {}
         ret => println!("{ret}"),

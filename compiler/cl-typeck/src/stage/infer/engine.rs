@@ -10,7 +10,7 @@ use crate::{
     type_expression::TypeExpression,
     type_kind::{Adt, Primitive, TypeKind},
 };
-use cl_ast::Sym;
+use cl_ast::types::Symbol as Sym;
 
 /*
     Types in Conlang:
@@ -78,17 +78,9 @@ impl<'table, 'a, 'b, 'r> InferenceEngine<'table, 'a, 'b, 'r> {
             println!("Inferring {source}");
 
             let ret = match source {
-                Source::Module(v) => v.infer(&mut eng),
-                Source::Alias(v) => v.infer(&mut eng),
-                Source::Enum(v) => v.infer(&mut eng),
-                // Source::Variant(v) => v.infer(&mut eng),
-                Source::Struct(v) => v.infer(&mut eng),
-                Source::Const(v) => v.infer(&mut eng),
-                Source::Static(v) => v.infer(&mut eng),
-                Source::Function(v) => v.infer(&mut eng),
-                Source::Local(v) => v.infer(&mut eng),
-                Source::Impl(v) => v.infer(&mut eng),
-                _ => Ok(eng.empty()),
+                Source::Binding(v) => v.infer(&mut eng),
+                Source::Ty(t) => t.infer(&mut eng),
+                Source::Use(_) | Source::Root => Ok(eng.unit()),
             };
 
             match &ret {
@@ -97,7 +89,6 @@ impl<'table, 'a, 'b, 'r> InferenceEngine<'table, 'a, 'b, 'r> {
                 Err(InferenceError::FieldCount(h, want, got)) => {
                     eprintln!("=> ERROR: Field count {want} != {got} in {}", eng.entry(*h))
                 }
-                Err(err @ InferenceError::NotFound(_)) => eprintln!("=> ERROR: {err}"),
                 Err(InferenceError::Mismatch(h1, h2)) => eprintln!(
                     "=> ERROR: Type mismatch {} != {}",
                     eng.entry(*h1),
@@ -196,12 +187,8 @@ impl<'table, 'a, 'b, 'r> InferenceEngine<'table, 'a, 'b, 'r> {
     }
 
     pub fn get_fn(&self, at: Handle, name: Sym) -> Option<(Handle, Handle)> {
-        use cl_ast::PathPart;
-        if let Some(&TypeKind::FnSig { args, rety }) = self
-            .entry(at)
-            .nav(&[PathPart::Ident(name)])
-            .as_ref()
-            .and_then(Entry::ty)
+        if let Some(&TypeKind::FnSig { args, rety }) =
+            self.entry(at).nav(&[name]).as_ref().and_then(Entry::ty)
         {
             Some((args, rety))
         } else {
@@ -239,7 +226,7 @@ impl<'table, 'a, 'b, 'r> InferenceEngine<'table, 'a, 'b, 'r> {
         self.table.get_lang_item("never")
     }
 
-    pub fn empty(&mut self) -> Handle {
+    pub fn unit(&mut self) -> Handle {
         self.table.anon_type(TypeKind::Tuple(vec![]))
     }
 

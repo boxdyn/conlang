@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use crate::{ansi, args::Mode, ctx};
-use cl_ast::Stmt;
+use cl_ast::Expr;
 use cl_interpret::convalue::ConValue;
 use cl_lexer::Lexer;
 use cl_parser::Parser;
@@ -64,14 +64,14 @@ pub fn main_menu(mode: Mode, ctx: &mut ctx::Context) -> ReplResult<()> {
 }
 
 pub fn mode_run(ctx: &mut ctx::Context, line: &str) -> Result<Response, Box<dyn Error>> {
-    use cl_ast::ast_visitor::Fold;
+    use cl_ast::fold::Fold;
     use cl_parser::inliner::ModuleInliner;
 
     if line.trim().is_empty() {
         return Ok(Response::Deny);
     }
-    let code = Parser::new("", Lexer::new(line)).parse::<Stmt>()?;
-    let code = ModuleInliner::new(".").fold_stmt(code);
+    let code = Parser::new(Lexer::new("".into(), line)).parse::<Expr>(0)?;
+    let Ok(code) = ModuleInliner::new(".").fold_expr(code);
 
     print!("{}", ansi::OUTPUT);
     match ctx.run(&code) {
@@ -83,20 +83,18 @@ pub fn mode_run(ctx: &mut ctx::Context, line: &str) -> Result<Response, Box<dyn 
 }
 
 pub fn mode_lex(_ctx: &mut ctx::Context, line: &str) -> Result<Response, Box<dyn Error>> {
-    for token in Lexer::new(line) {
-        match token {
-            Ok(token) => crate::tools::print_token(&token),
-            Err(e) => eprintln!("! > {}{e}{}", ansi::RED, ansi::RESET),
-        }
+    let mut lexer = Lexer::new("".into(), line);
+    while let Ok(token) = lexer.scan() {
+        crate::tools::print_token(&token);
     }
 
     Ok(Response::Accept)
 }
 
 pub fn mode_fmt(_ctx: &mut ctx::Context, line: &str) -> Result<Response, Box<dyn Error>> {
-    let mut p = Parser::new("", Lexer::new(line));
+    let mut p = Parser::new(Lexer::new("".into(), line));
 
-    match p.parse::<Stmt>() {
+    match p.parse::<Expr>(0) {
         Ok(code) => println!("{}{code}{}", ansi::OUTPUT, ansi::RESET),
         Err(e) => Err(e)?,
     }

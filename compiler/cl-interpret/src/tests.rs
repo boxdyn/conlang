@@ -48,30 +48,20 @@ mod macros {
     //! ```
     #![allow(unused_macros)]
     use crate::IResult;
-    use cl_parser::parser::Parse;
+    use cl_parser::Parse;
 
     use super::*;
 
-    pub fn test_inside_block(block: &Block, env: &mut Environment) -> IResult<()> {
-        let Block { stmts } = block;
-        for stmt in stmts {
-            stmt.interpret(env)?;
-        }
+    pub fn test_inside_block(block: &Expr, env: &mut Environment) -> IResult<()> {
+        todo!("Interpret {block}");
         Ok(())
     }
 
     /// Stringifies, lexes, and parses everything you give to it
     ///
-    /// Returns a `Result<`[`File`]`, ParseError>`
-    pub macro file($($t:tt)*) {
-        File::parse(&mut Parser::new(Lexer::new(stringify!( $($t)* ))))
-    }
-
-    /// Stringifies, lexes, and parses everything you give to it
-    ///
-    /// Returns a `Result<`[`Block`]`, ParseError>`
-    pub macro block($($t:tt)*) {
-        Block::parse(&mut Parser::new("test", Lexer::new(stringify!({ $($t)* }))))
+    /// Returns a `Result<`[`Expr`]`, ParseError>`
+    pub macro expr($($t:tt)*) {
+        Expr::parse(&mut Parser::new(Lexer::new("test".into(), stringify!({ $($t)* }))), 0)
     }
 
     /// Evaluates a block of code in the given environment
@@ -85,7 +75,7 @@ mod macros {
     /// )
     /// ```
     pub macro eval($env: path, $($t:tt)*) {{
-        test_inside_block(&block!($($t)*)
+        test_inside_block(&expr!($($t)*)
             .expect("code passed to eval! should parse correctly"),
             &mut $env)
     }}
@@ -250,7 +240,6 @@ mod fn_declarations {
 }
 
 mod operators {
-    use cl_ast::Tuple;
 
     use super::*;
     #[test]

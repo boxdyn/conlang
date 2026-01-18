@@ -18,7 +18,7 @@
 //! - [Types](TypeKind): Contains type information populated through type checking and inference.
 //!   Nodes with unpopulated types may be considered type variables in the future.
 //! - [Spans][span]: Positional information from the source text. See [cl_structures::span].
-//! - [Metas](Meta): Metadata decorators. These may have an effect throughout the compiler.
+//! - [Meta](Expr): Metadata decorators. These may have an effect throughout the compiler.
 //! - [Sources](Source): Pointers back into the AST, for future analysis.
 //! - Impl Targets: Sparse mapping of `impl` nodes to their corresponding targets.
 //! - etc.
@@ -31,8 +31,8 @@ use crate::{
     source::Source,
     type_kind::TypeKind,
 };
-use cl_ast::{Expr, Meta, PathPart, Sym};
-use cl_structures::{index_map::IndexMap, span::Span};
+use cl_ast::{Expr, types::Symbol as Sym};
+use cl_structures::{index_map::IndexMap, intern::interned::Interned, span::Span};
 use std::collections::HashMap;
 
 // TODO: Cycle detection external to this module
@@ -53,7 +53,7 @@ pub struct Table<'a> {
     bodies: HashMap<Handle, &'a Expr>,
     types: HashMap<Handle, TypeKind>,
     spans: HashMap<Handle, Span>,
-    metas: HashMap<Handle, &'a [Meta]>,
+    metas: HashMap<Handle, &'a [Expr]>,
     sources: HashMap<Handle, Source<'a>>,
     impl_targets: HashMap<Handle, Handle>,
     anon_types: HashMap<TypeKind, Handle>,
@@ -216,7 +216,7 @@ impl<'a> Table<'a> {
         self.spans.get(&node)
     }
 
-    pub fn meta(&self, node: Handle) -> Option<&'a [Meta]> {
+    pub fn meta(&self, node: Handle) -> Option<&'a [Expr]> {
         self.metas.get(&node).copied()
     }
 
@@ -245,7 +245,7 @@ impl<'a> Table<'a> {
         self.spans.insert(node, span)
     }
 
-    pub fn set_meta(&mut self, node: Handle, meta: &'a [Meta]) -> Option<&'a [Meta]> {
+    pub fn set_meta(&mut self, node: Handle, meta: &'a [Expr]) -> Option<&'a [Expr]> {
         self.metas.insert(node, meta)
     }
 
@@ -310,11 +310,11 @@ impl<'a> Table<'a> {
     }
 
     /// Does path traversal relative to the provided `node`.
-    pub fn nav(&self, node: Handle, path: &[PathPart]) -> Option<Handle> {
+    pub fn nav(&self, node: Handle, path: &[Sym]) -> Option<Handle> {
         match path {
-            [PathPart::SuperKw, rest @ ..] => self.nav(self.super_of(node)?, rest),
-            [PathPart::SelfTy, rest @ ..] => self.nav(self.selfty(node)?, rest),
-            [PathPart::Ident(name), rest @ ..] => self.nav(self.get_by_sym(node, name)?, rest),
+            [Interned("super", ..), rest @ ..] => self.nav(self.super_of(node)?, rest),
+            [Interned("Self", ..), rest @ ..] => self.nav(self.selfty(node)?, rest),
+            [name, rest @ ..] => self.nav(self.get_by_sym(node, name)?, rest),
             [] => Some(node),
         }
     }

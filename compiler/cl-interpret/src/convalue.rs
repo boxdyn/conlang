@@ -1,9 +1,9 @@
 //! Values in the dynamically typed AST interpreter.
 //!
 //! The most permanent fix is a temporary one.
-use cl_ast::{Expr, Sym, format::FmtAdapter};
+use cl_ast::{Expr, fmt::FmtAdapter, types::Symbol};
 
-use crate::{closure::Closure, constructor::Constructor};
+use crate::constructor::Constructor;
 
 use super::{
     Callable, Environment,
@@ -52,7 +52,7 @@ pub enum ConValue {
     /// A unicode character
     Char(char),
     /// A string literal
-    Str(Sym),
+    Str(Symbol),
     /// A dynamic string
     String(String),
     /// A reference
@@ -65,19 +65,19 @@ pub enum ConValue {
     Tuple(Box<[ConValue]>),
     // TODO: Instead of storing the identifier, store the index of the struct module
     /// A value of a product type
-    Struct(Sym, Box<HashMap<Sym, ConValue>>),
+    Struct(Symbol, Box<HashMap<Symbol, ConValue>>),
     /// A value of a product type with anonymous members
-    TupleStruct(Sym, Box<Box<[ConValue]>>),
+    TupleStruct(Symbol, Box<Box<[ConValue]>>),
     /// An entire namespace
-    Module(Box<HashMap<Sym, ConValue>>),
+    Module(Box<HashMap<Symbol, ConValue>>),
     /// A quoted expression
     Quote(Rc<Expr>),
     /// A callable thing
     Function(Rc<Function>),
     /// A tuple constructor
     TupleConstructor(Constructor),
-    /// A closure, capturing by reference
-    Closure(Rc<Closure>),
+    // /// A closure, capturing by reference
+    // Closure(Rc<Closure>),
     /// A built-in function
     Builtin(&'static Builtin),
 }
@@ -110,17 +110,17 @@ impl ConValue {
             ConValue::Quote(_) => "Quote",
             ConValue::Function(_) => "Fn",
             ConValue::TupleConstructor(_) => "Fn",
-            ConValue::Closure(_) => "Fn",
+            // ConValue::Closure(_) => "Fn",
             ConValue::Builtin(_) => "Fn",
         }
     }
 
     #[allow(non_snake_case)]
-    pub fn TupleStruct(id: Sym, values: Box<[ConValue]>) -> Self {
+    pub fn TupleStruct(id: Symbol, values: Box<[ConValue]>) -> Self {
         Self::TupleStruct(id, Box::new(values))
     }
     #[allow(non_snake_case)]
-    pub fn Struct(id: Sym, values: HashMap<Sym, ConValue>) -> Self {
+    pub fn Struct(id: Symbol, values: HashMap<Symbol, ConValue>) -> Self {
         Self::Struct(id, Box::new(values))
     }
 
@@ -181,10 +181,10 @@ impl ConValue {
 }
 
 impl Callable for ConValue {
-    fn name(&self) -> Sym {
+    fn name(&self) -> Symbol {
         match self {
             ConValue::Function(func) => func.name(),
-            ConValue::Closure(func) => func.name(),
+            // ConValue::Closure(func) => func.name(),
             ConValue::Builtin(func) => func.name(),
             _ => "".into(),
         }
@@ -193,7 +193,7 @@ impl Callable for ConValue {
         match self {
             Self::Function(func) => func.call(env, args),
             Self::TupleConstructor(func) => func.call(env, args),
-            Self::Closure(func) => func.call(env, args),
+            // Self::Closure(func) => func.call(env, args),
             Self::Builtin(func) => func.call(env, args),
             Self::Module(m) => {
                 if let Some(func) = m.get(&"call".into()) {
@@ -242,9 +242,14 @@ macro from ($($T:ty => $v:expr),*$(,)?) {
         fn from(value: $T) -> Self { $v(value.into()) }
     })*
 }
-impl From<&Sym> for ConValue {
-    fn from(value: &Sym) -> Self {
+impl From<&Symbol> for ConValue {
+    fn from(value: &Symbol) -> Self {
         ConValue::Str(*value)
+    }
+}
+impl From<Rc<Symbol>> for ConValue {
+    fn from(value: Rc<Symbol>) -> Self {
+        ConValue::Str(value.0.into())
     }
 }
 from! {
@@ -252,11 +257,10 @@ from! {
     f64 => ConValue::Float,
     bool => ConValue::Bool,
     char => ConValue::Char,
-    Sym => ConValue::Str,
+    Symbol => ConValue::Str,
     &str => ConValue::Str,
     Expr => ConValue::Quote,
     String => ConValue::String,
-    Rc<str> => ConValue::Str,
     Function => ConValue::Function,
     Vec<ConValue> => ConValue::Tuple,
     &'static Builtin => ConValue::Builtin,
@@ -405,7 +409,7 @@ impl std::fmt::Display for ConValue {
             ConValue::Struct(id, map) => {
                 use std::fmt::Write;
                 write!(f, "{id} ")?;
-                let mut f = f.delimit_with("{", "\n}");
+                let mut f = f.delimit("{", "\n}");
                 for (k, v) in map.iter() {
                     write!(f, "\n{k}: {v},")?;
                 }
@@ -413,7 +417,7 @@ impl std::fmt::Display for ConValue {
             }
             ConValue::Module(module) => {
                 use std::fmt::Write;
-                let mut f = f.delimit_with("{", "\n}");
+                let mut f = f.delimit("{", "\n}");
                 for (k, v) in module.iter() {
                     write!(f, "\n{k}: {v},")?;
                 }
@@ -428,9 +432,9 @@ impl std::fmt::Display for ConValue {
             ConValue::TupleConstructor(Constructor { name: index, arity }) => {
                 write!(f, "{index}(..{arity})")
             }
-            ConValue::Closure(func) => {
-                write!(f, "{}", func.as_ref())
-            }
+            // ConValue::Closure(func) => {
+            //     write!(f, "{}", func.as_ref())
+            // }
             ConValue::Builtin(func) => {
                 write!(f, "{}", func)
             }

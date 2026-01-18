@@ -110,7 +110,7 @@ mod string {
 }
 mod punct {
     macro op($op:ident) {
-        TokenKind::$op
+        TKind::$op
     }
 
     use super::*;

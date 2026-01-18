@@ -2,7 +2,7 @@
 
 use std::{error::Error, path::PathBuf};
 
-use cl_ast::Expr;
+use cl_ast::{Expr, types::Symbol};
 use cl_interpret::{convalue::ConValue, env::Environment};
 use cl_lexer::Lexer;
 use cl_parser::{Parser, inliner::ModuleInliner};
@@ -16,10 +16,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     };
 
+    let display_path: Symbol = Symbol::from(&*path.display().to_string());
+
     let parent = path.parent().unwrap_or("".as_ref());
 
     let code = std::fs::read_to_string(&path)?;
-    let code = Parser::new(path.display().to_string(), Lexer::new(&code)).parse()?;
+    let code: Expr = Parser::new(Lexer::new(display_path, &code)).parse(0)?;
     let code = match ModuleInliner::new(parent).inline(code) {
         Ok(code) => code,
         Err((code, ioerrs, perrs)) => {
@@ -40,8 +42,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     if env.get(main).is_ok() {
         let args = args
             .flat_map(|arg| {
-                Parser::new(&arg, Lexer::new(&arg))
-                    .parse::<Expr>()
+                Parser::new(Lexer::new("conlang-run".into(), &arg))
+                    .parse::<Expr>(0)
                     .map(|arg| env.eval(&arg))
             })
             .collect::<Result<Vec<_>, _>>()?;

@@ -1,6 +1,6 @@
 //! Lexical and non-lexical scoping for variables
 
-use crate::{builtin::Builtin, constructor::Constructor, modules::ModuleTree};
+use crate::{builtin::Builtin, constructor::Constructor};
 
 use super::{
     Callable, Interpret,
@@ -9,7 +9,7 @@ use super::{
     error::{Error, IResult},
     function::Function,
 };
-use cl_ast::{Function as FnDecl, Sym};
+use cl_ast::{Bind as FnDecl, types::Symbol};
 use std::{
     collections::HashMap,
     fmt::Display,
@@ -17,9 +17,9 @@ use std::{
     rc::Rc,
 };
 
-pub type StackFrame = HashMap<Sym, ConValue>;
+pub type StackFrame = HashMap<Symbol, ConValue>;
 
-pub type StackBinds = HashMap<Sym, usize>;
+pub type StackBinds = HashMap<Symbol, usize>;
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct EnvFrame {
@@ -35,7 +35,6 @@ pub(crate) struct EnvFrame {
 pub struct Environment {
     values: Vec<ConValue>,
     frames: Vec<EnvFrame>,
-    modules: ModuleTree,
 }
 
 impl Display for Environment {
@@ -75,11 +74,7 @@ impl Environment {
     }
     /// Creates an [Environment] with no [builtins](super::builtin)
     pub fn no_builtins() -> Self {
-        Self {
-            values: Vec::new(),
-            frames: vec![EnvFrame::default()],
-            modules: ModuleTree::default(),
-        }
+        Self { values: Vec::new(), frames: vec![EnvFrame::default()] }
     }
 
     /// Reflexively evaluates a node
@@ -89,25 +84,17 @@ impl Environment {
 
     /// Calls a function inside the Environment's scope,
     /// and returns the result
-    pub fn call(&mut self, name: Sym, args: &[ConValue]) -> IResult<ConValue> {
+    pub fn call(&mut self, name: Symbol, args: &[ConValue]) -> IResult<ConValue> {
         let function = self.get(name)?;
         function.call(self, args)
     }
 
-    pub fn modules_mut(&mut self) -> &mut ModuleTree {
-        &mut self.modules
-    }
-
-    pub fn modules(&self) -> &ModuleTree {
-        &self.modules
-    }
-
     /// Binds a value to the given name in the current scope.
-    pub fn bind(&mut self, name: impl Into<Sym>, value: impl Into<ConValue>) {
+    pub fn bind(&mut self, name: impl Into<Symbol>, value: impl Into<ConValue>) {
         self.insert(name.into(), value.into());
     }
 
-    pub fn bind_raw(&mut self, name: Sym, id: usize) -> Option<()> {
+    pub fn bind_raw(&mut self, name: Symbol, id: usize) -> Option<()> {
         let EnvFrame { name: _, base: _, binds } = self.frames.last_mut()?;
         binds.insert(name, id);
         Some(())
@@ -178,7 +165,7 @@ impl Environment {
     /// Resolves a variable mutably.
     ///
     /// Returns a mutable reference to the variable's record, if it exists.
-    pub fn get_mut(&mut self, name: Sym) -> IResult<&mut ConValue> {
+    pub fn get_mut(&mut self, name: Symbol) -> IResult<&mut ConValue> {
         let at = self.id_of(name)?;
         self.get_id_mut(at).ok_or(Error::NotDefined(name))
     }
@@ -186,14 +173,14 @@ impl Environment {
     /// Resolves a variable immutably.
     ///
     /// Returns a reference to the variable's contents, if it is defined and initialized.
-    pub fn get(&self, name: Sym) -> IResult<ConValue> {
+    pub fn get(&self, name: Symbol) -> IResult<ConValue> {
         let id = self.id_of(name)?;
         let res = self.values.get(id);
         Ok(res.ok_or(Error::NotDefined(name))?.clone())
     }
 
-    /// Resolves the index associated with a [Sym]
-    pub fn id_of(&self, name: Sym) -> IResult<usize> {
+    /// Resolves the index associated with a [Symbol]
+    pub fn id_of(&self, name: Symbol) -> IResult<usize> {
         for EnvFrame { binds, .. } in self.frames.iter().rev() {
             if let Some(id) = binds.get(&name).copied() {
                 return Ok(id);
@@ -219,22 +206,13 @@ impl Environment {
     }
 
     /// Inserts a new [ConValue] into this [Environment]
-    pub fn insert(&mut self, k: Sym, v: ConValue) {
+    pub fn insert(&mut self, k: Symbol, v: ConValue) {
         if self.bind_raw(k, self.values.len()).is_some() {
             self.values.push(v);
         }
     }
 
-    /// A convenience function for registering a [FnDecl] as a [Function]
-    pub fn insert_fn(&mut self, decl: &FnDecl) {
-        let FnDecl { name, .. } = decl;
-        let (name, function) = (*name, Rc::new(Function::new(decl)));
-        self.insert(name, ConValue::Function(function.clone()));
-        // Tell the function to lift its upvars now, after it's been declared
-        function.lift_upvars(self);
-    }
-
-    pub fn insert_tup_constructor(&mut self, name: Sym, arity: usize) {
+    pub fn insert_tup_constructor(&mut self, name: Symbol, arity: usize) {
         let cs = Constructor { arity: arity as _, name };
         self.insert(name, ConValue::TupleConstructor(cs));
     }

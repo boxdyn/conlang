@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use cl_ast::{Expr, Meta, PathPart, Sym};
+use cl_ast::{Expr, types::Symbol as Sym};
 use cl_structures::span::Span;
 
 use crate::{
@@ -71,7 +71,7 @@ macro_rules! impl_entry_ {
             self.table.span(self.id)
         }
 
-        pub fn meta(&self) -> Option<&[Meta]> {
+        pub fn meta(&self) -> Option<&[Expr]> {
             self.table.meta(self.id)
         }
 
@@ -96,7 +96,7 @@ impl<'t, 'a> Entry<'t, 'a> {
         Self { table: self.table, id }
     }
 
-    pub fn nav(&self, path: &[PathPart]) -> Option<Entry<'t, 'a>> {
+    pub fn nav(&self, path: &[Sym]) -> Option<Entry<'t, 'a>> {
         Some(Entry { id: self.table.nav(self.id, path)?, table: self.table })
     }
 
@@ -157,7 +157,7 @@ impl<'t, 'a> EntryMut<'t, 'a> {
         EntryMut { table: self.table, id: parent }
     }
 
-    pub fn nav(&mut self, path: &[PathPart]) -> Option<EntryMut<'_, 'a>> {
+    pub fn nav(&mut self, path: &[Sym]) -> Option<EntryMut<'_, 'a>> {
         Some(EntryMut { id: self.table.nav(self.id, path)?, table: self.table })
     }
 
@@ -182,7 +182,7 @@ impl<'t, 'a> EntryMut<'t, 'a> {
         self.table.set_span(self.id, span)
     }
 
-    pub fn set_meta(&mut self, meta: &'a [Meta]) -> Option<&'a [Meta]> {
+    pub fn set_meta(&mut self, meta: &'a [Expr]) -> Option<&'a [Expr]> {
         self.table.set_meta(self.id, meta)
     }
 

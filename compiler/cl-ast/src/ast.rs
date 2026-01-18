@@ -1,650 +1,409 @@
-//! # The Abstract Syntax Tree
-//! Contains definitions of Conlang AST Nodes.
-//!
-//! # Notable nodes
-//! - [Item] and [ItemKind]: Top-level constructs
-//! - [Stmt] and [StmtKind]: Statements
-//! - [Expr] and [ExprKind]: Expressions
-//!   - [Assign], [Modify], [Binary], and [Unary] expressions
-//!   - [ModifyKind], [BinaryKind], and [UnaryKind] operators
-//! - [Ty] and [TyKind]: Type qualifiers
-//! - [Pattern]: Pattern matching operators
-//! - [Path]: Path expressions
-use cl_structures::{intern::interned::Interned, span::*};
+//! The Abstract Syntax Tree defines an interface between the parser and type checker
 
-/// An [Interned] static [str], used in place of an identifier
-pub type Sym = Interned<'static, str>;
+use std::hash::Hash;
 
-/// Whether a binding ([Static] or [Let]) or reference is mutable or not
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum Mutability {
-    #[default]
-    Not,
-    Mut,
+mod display;
+
+pub mod fold;
+pub mod macro_matcher;
+pub mod types;
+pub mod visit;
+
+pub use types::DefaultTypes;
+
+/// An annotation: bounds on AST parameters
+pub trait Annotation: Clone + std::fmt::Display + std::fmt::Debug + PartialEq + Eq {}
+
+impl<T: Clone + std::fmt::Debug + std::fmt::Display + PartialEq + Eq> Annotation for T {}
+
+pub trait AstTypes: Annotation {
+    /// An annotation on an arbitrary [Expr]
+    type Annotation: Annotation;
+
+    /// A literal value
+    type Literal: Annotation;
+
+    /// A (possibly interned) symbol or index which implements [`AsRef<str>`]
+    type MacroId: Annotation + Hash + AsRef<str>;
+
+    /// A (possibly interned) symbol or index
+    type Symbol: Annotation + Copy + Hash;
+
+    /// A (possibly compound) symbol or index
+    type Path: Annotation;
 }
 
-/// Whether an [Item] is visible outside of the current [Module]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum Visibility {
-    #[default]
-    Private,
-    Public,
+/// A value with an annotation.
+#[derive(Clone, PartialEq, Eq)]
+pub struct At<T: Annotation, A: AstTypes = DefaultTypes>(pub T, pub A::Annotation);
+
+impl<T: Annotation, A: AstTypes> std::fmt::Debug for At<T, A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        <A::Annotation as std::fmt::Debug>::fmt(&self.1, f)?;
+        f.write_str(": ")?;
+        <T as std::fmt::Debug>::fmt(&self.0, f)
+    }
 }
 
-/// A list of [Item]s
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct File {
-    pub name: &'static str,
-    pub items: Vec<Item>,
+/// Expressions: The beating heart of Dough.
+///
+/// A program in Doughlang is a single expression which, at compile time,
+/// sets up the state in which a program will run. This expression binds types,
+/// functions, and values to names which are exposed at runtime.
+///
+/// Whereas in the body of a function, `do` sequences are ordered, in the global
+/// scope (or subsequent module scopes, which are children of the global module,)
+/// `do` sequences are considered unordered, and subexpressions may be reordered
+/// in whichever way the compiler sees fit. This is especially important when
+/// performing import resolution, as imports typically depend on the order
+/// in which names are bound.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Expr<A: AstTypes = DefaultTypes> {
+    /// Omitted by semicolon insertion-elision rules
+    Omitted,
+    /// An identifier
+    Id(A::Path),
+    /// An escaped token for macro binding
+    MetId(A::MacroId),
+    /// A literal bool, string, char, or int
+    Lit(A::Literal),
+    /// use Use
+    Use(Use<A>),
+    /// `let Pat::NoTopAlt (= expr (else expr)?)?` |
+    /// `(fn | mod | impl) Pat::Fn Expr`
+    Bind(Box<Bind<A>>),
+    /// Expr { (Ident (: Expr)?),* }
+    Make(Box<Make<A>>),
+    /// Op Expr | Expr Op | Expr (Op Expr)+ | Op Expr Expr else Expr
+    Op(Op, Vec<At<Self, A>>),
 }
 
-/// A list of [Meta] decorators
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct Attrs {
-    pub meta: Vec<Meta>,
-}
+/// Doughlang's AST is partitioned by data representation, so it
+/// considers any expression which is composed solely of keywords,
+/// symbols, and other expressions as operator expressions.
+///
+/// This includes:
+/// - Do-sequence expressions: `Expr ; Expr `
+/// - Type-cast expressions `Expr as Expr`
+/// - Binding-modifier expressions: `pub Expr`, `#[Expr] Expr`
+/// - Block and Group expressions: `{Expr?}`, `(Expr?)`
+/// - Control flow: `if`, `while`, `loop`, `match`, `break`, `return`
+/// - Function calls `Expr (Expr,*)`
+/// - Traditional binary and unary operators (add, sub, neg, assign)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Op {
+    /// `Expr (; Expr)*`
+    Do,
+    /// `Expr as Expr`
+    As,
+    /// `macro { (Pat => Expr)* }`
+    Macro,
+    /// `{ Expr }`
+    Block,
+    /// `[ Expr,* ]`
+    Array,
+    /// `[ Expr ; Expr ]`
+    ArRep,
+    /// `( Expr )`
+    Group,
+    /// `Expr (, Expr)*`
+    Tuple,
+    /// `#[ Expr ]`
+    Meta,
 
-/// A metadata decorator
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Meta {
-    pub name: Sym,
-    pub kind: MetaKind,
-}
-
-/// Information attached to [Meta]data
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum MetaKind {
-    Plain,
-    Equals(Literal),
-    Func(Vec<Literal>),
-}
-
-// Items
-/// Anything that can appear at the top level of a [File]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Item {
-    pub span: Span,
-    pub attrs: Attrs,
-    pub vis: Visibility,
-    pub kind: ItemKind,
-}
-
-/// What kind of [Item] is this?
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum ItemKind {
-    // TODO: Trait declaration ("trait") item?
-    /// A [module](Module)
-    Module(Module),
-    /// A [type alias](Alias)
-    Alias(Alias),
-    /// An [enumerated type](Enum), with a discriminant and optional data
-    Enum(Enum),
-    /// A [structure](Struct)
-    Struct(Struct),
-    /// A [constant](Const)
-    Const(Const),
-    /// A [static](Static) variable
-    Static(Static),
-    /// A [function definition](Function)
-    Function(Function),
-    /// An [implementation](Impl)
-    Impl(Impl),
-    /// An [import](Use)
-    Use(Use),
-}
-
-/// A list of type variables to introduce
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct Generics {
-    pub vars: Vec<Sym>,
-}
-
-/// An ordered collection of [Items](Item)
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Module {
-    pub name: Sym,
-    pub file: Option<File>,
-}
-
-/// An alias to another [Ty]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Alias {
-    pub name: Sym,
-    pub from: Option<Box<Ty>>,
-}
-
-/// A compile-time constant
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Const {
-    pub name: Sym,
-    pub ty: Box<Ty>,
-    pub init: Box<Expr>,
-}
-
-/// A `static` variable
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Static {
-    pub mutable: Mutability,
-    pub name: Sym,
-    pub ty: Box<Ty>,
-    pub init: Box<Expr>,
-}
-
-/// Code, and the interface to that code
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Function {
-    pub name: Sym,
-    pub gens: Generics,
-    pub sign: TyFn,
-    pub bind: Pattern,
-    pub body: Option<Expr>,
-}
-
-/// A user-defined product type
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Struct {
-    pub name: Sym,
-    pub gens: Generics,
-    pub kind: StructKind,
-}
-
-/// Either a [Struct]'s [StructMember]s or tuple [Ty]pes, if present.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum StructKind {
-    Empty,
-    Tuple(Vec<Ty>),
-    Struct(Vec<StructMember>),
-}
-
-/// The [Visibility], [Sym], and [Ty]pe of a single [Struct] member
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct StructMember {
-    pub vis: Visibility,
-    pub name: Sym,
-    pub ty: Ty,
-}
-
-/// A user-defined sum type
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Enum {
-    pub name: Sym,
-    pub gens: Generics,
-    pub variants: Vec<Variant>,
-}
-
-/// A single [Enum] variant
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Variant {
-    pub name: Sym,
-    pub kind: StructKind,
-    pub body: Option<Box<Expr>>,
-}
-
-/// Sub-[items](Item) (associated functions, etc.) for a [Ty]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Impl {
-    pub gens: Generics,
-    pub target: ImplKind,
-    pub body: File,
-}
-
-// TODO: `impl` Trait for <Target> { }
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum ImplKind {
-    Type(Ty),
-    Trait { impl_trait: Path, for_type: Box<Ty> },
-}
-
-/// An import of nonlocal [Item]s
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Use {
-    pub absolute: bool,
-    pub tree: UseTree,
-}
-
-/// A tree of [Item] imports
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum UseTree {
-    Tree(Vec<UseTree>),
-    Path(PathPart, Box<UseTree>),
-    Alias(Sym, Sym),
-    Name(Sym),
-    Glob,
-}
-
-/// A type expression
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Ty {
-    pub span: Span,
-    pub kind: TyKind,
-    pub gens: Generics,
-}
-
-/// Information about a [Ty]pe expression
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum TyKind {
-    Never,
-    Infer,
-    Path(Path),
-    Array(TyArray),
-    Slice(TySlice),
-    Tuple(TyTuple),
-    Ref(TyRef),
-    Ptr(TyPtr),
-    Fn(TyFn),
-}
-
-/// An array of [`T`](Ty)
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct TyArray {
-    pub ty: Box<Ty>,
-    pub count: usize,
-}
-
-/// A [Ty]pe slice expression: `[T]`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct TySlice {
-    pub ty: Box<Ty>,
-}
-
-/// A tuple of [Ty]pes
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct TyTuple {
-    pub types: Vec<Ty>,
-}
-
-/// A [Ty]pe-reference expression as (number of `&`, [Path])
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct TyRef {
-    pub mutable: Mutability,
-    pub count: u16,
-    pub to: Box<Ty>,
-}
-
-/// A [Ty]pe-reference expression as (number of `&`, [Path])
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct TyPtr {
-    pub to: Box<Ty>,
-}
-
-/// The args and return value for a function pointer [Ty]pe
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct TyFn {
-    pub args: Box<Ty>,
-    pub rety: Box<Ty>,
-}
-
-/// A path to an [Item] in the [Module] tree
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct Path {
-    pub absolute: bool,
-    pub parts: Vec<PathPart>,
-}
-
-/// A single component of a [Path]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum PathPart {
-    SuperKw,
-    SelfTy,
-    Ident(Sym),
-}
-
-/// An abstract statement, and associated metadata
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Stmt {
-    pub span: Span,
-    pub kind: StmtKind,
-    pub semi: Semi,
-}
-
-/// Whether the [Stmt] is a [Let], [Item], or [Expr] statement
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum StmtKind {
-    Empty,
-    Item(Box<Item>),
-    Expr(Box<Expr>),
-}
-
-/// Whether or not a [Stmt] is followed by a semicolon
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Semi {
-    Terminated,
-    Unterminated,
-}
-
-/// An expression, the beating heart of the language
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Expr {
-    pub span: Span,
-    pub kind: ExprKind,
-}
-
-/// Any of the different [Expr]essions
-#[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
-pub enum ExprKind {
-    /// An empty expression: `(` `)`
-    #[default]
-    Empty,
-    /// A [Closure] expression: `|` [`Expr`] `|` ( -> [`Ty`])? [`Expr`]
-    Closure(Closure),
-    /// A [Tuple] expression: `(` [`Expr`] (`,` [`Expr`])+ `)`
-    Tuple(Tuple),
-    /// A [Struct creation](Structor) expression: [Path] `{` ([Fielder] `,`)* [Fielder]? `}`
-    Structor(Structor),
-    /// An [Array] literal: `[` [`Expr`] (`,` [`Expr`])\* `]`
-    Array(Array),
-    /// An Array literal constructed with [repeat syntax](ArrayRep)
-    /// `[` [Expr] `;` [Literal] `]`
-    ArrayRep(ArrayRep),
-    /// An address-of expression: `&` `mut`? [`Expr`]
-    AddrOf(AddrOf),
-    /// A backtick-quoted expression
-    Quote(Quote),
-    /// A [Literal]: 0x42, 1e123, 2.4, "Hello"
-    Literal(Literal),
-    /// A [Grouping](Group) expression `(` [`Expr`] `)`
-    Group(Group),
-    /// A [Block] expression: `{` [`Stmt`]\* [`Expr`]? `}`
-    Block(Block),
-
-    /// An [Assign]ment expression: [`Expr`] (`=` [`Expr`])\+
-    Assign(Assign),
-    /// A [Modify]-assignment expression: [`Expr`] ([`ModifyKind`] [`Expr`])\+
-    Modify(Modify),
-    /// A [Binary] expression: [`Expr`] ([`BinaryKind`] [`Expr`])\+
-    Binary(Binary),
-    /// A [Unary] expression: [`UnaryKind`]\* [`Expr`]
-    Unary(Unary),
-    /// A [Member] access expression: [`Expr`] [`MemberKind`]\*
-    Member(Member),
-    /// An Array [Index] expression: a[10, 20, 30]
-    Index(Index),
-    /// A [Cast] expression: [`Expr`] `as` [`Ty`]
-    Cast(Cast),
-    /// A [path expression](Path): `::`? [PathPart] (`::` [PathPart])*
-    Path(Path),
-    /// A local bind instruction, `let` [`Sym`] `=` [`Expr`]
-    Let(Let),
-    /// A [Match] expression: `match` [Expr] `{` ([MatchArm] `,`)* [MatchArm]? `}`
-    Match(Match),
-    /// A [While] expression: `while` [`Expr`] [`Block`] [`Else`]?
-    While(While),
-    /// An [If] expression: `if` [`Expr`] [`Block`] [`Else`]?
-    If(If),
-    /// A [For] expression: `for` [`Pattern`] `in` [`Expr`] [`Block`] [`Else`]?
-    For(For),
-    /// A [Break] expression: `break` [`Expr`]?
-    Break(Break),
-    /// A [Return] expression `return` [`Expr`]?
-    Return(Return),
-    /// A continue expression: `continue`
-    Continue,
-}
-
-/// A Closure [expression](Expr): `|` [`Expr`] `|` ( -> [`Ty`])? [`Expr`]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Closure {
-    pub arg: Box<Pattern>,
-    pub body: Box<Expr>,
-}
-
-/// A [Tuple] expression: `(` [`Expr`] (`,` [`Expr`])+ `)`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Tuple {
-    pub exprs: Vec<Expr>,
-}
-
-/// A [Struct creation](Structor) expression: [Path] `{` ([Fielder] `,`)* [Fielder]? `}`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Structor {
-    pub to: Path,
-    pub init: Vec<Fielder>,
-}
-
-/// A [Struct field initializer] expression: [Sym] (`=` [Expr])?
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Fielder {
-    pub name: Sym,
-    pub init: Option<Box<Expr>>,
-}
-
-/// An [Array] literal: `[` [`Expr`] (`,` [`Expr`])\* `]`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Array {
-    pub values: Vec<Expr>,
-}
-
-/// An Array literal constructed with [repeat syntax](ArrayRep)
-/// `[` [Expr] `;` [Literal] `]`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ArrayRep {
-    pub value: Box<Expr>,
-    pub repeat: Box<Expr>,
-}
-
-/// An address-of expression: `&` `mut`? [`Expr`]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct AddrOf {
-    pub mutable: Mutability,
-    pub expr: Box<Expr>,
-}
-
-/// A cast expression: [`Expr`] `as` [`Ty`]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Cast {
-    pub head: Box<Expr>,
-    pub ty: Ty,
-}
-
-/// A backtick-quoted subexpression-literal
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Quote {
-    pub quote: Box<Expr>,
-}
-
-/// A [Literal]: 0x42, 1e123, 2.4, "Hello"
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Literal {
-    Bool(bool),
-    Char(char),
-    Int(u128),
-    Float(u64),
-    String(String),
-}
-
-/// A [Grouping](Group) expression `(` [`Expr`] `)`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Group {
-    pub expr: Box<Expr>,
-}
-
-/// A [Block] expression: `{` [`Stmt`]\* [`Expr`]? `}`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Block {
-    pub stmts: Vec<Stmt>,
-}
-
-/// An [Assign]ment expression: [`Expr`] ([`ModifyKind`] [`Expr`])\+
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Assign {
-    pub parts: Box<(Expr, Expr)>,
-}
-
-/// A [Modify]-assignment expression: [`Expr`] ([`ModifyKind`] [`Expr`])\+
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Modify {
-    pub kind: ModifyKind,
-    pub parts: Box<(Expr, Expr)>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ModifyKind {
-    And,
-    Or,
-    Xor,
-    Shl,
-    Shr,
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
-}
-
-/// A [Binary] expression: [`Expr`] ([`BinaryKind`] [`Expr`])\+
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Binary {
-    pub kind: BinaryKind,
-    pub parts: Box<(Expr, Expr)>,
-}
-
-/// A [Binary] operator
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum BinaryKind {
-    Lt,
-    LtEq,
-    Equal,
-    NotEq,
-    GtEq,
-    Gt,
-    RangeExc,
-    RangeInc,
-    LogAnd,
-    LogOr,
-    LogXor,
-    BitAnd,
-    BitOr,
-    BitXor,
-    Shl,
-    Shr,
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
+    /// `Expr '?'`
+    Try,
+    /// `Expr [ Expr,* ]`
+    Index,
+    /// `Expr ( Expr,* )`
     Call,
-}
 
-/// A [Unary] expression: [`UnaryKind`]\* [`Expr`]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Unary {
-    pub kind: UnaryKind,
-    pub tail: Box<Expr>,
-}
-
-/// A [Unary] operator
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum UnaryKind {
-    Deref,
-    Neg,
-    Not,
-    RangeInc,
-    RangeExc,
-    /// A Loop expression: `loop` [`Block`]
+    /// `pub Expr`
+    Pub,
+    /// `const Expr`
+    Const,
+    /// `static Expr`
+    Static,
+    /// `loop Expr`
     Loop,
-    /// Unused
-    At,
-    /// Unused
-    Tilde,
+    /// `match Expr { <Bind(Match, ..)>,* }`
+    Match,
+    /// `if Expr Expr (else Expr)?`
+    If,
+    /// `while Expr Expr (else Expr)?`
+    While,
+    /// `break Expr`
+    Break,
+    /// `return Expr`
+    Return,
+    /// `continue`
+    Continue,
+
+    /// `Expr . Expr`
+    Dot,
+
+    /// `Expr? ..Expr`
+    RangeEx,
+    /// `Expr? ..=Expr`
+    RangeIn,
+    /// `-Expr`
+    Neg,
+    /// `!Expr`
+    Not,
+    /// `!!Expr`
+    Identity,
+    /// `&Expr`
+    Refer,
+    /// `*Expr`
+    Deref,
+
+    /// `Expr * Expr`
+    Mul,
+    /// `Expr / Expr`
+    Div,
+    /// `Expr % Expr`
+    Rem,
+
+    /// `Expr + Expr`
+    Add,
+    /// `Expr - Expr`
+    Sub,
+
+    /// `Expr << Expr`
+    Shl,
+    /// `Expr >> Expr`
+    Shr,
+
+    /// `Expr & Expr`
+    And,
+    /// `Expr ^ Expr`
+    Xor,
+    /// `Expr | Expr`
+    Or,
+
+    /// `Expr < Expr`
+    Lt,
+    /// `Expr <= Expr`
+    Leq,
+    /// `Expr == Expr`
+    Eq,
+    /// `Expr != Expr`
+    Neq,
+    /// `Expr >= Expr`
+    Geq,
+    /// `Expr > Expr`
+    Gt,
+
+    /// `Expr && Expr`
+    LogAnd,
+    /// `Expr ^^ Expr`
+    LogXor,
+    /// `Expr || Expr`
+    LogOr,
+
+    /// `Expr = Expr`
+    Set,
+    /// `Expr *= Expr`
+    MulSet,
+    /// `Expr /= Expr`
+    DivSet,
+    /// `Expr %= Expr`
+    RemSet,
+    /// `Expr += Expr`
+    AddSet,
+    /// `Expr -= Expr`
+    SubSet,
+    /// `Expr <<= Expr`
+    ShlSet,
+    /// `Expr >>= Expr`
+    ShrSet,
+    /// `Expr &= Expr`
+    AndSet,
+    /// `Expr ^= Expr`
+    XorSet,
+    /// `Expr |= Expr`
+    OrSet,
 }
 
-/// A [Member] access expression: [`Expr`] [`MemberKind`]\*
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Member {
-    pub head: Box<Expr>,
-    pub kind: MemberKind,
+impl<A: AstTypes> Expr<A> {
+    pub const fn at(self, annotation: A::Annotation) -> At<Expr<A>, A> {
+        At(self, annotation)
+    }
+
+    pub fn and_do(self, annotation: A::Annotation, other: At<Expr<A>, A>) -> Self {
+        let Self::Op(Op::Do, mut exprs) = self else {
+            return Self::Op(Op::Do, vec![self.at(annotation), other]);
+        };
+        let At(Self::Op(Op::Do, mut other), _) = other else {
+            exprs.push(other);
+            return Self::Op(Op::Do, exprs);
+        };
+        exprs.append(&mut other);
+        Self::Op(Op::Do, exprs)
+    }
+
+    pub fn to_tuple(self, annotation: A::Annotation) -> Self {
+        match self {
+            Self::Op(Op::Tuple, _) => self,
+            _ => Self::Op(Op::Tuple, vec![self.at(annotation)]),
+        }
+    }
+
+    pub const fn is_place(&self) -> bool {
+        matches!(
+            self,
+            Self::Id(_) | Self::Op(Op::Index | Op::Dot | Op::Deref, _)
+        )
+    }
+
+    pub const fn is_value(&self) -> bool {
+        !self.is_place()
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub const fn as_slice(&self) -> Option<(Op, &[At<Expr<A>, A>])> {
+        match self {
+            Expr::Op(op, args) => Some((*op, args.as_slice())),
+            _ => None,
+        }
+    }
 }
 
-/// The kind of [Member] access
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum MemberKind {
-    Call(Sym, Tuple),
-    Struct(Sym),
-    Tuple(Literal),
+/// A pattern binding
+/// ```ignore
+/// let    Pat (= Expr (else Expr)?)?
+/// type   Pat (= Expr)?
+/// fn     Pat =? Expr
+/// mod    Pat =? Expr
+/// impl   Pat =? Expr
+/// struct Pat
+/// enum   Pat
+/// for    Pat in Expr Expr (else Expr)?
+/// Pat => Expr // in match
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Bind<A: AstTypes = DefaultTypes>(
+    pub BindOp,
+    pub Vec<A::Path>,
+    pub Pat<A>,
+    pub Vec<At<Expr<A>, A>>,
+);
+
+/// The binding operation used by a [Bind].
+///
+/// See [Bind] for their syntactic representations
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BindOp {
+    /// A `let Pat (= Expr (else Expr)?)?` binding
+    Let,
+    /// A type-alias binding
+    Type,
+    /// A `fn Pat Expr` binding
+    Fn,
+    /// A `mod Pat Expr` binding
+    Mod,
+    /// An `impl Pat Expr` binding
+    Impl,
+    /// A struct definition
+    Struct,
+    /// An enum definition
+    Enum,
+    /// A `for Pat in Expr Expr (else Expr)?` binding
+    For,
+    /// A `Pat => Expr` binding
+    Match,
 }
 
-/// A repeated [Index] expression: a[10, 20, 30][40, 50, 60]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Index {
-    pub head: Box<Expr>,
-    pub indices: Vec<Expr>,
+/// Binding patterns for each kind of matchable value.
+///
+/// This covers both bindings and type annotations in [Bind] expressions.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Pat<A: AstTypes = DefaultTypes> {
+    /// Matches anything without binding
+    Ignore,
+    /// Matches nothing, ever
+    Never,
+    /// Matches nothing; used for macro substitution
+    MetId(A::MacroId),
+    /// Matches anything, and binds it to a name
+    Name(A::Symbol),
+    /// Matches a value by equality comparison
+    Value(Box<At<Expr<A>, A>>),
+    /// Matches a compound pattern
+    Op(PatOp, Vec<Pat<A>>),
 }
 
-/// A local variable declaration [Stmt]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Let {
-    pub mutable: Mutability,
-    pub name: Pattern,
-    pub ty: Option<Box<Ty>>,
-    pub init: Option<Box<Expr>>,
+/// Operators on lists of patterns
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PatOp {
+    /// Changes the visibility mode to "public"
+    Pub,
+    /// Changes the binding mode to "mutable"
+    Mut,
+    /// Matches the dereference of a pointer (`&pat`)
+    Ref,
+    /// Matches the dereference of a raw pointer (`*pat`)
+    Ptr,
+    /// Matches a partial decomposition (`..rest`) or upper-bounded range (`..100`)
+    Rest,
+    /// Matches an exclusive bounded range (`0..100`)
+    RangeEx,
+    /// Matches an inclusive bounded range (`0..=100`)
+    RangeIn,
+    /// Matches the elements of a record or struct { a, b, c }
+    Record,
+    /// Matches the elements of a tuple ( a, b, c )
+    Tuple,
+    /// Matches the elements of a slice or array [ a, b, c ]
+    Slice,
+    /// Matches a constant-size slice with repeating elements
+    ArRep,
+    /// Matches a type annotation or struct member
+    Typed,
+    /// Matches a prefix-type-annotated structure
+    TypePrefixed,
+    /// Matches a generic specialization annotation
+    Generic,
+    /// Changes the binding mode to "function-body"
+    Fn,
+    /// Matches one of a list of alternatives
+    Alt,
 }
 
-/// A `match` expression: `match` `{` ([MatchArm] `,`)* [MatchArm]? `}`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Match {
-    pub scrutinee: Box<Expr>,
-    pub arms: Vec<MatchArm>,
+impl<A: AstTypes> Pat<A> {
+    pub fn to_tuple(self) -> Self {
+        match self {
+            Self::Op(PatOp::Tuple, _) => self,
+            _ => Self::Op(PatOp::Tuple, vec![self]),
+        }
+    }
 }
 
-/// A single arm of a [Match] expression: [`Pattern`] `=>` [`Expr`]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct MatchArm(pub Pattern, pub Expr);
-
-/// A [Pattern] meta-expression (any [`ExprKind`] that fits pattern rules)
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Pattern {
-    Name(Sym),
-    Path(Path),
-    Literal(Literal),
-    Rest(Option<Box<Pattern>>),
-    Ref(Mutability, Box<Pattern>),
-    RangeExc(Box<Pattern>, Box<Pattern>),
-    RangeInc(Box<Pattern>, Box<Pattern>),
-    Tuple(Vec<Pattern>),
-    Array(Vec<Pattern>),
-    Struct(Path, Vec<(Sym, Option<Pattern>)>),
-    TupleStruct(Path, Vec<Pattern>),
+/// A compound import declaration
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Use<A: AstTypes = DefaultTypes> {
+    /// "*"
+    Glob,
+    /// Identifier
+    Name(A::Symbol),
+    /// Identifier as Identifier
+    Alias(A::Symbol, A::Symbol),
+    /// Identifier :: Use
+    Path(A::Symbol, Box<Use<A>>),
+    /// { Use, * }
+    Tree(Vec<Use<A>>),
 }
 
-/// A [While] expression: `while` [`Expr`] [`Block`] [`Else`]?
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct While {
-    pub cond: Box<Expr>,
-    pub pass: Box<Block>,
-    pub fail: Else,
-}
+/// A make (constructor) expression
+/// ```ignore
+/// Expr { (Ident (: Expr)?),* }
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Make<A: AstTypes = DefaultTypes>(pub At<Expr<A>, A>, pub Vec<MakeArm<A>>);
 
-/// An [If] expression: `if` [`Expr`] [`Block`] [`Else`]?
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct If {
-    pub cond: Box<Expr>,
-    pub pass: Box<Block>,
-    pub fail: Else,
-}
-
-/// A [For] expression: `for` Pattern `in` [`Expr`] [`Block`] [`Else`]?
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct For {
-    pub bind: Pattern,
-    pub cond: Box<Expr>,
-    pub pass: Box<Block>,
-    pub fail: Else,
-}
-
-/// The (optional) `else` clause of a [While], [If], or [For] expression
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Else {
-    pub body: Option<Box<Expr>>,
-}
-
-/// A [Break] expression: `break` [`Expr`]?
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Break {
-    pub body: Option<Box<Expr>>,
-}
-
-/// A [Return] expression `return` [`Expr`]?
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Return {
-    pub body: Option<Box<Expr>>,
-}
+/// A single "arm" of a make expression
+/// ```text
+/// Identifier (':' Expr)?
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MakeArm<A: AstTypes = DefaultTypes>(pub A::Symbol, pub Option<At<Expr<A>, A>>);

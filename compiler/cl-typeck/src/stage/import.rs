@@ -5,7 +5,7 @@ use crate::{
     source::Source,
     table::{NodeKind, Table},
 };
-use cl_ast::{PathPart, Sym, Use, UseTree};
+use cl_ast::{Use, types::Symbol};
 use core::slice;
 use std::{collections::HashSet, mem};
 
@@ -45,39 +45,30 @@ fn import_one<'a>(table: &mut Table<'a>, item: Handle, seen: &mut Seen) -> UseRe
     let &Source::Use(tree) = code else {
         Err(Error::BadSource(*code))?
     };
-    let Use { absolute, tree } = tree;
 
-    import_tree(
-        table,
-        if !absolute { dst } else { table.root() },
-        dst,
-        tree,
-        seen,
-    )
+    import_tree(table, dst, dst, tree, seen)
 }
 
 fn import_tree<'a>(
     table: &mut Table<'a>,
     src: Handle,
     dst: Handle,
-    tree: &UseTree,
+    tree: &Use,
     seen: &mut Seen,
 ) -> UseResult<'a, ()> {
     match tree {
-        UseTree::Tree(trees) => trees
+        Use::Tree(trees) => trees
             .iter()
             .try_for_each(|tree| import_tree(table, src, dst, tree, seen)),
-        UseTree::Path(part, rest) => {
+        Use::Path(part, rest) => {
             let source = table
                 .nav(src, slice::from_ref(part))
                 .ok_or(Error::NotFound(src, *part))?;
             import_tree(table, source, dst, rest, seen)
         }
-        UseTree::Alias(src_name, dst_name) => {
-            import_name(table, src, src_name, dst, dst_name, seen)
-        }
-        UseTree::Name(src_name) => import_name(table, src, src_name, dst, src_name, seen),
-        UseTree::Glob => import_glob(table, src, dst, seen),
+        Use::Alias(src_name, dst_name) => import_name(table, src, src_name, dst, dst_name, seen),
+        Use::Name(src_name) => import_name(table, src, src_name, dst, src_name, seen),
+        Use::Glob => import_glob(table, src, dst, seen),
     }
 }
 
@@ -109,16 +100,16 @@ fn import_glob<'a>(
 fn import_name<'a>(
     table: &mut Table<'a>,
     src: Handle,
-    src_name: &Sym,
+    src_name: &Symbol,
     dst: Handle,
-    dst_name: &Sym,
+    dst_name: &Symbol,
     seen: &mut Seen,
 ) -> UseResult<'a, ()> {
     import_deps(table, src, seen)?;
     match table.get_by_sym(src, src_name) {
         // TODO: check for new imports clobbering existing imports
         Some(src_id) => table.add_import(dst, *dst_name, src_id),
-        None => Err(Error::NotFound(src, PathPart::Ident(*src_name)))?,
+        None => Err(Error::NotFound(src, *src_name))?,
     };
     Ok(())
 }
@@ -142,7 +133,7 @@ pub enum Error<'a> {
     NoParents,
     NoSource,
     BadSource(Source<'a>),
-    NotFound(Handle, PathPart),
+    NotFound(Handle, Symbol),
 }
 
 impl std::fmt::Display for Error<'_> {

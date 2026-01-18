@@ -52,7 +52,7 @@ impl super::Callable for Builtin {
         (self.func)(interpreter, args)
     }
 
-    fn name(&self) -> cl_ast::Sym {
+    fn name(&self) -> cl_ast::types::Symbol {
         self.name.into()
     }
 }

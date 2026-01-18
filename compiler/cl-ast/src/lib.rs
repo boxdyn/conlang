@@ -1,23 +1,20 @@
 //! # The Abstract Syntax Tree
 //! Contains definitions of Conlang AST Nodes.
 //!
+//! All AST nodes are parameterized by an implementation of the
+//! [AstTypes] trait. Implementers of the [AstTypes] trait are
+//! responsible for
+//!
 //! # Notable nodes
-//! - [Item] and [ItemKind]: Top-level constructs
-//! - [Stmt] and [StmtKind]: Statements
-//! - [Expr] and [ExprKind]: Expressions
-//!   - [Assign], [Binary], and [Unary] expressions
-//!   - [ModifyKind], [BinaryKind], and [UnaryKind] operators
-//! - [Ty] and [TyKind]: Type qualifiers
-//! - [Pattern]: Pattern matching operators
-//! - [Path]: Path expressions
+//! - [Expr] Expressions
+//!   - [Bind], [Use], and [Make] expressions
+//!   - [Op] operators
+//! - [Pat]: Pattern matching operators
 #![warn(clippy::all)]
 #![feature(decl_macro)]
 
 pub use ast::*;
-pub use ast_impl::weight_of::WeightOf;
 
 pub mod ast;
-pub mod ast_impl;
-pub mod ast_visitor;
 pub mod desugar;
-pub mod format;
+pub mod fmt;
