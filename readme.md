@@ -54,7 +54,7 @@ more flexible implementations.
 
 ## Development Goals
 ### Immediate Goals:
-- [ ] Remove statements as a syntactic position
+- [x] Remove statements as a syntactic position
   - [ ] There can be only one (expression per translation unit)
   - [ ] Update the [Grammatical grammar](/grammar.ebnf) to match expectations
 - [ ] Carefully evaluate all situations where a value can be returned, and figure out what value
