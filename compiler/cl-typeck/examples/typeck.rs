@@ -62,12 +62,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn main_menu(prj: &mut Table) -> Result<(), RlError> {
     banner();
-    read_and(C_MAIN, "mu>", "? >", |line| {
+    read_and(C_MAIN, "mu> ", "? > ", |line| {
         for line in line.trim().split_ascii_whitespace() {
             match line {
                 "c" | "code" => enter_code(prj)?,
                 "clear" => clear()?,
-                "dump" => dump(prj)?,
+                "dump" => dump_to(prj, &mut std::io::stdout().lock())?,
+                "dump-file" => dump(prj)?,
                 "d" | "desugar" => live_desugar()?,
                 "e" | "exit" => return Ok(Response::Break),
                 "f" | "file" => import_files(prj)?,
@@ -76,7 +77,7 @@ fn main_menu(prj: &mut Table) -> Result<(), RlError> {
                 "q" | "query" => query_type_expression(prj)?,
                 "r" | "resolve" => resolve_all(prj)?,
                 "s" | "strings" => print_strings(),
-                "a" | "all" => infer_all(prj)?,
+                // "a" | "all" => infer_all(prj)?,
                 "t" | "test" => infer_expression(prj)?,
                 "h" | "help" | "" => {
                     println!(
@@ -102,7 +103,7 @@ fn main_menu(prj: &mut Table) -> Result<(), RlError> {
 }
 
 fn enter_code(prj: &mut Table) -> Result<(), RlError> {
-    read_and(C_CODE, "cl>", "? >", |line| {
+    read_and(C_CODE, "cl> ", "? > ", |line| {
         if line.trim().is_empty() {
             return Ok(Response::Break);
         }
@@ -116,7 +117,7 @@ fn enter_code(prj: &mut Table) -> Result<(), RlError> {
 }
 
 fn live_desugar() -> Result<(), RlError> {
-    read_and(C_RESV, "se>", "? >", |line| {
+    read_and(C_RESV, "se> ", "? > ", |line| {
         let code = Parser::new(Lexer::new("".into(), line)).parse::<Expr>(0)?;
         println!("Raw, as parsed:\n{C_LISTING}{code}\x1b[0m");
 
@@ -141,16 +142,16 @@ fn print_strings() {
 }
 
 fn query_type_expression(prj: &mut Table) -> Result<(), RlError> {
-    read_and(C_RESV, "ty>", "? >", |line| {
+    read_and(C_RESV, "ty> ", "? > ", |line| {
         if line.trim().is_empty() {
             return Ok(Response::Break);
         }
         // A query is comprised of a Ty and a relative Path
         let mut p = Parser::new(Lexer::new("".into(), line));
         let ty: cl_ast::Pat = p.parse(cl_parser::pat::Prec::Alt)?;
-        let path: cl_ast::types::Path = p.parse(()).unwrap_or_else(|_| Path::from(""));
+        // let path: cl_ast::types::Path = p.parse(()).unwrap_or_else(|_| Path::from(""));
         let id = ty.evaluate(prj, prj.root())?;
-        let id = path.evaluate(prj, id)?;
+        // let id = path.evaluate(prj, id)?;
         pretty_handle(id.to_entry(prj))?;
         Ok(Response::Accept)
     })
@@ -158,7 +159,7 @@ fn query_type_expression(prj: &mut Table) -> Result<(), RlError> {
 
 #[allow(dead_code)]
 fn infer_expression(prj: &mut Table) -> Result<(), RlError> {
-    read_and(C_RESV, "ex>", "!?>", |line| {
+    read_and(C_RESV, "ex> ", "!?> ", |line| {
         if line.trim().is_empty() {
             return Ok(Response::Break);
         }
@@ -179,7 +180,8 @@ fn infer_expression(prj: &mut Table) -> Result<(), RlError> {
                 e => Err(e)?,
             },
         };
-        eprintln!("--> {}", prj.entry(ty));
+        // eprintln!("--> {}", prj.entry(ty));
+        pretty_handle(ty.to_entry(prj))?;
         Ok(Response::Accept)
     })
 }
@@ -188,7 +190,7 @@ fn get_by_id(prj: &mut Table) -> Result<(), RlError> {
     use cl_parser::Parse;
     use cl_structures::index_map::MapIndex;
     use cl_typeck::handle::Handle;
-    read_and(C_BYID, "id>", "? >", |line| {
+    read_and(C_BYID, "id> ", "? > ", |line| {
         if line.trim().is_empty() {
             return Ok(Response::Break);
         }
@@ -209,20 +211,18 @@ fn get_by_id(prj: &mut Table) -> Result<(), RlError> {
         }
         println!();
 
-        let Some(entry) = handle.nav(&path.parts) else {
-            Err("No results.")?
-        };
-
-        pretty_handle(entry)?;
+        if let Some(entry) = handle.nav(&path.parts) {
+            pretty_handle(entry)?;
+        } else {
+            pretty_handle(handle)?;
+            // Err("No results.")?
+        }
 
         Ok(Response::Accept)
     })
 }
 
 fn resolve_all(table: &mut Table) -> Result<(), Box<dyn Error>> {
-    for (id, error) in import(table) {
-        eprintln!("{error} in {} ({id})", id.to_entry(table))
-    }
     for handle in table.handle_iter() {
         if let Err(error) = handle.to_entry_mut(table).categorize() {
             eprintln!("{error}");
@@ -237,23 +237,23 @@ fn resolve_all(table: &mut Table) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn infer_all(table: &mut Table) -> Result<(), Box<dyn Error>> {
-    for (id, error) in InferenceEngine::new(table, table.root()).infer_all() {
-        match error {
-            InferenceError::Mismatch(a, b) => {
-                eprint!("Mismatched types: {}, {}", table.entry(a), table.entry(b));
-            }
-            InferenceError::Recursive(a, b) => {
-                eprint!("Recursive types: {}, {}", table.entry(a), table.entry(b));
-            }
-            e => eprint!("{e}"),
-        }
-        eprintln!(" in {id}\n({})\n", id.to_entry(table).source().unwrap())
-    }
+// fn infer_all(table: &mut Table) -> Result<(), Box<dyn Error>> {
+//     for (id, error) in InferenceEngine::new(table, table.root()).infer_all() {
+//         match error {
+//             InferenceError::Mismatch(a, b) => {
+//                 eprint!("Mismatched types: {}, {}", table.entry(a), table.entry(b));
+//             }
+//             InferenceError::Recursive(a, b) => {
+//                 eprint!("Recursive types: {}, {}", table.entry(a), table.entry(b));
+//             }
+//             e => eprint!("{e}"),
+//         }
+//         eprintln!(" in {id}\n({})\n", id.to_entry(table).source().unwrap())
+//     }
 
-    println!("...Inferred!");
-    Ok(())
-}
+//     println!("...Inferred!");
+//     Ok(())
+// }
 
 fn list_types(table: &mut Table) {
     for handle in table.debug_entry_iter() {
@@ -291,7 +291,7 @@ fn import_file(table: &mut Table, path: impl AsRef<std::path::Path>) -> Result<(
 }
 
 fn import_files(table: &mut Table) -> Result<(), RlError> {
-    read_and(C_RESV, "fi>", "? >", |line| {
+    read_and(C_RESV, "fi> ", "? > ", |line| {
         let line = line.trim();
         if line.is_empty() {
             return Ok(Response::Break);
@@ -340,14 +340,6 @@ fn pretty_handle(entry: Entry) -> Result<(), std::io::Error> {
         )?;
     }
 
-    if let Some(span) = entry.span() {
-        writeln!(
-            out,
-            "- {C_LISTING}Span:\x1b[0m ({}, {})",
-            span.head, span.tail
-        )?;
-    }
-
     match entry.meta() {
         Some(meta) if !meta.is_empty() => {
             writeln!(out, "- {C_LISTING}Meta:\x1b[0m")?;
@@ -369,14 +361,17 @@ fn pretty_handle(entry: Entry) -> Result<(), std::io::Error> {
         }
     }
 
-    if let Some(imports) = entry.imports() {
-        writeln!(out, "- {C_LISTING}Imports:\x1b[0m")?;
-        for (name, child) in imports {
-            writeln!(
-                out,
-                "  - {C_LISTING}{name}\x1b[0m ({child}): {}",
-                entry.with_id(*child)
-            )?
+    if let Some(lazy_imports) = entry.lazy_imports() {
+        writeln!(out, "- {C_LISTING}Lazy imports:\x1b[0m")?;
+        for (name, child) in lazy_imports {
+            writeln!(out, "  - {C_LISTING}{name}\x1b[0m: {child}",)?
+        }
+    }
+
+    if let Some(glob_imports) = entry.glob_imports() {
+        writeln!(out, "- {C_LISTING}Glob imports:\x1b[0m")?;
+        for path in glob_imports {
+            writeln!(out, "  - {C_LISTING}{path}\x1b[0m",)?
         }
     }
 
@@ -398,14 +393,13 @@ fn inline_modules(code: Expr, path: impl AsRef<path::Path>) -> Expr {
     }
 }
 
-fn dump(table: &Table) -> Result<(), Box<dyn Error>> {
+fn dump_to(table: &Table, output: &mut impl std::io::Write) -> Result<(), Box<dyn Error>> {
     fn dump_recursive(
         name: cl_ast::types::Symbol,
         entry: Entry,
         depth: usize,
-        to_file: &mut std::fs::File,
+        to_file: &mut impl std::io::Write,
     ) -> std::io::Result<()> {
-        use std::io::Write;
         write!(to_file, "{:w$}{name}: {entry}", "", w = depth)?;
         if let Some(children) = entry.children() {
             writeln!(to_file, " {{")?;
@@ -416,9 +410,13 @@ fn dump(table: &Table) -> Result<(), Box<dyn Error>> {
         }
         writeln!(to_file)
     }
+    dump_recursive("root".into(), table.root_entry(), 0, output)?;
+    Ok(())
+}
 
+fn dump(table: &Table) -> Result<(), Box<dyn Error>> {
     let mut file = std::fs::File::create("typeck-table.ron")?;
-    dump_recursive("root".into(), table.root_entry(), 0, &mut file)?;
+    dump_to(table, &mut file)?;
     Ok(())
 }
 

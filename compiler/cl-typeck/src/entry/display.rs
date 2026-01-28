@@ -10,7 +10,7 @@ fn write_name_or(h: Entry, f: &mut impl Write) -> fmt::Result {
     }
 }
 
-impl fmt::Display for Entry<'_, '_> {
+impl fmt::Display for Entry<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Some(&kind) = self.kind() else {
             return write!(f, "<invalid type: {}>", self.id);

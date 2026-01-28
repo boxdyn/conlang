@@ -1,21 +1,25 @@
 //! Holds the [Source] of a definition in the AST
 
-use cl_ast::{ast::*, types::Symbol};
-use std::fmt;
+use cl_ast::{
+    ast::*,
+    types::Symbol,
+    visit::{Visit, Walk},
+};
+use std::{convert::Infallible, fmt};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Source<'a> {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Source {
     Root,
-    Binding(&'a Bind),
-    Use(&'a Use),
-    Ty(&'a Pat),
+    Binding(Bind),
+    Use(Use),
+    Ty(Pat),
 }
 
-impl Source<'_> {
+impl Source {
     pub fn name(&self) -> Option<Symbol> {
         match self {
             Source::Root => None,
-            Source::Binding(_) => todo!("Get name from binding"),
+            Source::Binding(bind) => NameFinder::get(bind),
             Source::Use(_) | Source::Ty(_) => None,
         }
     }
@@ -52,7 +56,35 @@ impl Source<'_> {
     }
 }
 
-impl fmt::Display for Source<'_> {
+#[derive(Clone, Debug, Default)]
+pub struct NameFinder {
+    name: Option<Symbol>,
+}
+
+impl NameFinder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn get<'a, T: Walk<'a, DefaultTypes>>(walker: &'a T) -> Option<Symbol> {
+        let mut finder = Self::new();
+        finder.visit(walker);
+        finder.name
+    }
+}
+
+impl<'a> Visit<'a, DefaultTypes> for NameFinder {
+    type Error = Infallible;
+
+    fn visit_symbol(&mut self, name: &'a Symbol) -> Result<(), Self::Error> {
+        if self.name.is_none() {
+            self.name = Some(*name);
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for Source {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Root => "🌳 root 🌳".fmt(f),

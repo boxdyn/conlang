@@ -28,33 +28,31 @@
 use crate::{
     entry::{Entry, EntryMut},
     handle::Handle,
-    source::Source,
     type_kind::TypeKind,
 };
-use cl_ast::{Expr, types::Symbol as Sym};
-use cl_structures::{index_map::IndexMap, intern::interned::Interned, span::Span};
+use cl_ast::{
+    Expr,
+    types::{Path, Symbol as Sym},
+};
+use cl_structures::{index_map::IndexMap, intern::interned::Interned};
 use std::collections::HashMap;
-
-// TODO: Cycle detection external to this module
 
 /// The table is a monolithic data structure representing everything the type checker
 /// knows about a program.
 ///
 /// See [module documentation](self).
 #[derive(Debug)]
-pub struct Table<'a> {
+pub struct Table {
     root: Handle,
     /// This is the source of truth for handles
     kinds: IndexMap<Handle, NodeKind>,
     parents: IndexMap<Handle, Handle>,
     pub(crate) children: HashMap<Handle, HashMap<Sym, Handle>>,
-    pub(crate) imports: HashMap<Handle, HashMap<Sym, Handle>>,
-    pub(crate) use_items: HashMap<Handle, Vec<Handle>>,
-    bodies: HashMap<Handle, &'a Expr>,
+    pub(crate) lazy_imports: HashMap<Handle, HashMap<Sym, Path>>,
+    pub(crate) glob_imports: HashMap<Handle, Vec<Path>>,
+    pub(crate) names: HashMap<Handle, Sym>,
     types: HashMap<Handle, TypeKind>,
-    spans: HashMap<Handle, Span>,
-    metas: HashMap<Handle, &'a [Expr]>,
-    sources: HashMap<Handle, Source<'a>>,
+    metas: HashMap<Handle, Vec<Expr>>,
     impl_targets: HashMap<Handle, Handle>,
     anon_types: HashMap<TypeKind, Handle>,
     lang_items: HashMap<&'static str, Handle>,
@@ -62,10 +60,9 @@ pub struct Table<'a> {
     // --- Queues for algorithms ---
     pub(crate) unchecked: Vec<Handle>,
     pub(crate) impls: Vec<Handle>,
-    pub(crate) uses: Vec<Handle>,
 }
 
-impl<'a> Table<'a> {
+impl Table {
     pub fn new() -> Self {
         let mut kinds = IndexMap::new();
         let mut parents = IndexMap::new();
@@ -77,62 +74,57 @@ impl<'a> Table<'a> {
             kinds,
             parents,
             children: HashMap::new(),
-            imports: HashMap::new(),
-            use_items: HashMap::new(),
-            bodies: HashMap::new(),
+            lazy_imports: HashMap::new(),
+            glob_imports: HashMap::new(),
+            names: HashMap::new(),
             types: HashMap::new(),
-            spans: HashMap::new(),
             metas: HashMap::new(),
-            sources: HashMap::new(),
             impl_targets: HashMap::new(),
             anon_types: HashMap::new(),
             lang_items: HashMap::new(),
             unchecked: Vec::new(),
             impls: Vec::new(),
-            uses: Vec::new(),
         }
     }
 
-    pub fn entry(&self, handle: Handle) -> Entry<'_, 'a> {
+    /// Gets the [Entry] for a [Handle] in the [Table]
+    pub fn entry(&self, handle: Handle) -> Entry<'_> {
         handle.to_entry(self)
     }
 
-    pub fn entry_mut(&mut self, handle: Handle) -> EntryMut<'_, 'a> {
+    /// Gets the [EntryMut] for a [Handle] in the [Table]
+    pub fn entry_mut(&mut self, handle: Handle) -> EntryMut<'_> {
         handle.to_entry_mut(self)
     }
 
+    /// Creates a new entry in the table, and returns its [Handle]
     pub fn new_entry(&mut self, parent: Handle, kind: NodeKind) -> Handle {
         let entry = self.kinds.insert(kind);
         assert_eq!(entry, self.parents.insert(parent));
         entry
     }
 
+    /// Adds an existing [Handle] as the child of another (parent) [Handle]
     pub fn add_child(&mut self, parent: Handle, name: Sym, child: Handle) -> Option<Handle> {
         self.children.entry(parent).or_default().insert(name, child)
     }
 
-    pub fn add_import(&mut self, parent: Handle, name: Sym, import: Handle) -> Option<Handle> {
-        self.imports.entry(parent).or_default().insert(name, import)
-    }
-
+    /// Marks this item as not having been typechecked
     pub fn mark_unchecked(&mut self, item: Handle) {
         self.unchecked.push(item);
     }
 
-    pub fn mark_use_item(&mut self, item: Handle) {
-        let parent = self.parents[item];
-        self.use_items.entry(parent).or_default().push(item);
-        self.uses.push(item);
-    }
-
+    /// Marks this item as an `impl` which hasn't been reparented.
     pub fn mark_impl_item(&mut self, item: Handle) {
         self.impls.push(item);
     }
 
+    /// Marks this item as a "lang item", to be [retrieved later](Table::get_lang_item)
     pub fn mark_lang_item(&mut self, name: &'static str, item: Handle) {
         self.lang_items.insert(name, item);
     }
 
+    /// Gets a previously [marked](Table::get_lang_item) lang-item from the table.
     pub fn get_lang_item(&self, name: &str) -> Handle {
         match self.lang_items.get(name).copied() {
             Some(handle) => handle,
@@ -140,12 +132,13 @@ impl<'a> Table<'a> {
         }
     }
 
+    /// Gets an [Iterator] over [Handles](Handle) in the Table
     pub fn handle_iter(&self) -> impl Iterator<Item = Handle> + use<> {
         self.kinds.keys()
     }
 
     /// Returns handles to all nodes sequentially by [Entry]
-    pub fn debug_entry_iter(&self) -> impl Iterator<Item = Entry<'_, 'a>> {
+    pub fn debug_entry_iter(&self) -> impl Iterator<Item = Entry<'_>> {
         self.kinds.keys().map(|key| key.to_entry(self))
     }
 
@@ -162,97 +155,115 @@ impl<'a> Table<'a> {
         entry
     }
 
+    /// Gets a [Handle] to a new [NodeKind::Type] with [TypeKind::Inferred]
     pub(crate) fn inferred_type(&mut self) -> Handle {
         let handle = self.new_entry(self.root, NodeKind::Type);
         self.types.insert(handle, TypeKind::Inferred);
         handle
     }
 
+    /// Gets a [Handle] to a new [NodeKind::Type] with [TypeKind::Variable]
     pub(crate) fn type_variable(&mut self) -> Handle {
         let handle = self.new_entry(self.root, NodeKind::Type);
         self.types.insert(handle, TypeKind::Variable);
         handle
     }
 
-    pub const fn root_entry(&self) -> Entry<'_, 'a> {
+    /// Gets the root [Entry] in the table
+    pub const fn root_entry(&self) -> Entry<'_> {
         self.root.to_entry(self)
     }
 
-    pub fn root_entry_mut(&mut self) -> crate::entry::EntryMut<'_, 'a> {
+    /// Gets the root [EntryMut] in the table
+    pub fn root_entry_mut(&mut self) -> crate::entry::EntryMut<'_> {
         self.root.to_entry_mut(self)
     }
 
     // --- inherent properties ---
 
+    /// Gets the root [Handle] in the table.
     pub const fn root(&self) -> Handle {
         self.root
     }
 
+    /// Gets the [NodeKind] of the given [Handle]
     pub fn kind(&self, node: Handle) -> Option<&NodeKind> {
         self.kinds.get(node)
     }
 
+    /// Gets the parent [Handle] of the given [Handle]
     pub fn parent(&self, node: Handle) -> Option<&Handle> {
         self.parents.get(node)
     }
 
+    /// Gets the child map of the given [Handle]
     pub fn children(&self, node: Handle) -> Option<&HashMap<Sym, Handle>> {
         self.children.get(&node)
     }
 
-    pub fn imports(&self, node: Handle) -> Option<&HashMap<Sym, Handle>> {
-        self.imports.get(&node)
+    /// Gets the lazy import map of the given [Handle]
+    pub fn lazy_imports(&self, node: Handle) -> Option<&HashMap<Sym, Path>> {
+        self.lazy_imports.get(&node)
     }
 
-    pub fn body(&self, node: Handle) -> Option<&'a Expr> {
-        self.bodies.get(&node).copied()
+    /// Gets the glob-import set of the given [Handle]
+    pub fn glob_imports(&self, node: Handle) -> Option<&[Path]> {
+        self.glob_imports.get(&node).map(Vec::as_slice)
     }
 
+    /// Gets the [TypeKind] of the given [Handle]
     pub fn ty(&self, node: Handle) -> Option<&TypeKind> {
         self.types.get(&node)
     }
 
-    pub fn span(&self, node: Handle) -> Option<&Span> {
-        self.spans.get(&node)
+    /// Gets the [meta-expressions](Expr) of the given [Handle]
+    pub fn meta(&self, node: Handle) -> Option<&[Expr]> {
+        self.metas.get(&node).map(Vec::as_slice)
     }
 
-    pub fn meta(&self, node: Handle) -> Option<&'a [Expr]> {
-        self.metas.get(&node).copied()
-    }
-
-    pub fn source(&self, node: Handle) -> Option<&Source<'a>> {
-        self.sources.get(&node)
-    }
-
+    /// Gets the `impl` target of the given [Handle], if there is one
     pub fn impl_target(&self, node: Handle) -> Option<Handle> {
         self.impl_targets.get(&node).copied()
     }
 
+    /// Replaces the parent [Handle] of the given node, returning the old one
     pub fn reparent(&mut self, node: Handle, parent: Handle) -> Handle {
         self.parents.replace(node, parent)
     }
 
-    pub fn set_body(&mut self, node: Handle, body: &'a Expr) -> Option<&'a Expr> {
-        self.mark_unchecked(node);
-        self.bodies.insert(node, body)
+    /// Adds a lazy-import to the entry at the `node` [Handle]
+    pub fn add_import(&mut self, node: Handle, name: Sym, path: Path) {
+        self.lazy_imports
+            .entry(node)
+            .or_default()
+            .insert(name, path);
     }
 
+    /// Adds a glob-import at the given node
+    pub fn add_glob(&mut self, node: Handle, path: Path) {
+        self.glob_imports.entry(node).or_default().push(path);
+    }
+
+    /// Sets the preferred name of the given node
+    pub fn set_name(&mut self, node: Handle, name: Sym) -> Option<Sym> {
+        self.names.insert(node, name)
+    }
+
+    /// Sets the [TypeKind] of the given node
     pub fn set_ty(&mut self, node: Handle, kind: TypeKind) -> Option<TypeKind> {
         self.types.insert(node, kind)
     }
 
-    pub fn set_span(&mut self, node: Handle, span: Span) -> Option<Span> {
-        self.spans.insert(node, span)
+    /// Sets the [meta-expressions](Expr) of the given node, returning the old expressions
+    pub fn set_meta(&mut self, node: Handle, meta: Vec<Expr>) {
+        self.metas.entry(node).or_default().extend(meta);
     }
 
-    pub fn set_meta(&mut self, node: Handle, meta: &'a [Expr]) -> Option<&'a [Expr]> {
-        self.metas.insert(node, meta)
+    pub fn add_meta(&mut self, node: Handle, meta: Expr) {
+        self.metas.entry(node).or_default().push(meta);
     }
 
-    pub fn set_source(&mut self, node: Handle, source: Source<'a>) -> Option<Source<'a>> {
-        self.sources.insert(node, source)
-    }
-
+    /// Sets the `impl` target of the given node
     pub fn set_impl_target(&mut self, node: Handle, target: Handle) -> Option<Handle> {
         self.impl_targets.insert(node, target)
     }
@@ -269,6 +280,7 @@ impl<'a> Table<'a> {
         }
     }
 
+    /// Gets the local parent *module*
     pub fn super_of(&self, node: Handle) -> Option<Handle> {
         match self.kinds.get(node)? {
             NodeKind::Root => None,
@@ -277,10 +289,12 @@ impl<'a> Table<'a> {
         }
     }
 
+    /// Gets the name of this node
     pub fn name(&self, node: Handle) -> Option<Sym> {
-        self.source(node).and_then(|s| s.name())
+        self.names.get(&node).copied()
     }
 
+    /// Returns `true` when name resolution is allowed to defer to the parent of this node
     pub fn is_transparent(&self, node: Handle) -> bool {
         !matches!(
             self.kind(node),
@@ -288,17 +302,26 @@ impl<'a> Table<'a> {
         )
     }
 
+    /// Gets the child of this `node` with the given `name`
     pub fn get_child(&self, node: Handle, name: &Sym) -> Option<Handle> {
         self.children.get(&node).and_then(|c| c.get(name)).copied()
     }
 
+    /// Searches the import hierarchy for a particular name
     pub fn get_import(&self, node: Handle, name: &Sym) -> Option<Handle> {
-        self.imports.get(&node).and_then(|i| i.get(name)).copied()
+        if let Some(path) = self.lazy_imports(node).and_then(|t| t.get(name)) {
+            return self.nav(node, &path.parts);
+        }
+        self.glob_imports(node)
+            .into_iter()
+            .flatten()
+            .rev()
+            .flat_map(|path| self.nav(node, &path.parts))
+            .find_map(|node| self.get_by_sym(node, name))
     }
 
     pub fn get_by_sym(&self, node: Handle, name: &Sym) -> Option<Handle> {
         self.get_child(node, name)
-            .or_else(|| self.get_import(node, name))
             .or_else(|| {
                 self.is_transparent(node)
                     .then(|| {
@@ -307,11 +330,18 @@ impl<'a> Table<'a> {
                     })
                     .flatten()
             })
+            .or_else(|| self.get_import(node, name))
     }
 
     /// Does path traversal relative to the provided `node`.
     pub fn nav(&self, node: Handle, path: &[Sym]) -> Option<Handle> {
+        // println!(
+        //     "Navigating to {}::{:?}",
+        //     self.name(node).unwrap_or_default(),
+        //     path
+        // );
         match path {
+            [Interned("", ..), rest @ ..] => self.nav(self.root, rest),
             [Interned("super", ..), rest @ ..] => self.nav(self.super_of(node)?, rest),
             [Interned("Self", ..), rest @ ..] => self.nav(self.selfty(node)?, rest),
             [name, rest @ ..] => self.nav(self.get_by_sym(node, name)?, rest),
@@ -320,7 +350,7 @@ impl<'a> Table<'a> {
     }
 }
 
-impl Default for Table<'_> {
+impl Default for Table {
     fn default() -> Self {
         Self::new()
     }

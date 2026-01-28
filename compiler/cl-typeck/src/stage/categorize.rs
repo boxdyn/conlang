@@ -8,25 +8,33 @@ use crate::{
     type_expression::{Error as TypeEval, TypeExpression},
     type_kind::{Adt, TypeKind},
 };
-use cl_ast::*;
+use cl_ast::{visit::Visit, *};
 
 /// Ensures a type entry exists for the provided handle in the table
 pub fn categorize(table: &mut Table, node: Handle) -> CatResult<()> {
-    let Some(source) = table.source(node) else {
-        return Ok(());
-    };
+    let _ = node;
+    // let Some(source) = table.source(node) else {
+    //     return Ok(());
+    // };
 
-    match source {
-        Source::Root => {}
-        Source::Binding(item) => todo!("Categorize {item}"),
-        Source::Use(import) => todo!("Categorize {import}"),
-        Source::Ty(pat) => todo!("Categorize {pat}"),
-    }
+    // match source {
+    //     Source::Root => {}
+    //     Source::Binding(item) => println!("Categorize {item}"),
+    //     Source::Use(import) => println!("Categorize {import}"),
+    //     Source::Ty(pat) => println!("Categorize {pat}"),
+    // }
     Ok(())
 }
 
 fn parent(table: &Table, node: Handle) -> Handle {
     table.parent(node).copied().unwrap_or(node)
+}
+
+#[derive(Debug, Default)]
+pub struct Categorizer;
+
+impl<'a> Visit<'a, DefaultTypes> for Categorizer {
+    type Error = Error;
 }
 
 // fn cat_struct(table: &mut Table, node: Handle, s: &Struct) -> CatResult<()> {
