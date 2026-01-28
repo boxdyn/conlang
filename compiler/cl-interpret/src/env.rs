@@ -47,7 +47,7 @@ impl Display for Environment {
                 binds.len(),
             )?;
             let mut binds: Vec<_> = binds.iter().collect();
-            binds.sort_by(|(_, a), (_, b)| a.cmp(b));
+            binds.sort_by_key(|(_, a)| *a);
             for (name, idx) in binds {
                 write!(f, "{idx:4} {name}: ")?;
                 match self.values.get(*idx) {
