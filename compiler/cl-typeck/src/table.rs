@@ -51,11 +51,11 @@ pub struct Table {
     pub(crate) lazy_imports: HashMap<Handle, HashMap<Sym, Path>>,
     pub(crate) glob_imports: HashMap<Handle, Vec<Path>>,
     pub(crate) names: HashMap<Handle, Sym>,
-    types: HashMap<Handle, TypeKind>,
-    metas: HashMap<Handle, Vec<Expr>>,
-    impl_targets: HashMap<Handle, Handle>,
-    anon_types: HashMap<TypeKind, Handle>,
-    lang_items: HashMap<&'static str, Handle>,
+    pub(crate) types: HashMap<Handle, TypeKind>,
+    pub(crate) metas: HashMap<Handle, Vec<Expr>>,
+    pub(crate) impl_targets: HashMap<Handle, Handle>,
+    pub(crate) anon_types: HashMap<TypeKind, Handle>,
+    pub(crate) lang_items: HashMap<&'static str, Handle>,
 
     // --- Queues for algorithms ---
     pub(crate) unchecked: Vec<Handle>,

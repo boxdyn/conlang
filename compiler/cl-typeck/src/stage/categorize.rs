@@ -1,28 +1,42 @@
 //! Categorizes an entry in a table according to its embedded type information
 #![allow(unused)]
+use std::str::FromStr;
+
 use crate::{
     entry::EntryMut,
     handle::Handle,
     source::Source,
     table::{NodeKind, Table},
     type_expression::{Error as TypeEval, TypeExpression},
-    type_kind::{Adt, TypeKind},
+    type_kind::{Adt, Primitive, TypeKind},
 };
-use cl_ast::{visit::Visit, *};
+use cl_ast::{
+    types::{Literal, Path, Symbol},
+    visit::Visit,
+    *,
+};
+use cl_structures::intern::interned::Interned;
 
 /// Ensures a type entry exists for the provided handle in the table
 pub fn categorize(table: &mut Table, node: Handle) -> CatResult<()> {
-    let _ = node;
-    // let Some(source) = table.source(node) else {
-    //     return Ok(());
-    // };
-
-    // match source {
-    //     Source::Root => {}
-    //     Source::Binding(item) => println!("Categorize {item}"),
-    //     Source::Use(import) => println!("Categorize {import}"),
-    //     Source::Ty(pat) => println!("Categorize {pat}"),
-    // }
+    let Table { metas, lang_items, types, .. } = table;
+    if let Some(meta) = metas.get(&node) {
+        for meta in meta {
+            // #[lang = ".*?"]
+            if let Expr::Op(Op::Set, exprs) = meta
+                && let [
+                    At(Expr::Id(Path { parts }), ..),
+                    At(Expr::Lit(Literal::Str(value)), ..),
+                ] = exprs.as_slice()
+                && let [Interned("lang", ..)] = parts.as_slice()
+            {
+                lang_items.insert(Symbol::from(value.as_str()).to_ref(), node);
+                if let Ok(prim) = Primitive::from_str(value) {
+                    types.insert(node, TypeKind::Primitive(prim));
+                }
+            }
+        }
+    }
     Ok(())
 }
 
