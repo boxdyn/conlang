@@ -37,14 +37,6 @@ pub trait AstTypes: Annotation {
 #[derive(Clone, PartialEq, Eq)]
 pub struct At<T: Annotation, A: AstTypes = DefaultTypes>(pub T, pub A::Annotation);
 
-impl<T: Annotation, A: AstTypes> std::fmt::Debug for At<T, A> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        <A::Annotation as std::fmt::Debug>::fmt(&self.1, f)?;
-        f.write_str(": ")?;
-        <T as std::fmt::Debug>::fmt(&self.0, f)
-    }
-}
-
 /// Expressions: The beating heart of Dough.
 ///
 /// A program in Doughlang is a single expression which, at compile time,
