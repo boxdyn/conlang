@@ -88,8 +88,6 @@ pub enum Op {
     Do,
     /// `Expr as Expr`
     As,
-    /// `macro { (Pat => Expr)* }`
-    Macro,
     /// `{ Expr }`
     Block,
     /// `[ Expr,* ]`
@@ -100,14 +98,16 @@ pub enum Op {
     Group,
     /// `Expr (, Expr)*`
     Tuple,
+    /// `#![ Expr ]`
+    MetaInner,
     /// `#[ Expr ]`
-    Meta,
+    MetaOuter,
 
     /// `Expr '?'`
     Try,
-    /// `Expr [ Expr,* ]`
+    /// `Expr [ Expr ]`
     Index,
-    /// `Expr ( Expr,* )`
+    /// `Expr ( Expr )`
     Call,
 
     /// `pub Expr`
@@ -116,6 +116,8 @@ pub enum Op {
     Const,
     /// `static Expr`
     Static,
+    /// `macro Expr`
+    Macro,
     /// `loop Expr`
     Loop,
     /// `match Expr { <Bind(Match, ..)>,* }`

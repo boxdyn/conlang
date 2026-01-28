@@ -48,7 +48,11 @@ impl<A: AstTypes> Display for Expr<A> {
                 .list_wrap("\n", exprs, "\n", "\n"),
             Self::Op(Op::Tuple, exprs) => f.delimit("(", ")").list(exprs, ", "),
             Self::Op(Op::Group, exprs) => f.list(exprs, ", "),
-            Self::Op(Op::Meta, exprs) => match exprs.as_slice() {
+            Self::Op(Op::MetaInner, exprs) => match exprs.as_slice() {
+                [meta, expr @ ..] => f.delimit(fmt!("#![{meta}]\n"), "").list(expr, ","),
+                [] => write!(f, "#![]"),
+            },
+            Self::Op(Op::MetaOuter, exprs) => match exprs.as_slice() {
                 [meta, expr @ ..] => f.delimit(fmt!("#[{meta}]\n"), "").list(expr, ","),
                 [] => write!(f, "#[]"),
             },
@@ -87,7 +91,8 @@ impl Display for Op {
             Op::ArRep => "[;]",
             Op::Group => "()",
             Op::Tuple => "()",
-            Op::Meta => "#[]",
+            Op::MetaInner => "#![]",
+            Op::MetaOuter => "#[]",
             Op::Try => "?",
             Op::Index => "",
             Op::Call => "",

@@ -74,7 +74,8 @@ pub enum Ps {
     Lit,        // Literal
     Use,        // use Use
     Def,        // any definition (let, struct, enum, fn, ...)
-    Doc,        // Documentation Comment
+    DocInner,   // Documentation Comment `//!`
+    DocOuter,   // Documentation Comment `///`
     For,        // for Pat in Expr Expr else Expr
     Lambda0,    // || Expr
     Lambda,     // | Pat,* | Expr
@@ -89,8 +90,8 @@ pub enum Ps {
 /// and its [precedence level](Prec)
 fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
     Ok(match token.kind {
-        TKind::OutDoc => (Ps::Doc, Prec::Max),
-        TKind::InDoc => (Ps::Doc, Prec::Max),
+        TKind::OutDoc => (Ps::DocOuter, Prec::Max),
+        TKind::InDoc => (Ps::DocInner, Prec::Max),
         TKind::Do => (Ps::Op(Op::Do), Prec::Do),
         TKind::Semi => (Ps::End, Prec::Body),
 
@@ -119,8 +120,8 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
         TKind::Loop => (Ps::Op(Op::Loop), Prec::Body),
         TKind::If => (Ps::Op(Op::If), Prec::Body),
         TKind::While => (Ps::Op(Op::While), Prec::Body),
-        TKind::Break => (Ps::Op(Op::Break), Prec::Do),
-        TKind::Return => (Ps::Op(Op::Return), Prec::Do),
+        TKind::Break => (Ps::Op(Op::Break), Prec::Body),
+        TKind::Return => (Ps::Op(Op::Return), Prec::Body),
         TKind::Continue => (Ps::Op(Op::Continue), Prec::Min),
 
         TKind::LCurly => (Ps::Op(Op::Block), Prec::Min),
@@ -140,7 +141,8 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
         TKind::Minus => (Ps::Op(Op::Neg), Prec::Unary),
         TKind::Plus => (Ps::Op(Op::Identity), Prec::Unary),
         TKind::Star => (Ps::Op(Op::Deref), Prec::Unary),
-        TKind::Hash => (Ps::Op(Op::Meta), Prec::Unary),
+        TKind::Hash => (Ps::Op(Op::MetaOuter), Prec::Unary),
+        TKind::HashBang => (Ps::Op(Op::MetaInner), Prec::Unary),
 
         kind => Err(ParseError::NotPrefix(kind, token.span))?,
     })
@@ -217,7 +219,7 @@ impl<'t> Parse<'t> for Expr {
                 // This happens when a semi or closing delimiter begins an expression.
                 // The token which emitted "End" cannot be consumed, as it is expected
                 // elsewhere.
-                Ps::End if level <= prec.next() => Expr::Omitted,
+                Ps::End if (prec.value()..=prec.next()).contains(&level) => Expr::Omitted,
                 Ps::End => Err(ParseError::NotPrefix(kind, span))?,
 
                 Ps::Id => Expr::Id(p.parse(())?),
@@ -225,14 +227,20 @@ impl<'t> Parse<'t> for Expr {
                 Ps::Lit => Expr::Lit(p.parse(())?),
                 Ps::Use => Expr::Use(p.consume().parse(())?),
                 Ps::Def => Expr::Bind(p.parse(None)?),
-                Ps::Doc => {
+                Ps::DocOuter | Ps::DocInner => {
                     let comment = Literal::Str(p.take_lexeme()?.string().unwrap());
                     let comment = Expr::Lit(comment).at(span);
                     let next = p.parse(level.max(Prec::Do.next()))?;
-                    Expr::Op(Op::Meta, vec![comment, next])
+                    Expr::Op(
+                        match op {
+                            Ps::DocOuter => Op::MetaOuter,
+                            _ => Op::MetaInner,
+                        },
+                        vec![comment, next],
+                    )
                 }
                 Ps::For => parse_for(p, ())?,
-                Ps::Lambda => {
+                Ps::Lambda | Ps::Lambda0 => {
                     p.consume();
 
                     let args = if kind == TKind::Bar {
@@ -253,8 +261,8 @@ impl<'t> Parse<'t> for Expr {
                     )))
                 }
                 Ps::Op(Op::Match) => parse_match(p)?,
-                Ps::Op(Op::Meta) => Expr::Op(
-                    Op::Meta,
+                Ps::Op(op @ (Op::MetaOuter | Op::MetaInner)) => Expr::Op(
+                    op,
                     vec![
                         p.consume()
                             .expect(TKind::LBrack)?

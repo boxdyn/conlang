@@ -105,12 +105,12 @@ fn subst() -> Result<(), Box<dyn Error>> {
                 continue;
             };
             let mut pats: Vec<_> = pat.into_iter().collect();
-            pats.sort_by(|(a, _), (b, _)| a.cmp(b));
+            pats.sort_by_key(|(a, _)| a.to_ref());
             for (name, pat) in pats {
                 println!("{name}: {pat}")
             }
             let mut exprs: Vec<_> = exp.into_iter().collect();
-            exprs.sort_by(|(a, _), (b, _)| a.cmp(b));
+            exprs.sort_by_key(|(a, _)| a.to_ref());
             for (name, expr) in exprs.iter() {
                 println!("{name}: {expr}")
             }
@@ -165,7 +165,7 @@ where
     <T as Foldable<DefaultTypes, DefaultTypes>>::Out: Annotation,
 {
     let mut parser = Parser::new(Lexer::new("<interactive>".into(), document));
-    for idx in 0.. {
+    for idx in 0..6 {
         match (
             parser
                 .parse::<At<T, _>>(T::Prec::default())
