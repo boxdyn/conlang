@@ -259,7 +259,7 @@ impl<'t> Lexer<'t> {
     pub fn trailing(&mut self, kind: TKind) -> Result<Token, LexError> {
         Ok(match self.skip_whitespace().peek() {
             // Some(')') => self.consume().produce(TKind::RParen), // maybe.
-            Some(']') => self.consume().produce(TKind::RBrack),
+            // Some(']') => self.consume().produce(TKind::RBrack),
             Some('}') => self.consume().produce(TKind::RCurly),
             _ => self.produce(kind),
         })
