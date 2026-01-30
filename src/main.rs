@@ -6,6 +6,7 @@ use cl_ast::{
     macro_matcher::{Match, Subst},
     visit::Walk,
 };
+use cl_interpret::{convalue::ConValue, env::Environment, interpret::Interpret};
 use cl_lexer::{EOF, LexError, Lexer};
 use cl_parser::{Parse, ParseError, Parser, inliner::ModuleInliner};
 use cl_structures::span::Span;
@@ -18,6 +19,8 @@ use std::{
     marker::PhantomData,
 };
 
+mod builtin;
+
 fn banner() {
     println!("--- conlang v{} 💪🦈 ---", env!("CARGO_PKG_VERSION"))
 }
@@ -29,6 +32,7 @@ fn clear() {
 fn main() -> Result<(), Box<dyn Error>> {
     let mut verbose = Verbosity::from(std::env::var("DO_VERBOSE").as_deref().unwrap_or_default());
     let mut parsing = ParseMode::from(std::env::var("DO_PARSING").as_deref().unwrap_or_default());
+    let mut env = builtin::get_env();
     let color = parsing.color();
     let begin = verbose.begin();
     banner();
@@ -53,7 +57,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 Ok(Response::Accept)
             }
-            line @ ("tokens" | "expr" | "pat" | "bind" | "use") => {
+            line @ ("run" | "tokens" | "expr" | "pat" | "bind" | "use") => {
                 parsing = ParseMode::from(line);
                 println!("Parse mode set to '{parsing:?}'");
                 rl.set_color(parsing.color());
@@ -66,14 +70,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Ok(Response::Accept)
             }
             _ if line.ends_with("\n\n") => {
-                parsing.with()(line, verbose);
+                parsing.with()(&mut env, line, verbose);
                 Ok(Response::Accept)
             }
             _ => Ok(Response::Continue),
         })?;
     } else {
         let doc = std::io::read_to_string(stdin())?;
-        parsing.with()(&doc, verbose);
+        parsing.with()(&mut env, &doc, verbose);
     }
     Ok(())
 }
@@ -133,7 +137,11 @@ fn plural(count: usize) -> &'static str {
     }
 }
 
-fn tokens<'t, T: Parse<'t> + ?Sized>(document: &'t str, verbose: Verbosity) {
+fn tokens<'e: 't, 't, T: Parse<'t> + ?Sized>(
+    _: &'e mut Environment,
+    document: &'t str,
+    verbose: Verbosity,
+) {
     let _: PhantomData<T>; // for lifetime variance
     let mut lexer = Lexer::new("<interactive>".into(), document);
     loop {
@@ -156,7 +164,7 @@ fn tokens<'t, T: Parse<'t> + ?Sized>(document: &'t str, verbose: Verbosity) {
     }
 }
 
-fn parse<'t, T>(document: &'t str, verbose: Verbosity)
+fn parse<'env: 't, 't, T>(_: &'env mut Environment, document: &'t str, verbose: Verbosity)
 where
     T: Parse<'t>
         + Annotation
@@ -197,6 +205,39 @@ where
             }
             (Ok(expr), Verbosity::DebugPretty) => {
                 println!("\x1b[{}m{expr:#?}", (idx + 5) % 6 + 31);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn run<'env: 't, 't>(env: &'env mut Environment, document: &'t str, verbose: Verbosity) {
+    let mut parser = Parser::new(Lexer::new("<interactive>".into(), document));
+    for idx in 0..6 {
+        match (
+            parser
+                .parse::<At<Expr>>(0)
+                .map(inline_modules)
+                .map(|expr| expr.interpret(env)),
+            verbose,
+        ) {
+            (Err(ParseError::EOF(_)), _) => break,
+            (Err(e), _) => {
+                println!("\x1b[91m{e}\x1b[0m");
+                break;
+            }
+            (Ok(Ok(ConValue::Empty)), Verbosity::Pretty) => {}
+            (Ok(Ok(value)), Verbosity::Pretty) => {
+                println!("\x1b[{}m{value}", (idx + 5) % 6 + 31);
+            }
+            (Ok(Err(error)), Verbosity::Pretty) => {
+                println!("\x1b[{}m{error}", (idx + 5) % 6 + 31);
+            }
+            (Ok(value), Verbosity::Debug) => {
+                println!("\x1b[{}m{value:?}", (idx + 5) % 6 + 31);
+            }
+            (Ok(value), Verbosity::DebugPretty) => {
+                println!("\x1b[{}m{value:#?}", (idx + 5) % 6 + 31);
             }
             _ => {}
         }
@@ -266,6 +307,7 @@ enum ParseMode {
     Bind,
     Use,
     Tokens,
+    Run,
 }
 
 impl From<&str> for ParseMode {
@@ -276,18 +318,20 @@ impl From<&str> for ParseMode {
             "bind" => Self::Bind,
             "use" => Self::Use,
             "tokens" => Self::Tokens,
+            "run" => Self::Run,
             _ => Default::default(),
         }
     }
 }
 impl ParseMode {
-    fn with<'a>(&self) -> fn(&'a str, Verbosity) {
+    fn with<'env: 'a, 'a>(&self) -> fn(&'env mut Environment, &'a str, Verbosity) {
         match self {
-            Self::Expr => parse::<'a, Expr>,
-            Self::Pat => parse::<'a, Pat>,
-            Self::Bind => parse::<'a, Bind>,
-            Self::Use => parse::<'a, Use>,
-            Self::Tokens => tokens::<'a, dyn Parse<'a, Prec = ()>>,
+            Self::Expr => parse::<'env, 'a, Expr>,
+            Self::Pat => parse::<'env, 'a, Pat>,
+            Self::Bind => parse::<'env, 'a, Bind>,
+            Self::Use => parse::<'env, 'a, Use>,
+            Self::Tokens => tokens::<'env, 'a, dyn Parse<'a, Prec = ()>>,
+            Self::Run => run::<'env, 'a>,
         }
     }
 
@@ -298,6 +342,7 @@ impl ParseMode {
             Self::Bind => "\x1b[34m",
             Self::Use => "\x1b[33m",
             Self::Tokens => "\x1b[32m",
+            Self::Run => "\x1b[31m",
         }
     }
 }

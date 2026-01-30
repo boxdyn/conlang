@@ -31,7 +31,7 @@ edition.workspace = true
 [dependencies]
 # cl-repl = { path = "compiler/cl-repl" }
 # cl-typeck = { path = "compiler/cl-typeck" }
-# cl-interpret = { path = "compiler/cl-interpret" }
+cl-interpret = { path = "compiler/cl-interpret" }
 cl-structures = { path = "compiler/cl-structures" }
 cl-token = { path = "compiler/cl-token" }
 cl-ast = { path = "compiler/cl-ast" }
