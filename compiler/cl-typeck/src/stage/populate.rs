@@ -1,18 +1,24 @@
 //! The [Populator] populates entries in the sym table, including span info
-use std::collections::HashMap;
 
 use crate::{
     entry::EntryMut,
     list::List,
-    source::NameFinder,
     table::{NodeKind, Table},
 };
 use cl_ast::{
     At, Bind, BindOp, DefaultTypes, Expr, Op, Use,
-    types::{Path, Symbol},
+    types::Path,
     visit::{Visit, Walk},
 };
 
+mod name_finder;
+use name_finder::NameFinder;
+
+mod user;
+use user::User;
+
+/// Populates a [Table] with the modules, imports and bindings described in
+/// a [syntax tree](Walk).
 #[derive(Debug)]
 pub struct Populator<'t, 'parent> {
     entry: EntryMut<'t>,
@@ -20,20 +26,24 @@ pub struct Populator<'t, 'parent> {
 }
 
 impl<'t> Populator<'t, '_> {
+    /// Constructs a new [Populator] with the given [Table]
     pub fn new(table: &'t mut Table) -> Self {
         Self { entry: table.root_entry_mut(), meta: List::Nil }
     }
 
+    /// Adds an [outer meta attribute](cl_ast::Op::MetaOuter) to the current [List]
     pub fn with_meta<'p, 'e: 'p>(&'p mut self, expr: &'e Expr) -> Populator<'p, 'p> {
         let Self { entry, meta } = self;
         Populator { entry: entry.with_id(entry.id()), meta: meta.enter(expr) }
     }
 
+    /// Creates a [Populator] with an empty [outer meta](cl_ast::Op::MetaOuter) [List]
     pub fn without_meta(&mut self) -> Populator<'_, '_> {
         let Self { entry, meta: _ } = self;
         Populator { entry: entry.with_id(entry.id()), meta: List::Nil }
     }
 
+    /// Creates a populator at a brand-new entry in the [Table]
     pub fn new_entry(&mut self, kind: NodeKind) -> Populator<'_, '_> {
         let entry = self.entry.new_entry(kind);
         Populator { entry, meta: self.meta }
@@ -49,11 +59,13 @@ impl Visit<'_, DefaultTypes> for Populator<'_, '_> {
             Expr::Use(item) => self.visit_use(item),
             Expr::Bind(bind) => self.visit_bind(bind),
             Expr::Make(make) => self.visit_make(make),
+
             // outer meta is collected on the stack, and shared among all scoped items
             Expr::Op(Op::MetaOuter, exprs) => match exprs.as_slice() {
                 [At(meta, ..), expr] => self.with_meta(meta).visit(expr),
                 _ => unreachable!("MetaOuter is binary"),
             },
+
             // inner meta is immediately appended to the contextually current item
             Expr::Op(Op::MetaInner, exprs) => match exprs.as_slice() {
                 [At(meta, ..), expr] => {
@@ -130,45 +142,5 @@ impl Visit<'_, DefaultTypes> for Populator<'_, '_> {
         .visit_use(item);
 
         Ok(())
-    }
-}
-
-/// Imports [Use] items into a module by their path
-pub struct User<'parent> {
-    path: List<'parent, Symbol>,
-    imports: &'parent mut HashMap<Symbol, Path>,
-    globs: &'parent mut Vec<Path>,
-}
-
-impl<'parent> User<'parent> {
-    pub fn new(
-        path: List<'parent, Symbol>,
-        imports: &'parent mut HashMap<Symbol, Path>,
-        globs: &'parent mut Vec<Path>,
-    ) -> Self {
-        Self { path, imports, globs }
-    }
-
-    pub fn visit_use(&mut self, item: &'parent Use) {
-        let Self { path, imports, globs } = self;
-        match item {
-            Use::Glob => {
-                globs.push((*path).into());
-            }
-            &Use::Name(name) => {
-                let path: Path = path.enter(name).into();
-                imports.insert(name, path);
-            }
-            &Use::Alias(name, alias) => {
-                let path: Path = path.enter(name).into();
-                imports.insert(alias, path);
-            }
-            Use::Path(name, rest) => {
-                User { path: path.enter(*name), imports, globs }.visit_use(rest);
-            }
-            Use::Tree(items) => {
-                items.iter().for_each(|item| self.visit_use(item));
-            }
-        }
     }
 }

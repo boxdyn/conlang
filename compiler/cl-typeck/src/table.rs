@@ -35,7 +35,10 @@ use cl_ast::{
     types::{Path, Symbol as Sym},
 };
 use cl_structures::{index_map::IndexMap, intern::interned::Interned};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+
+pub type Map<K, V> = BTreeMap<K, V>;
+pub type SymMap<V> = BTreeMap<Sym, V>;
 
 /// The table is a monolithic data structure representing everything the type checker
 /// knows about a program.
@@ -47,19 +50,20 @@ pub struct Table {
     /// This is the source of truth for handles
     kinds: IndexMap<Handle, NodeKind>,
     parents: IndexMap<Handle, Handle>,
-    pub(crate) children: HashMap<Handle, HashMap<Sym, Handle>>,
-    pub(crate) lazy_imports: HashMap<Handle, HashMap<Sym, Path>>,
-    pub(crate) glob_imports: HashMap<Handle, Vec<Path>>,
-    pub(crate) names: HashMap<Handle, Sym>,
-    pub(crate) types: HashMap<Handle, TypeKind>,
-    pub(crate) metas: HashMap<Handle, Vec<Expr>>,
-    pub(crate) impl_targets: HashMap<Handle, Handle>,
+    pub(crate) children: Map<Handle, SymMap<Handle>>,
+    pub(crate) lazy_imports: Map<Handle, SymMap<Path>>,
+    pub(crate) glob_imports: Map<Handle, Vec<Path>>,
+    pub(crate) names: Map<Handle, Sym>,
+    pub(crate) types: Map<Handle, TypeKind>,
+    pub(crate) metas: Map<Handle, Vec<Expr>>,
+    pub(crate) impls: Map<Handle, Vec<Handle>>,
+    pub(crate) impl_targets: Map<Handle, Handle>,
     pub(crate) anon_types: HashMap<TypeKind, Handle>,
-    pub(crate) lang_items: HashMap<&'static str, Handle>,
+    pub(crate) lang_items: Map<&'static str, Handle>,
 
     // --- Queues for algorithms ---
-    pub(crate) unchecked: Vec<Handle>,
-    pub(crate) impls: Vec<Handle>,
+    pub(crate) unchecked_handles: Vec<Handle>,
+    pub(crate) pending_impls: Vec<Handle>,
 }
 
 impl Table {
@@ -73,17 +77,18 @@ impl Table {
             root,
             kinds,
             parents,
-            children: HashMap::new(),
-            lazy_imports: HashMap::new(),
-            glob_imports: HashMap::new(),
-            names: HashMap::new(),
-            types: HashMap::new(),
-            metas: HashMap::new(),
-            impl_targets: HashMap::new(),
+            children: Map::new(),
+            lazy_imports: Map::new(),
+            glob_imports: Map::new(),
+            names: Map::new(),
+            types: Map::new(),
+            metas: Map::new(),
+            impls: Map::new(),
+            impl_targets: Map::new(),
             anon_types: HashMap::new(),
-            lang_items: HashMap::new(),
-            unchecked: Vec::new(),
-            impls: Vec::new(),
+            lang_items: Map::new(),
+            unchecked_handles: Vec::new(),
+            pending_impls: Vec::new(),
         }
     }
 
@@ -111,12 +116,14 @@ impl Table {
 
     /// Marks this item as not having been typechecked
     pub fn mark_unchecked(&mut self, item: Handle) {
-        self.unchecked.push(item);
+        self.unchecked_handles.push(item);
     }
 
-    /// Marks this item as an `impl` which hasn't been reparented.
+    /// Marks this item as an `impl` which hasn't been linked.
     pub fn mark_impl_item(&mut self, item: Handle) {
-        self.impls.push(item);
+        let parent = self.parent(item).copied().unwrap_or(item);
+        self.impls.entry(parent).or_default().push(item);
+        self.pending_impls.push(item);
     }
 
     /// Marks this item as a "lang item", to be [retrieved later](Table::get_lang_item)
@@ -197,12 +204,12 @@ impl Table {
     }
 
     /// Gets the child map of the given [Handle]
-    pub fn children(&self, node: Handle) -> Option<&HashMap<Sym, Handle>> {
+    pub fn children(&self, node: Handle) -> Option<&SymMap<Handle>> {
         self.children.get(&node)
     }
 
     /// Gets the lazy import map of the given [Handle]
-    pub fn lazy_imports(&self, node: Handle) -> Option<&HashMap<Sym, Path>> {
+    pub fn lazy_imports(&self, node: Handle) -> Option<&SymMap<Path>> {
         self.lazy_imports.get(&node)
     }
 

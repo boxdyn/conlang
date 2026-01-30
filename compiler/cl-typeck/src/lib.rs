@@ -100,8 +100,6 @@ pub mod handle;
 
 pub mod entry;
 
-pub mod source;
-
 pub mod type_kind;
 
 pub mod type_expression;

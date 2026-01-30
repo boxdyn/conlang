@@ -5,7 +5,6 @@ use std::str::FromStr;
 use crate::{
     entry::EntryMut,
     handle::Handle,
-    source::Source,
     table::{NodeKind, Table},
     type_expression::{Error as TypeEval, TypeExpression},
     type_kind::{Adt, Primitive, TypeKind},
@@ -24,10 +23,9 @@ pub fn categorize(table: &mut Table, node: Handle) -> CatResult<()> {
         for meta in meta {
             // #[lang = ".*?"]
             if let Expr::Op(Op::Set, exprs) = meta
-                && let [
-                    At(Expr::Id(Path { parts }), ..),
-                    At(Expr::Lit(Literal::Str(value)), ..),
-                ] = exprs.as_slice()
+                && let [At(lhs, ..), At(rhs, ..)] = exprs.as_slice()
+                && let Expr::Id(Path { parts }) = lhs
+                && let Expr::Lit(Literal::Str(value)) = rhs
                 && let [Interned("lang", ..)] = parts.as_slice()
             {
                 lang_items.insert(Symbol::from(value.as_str()).to_ref(), node);

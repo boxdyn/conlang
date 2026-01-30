@@ -32,11 +32,10 @@ impl Display for TypeKind {
 
 impl Display for Visibility {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
+        f.write_str(match self {
             Self::Public => "pub ",
             Self::Private => "",
-        }
-        .fmt(f)
+        })
     }
 }
 

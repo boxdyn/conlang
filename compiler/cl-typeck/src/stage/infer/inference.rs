@@ -38,11 +38,7 @@ impl Inference for Expr {
     }
 }
 
-fn infer_expr_op(
-    op: Op,
-    exprs: &[At<Expr>],
-    e: &mut InferenceEngine<'_, '_, '_>,
-) -> IfResult {
+fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
     match (op, exprs) {
         (Op::Do, []) => Ok(e.unit()),
         (Op::Do, [ignored @ .., returned]) => {
@@ -274,11 +270,7 @@ impl Inference for Pat {
     }
 }
 
-fn infer_pat_op(
-    op: PatOp,
-    pats: &[Pat],
-    e: &mut InferenceEngine<'_, '_, '_>,
-) -> IfResult {
+fn infer_pat_op(op: PatOp, pats: &[Pat], e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
     match (op, pats) {
         (PatOp::Pub, [body]) => body.infer(e),
         (PatOp::Mut, [..]) => todo!(),
@@ -299,6 +291,8 @@ fn infer_pat_op(
         _ => panic!(""),
     }
 }
+
+// use crate::table::Map;
 
 // impl Inference for Generics {
 //     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
@@ -492,7 +486,7 @@ fn infer_pat_op(
 //                     return Err(InferenceError::FieldCount(to, fields.len(), init.len()));
 //                 }
 //                 let fields = fields.clone(); // todo: fix this somehow.
-//                 let mut field_inits: std::collections::HashMap<_, _> = init
+//                 let mut field_inits: std::collections::Map<_, _> = init
 //                     .iter()
 //                     .map(|Fielder { name, init }| (name, init))
 //                     .collect();

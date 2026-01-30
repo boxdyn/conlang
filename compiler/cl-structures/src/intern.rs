@@ -82,6 +82,18 @@ pub mod interned {
 
     impl<T: ?Sized> Eq for Interned<'_, T> {}
 
+    impl<T: ?Sized + PartialOrd> PartialOrd for Interned<'_, T> {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            self.0.partial_cmp(other.0)
+        }
+    }
+
+    impl<T: ?Sized + Ord> Ord for Interned<'_, T> {
+        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            self.0.cmp(other.0)
+        }
+    }
+
     impl<T: ?Sized> Hash for Interned<'_, T> {
         fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
             Self::as_ptr(self).hash(state)
