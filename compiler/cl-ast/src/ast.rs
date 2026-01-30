@@ -313,15 +313,15 @@ pub enum BindOp {
 /// This covers both bindings and type annotations in [Bind] expressions.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Pat<A: AstTypes = DefaultTypes> {
-    /// Matches anything without binding
+    /// `_`: Matches anything without binding
     Ignore,
-    /// Matches nothing, ever
+    /// `!`: Matches nothing, ever
     Never,
-    /// Matches nothing; used for macro substitution
+    /// `$Token`: Matches nothing; used for macro substitution
     MetId(A::MacroId),
-    /// Matches anything, and binds it to a name
+    /// `Identifier`: Matches anything, and binds it to a name
     Name(A::Symbol),
-    /// Matches a value by equality comparison
+    /// `Expr`: Matches a value by equality comparison
     Value(Box<At<Expr<A>, A>>),
     /// Matches a compound pattern
     Op(PatOp, Vec<Pat<A>>),
