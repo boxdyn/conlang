@@ -277,7 +277,7 @@ pub mod dropless_interner {
     //! See the standard library [HashSet] for more details.
     //!
     //! ```rust
-    //! use doughlang::intern::dropless_interner::DroplessInterner;
+    //! use cl_structures::intern::dropless_interner::DroplessInterner;
     //! use cl_arena::dropless_arena::DroplessArena;
     //!
     //! let da = DroplessArena::new();
@@ -291,7 +291,7 @@ pub mod dropless_interner {
     //! ```
     //!
     //! ```rust
-    //! use doughlang::intern::dropless_interner::DroplessInterner;
+    //! use cl_structures::intern::dropless_interner::DroplessInterner;
     //! use cl_arena::dropless_arena::DroplessArena;
     //!
     //! let da = DroplessArena::new();
