@@ -1,5 +1,7 @@
 #![allow(non_upper_case_globals)]
 
+use cl_ast::types::Symbol;
+
 use crate::{
     convalue::ConValue,
     env::Environment,
@@ -52,8 +54,8 @@ impl super::Callable for Builtin {
         (self.func)(interpreter, args)
     }
 
-    fn name(&self) -> cl_ast::types::Symbol {
-        self.name.into()
+    fn name(&self) -> Option<Symbol> {
+        Some(self.name.into())
     }
 }
 
@@ -146,6 +148,11 @@ pub const Builtins: &[Builtin] = &builtins![
     fn dbgp(args @ ..) {
         let mut out = stdout().lock();
         args.iter().try_for_each(|arg| writeln!(out, "{arg:#?}") ).ok();
+        Ok(())
+    }
+
+    fn bind(ConValue::Str(name), value) @env {
+        env.bind(*name, value.clone());
         Ok(())
     }
 

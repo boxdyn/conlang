@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use crate::{ansi, args::Mode, ctx};
-use cl_ast::Expr;
+use cl_ast::{At, Expr};
 use cl_interpret::convalue::ConValue;
 use cl_lexer::Lexer;
 use cl_parser::Parser;
@@ -70,8 +70,8 @@ pub fn mode_run(ctx: &mut ctx::Context, line: &str) -> Result<Response, Box<dyn 
     if line.trim().is_empty() {
         return Ok(Response::Deny);
     }
-    let code = Parser::new(Lexer::new("".into(), line)).parse::<Expr>(0)?;
-    let Ok(code) = ModuleInliner::new(".").fold_expr(code);
+    let code = Parser::new(Lexer::new("".into(), line)).parse::<At<Expr>>(0)?;
+    let Ok(code) = ModuleInliner::new(".").fold_at_expr(code);
 
     print!("{}", ansi::OUTPUT);
     match ctx.run(&code) {
@@ -94,7 +94,7 @@ pub fn mode_lex(_ctx: &mut ctx::Context, line: &str) -> Result<Response, Box<dyn
 pub fn mode_fmt(_ctx: &mut ctx::Context, line: &str) -> Result<Response, Box<dyn Error>> {
     let mut p = Parser::new(Lexer::new("".into(), line));
 
-    match p.parse::<Expr>(0) {
+    match p.parse::<At<Expr>>(0) {
         Ok(code) => println!("{}{code}{}", ansi::OUTPUT, ansi::RESET),
         Err(e) => Err(e)?,
     }

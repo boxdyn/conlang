@@ -87,6 +87,7 @@ impl ConValue {
     pub fn truthy(&self) -> IResult<bool> {
         match self {
             ConValue::Bool(v) => Ok(*v),
+            ConValue::Int(v) => Ok(*v != 0),
             _ => Err(Error::TypeError())?,
         }
     }
@@ -112,6 +113,41 @@ impl ConValue {
             ConValue::TupleConstructor(_) => "Fn",
             // ConValue::Closure(_) => "Fn",
             ConValue::Builtin(_) => "Fn",
+        }
+    }
+
+    pub fn cast(self, to_type: &str) -> Self {
+        if to_type.starts_with("f") {
+            let f = match self {
+                Self::Float(v) => v,
+                Self::Int(v) => v as _,
+                Self::Bool(v) => v as i32 as _,
+                Self::Char(v) => v as i32 as _,
+                _ => return self,
+            };
+            return ConValue::Float(f);
+        }
+        let i = match self {
+            Self::Int(v) => v,
+            Self::Float(v) => v as _,
+            Self::Bool(v) => v as _,
+            Self::Char(v) => v as _,
+            _ => return self,
+        };
+        match to_type {
+            "i8" => ConValue::Int(i as i8 as _),
+            "i16" => ConValue::Int(i as i16 as _),
+            "i32" => ConValue::Int(i as i32 as _),
+            "i64" => ConValue::Int(i),
+            "isize" | "int" => ConValue::Int(i),
+            "u8" => ConValue::Int(i % 0x100),
+            "u16" => ConValue::Int(i % 0x10000),
+            "u32" => ConValue::Int(i % 0x100000000),
+            "u64" => ConValue::Int(i),
+            "usize" | "uint" => ConValue::Int(i),
+            "bool" => ConValue::Bool(i != 0),
+            "char" => ConValue::Char(char::from_u32(i as _).unwrap_or('�')),
+            _ => self,
         }
     }
 
@@ -181,12 +217,12 @@ impl ConValue {
 }
 
 impl Callable for ConValue {
-    fn name(&self) -> Symbol {
+    fn name(&self) -> Option<Symbol> {
         match self {
             ConValue::Function(func) => func.name(),
             // ConValue::Closure(func) => func.name(),
             ConValue::Builtin(func) => func.name(),
-            _ => "".into(),
+            _ => None,
         }
     }
     fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
@@ -427,7 +463,8 @@ impl std::fmt::Display for ConValue {
                 write!(f, "`{q}`")
             }
             ConValue::Function(func) => {
-                write!(f, "{}", func.decl())
+                let (pat, body) = func.decl();
+                write!(f, "fn {pat} {body}")
             }
             ConValue::TupleConstructor(Constructor { name: index, arity }) => {
                 write!(f, "{index}(..{arity})")

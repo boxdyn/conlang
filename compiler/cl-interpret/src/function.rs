@@ -1,9 +1,12 @@
 //! Represents a block of code which lives inside the Interpreter
 
-use crate::error::ErrorKind;
+use crate::{
+    error::ErrorKind,
+    interpret::{Match, MatchEnv},
+};
 
 use super::{Callable, ConValue, Environment, Error, IResult, Interpret};
-use cl_ast::{Bind, types::Symbol as Sym};
+use cl_ast::{At, Bind, BindOp, Expr, Pat, PatOp, types::Symbol as Sym};
 use std::{
     cell::{Ref, RefCell},
     collections::HashMap,
@@ -16,7 +19,7 @@ type Upvars = HashMap<Sym, ConValue>;
 #[derive(Clone, Debug)]
 pub struct Function {
     /// Stores the contents of the function declaration
-    decl: Rc<Bind>,
+    decl: Rc<(Pat, At<Expr>)>,
     /// Stores data from the enclosing scopes
     upvars: RefCell<Upvars>,
 }
@@ -24,9 +27,15 @@ pub struct Function {
 impl Function {
     pub fn new(decl: &Bind) -> Self {
         // let upvars = collect_upvars(decl, env);
-        Self { decl: decl.clone().into(), upvars: Default::default() }
+        if let Bind(BindOp::Fn, _, pat, exprs) = decl
+            && let [body] = exprs.as_slice()
+        {
+            Self { decl: (pat.clone(), body.clone()).into(), upvars: Default::default() }
+        } else {
+            unimplemented!()
+        }
     }
-    pub fn decl(&self) -> &Bind {
+    pub fn decl(&self) -> &(Pat, At<Expr>) {
         &self.decl
     }
     pub fn upvars(&self) -> Ref<'_, Upvars> {
@@ -42,10 +51,27 @@ impl Function {
 }
 
 impl Callable for Function {
-    fn name(&self) -> Sym {
-        todo!()
+    fn name(&self) -> Option<Sym> {
+        fn get_name(pat: &Pat) -> Option<Sym> {
+            match pat {
+                Pat::Name(name) => Some(*name),
+                Pat::Op(PatOp::Tuple | PatOp::Slice | PatOp::Fn, _) => None,
+                Pat::Op(_op, pats) => pats.iter().find_map(get_name),
+                _ => None,
+            }
+        }
+        get_name(&self.decl.0)
     }
     fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
-        todo!()
+        let args = ConValue::Tuple(args.into());
+        let (pat, body) = self.decl();
+
+        let mut bindings = HashMap::new();
+        pat.matches(args, &mut MatchEnv::new(env, &mut bindings))?;
+
+        // env.push_frame("args", bind);
+        let mut scope = env.with_frame("args", bindings);
+        let mut scope = scope.frame("function-body");
+        body.interpret(&mut scope)
     }
 }

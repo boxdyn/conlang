@@ -116,7 +116,10 @@ impl Environment {
         }
 
         for builtin in builtins {
-            self.insert(builtin.name(), builtin.into());
+            self.insert(
+                builtin.name().expect("Builtin functions must have names!"),
+                builtin.into(),
+            );
         }
 
         self

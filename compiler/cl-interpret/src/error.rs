@@ -112,8 +112,8 @@ impl std::error::Error for Error {}
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self { kind, span } = self;
-        if let Some(Span { path: _, head, tail }) = span {
-            write!(f, "{head}..{tail}: ")?;
+        if let Some(Span { path, head, tail }) = span {
+            write!(f, "{path}:{head}..{tail}: ")?;
         }
         write!(f, "{kind}")
     }
@@ -190,7 +190,7 @@ impl std::fmt::Display for ErrorKind {
                 write!(f, "expression is not assignable")
             }
             ErrorKind::NotDefined(value) => {
-                write!(f, "{value} not bound. Did you mean `let {value};`?")
+                write!(f, "{value} not bound.")
             }
             ErrorKind::NotInitialized(value) => {
                 write!(f, "{value} bound, but not initialized")

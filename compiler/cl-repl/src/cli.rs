@@ -5,7 +5,7 @@ use crate::{
     menu,
     tools::print_token,
 };
-use cl_ast::{Expr, types::Symbol};
+use cl_ast::{At, Expr, types::Symbol};
 use cl_interpret::{builtin::builtins, convalue::ConValue, env::Environment, interpret::Interpret};
 use cl_lexer::Lexer;
 use cl_parser::{Parser, inliner::ModuleInliner};
@@ -148,13 +148,13 @@ fn lex_code(path: &str, code: &str) -> Result<(), Box<dyn Error>> {
 }
 
 fn fmt_code(path: &str, code: &str) -> Result<(), Box<dyn Error>> {
-    let code = Parser::new(Lexer::new(path.into(), code)).parse::<Expr>(0)?;
+    let code = Parser::new(Lexer::new(path.into(), code)).parse::<At<Expr>>(0)?;
     println!("{code}");
     Ok(())
 }
 
 fn run_code(path: &str, code: &str, env: &mut Environment) -> Result<(), Box<dyn Error>> {
-    let code = Parser::new(Lexer::new(path.into(), code)).parse::<Expr>(0)?;
+    let code = Parser::new(Lexer::new(path.into(), code)).parse::<At<Expr>>(0)?;
     match code.interpret(env)? {
         ConValue::Empty => {}
         ret => println!("{ret}"),
