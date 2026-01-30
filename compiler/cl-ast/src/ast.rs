@@ -37,9 +37,9 @@ pub trait AstTypes: Annotation {
 #[derive(Clone, PartialEq, Eq)]
 pub struct At<T: Annotation, A: AstTypes = DefaultTypes>(pub T, pub A::Annotation);
 
-/// Expressions: The beating heart of Dough.
+/// Expressions: The beating heart of Conlang.
 ///
-/// A program in Doughlang is a single expression which, at compile time,
+/// A program in Conlang is a single expression which, at compile time,
 /// sets up the state in which a program will run. This expression binds types,
 /// functions, and values to names which are exposed at runtime.
 ///
@@ -70,7 +70,7 @@ pub enum Expr<A: AstTypes = DefaultTypes> {
     Op(Op, Vec<At<Self, A>>),
 }
 
-/// Doughlang's AST is partitioned by data representation, so it
+/// Conlang's AST is partitioned by data representation, so it
 /// considers any expression which is composed solely of keywords,
 /// symbols, and other expressions as operator expressions.
 ///
