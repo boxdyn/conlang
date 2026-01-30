@@ -82,6 +82,7 @@ pub enum Ps {
     DoubleRef,  // && Expr
     Make,       // Expr{ Expr,* }
     ImplicitDo, // An implicit semicolon
+    Skip,       // Skips the current token.
     End,        // Produces an empty value.
     Op(Op),     // A normal [ast::Op]
 }
@@ -92,6 +93,9 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
     Ok(match token.kind {
         TKind::OutDoc => (Ps::DocOuter, Prec::Max),
         TKind::InDoc => (Ps::DocInner, Prec::Max),
+
+        TKind::Dot | TKind::Gt => (Ps::Skip, Prec::Max), // .> conlang
+
         TKind::Do => (Ps::Op(Op::Do), Prec::Do),
         TKind::Semi => (Ps::End, Prec::Body),
 
@@ -222,6 +226,7 @@ impl<'t> Parse<'t> for Expr {
                 Ps::End if (prec.value()..=prec.next()).contains(&level) => Expr::Omitted,
                 Ps::End => Err(ParseError::NotPrefix(kind, span))?,
 
+                Ps::Skip => p.consume().parse(level)?,
                 Ps::Id => Expr::Id(p.parse(())?),
                 Ps::Mid => Expr::MetId(p.consume().next()?.lexeme.to_string().as_str().into()),
                 Ps::Lit => Expr::Lit(p.parse(())?),
