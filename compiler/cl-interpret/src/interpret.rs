@@ -96,14 +96,13 @@ impl Interpret for (Op, &[At<Expr>]) {
             },
             (Op::As, [value, ty]) => cl_todo!("{value} as {ty} operator"),
             (Op::Block, []) => Ok(ConValue::Empty),
-            (Op::Block, [expr]) => expr.interpret(&mut env.frame("block")),
+            (Op::Block, [expr]) => expr.interpret(&mut env.frame("block", None)),
             (Op::Array, []) => Ok(ConValue::Array(Box::new([]))),
             (Op::Array, exprs) => Ok(ConValue::Array(
                 exprs
                     .iter()
                     .map(|e| e.interpret(env))
-                    .collect::<Result<Vec<_>, _>>()?
-                    .into_boxed_slice(),
+                    .collect::<Result<Box<_>, _>>()?,
             )),
             (Op::ArRep, [v, rep]) => cl_todo!("[{v}; {rep}]"),
             (Op::Group, [expr]) => expr.interpret(env),
@@ -112,8 +111,7 @@ impl Interpret for (Op, &[At<Expr>]) {
                 exprs
                     .iter()
                     .map(|e| e.interpret(env))
-                    .collect::<Result<Vec<_>, _>>()?
-                    .into_boxed_slice(),
+                    .collect::<Result<Box<_>, _>>()?,
             )),
             (Op::MetaInner, [_, expr]) => expr.interpret(env),
             (Op::MetaOuter, [_, expr]) => expr.interpret(env),
@@ -129,7 +127,7 @@ impl Interpret for (Op, &[At<Expr>]) {
             }
 
             // Annotation operators
-            (Op::Pub, [expr]) => cl_todo!("pub {expr}"),
+            (Op::Pub, [expr]) => expr.interpret(env),
             (Op::Const, [expr]) => expr.interpret(env), // we are const
             (Op::Static, [expr]) => cl_todo!("static {expr}"),
 
@@ -145,7 +143,7 @@ impl Interpret for (Op, &[At<Expr>]) {
             },
             (Op::Match, [scrutinee, arms @ ..]) => cl_todo!("match {scrutinee} {{{arms:#?}}}"),
             (Op::If, [cond, pass, fail]) => {
-                let mut scope = env.frame("if");
+                let mut scope = env.frame("if", None);
                 if cond.interpret(&mut scope)?.truthy()? {
                     return pass.interpret(&mut scope);
                 }
@@ -154,7 +152,7 @@ impl Interpret for (Op, &[At<Expr>]) {
             }
             (Op::While, [cond, pass, fail]) => {
                 loop {
-                    let mut scope = env.frame("while");
+                    let mut scope = env.frame("while", None);
                     if cond.interpret(&mut scope)?.truthy()? {
                         match pass.interpret(&mut scope) {
                             Ok(_) => {}

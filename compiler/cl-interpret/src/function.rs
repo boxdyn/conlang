@@ -7,6 +7,7 @@ use crate::{
 
 use super::{Callable, ConValue, Environment, Error, IResult, Interpret};
 use cl_ast::{At, Bind, BindOp, Expr, Pat, PatOp, types::Symbol as Sym};
+use cl_structures::{intern::interned::Interned, span::Span};
 use std::{
     cell::{Ref, RefCell},
     collections::HashMap,
@@ -37,6 +38,9 @@ impl Function {
     }
     pub fn decl(&self) -> &(Pat, At<Expr>) {
         &self.decl
+    }
+    pub fn span(&self) -> Span {
+        self.decl.1.1
     }
     pub fn upvars(&self) -> Ref<'_, Upvars> {
         self.upvars.borrow()
@@ -69,9 +73,17 @@ impl Callable for Function {
         let mut bindings = HashMap::new();
         pat.matches(args, &mut MatchEnv::new(env, &mut bindings))?;
 
-        // env.push_frame("args", bind);
         let mut scope = env.with_frame("args", bindings);
-        let mut scope = scope.frame("function-body");
-        body.interpret(&mut scope)
+        let mut scope = scope.frame(
+            self.name().map(|name| name.to_ref()).unwrap_or("closure"),
+            Some(self.span()),
+        );
+        match body.interpret(&mut scope) {
+            Err(Error { kind: ErrorKind::Panic(e, depth), span }) => {
+                println!("{depth:>4}: {pat} at {}", span.unwrap_or(self.span()));
+                Err(Error { kind: ErrorKind::Panic(e, depth + 1), span: None })
+            }
+            other => other,
+        }
     }
 }

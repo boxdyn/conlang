@@ -176,6 +176,16 @@ pub const Builtins: &[Builtin] = &builtins![
         Ok(())
     }
 
+    fn backtrace() @env {
+        println!("Backtrace:\n{}", env.backtrace());
+        Ok(())
+    }
+
+    fn host_backtrace() {
+        println!("Host backtrace:\n{}", std::backtrace::Backtrace::force_capture());
+        Ok(())
+    }
+
     /// Gets all global variables in the environment
     fn globals() @env {
         let globals = env.globals();
@@ -290,7 +300,7 @@ pub const Math: &[Builtin] = &builtins![
             (ConValue::Str(s), ConValue::Char(c)) => { let mut s = s.to_string(); s.push(*c); s.into() }
             (ConValue::String(s), ConValue::Char(c)) => { let mut s = s.to_string(); s.push(*c); s.into() }
             (ConValue::Char(a), ConValue::Char(b)) => {
-                ConValue::String([a, b].into_iter().collect::<String>())
+                ConValue::String([a, b].into_iter().collect())
             }
             _ => Err(Error::TypeError())?
         })

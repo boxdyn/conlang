@@ -10,6 +10,7 @@ use super::{
     function::Function,
 };
 use cl_ast::{Bind as FnDecl, types::Symbol};
+use cl_structures::span::Span;
 use std::{
     collections::HashMap,
     fmt::Display,
@@ -24,10 +25,30 @@ pub type StackBinds = HashMap<Symbol, usize>;
 #[derive(Clone, Debug, Default)]
 pub(crate) struct EnvFrame {
     pub name: Option<&'static str>,
+
+    pub span: Option<Span>,
     /// The length of the array when this stack frame was constructed
     pub base: usize,
     /// The bindings of name to stack position
     pub binds: StackBinds,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Backtrace<'env> {
+    frames: &'env [EnvFrame],
+}
+
+impl std::fmt::Display for Backtrace<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut count = 0;
+        for EnvFrame { name, span, .. } in self.frames.iter().rev() {
+            if let (Some(name), Some(span)) = (name, span) {
+                writeln!(f, "{count:>4}: {name}")?;
+                count += 1;
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Implements a nested lexical scope
@@ -39,7 +60,7 @@ pub struct Environment {
 
 impl Display for Environment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for EnvFrame { name, base: _, binds } in self.frames.iter().rev() {
+        for EnvFrame { name, binds, .. } in self.frames.iter().rev() {
             writeln!(
                 f,
                 "--- {}[{}] ---",
@@ -95,7 +116,7 @@ impl Environment {
     }
 
     pub fn bind_raw(&mut self, name: Symbol, id: usize) -> Option<()> {
-        let EnvFrame { name: _, base: _, binds } = self.frames.last_mut()?;
+        let EnvFrame { name: _, span: _, base: _, binds } = self.frames.last_mut()?;
         binds.insert(name, id);
         Some(())
     }
@@ -103,6 +124,10 @@ impl Environment {
     /// Gets all registered globals, bound or unbound.
     pub(crate) fn globals(&self) -> &EnvFrame {
         self.frames.first().unwrap()
+    }
+
+    pub fn backtrace(&self) -> Backtrace<'_> {
+        Backtrace { frames: &self.frames }
     }
 
     /// Adds builtins
@@ -128,6 +153,7 @@ impl Environment {
     pub fn push_frame(&mut self, name: &'static str, frame: StackFrame) {
         self.frames.push(EnvFrame {
             name: Some(name),
+            span: None,
             base: self.values.len(),
             binds: HashMap::new(),
         });
@@ -138,7 +164,7 @@ impl Environment {
 
     pub fn pop_frame(&mut self) -> Option<(StackFrame, &'static str)> {
         let mut out = HashMap::new();
-        let EnvFrame { name, base, binds } = self.frames.pop()?;
+        let EnvFrame { name, span: _, base, binds } = self.frames.pop()?;
         for (k, v) in binds {
             out.insert(k, self.values.get_mut(v).map(std::mem::take)?);
         }
@@ -149,8 +175,8 @@ impl Environment {
     /// Enters a nested scope, returning a [`Frame`] stack-guard.
     ///
     /// [`Frame`] implements Deref/DerefMut for [`Environment`].
-    pub fn frame(&mut self, name: &'static str) -> Frame<'_> {
-        Frame::new(self, name)
+    pub fn frame(&mut self, name: &'static str, span: Option<Span>) -> Frame<'_> {
+        Frame::new(self, name, span)
     }
 
     /// Enters a nested scope, assigning the contents of `frame`,
@@ -158,7 +184,7 @@ impl Environment {
     ///
     /// [`Frame`] implements Deref/DerefMut for [`Environment`].
     pub fn with_frame<'e>(&'e mut self, name: &'static str, frame: StackFrame) -> Frame<'e> {
-        let mut scope = self.frame(name);
+        let mut scope = self.frame(name, None);
         for (k, v) in frame {
             scope.insert(k, v);
         }
@@ -246,9 +272,10 @@ pub struct Frame<'scope> {
     scope: &'scope mut Environment,
 }
 impl<'scope> Frame<'scope> {
-    fn new(scope: &'scope mut Environment, name: &'static str) -> Self {
+    fn new(scope: &'scope mut Environment, name: &'static str, span: Option<Span>) -> Self {
         scope.frames.push(EnvFrame {
             name: Some(name),
+            span,
             base: scope.values.len(),
             binds: HashMap::new(),
         });
@@ -266,7 +293,7 @@ impl<'scope> Frame<'scope> {
     }
 
     pub fn into_binds(mut self) -> Option<StackBinds> {
-        let EnvFrame { name: _, base: _, binds } = self.frames.pop()?;
+        let EnvFrame { name: _, span: _, base: _, binds } = self.frames.pop()?;
         std::mem::forget(self);
         Some(binds)
     }
