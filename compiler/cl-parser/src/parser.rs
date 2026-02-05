@@ -235,7 +235,7 @@ impl<'t> Parse<'t> for Path {
         if p.next_if(TKind::ColonColon)?.is_ok() {
             parts.push("".into()); // the "root"
         }
-        while let Ok(id) = p.next_if(TKind::Identifier)? {
+        while let Some(Ok(id)) = p.next_if(TKind::Identifier).allow_eof()? {
             parts.push(
                 id.lexeme
                     .str()

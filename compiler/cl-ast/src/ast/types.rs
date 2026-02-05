@@ -37,6 +37,20 @@ pub struct Path {
     // TODO: generic parameters
 }
 
+impl Path {
+    /// Returns the "root path": `::`
+    pub fn root() -> Path {
+        Path { parts: vec!["".into()] }
+    }
+    /// Returns the last path segment
+    pub fn name(&self) -> Option<Symbol> {
+        match self.parts.as_slice() {
+            [] => None,
+            [.., name] => Some(*name),
+        }
+    }
+}
+
 impl From<&str> for Path {
     fn from(value: &str) -> Self {
         Self { parts: vec![value.into()] }
@@ -52,7 +66,10 @@ impl From<Symbol> for Path {
 impl std::fmt::Display for Path {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self { parts } = self;
-        f.list(parts, "::")
+        match parts.as_slice() {
+            [Interned("", ..)] => f.write_str("::"),
+            parts => f.list(parts, "::"),
+        }
     }
 }
 
