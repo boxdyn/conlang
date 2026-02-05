@@ -220,10 +220,12 @@ pub enum Op {
 }
 
 impl<A: AstTypes> Expr<A> {
+    /// Attaches this [Expr] to an [At] node with the provided [Annotation].
     pub const fn at(self, annotation: A::Annotation) -> At<Expr<A>, A> {
         At(self, annotation)
     }
 
+    /// Attaches another expression to this one, continuing a [`do`](Op::Do) chain if possible.
     pub fn and_do(self, annotation: A::Annotation, other: At<Expr<A>, A>) -> Self {
         let Self::Op(Op::Do, mut exprs) = self else {
             return Self::Op(Op::Do, vec![self.at(annotation), other]);
@@ -236,6 +238,7 @@ impl<A: AstTypes> Expr<A> {
         Self::Op(Op::Do, exprs)
     }
 
+    /// Turns this expression into a [`tuple`](Op::Tuple) if it isn't already one.
     pub fn to_tuple(self, annotation: A::Annotation) -> Self {
         match self {
             Self::Op(Op::Tuple, _) => self,
@@ -243,6 +246,7 @@ impl<A: AstTypes> Expr<A> {
         }
     }
 
+    /// Returns whether `self` is a "place projection" expression (identifier, index, dot, or deref)
     pub const fn is_place(&self) -> bool {
         matches!(
             self,
@@ -250,10 +254,12 @@ impl<A: AstTypes> Expr<A> {
         )
     }
 
+    /// Returns whether `self` is NOT a "place projection" expression
     pub const fn is_value(&self) -> bool {
         !self.is_place()
     }
 
+    /// If `self` is an [Expr::Op], returns the [Op] and a slice of its arguments.
     #[allow(clippy::type_complexity)]
     pub const fn as_slice(&self) -> Option<(Op, &[At<Expr<A>, A>])> {
         match self {
@@ -365,6 +371,7 @@ pub enum PatOp {
 }
 
 impl<A: AstTypes> Pat<A> {
+    /// Turns this pattern into a [`tuple`](PatOp::Tuple) if it isn't already one.
     pub fn to_tuple(self) -> Self {
         match self {
             Self::Op(PatOp::Tuple, _) => self,
