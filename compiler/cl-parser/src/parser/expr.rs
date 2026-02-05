@@ -141,8 +141,8 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
         TKind::Minus => (Ps::Op(Op::Neg), Prec::Unary),
         TKind::Plus => (Ps::Op(Op::Identity), Prec::Unary),
         TKind::Star => (Ps::Op(Op::Deref), Prec::Unary),
-        TKind::Hash => (Ps::Op(Op::MetaOuter), Prec::Unary),
-        TKind::HashBang => (Ps::Op(Op::MetaInner), Prec::Unary),
+        TKind::Hash => (Ps::Op(Op::MetaOuter), Prec::Max),
+        TKind::HashBang => (Ps::Op(Op::MetaInner), Prec::Max),
 
         kind => Err(ParseError::NotPrefix(kind, token.span))?,
     })
@@ -227,18 +227,6 @@ impl<'t> Parse<'t> for Expr {
                 Ps::Lit => Expr::Lit(p.parse(())?),
                 Ps::Use => Expr::Use(p.consume().parse(())?),
                 Ps::Def => Expr::Bind(p.parse(None)?),
-                Ps::DocOuter | Ps::DocInner => {
-                    let comment = Literal::Str(p.take_lexeme()?.string().unwrap());
-                    let comment = Expr::Lit(comment).at(span);
-                    let next = p.parse(level.max(Prec::Do.next()))?;
-                    Expr::Op(
-                        match op {
-                            Ps::DocOuter => Op::MetaOuter,
-                            _ => Op::MetaInner,
-                        },
-                        vec![comment, next],
-                    )
-                }
                 Ps::For => parse_for(p, ())?,
                 Ps::Lambda | Ps::Lambda0 => {
                     p.consume();
@@ -260,7 +248,18 @@ impl<'t> Parse<'t> for Expr {
                         vec![p.parse(Prec::Body.next())?],
                     )))
                 }
-                Ps::Op(Op::Match) => parse_match(p)?,
+                Ps::DocOuter | Ps::DocInner => {
+                    let comment = Literal::Str(p.take_lexeme()?.string().unwrap());
+                    let comment = Expr::Lit(comment).at(span);
+                    let next = p.parse(prec.next())?;
+                    Expr::Op(
+                        match op {
+                            Ps::DocOuter => Op::MetaOuter,
+                            _ => Op::MetaInner,
+                        },
+                        vec![comment, next],
+                    )
+                }
                 Ps::Op(op @ (Op::MetaOuter | Op::MetaInner)) => Expr::Op(
                     op,
                     vec![
@@ -268,9 +267,10 @@ impl<'t> Parse<'t> for Expr {
                             .expect(TKind::LBrack)?
                             .opt(MIN, TKind::RBrack)?
                             .unwrap_or_else(|| Expr::Op(Op::Tuple, vec![]).at(span)),
-                        p.parse(level.max(Prec::Do.next()))?,
+                        p.parse(prec.next())?,
                     ],
                 ),
+                Ps::Op(Op::Match) => parse_match(p)?,
                 Ps::Op(Op::Block) => Expr::Op(
                     Op::Block,
                     p.consume().opt(MIN, kind.flip())?.into_iter().collect(),
