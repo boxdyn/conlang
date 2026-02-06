@@ -12,9 +12,9 @@ pub mod visit;
 pub use types::DefaultTypes;
 
 /// An annotation: bounds on AST parameters
-pub trait Annotation: Clone + std::fmt::Display + std::fmt::Debug + PartialEq + Eq {}
+pub trait Annotation: Clone + std::fmt::Display + std::fmt::Debug + PartialEq + Eq + Hash {}
 
-impl<T: Clone + std::fmt::Debug + std::fmt::Display + PartialEq + Eq> Annotation for T {}
+impl<T: Clone + std::fmt::Debug + std::fmt::Display + PartialEq + Eq + Hash> Annotation for T {}
 
 pub trait AstTypes: Annotation {
     /// An annotation on an arbitrary [Expr]
@@ -34,7 +34,7 @@ pub trait AstTypes: Annotation {
 }
 
 /// A value with an annotation.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct At<T: Annotation, A: AstTypes = DefaultTypes>(pub T, pub A::Annotation);
 
 /// Expressions: The beating heart of Conlang.
@@ -49,7 +49,7 @@ pub struct At<T: Annotation, A: AstTypes = DefaultTypes>(pub T, pub A::Annotatio
 /// in whichever way the compiler sees fit. This is especially important when
 /// performing import resolution, as imports typically depend on the order
 /// in which names are bound.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Expr<A: AstTypes = DefaultTypes> {
     /// Omitted by semicolon insertion-elision rules
     Omitted,
@@ -82,7 +82,7 @@ pub enum Expr<A: AstTypes = DefaultTypes> {
 /// - Control flow: `if`, `while`, `loop`, `match`, `break`, `return`
 /// - Function calls `Expr (Expr,*)`
 /// - Traditional binary and unary operators (add, sub, neg, assign)
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Op {
     /// `Expr (; Expr)*`
     Do,
@@ -281,7 +281,7 @@ impl<A: AstTypes> Expr<A> {
 /// for    Pat in Expr Expr (else Expr)?
 /// Pat => Expr // in match
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Bind<A: AstTypes = DefaultTypes>(
     pub BindOp,
     pub Vec<A::Path>,
@@ -292,7 +292,7 @@ pub struct Bind<A: AstTypes = DefaultTypes>(
 /// The binding operation used by a [Bind].
 ///
 /// See [Bind] for their syntactic representations
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BindOp {
     /// A `let Pat (= Expr (else Expr)?)?` binding
     Let,
@@ -317,7 +317,7 @@ pub enum BindOp {
 /// Binding patterns for each kind of matchable value.
 ///
 /// This covers both bindings and type annotations in [Bind] expressions.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Pat<A: AstTypes = DefaultTypes> {
     /// `_`: Matches anything without binding
     Ignore,
@@ -334,7 +334,7 @@ pub enum Pat<A: AstTypes = DefaultTypes> {
 }
 
 /// Operators on lists of patterns
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PatOp {
     /// Changes the visibility mode to "public"
     Pub,
@@ -381,7 +381,7 @@ impl<A: AstTypes> Pat<A> {
 }
 
 /// A compound import declaration
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Use<A: AstTypes = DefaultTypes> {
     /// "*"
     Glob,
@@ -399,12 +399,12 @@ pub enum Use<A: AstTypes = DefaultTypes> {
 /// ```ignore
 /// Expr { (Ident (: Expr)?),* }
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Make<A: AstTypes = DefaultTypes>(pub At<Expr<A>, A>, pub Vec<MakeArm<A>>);
 
 /// A single "arm" of a make expression
 /// ```text
 /// Identifier (':' Expr)?
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MakeArm<A: AstTypes = DefaultTypes>(pub A::Symbol, pub Option<At<Expr<A>, A>>);

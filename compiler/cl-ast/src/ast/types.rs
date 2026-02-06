@@ -30,7 +30,7 @@ pub type Symbol = Interned<'static, str>;
 /// A qualified identifier
 ///
 /// TODO: qualify identifier
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Path {
     // TODO: Identifier interning
     pub parts: Vec<Symbol>,
@@ -74,7 +74,7 @@ impl std::fmt::Display for Path {
 }
 
 /// A literal value (boolean, character, integer, string)
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Literal {
     /// A boolean literal: true | false
     Bool(bool),

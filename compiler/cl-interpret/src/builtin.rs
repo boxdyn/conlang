@@ -3,9 +3,10 @@
 use cl_ast::types::Symbol;
 
 use crate::{
+    Callable,
     convalue::ConValue,
     env::Environment,
-    error::{Error, IResult},
+    error::{Error, ErrorKind, IResult},
 };
 use std::io::{Write, stdout};
 
@@ -245,9 +246,43 @@ pub const Builtins: &[Builtin] = &builtins![
         })
     }
 
+    /// Invokes a function with the given arguments
+    fn invoke(function, args) @env {
+        match args {
+            ConValue::Empty => function.call(env, &[]),
+            ConValue::Array(args) | ConValue::Tuple(args) => function.call(env, args),
+            _ => function.call(env, std::slice::from_ref(args)),
+        }
+    }
+
     fn dump_symbols() {
         println!("{}", cl_structures::intern::string_interner::StringInterner::global());
         Ok(ConValue::Empty)
+    }
+
+    /// Builtin hex function to use when hex.cl isn't loaded
+    fn builtin_hex(ConValue::Int(v)) {
+        Ok(format!("0x{v:x}"))
+    }
+
+    /// Builtin oct function to use when hex.cl isn't loaded
+    fn builtin_oct(ConValue::Int(v)) {
+        Ok(format!("0o{v:o}"))
+    }
+
+    /// Builtin bin function to use when hex.cl isn't loaded
+    fn builtin_bin(ConValue::Int(v)) {
+        Ok(format!("0b{v:b}"))
+    }
+
+    fn catch_panic(lambda, args @ ..) @env {
+        match lambda.call(env, args) {
+            Err(Error { kind: ErrorKind::Panic(e, ..), ..}) => {
+                println!("Caught panic!");
+                Ok(ConValue::String(e))
+            },
+            other => other,
+        }
     }
 
     fn slice_of(ConValue::Ref(arr), ConValue::Int(start)) {
