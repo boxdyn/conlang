@@ -211,7 +211,7 @@ impl std::fmt::Display for ErrorKind {
             ErrorKind::MatchNonexhaustive => {
                 write!(f, "Fell through a non-exhaustive match expression!")
             }
-            ErrorKind::Panic(s, _depth) => write!(f, "Explicit panic: {s}"),
+            ErrorKind::Panic(s, _depth) => write!(f, "{s}"),
             ErrorKind::BuiltinError(s) => write!(f, "{s}"),
         }
     }

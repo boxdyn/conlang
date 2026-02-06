@@ -14,7 +14,7 @@ use cl_ast::{
     *,
 };
 use cl_structures::intern::interned::Interned;
-use std::{collections::HashMap, rc::Rc, slice};
+use std::{collections::HashMap, iter, rc::Rc, slice};
 
 macro trace($($t:tt)*) {{
     #[cfg(debug_assertions)]
@@ -23,23 +23,23 @@ macro trace($($t:tt)*) {{
     }
 }}
 
-/// Turns a `todo!` invocation into an [Error::BuiltinError]
+/// Turns a `todo!` invocation into an [Error::Panic]
 macro cl_todo {
     () => {
-        Err(Error::BuiltinError(format!("Not yet implemented (at {}:{}:{})", file!(), line!(), column!())))
+        Err(Error::Panic(format!("Not yet implemented (at {}:{}:{})", file!(), line!(), column!())))
     },
     ($($t:tt)*) => {
-        Err(Error::BuiltinError(format!("Not yet implemented: {} (at {}:{}:{})", format_args!($($t)*), file!(), line!(), column!())))
+        Err(Error::Panic(format!("Not yet implemented: {} (at {}:{}:{})", format_args!($($t)*), file!(), line!(), column!())))
     }
 }
 
-/// Turns an `unimplemented!` invocation into an [Error::BuiltinError]
+/// Turns an `unimplemented!` invocation into an [Error::Panic]
 macro cl_unimplemented {
     () => {
-        Err(Error::BuiltinError(format!("Not implemented (at {}:{}:{})", file!(), line!(), column!())))
+        Err(Error::Panic(format!("Not implemented (at {}:{}:{})", file!(), line!(), column!())))
     },
     ($($t:tt)*) => {
-        Err(Error::BuiltinError(format!("Not implemented: {} (at {}:{}:{})", format_args!($($t)*), file!(), line!(), column!())))
+        Err(Error::Panic(format!("Not implemented: {} (at {}:{}:{})", format_args!($($t)*), file!(), line!(), column!())))
     }
 }
 
@@ -171,6 +171,24 @@ impl Interpret for (Op, &[At<Expr>]) {
             (Op::Continue, []) => Err(Error::Continue()),
 
             // Dot projection
+            (Op::Dot, [scrutinee, At(Expr::Op(Op::Call, args), _)]) => {
+                let [callee, args] = args.as_slice() else {
+                    cl_todo!("Interpret non-call {args:?}")?
+                };
+                let function = callee.interpret(env)?;
+                let args = args.interpret(env)?;
+                let scrutinee = scrutinee.interpret(env)?;
+                match args {
+                    ConValue::Empty => function.call(env, &[scrutinee]),
+                    ConValue::Tuple(args) => function.call(
+                        env,
+                        &iter::once(scrutinee)
+                            .chain(args) // TODO: remove allocation
+                            .collect::<Box<_>>(),
+                    ),
+                    other => function.call(env, &[scrutinee, other]),
+                }
+            }
             (Op::Dot, [scrutinee, proj]) => cl_todo!("dot: {scrutinee}.{proj}"),
 
             // Range operators
@@ -320,16 +338,12 @@ impl Interpret for Bind<DefaultTypes> {
                 Ok(ConValue::Function(func))
             }
             (BindOp::Mod, _, [At(Expr::Op(Op::Block, exprs), ..)]) => {
-                println!("Warning: not creating module for {pat}");
                 let [body] = exprs.as_slice() else {
                     todo!("{exprs:?}")?
                 };
                 body.interpret(env)
             }
-            (BindOp::Mod, _, [body]) => {
-                println!("Warning: not creating module for {pat}");
-                body.interpret(env)
-            }
+            (BindOp::Mod, _, [body]) => body.interpret(env),
             (BindOp::Impl, _, [body]) => cl_todo!("impl {pat} {body}"),
             (BindOp::Struct, _, []) => cl_todo!("struct {pat}"),
             (BindOp::Enum, _, []) => cl_todo!("enum {pat}"),
@@ -445,9 +459,8 @@ impl Match for (PatOp, &[Pat]) {
                         .ok_or_else(|| Error::PatFailed(pat.clone().into()))?;
                     pat.matches(value, in_env)
                 }
-                _ => Err(Error::PatFailed(
-                    Pat::Op(PatOp::Ref, vec![pat.clone()]).into(),
-                )),
+                // Auto-referencing in patterns..?
+                other => pat.matches(other, in_env),
             },
             (PatOp::Ref, _) => unimplemented!(),
             (PatOp::Ptr, _) => todo!(),
@@ -475,8 +488,8 @@ impl Match for (PatOp, &[Pat]) {
             (PatOp::Typed, _) => todo!(),
             (PatOp::TypePrefixed, [Pat::Name(pat_name), pat]) => match value {
                 ConValue::TupleStruct(value_name, values) => {
-                    if (*pat_name != value_name) {
-                        Err(Error::MatchNonexhaustive())?
+                    if *pat_name != value_name {
+                        Err(Error::TypeError())?
                     }
                     pat.matches(ConValue::Tuple(*values), in_env)
                 }
@@ -502,6 +515,7 @@ enum SliceMode {
 impl Match<Box<[ConValue]>> for (SliceMode, &[Pat]) {
     fn matches<'env>(&self, values: Box<[ConValue]>, in_env: &mut MatchEnv<'env>) -> IResult<()> {
         let (mode, pats) = self;
+
         let mut values = values.into_iter();
         let mut pats = pats.iter().peekable();
         while !matches!(pats.peek(), None | Some(Pat::Op(PatOp::Rest, _))) {
@@ -529,9 +543,12 @@ impl Match<Box<[ConValue]>> for (SliceMode, &[Pat]) {
                 };
             }
         } else if values.next().is_some() {
-            Err(Error::TypeError())?;
+            Err(Error::TypeError())?
         }
 
-        Ok(())
+        match pats.next() {
+            Some(_) => unimplemented!("Match against multiple rest-patterns"),
+            None => Ok(()),
+        }
     }
 }
