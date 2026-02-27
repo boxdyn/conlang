@@ -31,8 +31,8 @@ impl Inference for Expr {
             Self::MetId(_) => todo!("Cannot perform type inference on macro identifier {self}"),
             Self::Lit(literal) => literal.infer(e),
             Self::Use(_) => Ok(e.unit()),
-            Self::Bind(bind) => todo!("Infer the type of {bind}"),
-            Self::Make(make) => todo!("Infer the type of {make}"),
+            Self::Bind(bind) => bind.infer(e),
+            Self::Make(make) => make.infer(e),
             Self::Op(op, exprs) => infer_expr_op(*op, exprs, e),
         }
     }
@@ -70,9 +70,18 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_, '_>
         (Op::Try, [..]) => todo!("Infer {op}"),
         (Op::Index, [..]) => todo!("Infer {op}"),
         (Op::Call, [..]) => todo!("Infer {op}"),
-        (Op::Pub, [..]) => todo!("Infer {op}"),
+        (Op::Pub, [expr]) => expr.infer(e),
+        (Op::Pub, [..]) => todo!("Infer {op} {exprs:?}"),
         (Op::Const, [..]) => todo!("Infer {op}"),
         (Op::Static, [..]) => todo!("Infer {op}"),
+        (Op::Loop, [expr]) => {
+            let mut bset = None;
+            let mut scope = e.open_bset(&mut bset);
+            let body = scope.infer(expr)?;
+            let unit = scope.unit();
+            scope.unify(body, unit)?;
+            Ok(bset.unwrap_or(e.never()))
+        }
         (Op::Loop, [..]) => todo!("Infer {op}"),
         (Op::Match, [scrutinee, arms @ ..]) => {
             // Infer the scrutinee
@@ -289,6 +298,19 @@ fn infer_pat_op(op: PatOp, pats: &[Pat], e: &mut InferenceEngine<'_, '_, '_>) ->
         (PatOp::Fn, [..]) => todo!(),
         (PatOp::Alt, [..]) => todo!(),
         _ => panic!(""),
+    }
+}
+
+impl Inference for Make {
+    fn infer(&self, _e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+        todo!("infer {self}")
+    }
+}
+
+impl Inference for MakeArm {
+    fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+        let Self(_sym, expr) = self;
+        expr.infer(e)
     }
 }
 

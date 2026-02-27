@@ -375,3 +375,61 @@ pub mod dropless_interner {
     unsafe impl<'a, T: Eq + Hash + Send> Send for DroplessInterner<'a, T> where &'a T: Send {}
     unsafe impl<T: Eq + Hash + Send + Sync> Sync for DroplessInterner<'_, T> {}
 }
+
+pub mod leaky_interner {
+    //! An "interner" which leaks anything you give it
+    use std::{collections::HashSet, hash::Hash, sync::RwLock};
+
+    use crate::intern::interned::Interned;
+
+    /// An interner which leaks anything you give it using [Box::leak]
+    pub struct LeakyInterner<'a, T: Eq + Hash> {
+        keys: RwLock<HashSet<&'a T>>,
+    }
+
+    impl<'a, T: Eq + Hash> Default for LeakyInterner<'a, T> {
+        fn default() -> Self {
+            Self { keys: Default::default() }
+        }
+    }
+
+    impl<'a, T: Eq + Hash> LeakyInterner<'a, T> {
+        pub fn new() -> Self {
+            Self { keys: RwLock::new(HashSet::new()) }
+        }
+
+        /// Converts the given value into an [Interned] value.
+        ///
+        /// # Blocks
+        /// This function blocks when the interner is held by another thread.
+        pub fn get_or_insert(&'a self, value: T) -> Interned<'a, T> {
+            let Self { keys } = self;
+            let mut keys = keys.write().expect("should not be poisoned");
+
+            Interned::new(match keys.get(&value) {
+                Some(value) => value,
+                None => {
+                    let value = Box::leak(Box::new(value));
+                    keys.insert(value);
+                    value
+                }
+            })
+        }
+
+        /// Returns the [Interned] copy of the given value, if one already exists
+        ///
+        /// # Blocks
+        /// This function blocks when the interner is being written to by another thread.
+        pub fn get(&self, value: &T) -> Option<Interned<'a, T>> {
+            let keys = self.keys.read().expect("should not be poisoned");
+            keys.get(value).copied().map(Interned::new)
+        }
+
+        /// Calls the closure on each previously-interned value
+        pub fn foreach(&self, mut f: impl FnMut(&T)) {
+            for key in self.keys.read().expect("should not be poisoned").iter() {
+                f(key);
+            }
+        }
+    }
+}

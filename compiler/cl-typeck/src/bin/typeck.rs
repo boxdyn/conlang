@@ -11,11 +11,12 @@ use cl_typeck::{
 use cl_ast::{Expr, types::Path, visit::Visit};
 use cl_lexer::Lexer;
 use cl_parser::{Parser, inliner::ModuleInliner};
-use cl_structures::intern::string_interner::StringInterner;
+use cl_structures::intern::{leaky_interner::LeakyInterner, string_interner::StringInterner};
 use repline::{error::Error as RlError, prebaked::*};
 use std::{
     error::Error,
     path::{self, PathBuf},
+    sync::OnceLock,
 };
 
 // Path to display in standard library errors
@@ -77,7 +78,7 @@ fn main_menu(prj: &mut Table) -> Result<(), RlError> {
                 "q" | "query" => query_type_expression(prj)?,
                 "r" | "resolve" => resolve_all(prj)?,
                 "s" | "strings" => print_strings(),
-                // "a" | "all" => infer_all(prj)?,
+                "a" | "all" => infer_all(prj)?,
                 "t" | "test" => infer_expression(prj)?,
                 "h" | "help" | "" => {
                     println!(
@@ -237,23 +238,19 @@ fn resolve_all(table: &mut Table) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-// fn infer_all(table: &mut Table) -> Result<(), Box<dyn Error>> {
-//     for (id, error) in InferenceEngine::new(table, table.root()).infer_all() {
-//         match error {
-//             InferenceError::Mismatch(a, b) => {
-//                 eprint!("Mismatched types: {}, {}", table.entry(a), table.entry(b));
-//             }
-//             InferenceError::Recursive(a, b) => {
-//                 eprint!("Recursive types: {}, {}", table.entry(a), table.entry(b));
-//             }
-//             e => eprint!("{e}"),
-//         }
-//         eprintln!(" in {id}\n({})\n", id.to_entry(table).source().unwrap())
-//     }
+fn infer_all(table: &mut Table) -> Result<(), Box<dyn Error>> {
+    let mut ie = InferenceEngine::new(table, table.root());
+    let mut results = vec![];
+    EXPR_INTERNER
+        .get_or_init(Default::default)
+        .foreach(|expr| match ie.infer(expr) {
+            Ok(v) => println!("{expr}: {}", ie.entry(v)),
+            Err(e) => results.push(e),
+        });
 
-//     println!("...Inferred!");
-//     Ok(())
-// }
+    println!("...Inferred!");
+    Ok(())
+}
 
 fn list_types(table: &mut Table) {
     for handle in table.debug_entry_iter() {
@@ -434,8 +431,12 @@ fn banner() {
     );
 }
 
+static EXPR_INTERNER: OnceLock<LeakyInterner<'static, Expr>> = OnceLock::new();
+
 /// Interns an [Expr](cl_ast::Expr), returning a static reference to it.
 fn interned(expr: Expr) -> &'static Expr {
-    // lol. lmao even.
-    Box::leak(Box::new(expr))
+    EXPR_INTERNER
+        .get_or_init(Default::default)
+        .get_or_insert(expr)
+        .to_ref()
 }
