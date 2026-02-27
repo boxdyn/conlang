@@ -14,10 +14,10 @@ pub fn get_env() -> Environment {
                 ConValue::Str(string) => string.to_ref(),
                 ConValue::String(string) => string.as_str(),
                 ConValue::Ref(v) => {
-                    let string = env.get_id(*v).cloned().unwrap_or_default();
+                    let string = v.get(env).cloned().unwrap_or_default();
                     return eval(env, &[string])
                 }
-                _ => Err(Error::TypeError())?
+                _ => Err(Error::TypeError("string", string.typename()))?
             };
 
 
@@ -39,7 +39,7 @@ pub fn get_env() -> Environment {
             let prompt = match prompt {
                 ConValue::Str(prompt) => prompt.to_ref(),
                 ConValue::String(prompt) => prompt.as_str(),
-                _ => Err(Error::TypeError())?,
+                _ => Err(Error::TypeError("string", prompt.typename()))?,
             };
             match repline::Repline::new("", prompt, "").read() {
                 Ok(line) => Ok(ConValue::String(line)),

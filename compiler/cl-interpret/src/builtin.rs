@@ -7,6 +7,7 @@ use crate::{
     convalue::ConValue,
     env::Environment,
     error::{Error, ErrorKind, IResult},
+    place::Place,
 };
 use std::io::{Write, stdout};
 
@@ -88,7 +89,7 @@ pub macro builtin(
         // Allow for single argument `fn foo(args @ ..)` pattern
         #[allow(clippy::redundant_at_rest_pattern, irrefutable_let_patterns)]
         let [$($arg),*] = _args else {
-            Err($crate::error::Error::TypeError())?
+            Err($crate::error::Error::TypeError(concat!("(", $(stringify!($arg,),)* ")"), "something weird"))?
         };
         $body.map(Into::into)
     }
@@ -115,26 +116,42 @@ pub macro error_format ($($t:tt)*) {
 
 pub const Builtins: &[Builtin] = &builtins![
     /// Unstable variadic format function
-    fn fmt(args @ ..) {
+    fn fmt(args @ ..) @env {
         use std::fmt::Write;
         let mut out = String::new();
-        if let Err(e) = args.iter().try_for_each(|arg| write!(out, "{arg}")) {
-            eprintln!("{e}");
+
+        for mut arg in args.iter() {
+            while let ConValue::Ref(r) = arg {
+                arg = r.get(env)?;
+            }
+            if let Err(e) = write!(out, "{arg}") {
+                eprintln!("{e}");
+            }
         }
         Ok(out)
     }
 
     /// Prints the arguments in-order, with no separators
-    fn print(args @ ..) {
+    fn print(args @ ..) @env {
         let mut out = stdout().lock();
-        args.iter().try_for_each(|arg| write!(out, "{arg}") ).ok();
+        for mut arg in args.iter() {
+            while let ConValue::Ref(r) = arg {
+                arg = r.get(env)?;
+            }
+            write!(out, "{arg}").ok();
+        }
         Ok(())
     }
 
     /// Prints the arguments in-order, followed by a newline
-    fn println(args @ ..) {
+    fn println(args @ ..) @env {
         let mut out = stdout().lock();
-        args.iter().try_for_each(|arg| write!(out, "{arg}") ).ok();
+        for mut arg in args.iter() {
+            while let ConValue::Ref(r) = arg {
+                arg = r.get(env)?;
+            }
+            write!(out, "{arg}").ok();
+        }
         writeln!(out).ok();
         Ok(())
     }
@@ -197,12 +214,6 @@ pub const Builtins: &[Builtin] = &builtins![
         Ok(())
     }
 
-    /// Gets all global variables in the environment
-    fn globals() @env {
-        let globals = env.globals();
-        Ok(ConValue::Slice(globals.base, globals.binds.len()))
-    }
-
     fn builtins() @env {
         let len = env.globals().binds.len();
         for builtin in 0..len {
@@ -213,29 +224,27 @@ pub const Builtins: &[Builtin] = &builtins![
         Ok(())
     }
 
-    fn alloca(ConValue::Int(len)) @env {
-        Ok(env.alloca(ConValue::Empty, *len as usize))
-    }
-
     /// Returns the length of the input list as a [ConValue::Int]
     fn len(list) @env {
-        Ok(match list {
+        let mut value = list;
+        while let ConValue::Ref(r) = value {
+            value = r.get(env)?;
+        }
+        Ok(match value {
             ConValue::Empty => 0,
             ConValue::Str(s) => s.chars().count() as _,
             ConValue::String(s) => s.chars().count() as _,
-            ConValue::Ref(r) => {
-                return len(env, &[env.get_id(*r).ok_or(Error::StackOverflow(*r))?.clone()])
-            }
             ConValue::Slice(_, len) => *len as _,
             ConValue::Array(arr) => arr.len() as _,
             ConValue::Tuple(t) => t.len() as _,
-            _ => Err(Error::TypeError())?,
+            other => Err(Error::TypeError("A type with a length", other.typename()))?,
         })
     }
 
     fn push(ConValue::Ref(index), item) @env{
-        let Some(ConValue::Array(v)) = env.get_id_mut(*index) else {
-            Err(Error::TypeError())?
+        let v = match index.get_mut(env)? {
+            ConValue::Array(v) => v,
+            other => Err(Error::TypeError("An array", other.typename()))?,
         };
 
         let mut items = std::mem::take(v).into_vec();
@@ -245,14 +254,28 @@ pub const Builtins: &[Builtin] = &builtins![
         Ok(ConValue::Empty)
     }
 
+    fn pop(ConValue::Ref(index)) @env {
+        let v = match index.get_mut(env)? {
+            ConValue::Array(v) => v,
+            other => Err(Error::TypeError("An array", other.typename()))?,
+        };
+
+        let mut items = std::mem::take(v).into_vec();
+        let out = items.pop().unwrap_or(ConValue::Empty);
+        *v = items.into_boxed_slice();
+
+        Ok(out)
+    }
+
     fn chars(string) @env {
-        Ok(match string {
+        let mut value = string;
+        while let ConValue::Ref(r) = value {
+            value = r.get(env)?;
+        }
+        Ok(match value {
             ConValue::Str(s) => ConValue::Array(s.chars().map(Into::into).collect()),
             ConValue::String(s) => ConValue::Array(s.chars().map(Into::into).collect()),
-            ConValue::Ref(r) => {
-                return chars(env, &[env.get_id(*r).ok_or(Error::StackOverflow(*r))?.clone()])
-            }
-            _ => Err(Error::TypeError())?,
+            _ => Err(Error::TypeError("string", string.typename()))?,
         })
     }
 
@@ -295,10 +318,6 @@ pub const Builtins: &[Builtin] = &builtins![
         }
     }
 
-    fn slice_of(ConValue::Ref(arr), ConValue::Int(start)) {
-        Ok(ConValue::Slice(*arr, *start as usize))
-    }
-
     /// Returns a shark
     fn shark() {
         Ok('\u{1f988}')
@@ -311,7 +330,7 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a * b),
-            _ => Err(Error::TypeError())?
+            _ => Err(Error::TypeError("type implements Mul", lhs.typename()))?,
         })
     }
 
@@ -320,7 +339,7 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs){
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a / b),
-            _ => Err(Error::TypeError())?
+            _ => Err(Error::TypeError("type implements Div", lhs.typename()))?,
         })
     }
 
@@ -329,7 +348,7 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a % b),
-            _ => Err(Error::TypeError())?,
+            _ => Err(Error::TypeError("type implements Rem", lhs.typename()))?,
         })
     }
 
@@ -347,7 +366,7 @@ pub const Math: &[Builtin] = &builtins![
             (ConValue::Char(a), ConValue::Char(b)) => {
                 ConValue::String([a, b].into_iter().collect())
             }
-            _ => Err(Error::TypeError())?
+            _ => Err(Error::TypeError("type implements Add", lhs.typename()))?,
         })
     }
 
@@ -356,7 +375,7 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a - b),
-            _ => Err(Error::TypeError())?,
+            _ => Err(Error::TypeError("type implements Sub", lhs.typename()))?,
         })
     }
 
@@ -365,7 +384,8 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a << b),
-            _ => Err(Error::TypeError())?,
+            (ConValue::Int(a), b) => Err(Error::TypeError("int", b.typename()))?,
+            _ => Err(Error::TypeError("type implements Shl", lhs.typename()))?,
         })
     }
 
@@ -374,7 +394,8 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a >> b),
-            _ => Err(Error::TypeError())?,
+            (ConValue::Int(a), b) => Err(Error::TypeError("int", b.typename()))?,
+            _ => Err(Error::TypeError("type implements Shr", lhs.typename()))?,
         })
     }
 
@@ -384,7 +405,7 @@ pub const Math: &[Builtin] = &builtins![
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a & b),
             (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a & b),
-            _ => Err(Error::TypeError())?,
+            _ => Err(Error::TypeError("type implements BitAnd", lhs.typename()))?,
         })
     }
 
@@ -394,7 +415,7 @@ pub const Math: &[Builtin] = &builtins![
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a | b),
             (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a | b),
-            _ => Err(Error::TypeError())?,
+            _ => Err(Error::TypeError("type implements BitOr", lhs.typename()))?,
         })
     }
 
@@ -404,28 +425,28 @@ pub const Math: &[Builtin] = &builtins![
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a ^ b),
             (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a ^ b),
-            _ => Err(Error::TypeError())?,
+            _ => Err(Error::TypeError("type implements BitXor", lhs.typename()))?,
         })
     }
 
     #[allow(non_snake_case)]
     fn RangeExc(start, end) @env {
-        Ok(ConValue::TupleStruct("RangeExc".into(), Box::new(Box::new([start.clone(), end.clone()]))))
+        Ok(ConValue::tuple_struct("RangeExc", [start.clone(), end.clone()]))
     }
 
     #[allow(non_snake_case)]
     fn RangeInc(start, end) @env {
-        Ok(ConValue::TupleStruct("RangeInc".into(), Box::new(Box::new([start.clone(), end.clone()]))))
+        Ok(ConValue::tuple_struct("RangeInc", [start.clone(), end.clone()]))
     }
 
     #[allow(non_snake_case)]
     fn RangeTo(end) @env {
-        Ok(ConValue::TupleStruct("RangeTo".into(), Box::new(Box::new([end.clone()]))))
+        Ok(ConValue::tuple_struct("RangeTo", [end.clone()]))
     }
 
     #[allow(non_snake_case)]
     fn RangeToInc(end) @env {
-        Ok(ConValue::TupleStruct("RangeToInc".into(), Box::new(Box::new([end.clone()]))))
+        Ok(ConValue::tuple_struct("RangeToInc", [end.clone()]))
     }
 
     /// Negates the ConValue
@@ -434,7 +455,7 @@ pub const Math: &[Builtin] = &builtins![
             ConValue::Empty => ConValue::Empty,
             ConValue::Int(v) => ConValue::Int(v.wrapping_neg()),
             ConValue::Float(v) => ConValue::Float(-v),
-            _ => Err(Error::TypeError())?,
+            _ => Err(Error::TypeError("type implements Neg", tail.typename()))?,
         })
     }
 
@@ -444,7 +465,7 @@ pub const Math: &[Builtin] = &builtins![
             ConValue::Empty => ConValue::Empty,
             ConValue::Int(v) => ConValue::Int(!v),
             ConValue::Bool(v) => ConValue::Bool(!v),
-            _ => Err(Error::TypeError())?,
+            _ => Err(Error::TypeError("type implements Not", tail.typename()))?,
         })
     }
 
@@ -464,9 +485,10 @@ pub const Math: &[Builtin] = &builtins![
 
     /// Does the opposite of `&`
     fn deref(tail) @env {
-        Ok(match tail {
-            ConValue::Ref(v) => env.get_id(*v).cloned().ok_or(Error::StackOverflow(*v))?,
-            _ => tail.clone(),
-        })
+        let mut value = tail;
+        while let ConValue::Ref(r) = value {
+            value = r.get(env)?;
+        }
+        Ok(value.clone())
     }
 ];

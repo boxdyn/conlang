@@ -35,11 +35,11 @@ pub enum Prec {
     Factor,
     /// Multiplication, Division, and Remainder operators
     Term,
-    /// Negation, (De)reference, Try
+    /// Negation, Reference, Try
     Unary,
-    /// Place-projection operators
+    /// Place-projection operators (`*x`, `x[1]`, `x.a`, `x.1`)
     Project,
-    /// Array/Call subscripting and reference
+    /// Call subscripting
     Extend,
     Max,
 }
@@ -130,8 +130,8 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
         TKind::RBrack => (Ps::End, Prec::Tuple),
         TKind::LParen => (Ps::Op(Op::Group), Prec::Min),
         TKind::RParen => (Ps::End, Prec::Tuple),
-        TKind::Amp => (Ps::Op(Op::Refer), Prec::Extend),
-        TKind::AmpAmp => (Ps::DoubleRef, Prec::Extend),
+        TKind::Amp => (Ps::Op(Op::Refer), Prec::Unary),
+        TKind::AmpAmp => (Ps::DoubleRef, Prec::Unary),
         TKind::Bang => (Ps::Op(Op::Not), Prec::Unary),
         TKind::BangBang => (Ps::Op(Op::Identity), Prec::Unary),
         TKind::Bar => (Ps::Lambda, Prec::Body),
@@ -192,11 +192,11 @@ const fn from_infix(token: &Token) -> PResult<(Ps, Prec)> {
 
         TKind::Question => (Ps::Op(Op::Try), Prec::Unary),
         TKind::Dot => (Ps::Op(Op::Dot), Prec::Project),
+        TKind::LBrack => (Ps::Op(Op::Index), Prec::Project),
         TKind::LParen => (Ps::Op(Op::Call), Prec::Extend),
-        TKind::LBrack => (Ps::Op(Op::Index), Prec::Extend),
 
         TKind::RParen | TKind::RBrack | TKind::RCurly => (Ps::End, Prec::Max),
-        TKind::As => (Ps::Op(Op::As), Prec::Max),
+        TKind::As => (Ps::Op(Op::As), Prec::Project),
         _ => (Ps::ImplicitDo, Prec::Do),
     })
 }

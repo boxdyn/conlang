@@ -3,7 +3,7 @@
 //! The most permanent fix is a temporary one.
 use cl_ast::{Expr, fmt::FmtAdapter, types::Symbol};
 
-use crate::constructor::Constructor;
+use crate::{constructor::Constructor, place::Place};
 
 use super::{
     Callable, Environment,
@@ -56,9 +56,9 @@ pub enum ConValue {
     /// A dynamic string
     String(String),
     /// A reference
-    Ref(usize),
+    Ref(Place),
     /// A reference to an array
-    Slice(usize, usize),
+    Slice(Place, usize),
     /// An Array
     Array(Box<[ConValue]>),
     /// A tuple
@@ -67,7 +67,7 @@ pub enum ConValue {
     /// A value of a product type
     Struct(Symbol, Box<HashMap<Symbol, ConValue>>),
     /// A value of a product type with anonymous members
-    TupleStruct(Symbol, Box<Box<[ConValue]>>),
+    TupleStruct(Symbol, Box<[ConValue]>),
     /// An entire namespace
     Module(Box<HashMap<Symbol, ConValue>>),
     /// A quoted expression
@@ -88,7 +88,7 @@ impl ConValue {
         match self {
             ConValue::Bool(v) => Ok(*v),
             ConValue::Int(v) => Ok(*v != 0),
-            _ => Err(Error::TypeError())?,
+            _ => Err(Error::TypeError("type implements Truth", self.typename()))?,
         }
     }
 
@@ -105,8 +105,8 @@ impl ConValue {
             ConValue::Slice(_, _) => "Slice",
             ConValue::Array(_) => "Array",
             ConValue::Tuple(_) => "Tuple",
-            ConValue::Struct(_, _) => "Struct",
-            ConValue::TupleStruct(_, _) => "TupleStruct",
+            ConValue::Struct(sym, _) => sym.to_ref(),
+            ConValue::TupleStruct(sym, _) => sym.to_ref(),
             ConValue::Module(_) => "",
             ConValue::Quote(_) => "Quote",
             ConValue::Function(_) => "Fn",
@@ -152,17 +152,17 @@ impl ConValue {
     }
 
     #[allow(non_snake_case)]
-    pub fn TupleStruct(id: Symbol, values: Box<[ConValue]>) -> Self {
-        Self::TupleStruct(id, Box::new(values))
+    pub fn tuple_struct(id: impl Into<Symbol>, values: impl Into<Box<[ConValue]>>) -> Self {
+        Self::TupleStruct(id.into(), values.into())
     }
     #[allow(non_snake_case)]
-    pub fn Struct(id: Symbol, values: HashMap<Symbol, ConValue>) -> Self {
-        Self::Struct(id, Box::new(values))
+    pub fn Struct(id: impl Into<Symbol>, values: HashMap<Symbol, ConValue>) -> Self {
+        Self::Struct(id.into(), Box::new(values))
     }
 
     pub fn index(&self, index: &Self, _env: &Environment) -> IResult<ConValue> {
         let &Self::Int(index) = index else {
-            Err(Error::TypeError())?
+            Err(Error::TypeError("int", index.typename()))?
         };
         match self {
             ConValue::Str(string) => string
@@ -179,19 +179,20 @@ impl ConValue {
                 .get(index as usize)
                 .cloned()
                 .ok_or(Error::OobIndex(index as usize, arr.len())),
-            &ConValue::Slice(id, len) => {
+            ConValue::Slice(place, len) => {
                 let index = if index < 0 {
                     len.wrapping_add_signed(index)
                 } else {
                     index as usize
                 };
-                if index < len {
-                    Ok(ConValue::Ref(id + index))
+
+                if index < *len {
+                    Ok(ConValue::Ref(place.clone().index(index)))
                 } else {
-                    Err(Error::OobIndex(index, len))
+                    Err(Error::OobIndex(index, *len))
                 }
             }
-            _ => Err(Error::TypeError()),
+            other => Err(Error::TypeError("type implements Index", other.typename())),
         }
     }
     cmp! {
@@ -238,9 +239,9 @@ impl Callable for ConValue {
                     Err(Error::NotCallable(self.clone()))
                 }
             }
-            &Self::Ref(ptr) => {
+            Self::Ref(ptr) => {
                 // Move onto stack, and call
-                let func = env.get_id(ptr).ok_or(Error::StackOverflow(ptr))?.clone();
+                let func = ptr.get_mut(env)?.clone();
                 func.call(env, args)
             }
             _ => Err(Error::NotCallable(self.clone())),
@@ -262,7 +263,7 @@ macro cmp ($($fn:ident: $empty:literal, $op:tt);*$(;)?) {$(
             (Self::Str(a), Self::String(b)) => Ok(Self::Bool(&**a $op &**b)),
             (Self::String(a), Self::Str(b)) => Ok(Self::Bool(&**a $op &**b)),
             (Self::String(a), Self::String(b)) => Ok(Self::Bool(&**a $op &**b)),
-            _ => Err(Error::TypeError())
+            (a, _) => Err(Error::TypeError("type implements Cmp", a.typename()))?,
         }
     }
 )*}
@@ -340,25 +341,25 @@ ops! {
         (ConValue::Char(a), ConValue::Char(b)) => {
             ConValue::String([a, b].into_iter().collect::<String>())
         }
-        _ => Err(Error::TypeError())?
-        ]
+        (a, _) => Err(Error::TypeError("type implements add", a.typename()))?
+    ]
     BitAnd: bitand = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a & b),
         (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a & b),
-        _ => Err(Error::TypeError())?
+        (a, _) => Err(Error::TypeError("int or bool",a.typename()))?
     ]
     BitOr: bitor = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a | b),
         (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a | b),
-        _ => Err(Error::TypeError())?
+        (a, _) => Err(Error::TypeError("int or bool", a.typename()))?
     ]
     BitXor: bitxor = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a ^ b),
         (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a ^ b),
-        _ => Err(Error::TypeError())?
+        (a, _) => Err(Error::TypeError("int or bool", a.typename()))?
     ]
     Div: div = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
@@ -366,13 +367,13 @@ ops! {
             eprintln!("Warning: Divide by zero in {a} / {b}"); a
         })),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a / b),
-        _ => Err(Error::TypeError())?
+        (a, _) => Err(Error::TypeError("type implements Div", a.typename()))?
     ]
     Mul: mul = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_mul(b)),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a * b),
-        _ => Err(Error::TypeError())?
+        (a, _) => Err(Error::TypeError("type implements Mul", a.typename()))?
     ]
     Rem: rem = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
@@ -380,23 +381,25 @@ ops! {
             println!("Warning: Divide by zero in {a} % {b}"); a
         })),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a % b),
-        _ => Err(Error::TypeError())?
+        (a, _) => Err(Error::TypeError("type implements Rem", a.typename()))?
     ]
     Shl: shl = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_shl(b as _)),
-        _ => Err(Error::TypeError())?
+        (a, ConValue::Int(_)) => Err(Error::TypeError("type implements Shl", a.typename()))?,
+        (_, b) => Err(Error::TypeError("int", b.typename()))?
     ]
     Shr: shr = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_shr(b as _)),
-        _ => Err(Error::TypeError())?
+        (a, ConValue::Int(_)) => Err(Error::TypeError("type implements Shr", a.typename()))?,
+        (_, b) => Err(Error::TypeError("int", b.typename()))?
     ]
     Sub: sub = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_sub(b)),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a - b),
-        _ => Err(Error::TypeError())?
+        (a, _) => Err(Error::TypeError("type implements Sub", a.typename()))?
     ]
 }
 impl std::fmt::Display for ConValue {

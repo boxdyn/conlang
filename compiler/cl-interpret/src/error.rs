@@ -55,8 +55,8 @@ impl Error {
     }
     /// Type incompatibility
     // TODO: store the type information in this error
-    pub fn TypeError() -> Self {
-        Self { kind: ErrorKind::TypeError, span: None }
+    pub fn TypeError(want: &'static str, got: &'static str) -> Self {
+        Self { kind: ErrorKind::TypeError(want, got), span: None }
     }
     /// In clause of For loop didn't yield a Range
     pub fn NotIterable() -> Self {
@@ -138,7 +138,7 @@ pub enum ErrorKind {
     ScopeExit,
     /// Type incompatibility
     // TODO: store the type information in this error
-    TypeError,
+    TypeError(&'static str, &'static str),
     /// In clause of For loop didn't yield a Range
     NotIterable,
     /// A value could not be indexed
@@ -178,7 +178,9 @@ impl std::fmt::Display for ErrorKind {
                 write!(f, "Attempt to access <{id}> resulted in stack overflow.")
             }
             ErrorKind::ScopeExit => "Exited the last scope. This is a logic bug.".fmt(f),
-            ErrorKind::TypeError => "Incompatible types".fmt(f),
+            ErrorKind::TypeError(want, got) => {
+                write!(f, "Incompatible types: wanted {want}, got {got}")
+            }
             ErrorKind::NotIterable => "`in` clause of `for` loop did not yield an iterable".fmt(f),
             ErrorKind::NotIndexable => {
                 write!(f, "expression cannot be indexed")

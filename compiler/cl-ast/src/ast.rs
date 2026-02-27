@@ -37,6 +37,15 @@ pub trait AstTypes: Annotation {
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct At<T: Annotation, A: AstTypes = DefaultTypes>(pub T, pub A::Annotation);
 
+impl<T: Annotation, A: AstTypes> At<T, A> {
+    pub fn value(&self) -> &T {
+        &self.0
+    }
+    pub fn a(&self) -> &A::Annotation {
+        &self.1
+    }
+}
+
 /// Expressions: The beating heart of Conlang.
 ///
 /// A program in Conlang is a single expression which, at compile time,
@@ -376,6 +385,22 @@ impl<A: AstTypes> Pat<A> {
         match self {
             Self::Op(PatOp::Tuple, _) => self,
             _ => Self::Op(PatOp::Tuple, vec![self]),
+        }
+    }
+    /// Returns the single, unambiguous name bound by this pattern, if there is one.
+    ///
+    /// Else, returns [None].
+    pub fn name(&self) -> Option<A::Symbol> {
+        match self {
+            Self::Name(name) => Some(*name),
+            Self::Op(
+                PatOp::TypePrefixed | PatOp::Typed | PatOp::Pub | PatOp::Mut | PatOp::Generic,
+                pats,
+            ) => match pats.as_slice() {
+                [] => None,
+                [name, ..] => name.name(),
+            },
+            _ => None,
         }
     }
 }

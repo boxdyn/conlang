@@ -174,18 +174,15 @@ impl<A: AstTypes> Display for Bind<A> {
             f.delimit("<", "> ").list(gens, ", ")?;
         }
 
-        match op {
-            BindOp::Match => f.delimit(fmt!("{pat} => "), "").list(exprs, ",!? "),
-            BindOp::Fn | BindOp::Mod | BindOp::Impl => {
-                if let [At(Expr::Op(Op::Block, _), _)] = exprs.as_slice() {
-                    f.delimit(fmt!("{pat} "), "").list(exprs, ",!? ")
-                } else {
-                    // wrap bare function bodies to new line
-                    f.delimit_indented(pat, "")
-                        .list_wrap("\n", exprs, ",!?", "")
-                }
+        match (op, exprs.as_slice()) {
+            (_, [At(Expr::Omitted, _)]) => write!(f, "{pat}"),
+            (BindOp::Match, _) => f.delimit(fmt!("{pat} => "), "").list(exprs, ",!? "),
+            (BindOp::Fn | BindOp::Mod | BindOp::Impl, [At(Expr::Op(Op::Block, _), _)]) => {
+                f.delimit(fmt!("{pat} "), "").list(exprs, ",!? ")
             }
-            BindOp::Struct | BindOp::Enum => match pat {
+            (BindOp::Fn, _) => f.delimit(fmt!("{pat} = "), "").list(exprs, ""),
+            (BindOp::Mod | BindOp::Impl, _) => f.delimit(fmt!("{pat} "), "").list(exprs, "!?;"),
+            (BindOp::Struct | BindOp::Enum, _) => match pat {
                 Pat::Op(PatOp::TypePrefixed, bind) => match bind.as_slice() {
                     [name, Pat::Op(PatOp::Record, parts)] => f
                         .delimit_indented(fmt!("{name} {{"), "}")
@@ -197,19 +194,16 @@ impl<A: AstTypes> Display for Bind<A> {
                 },
                 _ => pat.fmt(f),
             },
-            BindOp::For => match exprs.as_slice() {
-                [iter, pass, At(Expr::Op(Op::Tuple, e), _)] if e.is_empty() => {
-                    write!(f, "{pat} in {iter} {pass}")
-                }
-                [iter, pass, fail] => write!(f, "{pat} in {iter} {pass} else {fail}"),
-                other => f.delimit(fmt!("{pat} in [["), "]]!?").list(other, ", "),
-            },
-            _ => match exprs.as_slice() {
-                [] => write!(f, "{pat}"),
-                [value] => write!(f, "{pat} = {value}"),
-                [value, fail] => write!(f, "{pat} = {value} else {fail}"),
-                other => f.delimit(fmt!("{pat} ("), ")").list(other, ", "),
-            },
+            (BindOp::For, [iter, pass, At(Expr::Op(Op::Tuple, e), _)]) if e.is_empty() => {
+                write!(f, "{pat} in {iter} {pass}")
+            }
+            (BindOp::For, [iter, pass, fail]) => write!(f, "{pat} in {iter} {pass} else {fail}"),
+            (BindOp::For, other) => f.delimit(fmt!("{pat} in [["), "]]!?").list(other, ", "),
+            (_, []) => write!(f, "{pat}"),
+            (_, [value]) => write!(f, "{pat} = {value}"),
+            (_, [value, fail]) => write!(f, "{pat} = {value} else {fail}"),
+
+            (_, other) => f.delimit(fmt!("{pat} ("), ")").list(other, ", "),
         }
     }
 }

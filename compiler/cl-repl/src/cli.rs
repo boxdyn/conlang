@@ -25,10 +25,10 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
                 ConValue::Str(string) => string.to_ref(),
                 ConValue::String(string) => string.as_str(),
                 ConValue::Ref(v) => {
-                    let string = env.get_id(*v).cloned().unwrap_or_default();
+                    let string = v.get(env).cloned().unwrap_or_default();
                     return eval(env, &[string])
                 }
-                _ => Err(Error::TypeError())?
+                _ => Err(Error::TypeError("string", string.typename()))?
             };
             match Parser::new(Lexer::new("eval".into(), string)).parse::<Expr>(0) {
                 Err(e) => Ok(ConValue::String(format!("{e}"))),
@@ -42,7 +42,7 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
             match path {
                 ConValue::Str(path) => load_file(env, &**path).or(Ok(ConValue::Empty)),
                 ConValue::String(path) => load_file(env, &**path).or(Ok(ConValue::Empty)),
-                _ => Err(Error::TypeError())
+                _ => Err(Error::TypeError("string", path.typename()))
             }
         }
 
@@ -57,7 +57,7 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
             let prompt = match prompt {
                 ConValue::Str(prompt) => prompt.to_ref(),
                 ConValue::String(prompt) => prompt.as_str(),
-                _ => Err(Error::TypeError())?,
+                _ => Err(Error::TypeError("string", prompt.typename()))?,
             };
             match repline::Repline::new("", prompt, "").read() {
                 Ok(line) => Ok(ConValue::String(line)),
@@ -155,10 +155,7 @@ fn fmt_code(path: &str, code: &str) -> Result<(), Box<dyn Error>> {
 
 fn run_code(path: &str, code: &str, env: &mut Environment) -> Result<(), Box<dyn Error>> {
     let code = Parser::new(Lexer::new(path.into(), code)).parse::<At<Expr>>(0)?;
-    match code.interpret(env)? {
-        ConValue::Empty => {}
-        ret => println!("{ret}"),
-    }
+    code.interpret(env)?;
     if env.get("main".into()).is_ok() {
         match env.call("main".into(), &[]) {
             Ok(ConValue::Empty) => {}

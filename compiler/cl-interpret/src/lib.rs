@@ -18,6 +18,30 @@ pub trait Callable {
     fn name(&self) -> Option<Sym>;
 }
 
+pub mod contype {
+    use std::collections::HashMap;
+
+    use cl_ast::types::Symbol;
+
+    use crate::convalue::ConValue;
+
+    /// Models the type information for a struct
+    pub enum Model {
+        Unit,
+        Tuple(/* arity: */ usize),
+        Struct(Vec<Symbol>),
+        Enum, // TODO: variant discriminants
+    }
+
+    pub struct Type {
+        pub ty_id: usize,
+        pub model: Model,
+        pub impls: HashMap<Symbol, ConValue>,
+    }
+}
+
+pub mod place;
+
 pub mod convalue;
 
 pub mod interpret;
@@ -44,7 +68,7 @@ pub mod constructor {
         fn call(&self, _env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
             let &Self { name, arity } = self;
             if arity as usize == args.len() {
-                Ok(ConValue::TupleStruct(name, Box::new(args.into())))
+                Ok(ConValue::TupleStruct(name, args.into()))
             } else {
                 Err(Error::ArgNumber(arity as usize, args.len()))
             }

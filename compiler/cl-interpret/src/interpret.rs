@@ -6,7 +6,7 @@
 //! one in any situation.
 #![expect(unused, reason = "Work in progress")]
 
-use crate::function::Function;
+use crate::{function::Function, place::Place};
 
 use super::*;
 use cl_ast::{
@@ -24,7 +24,7 @@ macro trace($($t:tt)*) {{
 }}
 
 /// Turns a `todo!` invocation into an [Error::Panic]
-macro cl_todo {
+pub macro cl_todo {
     () => {
         Err(Error::Panic(format!("Not yet implemented (at {}:{}:{})", file!(), line!(), column!())))
     },
@@ -34,7 +34,7 @@ macro cl_todo {
 }
 
 /// Turns an `unimplemented!` invocation into an [Error::Panic]
-macro cl_unimplemented {
+pub macro cl_unimplemented {
     () => {
         Err(Error::Panic(format!("Not implemented (at {}:{}:{})", file!(), line!(), column!())))
     },
@@ -43,7 +43,7 @@ macro cl_unimplemented {
     }
 }
 
-use self::{cl_todo as todo, cl_unimplemented as unimplemented};
+pub use self::{cl_todo as todo, cl_unimplemented as unimplemented};
 
 /// A work-in-progress tree walk interpreter for Conlang
 pub trait Interpret {
@@ -75,7 +75,15 @@ impl Interpret for Expr<DefaultTypes> {
             Self::Use(_) => cl_todo!("Use `{self}`"),
             Self::Bind(bind) => bind.interpret(env),
             Self::Make(make) => cl_todo!("Make `{make}`"),
-            Self::Op(op, exprs) => (*op, exprs.as_slice()).interpret(env),
+            Self::Op(op, exprs) => {
+                if self.is_place()
+                    && let Ok(place) = Place::new(self, env)
+                {
+                    place.get_mut(env).cloned()
+                } else {
+                    (*op, exprs.as_slice()).interpret(env)
+                }
+            }
         }
     }
 }
@@ -92,7 +100,10 @@ impl Interpret for (Op, &[At<Expr>]) {
             }
             (Op::As, [value, At(Expr::Id(Path { parts }), ..)]) => match parts.as_slice() {
                 [part] => Ok(value.interpret(env)?.cast(part.to_ref())),
-                _ => Err(Error::TypeError()),
+                _ => Err(Error::TypeError(
+                    "a primitive type",
+                    "a user type or type alias",
+                )),
             },
             (Op::As, [value, ty]) => cl_todo!("{value} as {ty} operator"),
             (Op::Block, []) => Ok(ConValue::Empty),
@@ -104,7 +115,15 @@ impl Interpret for (Op, &[At<Expr>]) {
                     .map(|e| e.interpret(env))
                     .collect::<Result<Box<_>, _>>()?,
             )),
-            (Op::ArRep, [v, rep]) => cl_todo!("[{v}; {rep}]"),
+            (Op::ArRep, [v, rep]) => {
+                let v = v.interpret(env)?;
+                match rep.interpret(env)? {
+                    ConValue::Int(rep) => {
+                        Ok(ConValue::Array(vec![v; rep as usize].into_boxed_slice()))
+                    }
+                    rep => Err(Error::TypeError("int", rep.typename())),
+                }
+            }
             (Op::Group, [expr]) => expr.interpret(env),
             (Op::Tuple, []) => Ok(ConValue::Empty),
             (Op::Tuple, exprs) => Ok(ConValue::Tuple(
@@ -129,7 +148,7 @@ impl Interpret for (Op, &[At<Expr>]) {
             // Annotation operators
             (Op::Pub, [expr]) => expr.interpret(env),
             (Op::Const, [expr]) => expr.interpret(env), // we are const
-            (Op::Static, [expr]) => cl_todo!("static {expr}"),
+            (Op::Static, [expr]) => expr.interpret(env), // TODO: "static"
 
             // Control-flow
             (Op::Macro, _) => cl_todo!("Macros are not supported in the interpreter"),
@@ -141,7 +160,23 @@ impl Interpret for (Op, &[At<Expr>]) {
                     Err(e) => Err(e)?,
                 }
             },
-            (Op::Match, [scrutinee, arms @ ..]) => cl_todo!("match {scrutinee} {{{arms:#?}}}"),
+            (Op::Match, [scrutinee, arms @ ..]) => {
+                let scrutinee = scrutinee.interpret(env)?;
+                for At(arm, span) in arms {
+                    if let Expr::Bind(arm) = arm
+                        && let Bind(BindOp::Match, _, pat, exprs) = &**arm
+                        && let [expr] = exprs.as_slice()
+                        && let mut scope = env.frame("match-arm", Some(*span))
+                        && let mut bind = HashMap::new()
+                        && pat
+                            .matches(scrutinee.clone(), &mut MatchEnv::new(&mut scope, &mut bind))
+                            .is_ok()
+                    {
+                        return expr.interpret(&mut scope);
+                    }
+                }
+                Err(Error::MatchNonexhaustive())
+            }
             (Op::If, [cond, pass, fail]) => {
                 let mut scope = env.frame("if", None);
                 if cond.interpret(&mut scope)?.truthy()? {
@@ -175,18 +210,19 @@ impl Interpret for (Op, &[At<Expr>]) {
                 let [callee, args] = args.as_slice() else {
                     cl_todo!("Interpret non-call {args:?}")?
                 };
+                let scrutinee = Place::new(scrutinee.value(), env)?;
                 let function = callee.interpret(env)?;
                 let args = args.interpret(env)?;
-                let scrutinee = scrutinee.interpret(env)?;
+                // let scrutinee = scrutinee.interpret(env)?;
                 match args {
-                    ConValue::Empty => function.call(env, &[scrutinee]),
+                    ConValue::Empty => function.call(env, &[ConValue::Ref(scrutinee)]),
                     ConValue::Tuple(args) => function.call(
                         env,
-                        &iter::once(scrutinee)
+                        &iter::once(ConValue::Ref(scrutinee))
                             .chain(args) // TODO: remove allocation
                             .collect::<Box<_>>(),
                     ),
-                    other => function.call(env, &[scrutinee, other]),
+                    other => function.call(env, &[ConValue::Ref(scrutinee), other]),
                 }
             }
             (Op::Dot, [scrutinee, proj]) => cl_todo!("dot: {scrutinee}.{proj}"),
@@ -194,19 +230,19 @@ impl Interpret for (Op, &[At<Expr>]) {
             // Range operators
             (Op::RangeEx, [lhs, rhs]) => Ok(ConValue::TupleStruct(
                 "RangeExc".into(),
-                Box::new(Box::new([lhs.interpret(env)?, rhs.interpret(env)?])),
+                Box::new([lhs.interpret(env)?, rhs.interpret(env)?]),
             )),
             (Op::RangeIn, [lhs, rhs]) => Ok(ConValue::TupleStruct(
                 "RangeInc".into(),
-                Box::new(Box::new([lhs.interpret(env)?, rhs.interpret(env)?])),
+                Box::new([lhs.interpret(env)?, rhs.interpret(env)?]),
             )),
             (Op::RangeEx, [rhs]) => Ok(ConValue::TupleStruct(
                 "RangeTo".into(),
-                Box::new(Box::new([rhs.interpret(env)?])),
+                Box::new([rhs.interpret(env)?]),
             )),
             (Op::RangeIn, [rhs]) => Ok(ConValue::TupleStruct(
                 "RangeToInc".into(),
-                Box::new(Box::new([rhs.interpret(env)?])),
+                Box::new([rhs.interpret(env)?]),
             )),
 
             // Unary operators
@@ -221,7 +257,13 @@ impl Interpret for (Op, &[At<Expr>]) {
             (Op::Identity, [expr]) => expr.interpret(env),
 
             // Reference manipulation operators
-            (Op::Refer, [expr]) => cl_todo!("References: &{expr}"),
+            (Op::Refer, [expr]) => Ok(ConValue::Ref(
+                Place::new(expr.value(), env).map_err(|e| Error::Panic("asfd".into()))?,
+            )),
+            (Op::Deref, [expr]) => match expr.interpret(env)? {
+                ConValue::Ref(place) => place.get(env).cloned(),
+                other => Ok(other),
+            },
             (Op::Deref, [expr]) => cl_todo!("References: *{expr}"),
 
             // Binary computation operators
@@ -264,17 +306,72 @@ impl Interpret for (Op, &[At<Expr>]) {
             }
 
             // Assignment operators
-            (Op::Set, [target, value]) => cl_todo!("Set {target} to {value}"),
-            (Op::MulSet, [target, value]) => cl_todo!("MulSet {target} to {value}"),
-            (Op::DivSet, [target, value]) => cl_todo!("DivSet {target} to {value}"),
-            (Op::RemSet, [target, value]) => cl_todo!("RemSet {target} to {value}"),
-            (Op::AddSet, [target, value]) => cl_todo!("AddSet {target} to {value}"),
-            (Op::SubSet, [target, value]) => cl_todo!("SubSet {target} to {value}"),
-            (Op::ShlSet, [target, value]) => cl_todo!("ShlSet {target} to {value}"),
-            (Op::ShrSet, [target, value]) => cl_todo!("ShrSet {target} to {value}"),
-            (Op::AndSet, [target, value]) => cl_todo!("AndSet {target} to {value}"),
-            (Op::XorSet, [target, value]) => cl_todo!("XorSet {target} to {value}"),
-            (Op::OrSet, [target, value]) => cl_todo!("OrSet {target} to {value}"),
+            (Op::Set, [target, value]) => {
+                let place = Place::new(target.value(), env).map_err(|_| Error::NotAssignable())?;
+                let value = value.interpret(env)?;
+                *(place.get_mut(env)?) = value;
+                Ok(ConValue::Empty)
+            }
+            (Op::MulSet, [target, value]) => {
+                let place = Place::new(target.value(), env).map_err(|_| Error::NotAssignable())?;
+                let value = value.interpret(env)?;
+                place.get_mut(env)?.mul_assign(value)?;
+                Ok(ConValue::Empty)
+            }
+            (Op::DivSet, [target, value]) => {
+                let place = Place::new(target.value(), env).map_err(|_| Error::NotAssignable())?;
+                let value = value.interpret(env)?;
+                place.get_mut(env)?.div_assign(value)?;
+                Ok(ConValue::Empty)
+            }
+            (Op::RemSet, [target, value]) => {
+                let place = Place::new(target.value(), env).map_err(|_| Error::NotAssignable())?;
+                let value = value.interpret(env)?;
+                place.get_mut(env)?.rem_assign(value)?;
+                Ok(ConValue::Empty)
+            }
+            (Op::AddSet, [target, value]) => {
+                let place = Place::new(target.value(), env).map_err(|_| Error::NotAssignable())?;
+                let value = value.interpret(env)?;
+                place.get_mut(env)?.add_assign(value)?;
+                Ok(ConValue::Empty)
+            }
+            (Op::SubSet, [target, value]) => {
+                let place = Place::new(target.value(), env).map_err(|_| Error::NotAssignable())?;
+                let value = value.interpret(env)?;
+                place.get_mut(env)?.sub_assign(value)?;
+                Ok(ConValue::Empty)
+            }
+            (Op::ShlSet, [target, value]) => {
+                let place = Place::new(target.value(), env).map_err(|_| Error::NotAssignable())?;
+                let value = value.interpret(env)?;
+                place.get_mut(env)?.shl_assign(value)?;
+                Ok(ConValue::Empty)
+            }
+            (Op::ShrSet, [target, value]) => {
+                let place = Place::new(target.value(), env).map_err(|_| Error::NotAssignable())?;
+                let value = value.interpret(env)?;
+                place.get_mut(env)?.shr_assign(value)?;
+                Ok(ConValue::Empty)
+            }
+            (Op::AndSet, [target, value]) => {
+                let place = Place::new(target.value(), env).map_err(|_| Error::NotAssignable())?;
+                let value = value.interpret(env)?;
+                place.get_mut(env)?.bitand_assign(value)?;
+                Ok(ConValue::Empty)
+            }
+            (Op::XorSet, [target, value]) => {
+                let place = Place::new(target.value(), env).map_err(|_| Error::NotAssignable())?;
+                let value = value.interpret(env)?;
+                place.get_mut(env)?.bitxor_assign(value)?;
+                Ok(ConValue::Empty)
+            }
+            (Op::OrSet, [target, value]) => {
+                let place = Place::new(target.value(), env).map_err(|_| Error::NotAssignable())?;
+                let mut value = value.interpret(env)?;
+                place.get_mut(env)?.bitor_assign(value)?;
+                Ok(ConValue::Empty)
+            }
             (op, exprs) => cl_unimplemented!("Evaluate {op:?} {exprs:?}"),
         }
     }
@@ -354,13 +451,13 @@ impl Interpret for Bind<DefaultTypes> {
                     }
                     ConValue::String(str) => Box::new(str.into_chars().map(ConValue::Char)),
                     ConValue::Str(str) => Box::new(str.to_ref().chars().map(ConValue::Char)),
-                    ConValue::TupleStruct(Interned("RangeExc", ..), bounds) => match **bounds {
+                    ConValue::TupleStruct(Interned("RangeExc", ..), bounds) => match *bounds {
                         [ConValue::Int(start), ConValue::Int(end)] => {
                             Box::new((start..end).map(ConValue::Int))
                         }
                         _ => Err(Error::NotIterable())?,
                     },
-                    ConValue::TupleStruct(Interned("RangeInc", ..), bounds) => match **bounds {
+                    ConValue::TupleStruct(Interned("RangeInc", ..), bounds) => match *bounds {
                         [ConValue::Int(start), ConValue::Int(end)] => {
                             Box::new((start..=end).map(ConValue::Int))
                         }
@@ -451,12 +548,11 @@ impl Match for (PatOp, &[Pat]) {
             (PatOp::Mut, [pat]) => pat.matches(value, &mut in_env.mutable()),
             (PatOp::Mut, _) => unimplemented!(),
             (PatOp::Ref, [pat]) => match value {
-                ConValue::Ref(idx) => {
-                    let value = in_env
-                        .env
-                        .get_id(idx)
+                ConValue::Ref(place) => {
+                    let value = place
+                        .get(in_env.env)
                         .cloned()
-                        .ok_or_else(|| Error::PatFailed(pat.clone().into()))?;
+                        .map_err(|_| Error::PatFailed(pat.clone().into()))?;
                     pat.matches(value, in_env)
                 }
                 // Auto-referencing in patterns..?
@@ -486,12 +582,15 @@ impl Match for (PatOp, &[Pat]) {
             (PatOp::ArRep, _) => todo!(),
             (PatOp::Typed, [pat, _ty @ ..]) => pat.matches(value, in_env),
             (PatOp::Typed, _) => todo!(),
-            (PatOp::TypePrefixed, [Pat::Name(pat_name), pat]) => match value {
+            (PatOp::TypePrefixed, [pat_name, pat]) => match value {
                 ConValue::TupleStruct(value_name, values) => {
-                    if *pat_name != value_name {
-                        Err(Error::TypeError())?
+                    let Some(pat_name) = pat_name.name() else {
+                        todo!("{pat_name}({pat})")?
+                    };
+                    if pat_name != value_name {
+                        Err(Error::TypeError(pat_name.to_ref(), value_name.to_ref()))?
                     }
-                    pat.matches(ConValue::Tuple(*values), in_env)
+                    pat.matches(ConValue::Tuple(values), in_env)
                 }
                 _ => pat.matches(value, in_env),
             },
@@ -543,7 +642,7 @@ impl Match<Box<[ConValue]>> for (SliceMode, &[Pat]) {
                 };
             }
         } else if values.next().is_some() {
-            Err(Error::TypeError())?
+            Err(Error::MatchNonexhaustive())?
         }
 
         match pats.next() {

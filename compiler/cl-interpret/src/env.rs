@@ -1,6 +1,6 @@
 //! Lexical and non-lexical scoping for variables
 
-use crate::{builtin::Builtin, constructor::Constructor};
+use crate::{builtin::Builtin, constructor::Constructor, place::Place};
 
 use super::{
     Callable, Interpret,
@@ -256,13 +256,6 @@ impl Environment {
         let adr = self.values.len();
         self.values.push(value);
         Ok(adr)
-    }
-
-    /// Allocates some space on the stack
-    pub fn alloca(&mut self, value: ConValue, len: usize) -> ConValue {
-        let idx = self.values.len();
-        self.values.extend(std::iter::repeat_n(value, len));
-        ConValue::Slice(idx, len)
     }
 }
 

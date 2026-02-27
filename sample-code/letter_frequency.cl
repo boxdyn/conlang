@@ -1,15 +1,15 @@
 #!/usr/bin/env -S conlang -r false
 // Showcases `get_line` behavior by sorting stdin
 
-fn in_range(this: Ord, min: Ord, max: Ord) -> bool {
-    min < this && this < max
+fn in_range(this: &Ord, min: Ord, max: Ord) -> bool {
+    min < *this && *this < max
 }
 
 fn frequency(s: str) -> [i32; 128] {
     let letters = [0; 128];
     for letter in s.chars() {
-        if (letter).in_range(' ', letters.len() as char) {
-            letters[dbg(letter as i32)] += 1;
+        if letter.in_range(' ', letters.len() as char) {
+            letters[letter as i32] += 1;
         }
     }
     letters
