@@ -3,10 +3,7 @@
 /// Formats a string
 #[rustfmt::skip]
 fn f(__fmt: &str) -> &str {
-    let __out = "";
-    let __expr = "";
-    let __label = "";
-    let __depth = 0;
+    let __out, __expr, __label, __depth = "", "", "", 0;
     for __c in chars(__fmt) {
         match __c {
             '{' => {

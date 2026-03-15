@@ -19,9 +19,7 @@ fn fib(a: i64) -> i64 {
 
 /// The classic iterative algorithm for fib()
 fn fibit(n: i64) -> i64 {
-    let mut a = 0;
-    let mut b = 1;
-    let mut c = 1;
+    let a, b, c = 0, 1, 1;
     for _ in 0..n {
         a = b;
         b = c;
