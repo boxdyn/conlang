@@ -22,3 +22,7 @@ pub mod tree;
 pub mod stack;
 
 pub mod index_map;
+
+pub use cl_arena::dropless_arena;
+
+pub use cl_arena::typed_arena;
