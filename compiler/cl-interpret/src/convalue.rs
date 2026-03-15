@@ -474,16 +474,9 @@ impl std::fmt::Display for ConValue {
                 }
                 Ok(())
             }
-            ConValue::Quote(q) => {
-                write!(f, "`{q}`")
-            }
-            ConValue::Function(func) => {
-                let (pat, body) = func.decl();
-                write!(f, "fn {pat} {body}")
-            }
-            ConValue::Builtin(func) => {
-                write!(f, "{}", func)
-            }
+            ConValue::Quote(q) => write!(f, "`{q}`"),
+            ConValue::Function(func) => func.fmt(f),
+            ConValue::Builtin(func) => func.fmt(f),
             ConValue::TypeInfo(ty) => ty.fmt(f),
         }
     }

@@ -6,7 +6,7 @@ use crate::{
 };
 
 use super::{Callable, ConValue, Environment, Error, IResult, Interpret};
-use cl_ast::{At, Bind, BindOp, Expr, Pat, PatOp, types::Symbol as Sym};
+use cl_ast::{At, Bind, BindOp, Expr, Op, Pat, PatOp, types::Symbol as Sym};
 use cl_structures::{intern::interned::Interned, span::Span};
 use std::{
     cell::{Ref, RefCell},
@@ -84,6 +84,17 @@ impl Callable for Function {
                 Err(Error { kind: ErrorKind::Panic(e, depth + 1), span: None })
             }
             other => other,
+        }
+    }
+}
+
+impl std::fmt::Display for Function {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (pat, At(expr, ..)) = self.decl();
+        pat.fmt(f)?;
+        match expr {
+            Expr::Op(Op::Block, ..) => write!(f, " {expr}"),
+            _ => write!(f, " = {expr}"),
         }
     }
 }
