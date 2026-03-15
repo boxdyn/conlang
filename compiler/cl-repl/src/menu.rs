@@ -38,24 +38,25 @@ const fn get_mode(mode: Mode) -> ReplMode {
 pub fn main_menu(mode: Mode, ctx: &mut ctx::Context) -> ReplResult<()> {
     banner();
 
+    const HELP: &str = "Valid commands
+    help  : Print this list
+    clear : Clear the screen
+    exit  : Exit the program
+    lex   : Lex the input
+    fmt   : Format the input
+    run   : Evaluate some expressions";
+    ctx.env.bind("help", HELP);
+
     let mut mode = get_mode(mode);
     read_and_mut(mode.0, mode.1, mode.2, |rl, line| {
         match line.trim() {
             "" => return Ok(Response::Continue),
-            "help" => println!(
-                "Valid commands
-    help     : Print this list
-    clear    : Clear the screen
-    exit     : Exit the program
-    mode lex : Lex the input
-    mode fmt : Format the input
-    mode run : Evaluate some expressions"
-            ),
+            "help" => println!("{HELP}"),
             "clear" => clear(),
             "exit" => return Ok(Response::Break),
-            "mode lex" => mode = get_mode(Mode::Lex),
-            "mode fmt" => mode = get_mode(Mode::Fmt),
-            "mode run" => mode = get_mode(Mode::Run),
+            "lex" => mode = get_mode(Mode::Lex),
+            "fmt" => mode = get_mode(Mode::Fmt),
+            "run" => mode = get_mode(Mode::Run),
             _ => return mode.3(ctx, line),
         }
         rl.set_prompt(mode.0, mode.1, mode.2);
