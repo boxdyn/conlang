@@ -8,7 +8,7 @@ enum Expr {
 
 
 /// executes an expression
-fn execute(expr: Expr) -> f64 {
+fn execute(&expr: Expr) -> f64 {
     match expr {
         Expr::Atom(value) => value,
         Expr::Op('*', [lhs, rhs]) => execute(lhs) * execute(rhs),
@@ -41,8 +41,8 @@ fn print_expr(expr: Expr) {
 
 
 /// Parses expressions
-fn parse(line: [char], power: i32) -> (Expr, [char]) {
-    fn map((expr, line): (Expr, [char]), f: fn(Expr) -> Expr) -> (Expr, [char]) {
+fn parse(&line: &[char], power: i32) -> (Expr, [char]) {
+    fn map(&(expr, line): (Expr, [char]), f: fn(Expr) -> Expr) -> (Expr, [char]) {
         (f(expr), line)
     }
 
@@ -55,7 +55,7 @@ fn parse(line: [char], power: i32) -> (Expr, [char]) {
                 (expr, rest) => panic(fmt("Expected ')', got ", expr, ", ", rest)),
             },
         [op, ..rest] => parse(rest, pre_bp(op)).map(|lhs| Expr::Op(op, [lhs])),
-        _ => panic("Unexpected end of input"),
+        other => panic("Unexpected end of input: ", other),
     };
 
     while let [op, ..rest] = space(line) {
@@ -63,15 +63,19 @@ fn parse(line: [char], power: i32) -> (Expr, [char]) {
         if before < power {
             break;
         };
-        (lhs, line) = parse(rest, after).map(|rhs| Expr::Op(op, [lhs, rhs]));
+        let v = parse(rest, after).map(|rhs| Expr::Op(op, [lhs, rhs]));
+        lhs = *v.0;
+        line = *v.1;
     };
     (lhs, line)
 }
 
-fn number(line: [char]) -> (Expr, [char]) {
+fn number(&line: [char]) -> (Expr, [char]) {
     let value = 0.0;
     while (let [first, ..rest] = line) && (let '0'..='9' = first) {
-        (value, line) = (value * 10.0 + (first as f64 - '0' as f64), rest)
+        value = value * 10.0 + (first as f64 - '0' as f64);
+        line = rest;
+        // (value, line) = (value * 10.0 + (first as f64 - '0' as f64), rest)
     } else (Expr::Atom(value), line)
 }
 
@@ -103,7 +107,7 @@ fn inf_bp(op: char) -> (i32, i32) {
         '>' => Power::Shift,
         '<' => Power::Shift,
         _ => Power::None,
-    })
+    } as i32)
 }
 
 fn pre_bp(op: char) -> i32 {
@@ -111,12 +115,12 @@ fn pre_bp(op: char) -> i32 {
     match op {
         '-' => Power::Unary,
         _ => panic("Unknown unary operator: " + op),
-    })
+    } as i32)
 }
 
 fn main() {
     loop {
-        let line = get_line("calc >");
+        let line = get_line("calc > ");
         let (expr, rest) = line.chars().parse(0);
 
         println(fmt_expr(expr), " -> ", execute(expr));
