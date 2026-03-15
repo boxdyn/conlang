@@ -348,7 +348,7 @@ impl<'t> Parse<'t> for Expr {
                         };
                         Expr::Op(Op::Call, vec![head, args])
                     }
-                    Ps::Op(op @ (Op::Tuple | Op::Dot | Op::LogAnd | Op::LogOr)) => Expr::Op(
+                    Ps::Op(op @ Op::Tuple) => Expr::Op(
                         op,
                         p.consume()
                             .list_bare(vec![head.at(span)], prec.next(), kind)?,
