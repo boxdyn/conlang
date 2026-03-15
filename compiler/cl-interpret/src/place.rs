@@ -2,7 +2,7 @@
 use crate::{
     convalue::ConValue,
     env::Environment,
-    error::{Error, IResult},
+    error::{Error, ErrorKind, IResult},
     interpret::Interpret,
 };
 use cl_ast::{
@@ -17,15 +17,18 @@ pub struct Place {
     projections: Vec<Projection>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Projection {
     Deref,
-    Index(usize),
+    Index(usize, bool),
     DotSym(Symbol),
     DotIdx(usize),
 }
 
 impl Place {
+    /// Creates a new [Place] [Projection] expression from an [Expr].
+    ///
+    /// If a place-projection can't be constructed, returns [Error::NotPlace].
     pub fn new(value: &Expr, env: &mut Environment) -> IResult<Self> {
         // base case
         if let Expr::Id(names) = value
@@ -34,11 +37,11 @@ impl Place {
             return Ok(Self { place: env.id_of(name)?, projections: vec![] });
         };
         let Expr::Op(op, exprs) = value else {
-            return Err(Error::NotAssignable());
+            return Err(Error::NotPlace());
         };
 
         match (op, exprs.as_slice()) {
-            (Op::As, exprs) => Err(Error::NotAssignable()),
+            (Op::As, exprs) => Err(Error::NotPlace()),
             (Op::Block | Op::Group | Op::MetaInner | Op::MetaOuter | Op::Pub, [expr]) => {
                 Self::new(expr.value(), env)
             }
@@ -46,7 +49,8 @@ impl Place {
                 let place = Self::new(place.value(), env)?;
                 // this may be surprising, as it evaluates an arbitrary expression!!!
                 match idx.interpret(env)? {
-                    ConValue::Int(idx) => Ok(place.index(idx as usize)),
+                    ConValue::Int(idx @ ..0) => Ok(place.index(-idx as usize, true)),
+                    ConValue::Int(idx @ 0..) => Ok(place.index(idx as usize, false)),
                     err => Err(Error::TypeError("int", err.typename()))?,
                 }
             }
@@ -57,8 +61,19 @@ impl Place {
                 Ok(Self::new(place.value(), env)?.dot_sym(path.parts[0]))
             }
             (Op::Deref, [place]) => Ok(Self::new(place.value(), env)?.deref()),
-            _ => Err(Error::NotAssignable()),
+            _ => Err(Error::NotPlace()),
         }
+    }
+
+    /// Creates a new [Place] if this [Expr] is a place expression,
+    /// otherwise allocates a new temporary and returns a Place-reference to it.
+    pub fn new_or_temporary(value: &Expr, env: &mut Environment) -> IResult<Self> {
+        let new = Self::new(value, env);
+        if let Err(Error { kind: ErrorKind::NotPlace, .. }) = new {
+            let value = value.interpret(env)?;
+            return Ok(Self::from_index(env.stack_alloc(value)?));
+        }
+        new
     }
 
     pub fn from_index(index: usize) -> Self {
@@ -72,8 +87,8 @@ impl Place {
     pub fn deref(mut self) -> Self {
         self.with(Projection::Deref)
     }
-    pub fn index(mut self, idx: usize) -> Self {
-        self.with(Projection::Index(idx))
+    pub fn index(mut self, idx: usize, from_end: bool) -> Self {
+        self.with(Projection::Index(idx, from_end))
     }
     pub fn dot_idx(mut self, idx: usize) -> Self {
         self.with(Projection::DotIdx(idx))
@@ -96,19 +111,27 @@ impl Place {
                 (ConValue::Ref(place), Projection::Deref) => {
                     place.get_mut(unsafe { &mut *(env) })?
                 }
+                (ConValue::Ref(place), projection) => place
+                    .clone()
+                    .with(*projection)
+                    .get_mut(unsafe { &mut *env })?,
                 (value, Projection::Deref) => value,
-                (ConValue::Array(arr), &Projection::Index(idx)) => {
+                (ConValue::Array(arr), &Projection::Index(idx, from_end)) => {
                     let len = arr.len();
+                    let idx = if from_end { len - idx } else { idx };
                     arr.get_mut(idx).ok_or_else(|| Error::OobIndex(idx, len))?
                 }
-                (ConValue::Slice(place, len), &Projection::Index(idx)) => {
+                (ConValue::Slice(place, len), &Projection::Index(idx, from_end)) => {
                     if idx >= *len {
                         Err(Error::OobIndex(idx, *len))?
                     };
                     // SAFETY: see above
-                    place.clone().index(idx).get_mut(unsafe { &mut *env })?
+                    place
+                        .clone()
+                        .index(idx, from_end)
+                        .get_mut(unsafe { &mut *env })?
                 }
-                (place, Projection::Index(idx)) => Err(Error::NotIndexable())?,
+                (place, Projection::Index(_, _)) => Err(Error::NotIndexable())?,
                 (ConValue::Struct(_, values), Projection::DotSym(sym)) => {
                     values.get_mut(sym).ok_or(Error::NotDefined(*sym))?
                 }
@@ -142,11 +165,16 @@ impl Place {
 
         for projection in projections {
             place = match (place, projection) {
-                (ConValue::Ref(reference), Projection::Deref) => reference.get(env)?,
-                (ConValue::Array(arr), &Projection::Index(idx)) => {
+                (ConValue::Ref(place), Projection::Deref) => place.get(env)?,
+                (ConValue::Ref(place), projection) => place.clone().with(*projection).get(env)?,
+                (ConValue::Array(arr), &Projection::Index(idx, from_end)) => {
+                    let idx = if from_end { arr.len() - idx } else { idx };
                     arr.get(idx).ok_or(Error::OobIndex(idx, arr.len()))?
                 }
-                (place, Projection::Index(idx)) => todo!(),
+                (place, Projection::Index(_, _)) => todo!("Index {self}"),
+                (ConValue::Struct(_, values), Projection::DotSym(sym)) => {
+                    values.get(sym).ok_or(Error::NotDefined(*sym))?
+                }
                 (place, Projection::DotSym(interned)) => todo!(),
                 (ConValue::Tuple(values), &Projection::DotIdx(idx)) => {
                     values.get(idx).ok_or(Error::OobIndex(idx, values.len()))?
@@ -177,6 +205,10 @@ impl Display for Place {
                     "*".fmt(f)?;
                     format_inner(place, first, f)
                 }
+                [Projection::Index(idx, from_end), rest @ ..] => {
+                    format_inner(place, rest, f)?;
+                    write!(f, "[{}{idx}]", if *from_end { "-" } else { "" })
+                }
                 [Projection::DotIdx(idx), rest @ ..] => {
                     format_inner(place, rest, f)?;
                     write!(f, ".{idx}")
@@ -184,10 +216,6 @@ impl Display for Place {
                 [Projection::DotSym(idx), rest @ ..] => {
                     format_inner(place, rest, f)?;
                     write!(f, ".{idx}")
-                }
-                [Projection::Index(idx), rest @ ..] => {
-                    format_inner(place, rest, f)?;
-                    write!(f, "[{idx}]")
                 }
                 _ => unreachable!("{projections:?}"),
             }

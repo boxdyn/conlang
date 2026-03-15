@@ -2,8 +2,12 @@
 //!
 //! The most permanent fix is a temporary one.
 use cl_ast::{Expr, fmt::FmtAdapter, types::Symbol};
+use cl_structures::intern::interned::Interned;
 
-use crate::{constructor::Constructor, place::Place};
+use crate::{
+    place::Place,
+    typeinfo::{Model, Type, TypeInfo},
+};
 
 use super::{
     Callable, Environment,
@@ -35,7 +39,7 @@ struct {
 }
 */
 
-type Integer = isize;
+type Integer = i128;
 
 /// A Conlang value stores data in the interpreter
 #[derive(Clone, Debug, Default)]
@@ -65,21 +69,19 @@ pub enum ConValue {
     Tuple(Box<[ConValue]>),
     // TODO: Instead of storing the identifier, store the index of the struct module
     /// A value of a product type
-    Struct(Symbol, Box<HashMap<Symbol, ConValue>>),
+    Struct(Type, Box<HashMap<Symbol, ConValue>>),
     /// A value of a product type with anonymous members
-    TupleStruct(Symbol, Box<[ConValue]>),
+    TupleStruct(Type, Box<[ConValue]>),
     /// An entire namespace
     Module(Box<HashMap<Symbol, ConValue>>),
     /// A quoted expression
     Quote(Rc<Expr>),
     /// A callable thing
     Function(Rc<Function>),
-    /// A tuple constructor
-    TupleConstructor(Constructor),
-    // /// A closure, capturing by reference
-    // Closure(Rc<Closure>),
     /// A built-in function
     Builtin(&'static Builtin),
+    /// The definition of a type, by index
+    TypeInfo(Type),
 }
 
 impl ConValue {
@@ -89,6 +91,33 @@ impl ConValue {
             ConValue::Bool(v) => Ok(*v),
             ConValue::Int(v) => Ok(*v != 0),
             _ => Err(Error::TypeError("type implements Truth", self.typename()))?,
+        }
+    }
+
+    pub fn take(&mut self) -> Self {
+        std::mem::take(self)
+    }
+
+    pub fn is_cheap_to_copy(&self) -> bool {
+        match self {
+            Self::Empty
+            | Self::Int(_)
+            | Self::Float(_)
+            | Self::Bool(_)
+            | Self::Char(_)
+            | Self::Str(_) => true,
+            Self::Ref(_) => true,
+            Self::Slice(_, _) => true,
+            Self::Quote(_) => true,
+            Self::Function(_) => true,
+            Self::Builtin(_) => true,
+            Self::TypeInfo(_) => true,
+            Self::Module(_)
+            | Self::String(_)
+            | Self::Array(_)
+            | Self::Tuple(_)
+            | Self::Struct(_, _)
+            | Self::TupleStruct(_, _) => false,
         }
     }
 
@@ -105,62 +134,74 @@ impl ConValue {
             ConValue::Slice(_, _) => "Slice",
             ConValue::Array(_) => "Array",
             ConValue::Tuple(_) => "Tuple",
-            ConValue::Struct(sym, _) => sym.to_ref(),
-            ConValue::TupleStruct(sym, _) => sym.to_ref(),
+            ConValue::Struct(ty, _) => ty.ident.to_ref(),
+            ConValue::TupleStruct(ty, _) => ty.ident.to_ref(),
             ConValue::Module(_) => "",
             ConValue::Quote(_) => "Quote",
             ConValue::Function(_) => "Fn",
-            ConValue::TupleConstructor(_) => "Fn",
-            // ConValue::Closure(_) => "Fn",
             ConValue::Builtin(_) => "Fn",
+            ConValue::TypeInfo(ty) => ty.ident.to_ref(),
         }
     }
 
-    pub fn cast(self, to_type: &str) -> Self {
-        if to_type.starts_with("f") {
-            let f = match self {
-                Self::Float(v) => v,
-                Self::Int(v) => v as _,
-                Self::Bool(v) => v as i32 as _,
-                Self::Char(v) => v as i32 as _,
-                _ => return self,
-            };
-            return ConValue::Float(f);
-        }
-        let i = match self {
-            Self::Int(v) => v,
-            Self::Float(v) => v as _,
-            Self::Bool(v) => v as _,
-            Self::Char(v) => v as _,
-            _ => return self,
-        };
-        match to_type {
-            "i8" => ConValue::Int(i as i8 as _),
-            "i16" => ConValue::Int(i as i16 as _),
-            "i32" => ConValue::Int(i as i32 as _),
-            "i64" => ConValue::Int(i),
-            "isize" | "int" => ConValue::Int(i),
-            "u8" => ConValue::Int(i % 0x100),
-            "u16" => ConValue::Int(i % 0x10000),
-            "u32" => ConValue::Int(i % 0x100000000),
-            "u64" => ConValue::Int(i),
-            "usize" | "uint" => ConValue::Int(i),
-            "bool" => ConValue::Bool(i != 0),
-            "char" => ConValue::Char(char::from_u32(i as _).unwrap_or('�')),
+    pub fn cast(self, ty: &TypeInfo) -> Self {
+        match &ty.model {
+            &Model::Integer { signed, size, min, max } => {
+                let i = match self {
+                    Self::Int(v) => v,
+                    Self::Float(v) => v as _,
+                    Self::Bool(v) => v as _,
+                    Self::Char(v) => v as _,
+                    Self::TypeInfo(Interned(TypeInfo { model: Model::Unit(d), .. }, ..)) => *d as _,
+                    _ => return self,
+                };
+                if i == min || i == max {
+                    self
+                } else if signed {
+                    ConValue::Int(i.wrapping_rem(max))
+                } else {
+                    ConValue::Int(i & max)
+                }
+            }
+            Model::Float { size } => {
+                let f = match self {
+                    Self::Float(v) => v,
+                    Self::Int(v) => v as _,
+                    Self::Bool(v) => v as i32 as _,
+                    Self::Char(v) => v as i32 as _,
+                    Self::TypeInfo(Interned(TypeInfo { model: Model::Unit(d), .. }, ..)) => *d as _,
+                    _ => return self,
+                };
+                ConValue::Float(f)
+            }
+            Model::Bool => ConValue::Bool(self.truthy().unwrap_or(true)),
+            Model::Char => {
+                let c = match self {
+                    Self::Int(v) => v as _,
+                    Self::Float(v) => v as _,
+                    Self::Bool(v) => v as _,
+                    Self::Char(v) => return self,
+                    Self::TypeInfo(Interned(TypeInfo { model: Model::Unit(d), .. }, ..)) => *d as _,
+                    _ => return self,
+                };
+                ConValue::Char(char::from_u32(c).unwrap_or('�'))
+            }
+            Model::Unit(_) => ConValue::Empty,
+            Model::Str => ConValue::String(self.to_string()),
             _ => self,
         }
     }
 
     #[allow(non_snake_case)]
-    pub fn tuple_struct(id: impl Into<Symbol>, values: impl Into<Box<[ConValue]>>) -> Self {
-        Self::TupleStruct(id.into(), values.into())
+    pub fn tuple_struct(id: Type, values: impl Into<Box<[ConValue]>>) -> Self {
+        Self::TupleStruct(id, values.into())
     }
     #[allow(non_snake_case)]
-    pub fn Struct(id: impl Into<Symbol>, values: HashMap<Symbol, ConValue>) -> Self {
-        Self::Struct(id.into(), Box::new(values))
+    pub fn Struct(id: Type, values: HashMap<Symbol, ConValue>) -> Self {
+        Self::Struct(id, Box::new(values))
     }
 
-    pub fn index(&self, index: &Self, _env: &Environment) -> IResult<ConValue> {
+    pub fn index(self, index: &Self, _env: &Environment) -> IResult<ConValue> {
         let &Self::Int(index) = index else {
             Err(Error::TypeError("int", index.typename()))?
         };
@@ -180,18 +221,15 @@ impl ConValue {
                 .cloned()
                 .ok_or(Error::OobIndex(index as usize, arr.len())),
             ConValue::Slice(place, len) => {
-                let index = if index < 0 {
-                    len.wrapping_add_signed(index)
+                if (index.unsigned_abs() as usize) < len {
+                    Ok(ConValue::Ref(place.index(index as _, index < 0)))
                 } else {
-                    index as usize
-                };
-
-                if index < *len {
-                    Ok(ConValue::Ref(place.clone().index(index)))
-                } else {
-                    Err(Error::OobIndex(index, *len))
+                    Err(Error::OobIndex(index.unsigned_abs() as _, len))
                 }
             }
+            ConValue::Ref(place) => Ok(ConValue::Ref(
+                place.index(index.unsigned_abs() as _, index < 0),
+            )),
             other => Err(Error::TypeError("type implements Index", other.typename())),
         }
     }
@@ -229,8 +267,6 @@ impl Callable for ConValue {
     fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
         match self {
             Self::Function(func) => func.call(env, args),
-            Self::TupleConstructor(func) => func.call(env, args),
-            // Self::Closure(func) => func.call(env, args),
             Self::Builtin(func) => func.call(env, args),
             Self::Module(m) => {
                 if let Some(func) = m.get(&"call".into()) {
@@ -241,9 +277,10 @@ impl Callable for ConValue {
             }
             Self::Ref(ptr) => {
                 // Move onto stack, and call
-                let func = ptr.get_mut(env)?.clone();
+                let func = ptr.get(env)?.clone();
                 func.call(env, args)
             }
+            Self::TypeInfo(idx) => idx.call(env, args),
             _ => Err(Error::NotCallable(self.clone())),
         }
     }
@@ -263,6 +300,7 @@ macro cmp ($($fn:ident: $empty:literal, $op:tt);*$(;)?) {$(
             (Self::Str(a), Self::String(b)) => Ok(Self::Bool(&**a $op &**b)),
             (Self::String(a), Self::Str(b)) => Ok(Self::Bool(&**a $op &**b)),
             (Self::String(a), Self::String(b)) => Ok(Self::Bool(&**a $op &**b)),
+            (Self::TypeInfo(a), Self::TypeInfo(b)) => Ok(Self::Bool(&*a $op &*b)),
             (a, _) => Err(Error::TypeError("type implements Cmp", a.typename()))?,
         }
     }
@@ -341,25 +379,25 @@ ops! {
         (ConValue::Char(a), ConValue::Char(b)) => {
             ConValue::String([a, b].into_iter().collect::<String>())
         }
-        (a, _) => Err(Error::TypeError("type implements add", a.typename()))?
+        (a, b) => Err(Error::TypeError(a.typename(), b.typename()))?
     ]
     BitAnd: bitand = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a & b),
         (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a & b),
-        (a, _) => Err(Error::TypeError("int or bool",a.typename()))?
+        (a, b) => Err(Error::TypeError(a.typename(), b.typename()))?
     ]
     BitOr: bitor = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a | b),
         (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a | b),
-        (a, _) => Err(Error::TypeError("int or bool", a.typename()))?
+        (a, b) => Err(Error::TypeError(a.typename(), b.typename()))?
     ]
     BitXor: bitxor = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a ^ b),
         (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a ^ b),
-        (a, _) => Err(Error::TypeError("int or bool", a.typename()))?
+        (a, b) => Err(Error::TypeError(a.typename(), b.typename()))?
     ]
     Div: div = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
@@ -367,13 +405,13 @@ ops! {
             eprintln!("Warning: Divide by zero in {a} / {b}"); a
         })),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a / b),
-        (a, _) => Err(Error::TypeError("type implements Div", a.typename()))?
+        (a, b) => Err(Error::TypeError(a.typename(), b.typename()))?
     ]
     Mul: mul = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_mul(b)),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a * b),
-        (a, _) => Err(Error::TypeError("type implements Mul", a.typename()))?
+        (a, b) => Err(Error::TypeError(a.typename(), b.typename()))?
     ]
     Rem: rem = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
@@ -381,7 +419,7 @@ ops! {
             println!("Warning: Divide by zero in {a} % {b}"); a
         })),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a % b),
-        (a, _) => Err(Error::TypeError("type implements Rem", a.typename()))?
+        (a, b) => Err(Error::TypeError(a.typename(), b.typename()))?
     ]
     Shl: shl = [
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
@@ -399,7 +437,7 @@ ops! {
         (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_sub(b)),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a - b),
-        (a, _) => Err(Error::TypeError("type implements Sub", a.typename()))?
+        (a, b) => Err(Error::TypeError(a.typename(), b.typename()))?
     ]
 }
 impl std::fmt::Display for ConValue {
@@ -414,41 +452,15 @@ impl std::fmt::Display for ConValue {
             ConValue::String(v) => v.fmt(f),
             ConValue::Ref(v) => write!(f, "&<{}>", v),
             ConValue::Slice(id, len) => write!(f, "&<{id}>[{len}..]"),
-            ConValue::Array(array) => {
-                '['.fmt(f)?;
-                for (idx, element) in array.iter().enumerate() {
-                    if idx > 0 {
-                        ", ".fmt(f)?
-                    }
-                    element.fmt(f)?
-                }
-                ']'.fmt(f)
-            }
-            ConValue::Tuple(tuple) => {
-                '('.fmt(f)?;
-                for (idx, element) in tuple.iter().enumerate() {
-                    if idx > 0 {
-                        ", ".fmt(f)?
-                    }
-                    element.fmt(f)?
-                }
-                ')'.fmt(f)
-            }
-            ConValue::TupleStruct(id, tuple) => {
-                write!(f, "{id}")?;
-                '('.fmt(f)?;
-                for (idx, element) in tuple.iter().enumerate() {
-                    if idx > 0 {
-                        ", ".fmt(f)?
-                    }
-                    element.fmt(f)?
-                }
-                ')'.fmt(f)
-            }
+            ConValue::Array(array) => f.delimit('[', ']').list(array, ", "),
+            ConValue::Tuple(tuple) => f.delimit('(', ')').list(tuple, ", "),
+            ConValue::TupleStruct(id, tuple) => f
+                .delimit(format_args!("{} (", id.ident), ")")
+                .list(tuple, ", "),
             ConValue::Struct(id, map) => {
                 use std::fmt::Write;
-                write!(f, "{id} ")?;
-                let mut f = f.delimit("{", "\n}");
+                write!(f, "{} ", id.ident)?;
+                let mut f = f.delimit_indented("{", "\n}");
                 for (k, v) in map.iter() {
                     write!(f, "\n{k}: {v},")?;
                 }
@@ -469,15 +481,10 @@ impl std::fmt::Display for ConValue {
                 let (pat, body) = func.decl();
                 write!(f, "fn {pat} {body}")
             }
-            ConValue::TupleConstructor(Constructor { name: index, arity }) => {
-                write!(f, "{index}(..{arity})")
-            }
-            // ConValue::Closure(func) => {
-            //     write!(f, "{}", func.as_ref())
-            // }
             ConValue::Builtin(func) => {
                 write!(f, "{}", func)
             }
+            ConValue::TypeInfo(ty) => ty.fmt(f),
         }
     }
 }

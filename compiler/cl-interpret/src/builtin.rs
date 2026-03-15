@@ -174,6 +174,11 @@ pub const Builtins: &[Builtin] = &builtins![
         Ok(())
     }
 
+    /// Constructs a reference from a raw integer
+    fn raw_ref(ConValue::Int(index)) {
+        Ok(ConValue::Ref(Place::from_index(*index as _)))
+    }
+
     fn panic(args @ ..) @env {
         use std::fmt::Write;
         let mut stdout = stdout().lock();
@@ -294,18 +299,18 @@ pub const Builtins: &[Builtin] = &builtins![
     }
 
     /// Builtin hex function to use when hex.cl isn't loaded
-    fn builtin_hex(ConValue::Int(v)) {
-        Ok(format!("0x{v:x}"))
+    fn fmt_hex(ConValue::Int(v)) {
+        Ok(format!("{v:x}"))
     }
 
     /// Builtin oct function to use when hex.cl isn't loaded
-    fn builtin_oct(ConValue::Int(v)) {
-        Ok(format!("0o{v:o}"))
+    fn fmt_oct(ConValue::Int(v)) {
+        Ok(format!("{v:o}"))
     }
 
     /// Builtin bin function to use when hex.cl isn't loaded
-    fn builtin_bin(ConValue::Int(v)) {
-        Ok(format!("0b{v:b}"))
+    fn fmt_bin(ConValue::Int(v)) {
+        Ok(format!("{v:b}"))
     }
 
     fn catch_panic(lambda, args @ ..) @env {
@@ -429,31 +434,11 @@ pub const Math: &[Builtin] = &builtins![
         })
     }
 
-    #[allow(non_snake_case)]
-    fn RangeExc(start, end) @env {
-        Ok(ConValue::tuple_struct("RangeExc", [start.clone(), end.clone()]))
-    }
-
-    #[allow(non_snake_case)]
-    fn RangeInc(start, end) @env {
-        Ok(ConValue::tuple_struct("RangeInc", [start.clone(), end.clone()]))
-    }
-
-    #[allow(non_snake_case)]
-    fn RangeTo(end) @env {
-        Ok(ConValue::tuple_struct("RangeTo", [end.clone()]))
-    }
-
-    #[allow(non_snake_case)]
-    fn RangeToInc(end) @env {
-        Ok(ConValue::tuple_struct("RangeToInc", [end.clone()]))
-    }
-
     /// Negates the ConValue
     fn neg(tail) {
         Ok(match tail {
             ConValue::Empty => ConValue::Empty,
-            ConValue::Int(v) => ConValue::Int(v.wrapping_neg()),
+            ConValue::Int(v) => ConValue::Int(-v),
             ConValue::Float(v) => ConValue::Float(-v),
             _ => Err(Error::TypeError("type implements Neg", tail.typename()))?,
         })

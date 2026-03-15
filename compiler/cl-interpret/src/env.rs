@@ -1,6 +1,10 @@
 //! Lexical and non-lexical scoping for variables
 
-use crate::{builtin::Builtin, constructor::Constructor, place::Place};
+use crate::{
+    builtin::Builtin,
+    place::Place,
+    typeinfo::{self, Type, TypeInfo},
+};
 
 use super::{
     Callable, Interpret,
@@ -10,7 +14,7 @@ use super::{
     function::Function,
 };
 use cl_ast::{Bind as FnDecl, types::Symbol};
-use cl_structures::span::Span;
+use cl_structures::{intern::interned::Interned, span::Span};
 use std::{
     collections::HashMap,
     fmt::Display,
@@ -56,6 +60,8 @@ impl std::fmt::Display for Backtrace<'_> {
 pub struct Environment {
     values: Vec<ConValue>,
     frames: Vec<EnvFrame>,
+    types: HashMap<Symbol, Type>,
+    impls: Vec<HashMap<Symbol, ConValue>>,
 }
 
 impl Display for Environment {
@@ -72,6 +78,9 @@ impl Display for Environment {
             for (name, idx) in binds {
                 write!(f, "{idx:4} {name}: ")?;
                 match self.values.get(*idx) {
+                    Some(ConValue::TypeInfo(t)) => {
+                        writeln!(f, "\t{t:?}")
+                    }
                     Some(value) => writeln!(f, "\t{value}"),
                     None => writeln!(f, "ERROR: {name}'s address blows the stack!"),
                 }?
@@ -84,6 +93,10 @@ impl Display for Environment {
 impl Default for Environment {
     fn default() -> Self {
         let mut this = Self::no_builtins();
+        for ty in TypeInfo::defaults() {
+            let value = this.def_type(ty.ident, ty.model);
+            this.bind(ty.ident, ConValue::TypeInfo(value));
+        }
         this.add_builtins(Builtins).add_builtins(Math);
         this
     }
@@ -95,7 +108,12 @@ impl Environment {
     }
     /// Creates an [Environment] with no [builtins](super::builtin)
     pub fn no_builtins() -> Self {
-        Self { values: Vec::new(), frames: vec![EnvFrame::default()] }
+        Self {
+            values: Vec::new(),
+            frames: vec![EnvFrame::default()],
+            types: HashMap::new(),
+            impls: Vec::new(),
+        }
     }
 
     /// Reflexively evaluates a node
@@ -234,16 +252,20 @@ impl Environment {
         self.values.get_mut(start..start + len)
     }
 
+    pub fn def_type(&mut self, name: Symbol, model: typeinfo::Model) -> Type {
+        let typeinfo = TypeInfo { ident: name, model }.intern();
+        self.types.insert(name, (typeinfo));
+        typeinfo
+    }
+    pub fn get_type(&self, name: Symbol) -> Option<Type> {
+        self.types.get(&name).copied()
+    }
+
     /// Inserts a new [ConValue] into this [Environment]
     pub fn insert(&mut self, k: Symbol, v: ConValue) {
         if self.bind_raw(k, self.values.len()).is_some() {
             self.values.push(v);
         }
-    }
-
-    pub fn insert_tup_constructor(&mut self, name: Symbol, arity: usize) {
-        let cs = Constructor { arity: arity as _, name };
-        self.insert(name, ConValue::TupleConstructor(cs));
     }
 
     /// Gets the current stack top position

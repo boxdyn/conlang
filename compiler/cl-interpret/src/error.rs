@@ -70,9 +70,9 @@ impl Error {
     pub fn OobIndex(index: usize, length: usize) -> Self {
         Self { kind: ErrorKind::OobIndex(index, length), span: None }
     }
-    /// An expression is not assignable
-    pub fn NotAssignable() -> Self {
-        Self { kind: ErrorKind::NotAssignable, span: None }
+    /// An expression in place position is not a place-expression
+    pub fn NotPlace() -> Self {
+        Self { kind: ErrorKind::NotPlace, span: None }
     }
     /// A name was not defined in scope before being used
     pub fn NotDefined(name: Symbol) -> Self {
@@ -146,7 +146,7 @@ pub enum ErrorKind {
     /// An array index went out of bounds
     OobIndex(usize, usize),
     /// An expression is not assignable
-    NotAssignable,
+    NotPlace,
     /// A name was not defined in scope before being used
     NotDefined(Symbol),
     /// A name was defined but not initialized
@@ -188,8 +188,8 @@ impl std::fmt::Display for ErrorKind {
             ErrorKind::OobIndex(idx, len) => {
                 write!(f, "Index out of bounds: index was {idx}. but len is {len}")
             }
-            ErrorKind::NotAssignable => {
-                write!(f, "expression is not assignable")
+            ErrorKind::NotPlace => {
+                write!(f, "expression does not refer to a place")
             }
             ErrorKind::NotDefined(value) => {
                 write!(f, "{value} not bound.")
