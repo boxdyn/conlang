@@ -174,7 +174,7 @@ impl<'t> Parse<'t> for Pat {
                 PatOp::Generic => Pat::Op(
                     op,
                     p.consume()
-                        .list(vec![head], prec, TKind::Comma, kind.flip())?,
+                        .list(vec![head], Prec::Typed, TKind::Comma, kind.flip())?,
                 ),
                 PatOp::TypePrefixed => Pat::Op(op, vec![head, p.parse(prec)?]),
                 PatOp::Tuple => Pat::Op(op, p.consume().list_bare(vec![head], prec.next(), kind)?),
