@@ -26,6 +26,7 @@ impl<A: AstTypes> Display for Expr<A> {
             Self::Use(v) => write!(f, "use {v}"),
             Self::Bind(v) => v.fmt(f),
             Self::Make(v) => v.fmt(f),
+            Self::Match(v) => v.fmt(f),
 
             Self::Op(op @ Op::Continue, exprs) => f.delimit(op, "").list(exprs, "!?,"),
             Self::Op(op @ (Op::If | Op::While), exprs) => match exprs.as_slice() {
@@ -34,12 +35,6 @@ impl<A: AstTypes> Display for Expr<A> {
                 }
                 [cond, pass, fail] => write!(f, "{op}{cond} {pass} else {fail}"),
                 other => f.delimit(fmt!("({op}, "), ")").list(other, ", "),
-            },
-            Self::Op(op @ Op::Match, exprs) => match exprs.as_slice() {
-                [scrutinee, arms @ ..] => f
-                    .delimit_indented(fmt!("{op}{scrutinee} {{"), "}")
-                    .list_wrap("\n", arms, ",\n", ",\n"),
-                [] => write!(f, "{op} () {{}}"), // invalid, but whatever.
             },
             Self::Op(Op::Array, exprs) => f.delimit("[", "]").list(exprs, ", "),
             Self::Op(Op::ArRep, exprs) => f.delimit("[", "]").list(exprs, "; "),
@@ -100,7 +95,6 @@ impl Display for Op {
             Op::Const => "const ",
             Op::Static => "static ",
             Op::Loop => "loop ",
-            Op::Match => "match ",
             Op::If => "if ",
             Op::While => "while ",
             Op::Break => "break ",
@@ -237,6 +231,21 @@ impl<A: AstTypes> Display for MakeArm<A> {
             Self(name, Some(body)) => write!(f, "{name}: {body}"),
             Self(name, None) => write!(f, "{name}"),
         }
+    }
+}
+
+impl<A: AstTypes> Display for Match<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self(scrutinee, arms) = self;
+        f.delimit_indented(fmt!("match {scrutinee} {{"), "}")
+            .list_wrap("\n", arms, ",\n", ",\n")
+    }
+}
+
+impl<A: AstTypes> Display for MatchArm<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self(pat, expr) = self;
+        write!(f, "{pat} => {expr}")
     }
 }
 

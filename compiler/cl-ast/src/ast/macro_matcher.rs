@@ -89,19 +89,6 @@ impl<A: AstTypes> Match<A> for Bind<A> {
     }
 }
 
-impl<A: AstTypes> Match<A> for crate::ast::Make<A> {
-    fn recurse(sub: &mut Subst<A>, pat: &Self, expr: &Self) -> bool {
-        let (Make(pat, pat_arms), Make(expr, expr_arms)) = (pat, expr);
-        Match::recurse(sub, pat, expr) && Match::recurse(sub, pat_arms, expr_arms)
-    }
-
-    fn apply(&mut self, sub: &Subst<A>) {
-        let Make(expr, make_arms) = self;
-        expr.apply(sub);
-        make_arms.apply(sub);
-    }
-}
-
 impl<A: AstTypes> Match<A> for Expr<A> {
     fn recurse(sub: &mut Subst<A>, pat: &Self, expr: &Self) -> bool {
         match (pat, expr) {
@@ -119,6 +106,8 @@ impl<A: AstTypes> Match<A> for Expr<A> {
             (Expr::Bind(..), _) => false,
             (Expr::Make(pat), Expr::Make(expr)) => Match::recurse(sub, pat, expr),
             (Expr::Make(..), _) => false,
+            (Expr::Match(pat), Expr::Match(expr)) => Match::recurse(sub, pat, expr),
+            (Expr::Match(..), _) => false,
             (Expr::Op(pat_op, pat_exprs), Expr::Op(expr_op, expr_exprs)) => {
                 Match::recurse(sub, pat_op, expr_op) && Match::recurse(sub, pat_exprs, expr_exprs)
             }
@@ -136,11 +125,25 @@ impl<A: AstTypes> Match<A> for Expr<A> {
             Expr::Omitted | Expr::Id(_) | Expr::Lit(_) | Expr::Use(_) => {}
             Expr::Bind(expr) => expr.apply(sub),
             Expr::Make(expr) => expr.apply(sub),
+            Expr::Match(expr) => expr.apply(sub),
             Expr::Op(op, exprs) => {
                 op.apply(sub);
                 exprs.apply(sub);
             }
         }
+    }
+}
+
+impl<A: AstTypes> Match<A> for crate::ast::Make<A> {
+    fn recurse(sub: &mut Subst<A>, pat: &Self, expr: &Self) -> bool {
+        let (Make(pat, pat_arms), Make(expr, expr_arms)) = (pat, expr);
+        Match::recurse(sub, pat, expr) && Match::recurse(sub, pat_arms, expr_arms)
+    }
+
+    fn apply(&mut self, sub: &Subst<A>) {
+        let Make(expr, make_arms) = self;
+        expr.apply(sub);
+        make_arms.apply(sub);
     }
 }
 
@@ -152,6 +155,32 @@ impl<A: AstTypes> Match<A> for MakeArm<A> {
 
     fn apply(&mut self, sub: &Subst<A>) {
         let Self(_, expr) = self;
+        expr.apply(sub);
+    }
+}
+
+impl<A: AstTypes> Match<A> for super::Match<A> {
+    fn recurse(sub: &mut Subst<A>, pat: &Self, expr: &Self) -> bool {
+        let (Self(pat_scr, pat_arms), Self(expr_scr, expr_arms)) = (pat, expr);
+        Match::recurse(sub, pat_scr, expr_scr) && Match::recurse(sub, pat_arms, expr_arms)
+    }
+
+    fn apply(&mut self, sub: &Subst<A>) {
+        let Self(scrutinee, arms) = self;
+        scrutinee.apply(sub);
+        arms.apply(sub);
+    }
+}
+
+impl<A: AstTypes> Match<A> for MatchArm<A> {
+    fn recurse(sub: &mut Subst<A>, pat: &Self, expr: &Self) -> bool {
+        let (Self(pat_pat, pat_expr), Self(expr_pat, expr_expr)) = (pat, expr);
+        Match::recurse(sub, pat_pat, expr_pat) && Match::recurse(sub, pat_expr, expr_expr)
+    }
+
+    fn apply(&mut self, sub: &Subst<A>) {
+        let Self(pat, expr) = self;
+        pat.apply(sub);
         expr.apply(sub);
     }
 }

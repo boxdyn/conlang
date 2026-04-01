@@ -33,6 +33,7 @@ impl Inference for Expr {
             Self::Use(_) => Ok(e.unit()),
             Self::Bind(bind) => bind.infer(e),
             Self::Make(make) => make.infer(e),
+            Self::Match(mtch) => mtch.infer(e),
             Self::Op(op, exprs) => infer_expr_op(*op, exprs, e),
         }
     }
@@ -83,39 +84,6 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_, '_>
             Ok(bset.unwrap_or(e.never()))
         }
         (Op::Loop, [..]) => todo!("Infer {op}"),
-        (Op::Match, [scrutinee, arms @ ..]) => {
-            // Infer the scrutinee
-            let scrutinee = scrutinee.infer(e)?;
-
-            let mut out = None;
-            // For each pattern:
-            for arm in arms {
-                if let At(Expr::Bind(bind), _) = arm
-                    && let Bind(BindOp::Match, _, pat, exprs) = &**bind
-                    && let [expr] = exprs.as_slice()
-                {
-                    let mut scope = e.block_scope();
-                    // Infer the pattern
-                    let pat = pat.infer(&mut scope)?;
-                    // Unify it with the scrutinee
-                    scope.unify(scrutinee, pat)?;
-                    // Infer the Expr
-                    let expr = expr.infer(&mut scope)?;
-                    // Unify the expr with the out variable
-                    match out {
-                        Some(ty) => e.unify(ty, expr)?,
-                        None => out = Some(expr),
-                    }
-                } else {
-                    unreachable!("Expected Match-Bind in Match, got {arm}")
-                }
-            }
-            // Return out. If there are no arms, assume Never.
-            match out {
-                Some(ty) => Ok(ty),
-                None => Ok(e.never()),
-            }
-        }
         (Op::If, [cond, pass, fail @ ..]) => {
             // Open a block scope so the condition doesn't escape
             let pass = {
@@ -311,6 +279,36 @@ impl Inference for MakeArm {
     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
         let Self(_sym, expr) = self;
         expr.infer(e)
+    }
+}
+
+impl Inference for Match {
+    fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+        let Self(scrutinee, arms) = self;
+        // Infer the scrutinee
+        let scrutinee = scrutinee.infer(e)?;
+
+        let mut out = None;
+        // For each pattern:
+        for MatchArm(pat, expr) in arms {
+            let mut scope = e.block_scope();
+            // Infer the pattern
+            let pat = pat.infer(&mut scope)?;
+            // Unify it with the scrutinee
+            scope.unify(scrutinee, pat)?;
+            // Infer the Expr
+            let expr = expr.infer(&mut scope)?;
+            // Unify the expr with the out variable
+            match out {
+                Some(ty) => e.unify(ty, expr)?,
+                None => out = Some(expr),
+            }
+        }
+        // Return out. If there are no arms, assume Never.
+        match out {
+            Some(ty) => Ok(ty),
+            None => Ok(e.never()),
+        }
     }
 }
 

@@ -43,6 +43,12 @@ pub trait Visit<'a, A: AstTypes> {
     fn visit_makearm(&mut self, item: &'a MakeArm<A>) -> Result<(), Self::Error> {
         item.children(self)
     }
+    fn visit_match(&mut self, item: &'a Match<A>) -> Result<(), Self::Error> {
+        item.children(self)
+    }
+    fn visit_matcharm(&mut self, item: &'a MatchArm<A>) -> Result<(), Self::Error> {
+        item.children(self)
+    }
 }
 
 pub trait Walk<'a, A: AstTypes> {
@@ -63,6 +69,7 @@ impl<'a, A: AstTypes> Walk<'a, A> for Expr<A> {
             Self::Use(u) => u.visit_in(v),
             Self::Bind(bind) => bind.visit_in(v),
             Self::Make(make) => make.visit_in(v),
+            Self::Match(mtch) => mtch.visit_in(v),
             Self::Op(_op, exprs) => exprs.visit_in(v),
         }
     }
@@ -150,6 +157,32 @@ impl<'a, A: AstTypes> Walk<'a, A> for MakeArm<A> {
     #[inline]
     fn visit_in<V: Visit<'a, A> + ?Sized>(&'a self, v: &mut V) -> Result<(), V::Error> {
         v.visit_makearm(self)
+    }
+}
+
+impl<'a, A: AstTypes> Walk<'a, A> for Match<A> {
+    fn children<V: Visit<'a, A> + ?Sized>(&'a self, v: &mut V) -> Result<(), V::Error> {
+        let Self(expr, arms) = self;
+        expr.visit_in(v)?;
+        arms.visit_in(v)
+    }
+
+    #[inline]
+    fn visit_in<V: Visit<'a, A> + ?Sized>(&'a self, v: &mut V) -> Result<(), V::Error> {
+        v.visit_match(self)
+    }
+}
+
+impl<'a, A: AstTypes> Walk<'a, A> for MatchArm<A> {
+    fn children<V: Visit<'a, A> + ?Sized>(&'a self, v: &mut V) -> Result<(), V::Error> {
+        let Self(name, expr) = self;
+        name.visit_in(v)?;
+        expr.visit_in(v)
+    }
+
+    #[inline]
+    fn visit_in<V: Visit<'a, A> + ?Sized>(&'a self, v: &mut V) -> Result<(), V::Error> {
+        v.visit_matcharm(self)
     }
 }
 

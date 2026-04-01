@@ -92,6 +92,7 @@ impl Interpret for Expr<DefaultTypes> {
             Self::Use(_) => cl_todo!("Use `{self}`"),
             Self::Bind(bind) => bind.interpret(env),
             Self::Make(make) => make.interpret(env),
+            Self::Match(mtch) => mtch.interpret(env),
             Self::Op(op, exprs) => {
                 if self.is_place()
                     && let Ok(place) = Place::new(self, env)
@@ -174,22 +175,6 @@ impl Interpret for (Op, &[At<Expr>]) {
                     Err(e) => Err(e)?,
                 }
             },
-            (Op::Match, [scrutinee, arms @ ..]) => {
-                let scrutinee = scrutinee.interpret(env)?;
-                for At(arm, span) in arms {
-                    if let Expr::Bind(arm) = arm
-                        && let Bind(BindOp::Match, _, pat, exprs) = &**arm
-                        && let [expr] = exprs.as_slice()
-                        && let mut bind = HashMap::new()
-                        && pat
-                            .matches(scrutinee.clone(), &mut MatchEnv::new(env, &mut bind))
-                            .is_ok()
-                    {
-                        return expr.interpret(&mut env.with_frame("match-arm", bind));
-                    }
-                }
-                Err(Error::MatchNonexhaustive())
-            }
             (Op::If, [cond, pass, fail]) => {
                 let mut scope = env.frame("if", None);
                 if cond.interpret(&mut scope)?.truthy()? {
@@ -635,6 +620,23 @@ impl Interpret for Make<DefaultTypes> {
         }
 
         tyinfo.make_struct(members)
+    }
+}
+
+impl Interpret for cl_ast::ast::Match<DefaultTypes> {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let Self(scrutinee, arms) = self;
+        let scrutinee = scrutinee.interpret(env)?;
+        for MatchArm(pat, expr) in arms {
+            let mut bind = HashMap::new();
+            if pat
+                .matches(scrutinee.clone(), &mut MatchEnv::new(env, &mut bind))
+                .is_ok()
+            {
+                return expr.interpret(&mut env.with_frame("match-arm", bind));
+            }
+        }
+        Err(Error::MatchNonexhaustive())
     }
 }
 

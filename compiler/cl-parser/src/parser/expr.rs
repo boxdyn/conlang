@@ -1,7 +1,6 @@
 use super::{PResult, PResultExt, Parse, ParseError, Parser, no_eof, pat::Prec as PPrec};
 use cl_ast::{types::Literal, *};
 use cl_token::{TKind, Token};
-use std::iter;
 
 /// Organizes the precedence hierarchy for syntactic elements
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -81,6 +80,7 @@ pub enum Ps {
     Lambda,     // | Pat,* | Expr
     DoubleRef,  // && Expr
     Make,       // Expr{ Expr,* }
+    Match,      // match Expr { (Pat => Expr),* }
     ImplicitDo, // An implicit semicolon
     Ellipsis,   // An ellipsis (...)
     End,        // Produces an empty value.
@@ -107,7 +107,7 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
         TKind::Const => (Ps::Op(Op::Const), Prec::Body),
         TKind::Static => (Ps::Op(Op::Static), Prec::Body),
         TKind::For => (Ps::For, Prec::Body),
-        TKind::Match => (Ps::Op(Op::Match), Prec::Body),
+        TKind::Match => (Ps::Match, Prec::Body),
         TKind::Macro => (Ps::Op(Op::Macro), Prec::Assign),
 
         TKind::Fn
@@ -228,8 +228,9 @@ impl<'t> Parse<'t> for Expr {
                 Ps::Mid => Expr::MetId(p.consume().next()?.lexeme.to_string().as_str().into()),
                 Ps::Lit => Expr::Lit(p.parse(())?),
                 Ps::Use => Expr::Use(p.consume().parse(())?),
-                Ps::Def => Expr::Bind(p.parse(None)?),
+                Ps::Def => Expr::Bind(p.parse(())?),
                 Ps::For => parse_for(p, ())?,
+                Ps::Match => Expr::Match(p.parse(())?),
                 Ps::Lambda | Ps::Lambda0 => {
                     p.consume();
 
@@ -273,7 +274,6 @@ impl<'t> Parse<'t> for Expr {
                         p.parse(prec.next())?,
                     ],
                 ),
-                Ps::Op(Op::Match) => parse_match(p)?,
                 Ps::Op(Op::Block) => Expr::Op(
                     Op::Block,
                     p.consume().opt(MIN, kind.flip())?.into_iter().collect(),
@@ -398,18 +398,37 @@ fn parse_array(p: &mut Parser<'_>) -> PResult<Expr> {
 ///     (Pat => Expr),*
 /// }
 /// ```
-fn parse_match(p: &mut Parser<'_>) -> PResult<Expr> {
-    let scrutinee = p.consume().parse(Prec::Logical.value())?;
+impl<'t> Parse<'t> for Match {
+    type Prec = ();
 
-    let arms = p
-        .expect(TKind::LCurly)?
-        .list(vec![], Some(BindOp::Match), TKind::Comma, TKind::RCurly)?
-        .into_iter()
-        .map(|At(arm, span)| At(Expr::Bind(Box::new(arm)), span));
+    fn parse(p: &mut Parser<'t>, _level: Self::Prec) -> PResult<Self>
+    where Self: Sized {
+        Ok(Self(
+            p.consume().parse(Prec::Logical.value())?,
+            p.expect(TKind::LCurly)?
+                .list(vec![], (), TKind::Comma, TKind::RCurly)?,
+        ))
+    }
+}
 
-    let expr = Expr::Op(Op::Match, iter::once(scrutinee).chain(arms).collect());
+impl<'t> Parse<'t> for MatchArm {
+    type Prec = ();
 
-    Ok(expr)
+    fn parse(p: &mut Parser<'t>, _level: Self::Prec) -> PResult<Self>
+    where Self: Sized {
+        // <T,*>
+        // let generics = match p.next_if(TKind::Lt)? {
+        //     Ok(_) => p.list(vec![], (), TKind::Comma, TKind::Gt)?,
+        //     Err(_) => vec![],
+        // };
+
+        // Pat
+        let pat = p.parse(PPrec::Alt)?;
+        p.expect(TKind::FatArrow)?;
+        let body = p.parse(Prec::Body.value())?;
+
+        Ok(Self(pat, body))
+    }
 }
 
 /// Parses a `for` loop expression
@@ -460,9 +479,7 @@ fn from_bind(p: &mut Parser<'_>) -> PResult<(BindOp, PPrec, Option<TKind>, Optio
         TKind::Fn =>     (BindOp::Fn,     PPrec::Fn,    None,                  Some(Prec::Body),   None),
         TKind::Mod =>    (BindOp::Mod,    PPrec::Max,   None,                  Some(Prec::Body),   None),
         TKind::Impl =>   (BindOp::Impl,   PPrec::Fn,    None,                  Some(Prec::Body),   None),
-        TKind::Bar =>    (BindOp::Match,  PPrec::Alt,   Some(TKind::FatArrow), Some(Prec::Body),   None),
-        // no consume!
-        _ => return   Ok((BindOp::Match,  PPrec::Alt,   Some(TKind::FatArrow), Some(Prec::Body),   None)),
+        other => return Err(ParseError::NotBind(other, p.span()))
     };
 
     p.consume();
@@ -470,17 +487,11 @@ fn from_bind(p: &mut Parser<'_>) -> PResult<(BindOp, PPrec, Option<TKind>, Optio
 }
 
 impl<'t> Parse<'t> for Bind {
-    type Prec = Option<BindOp>;
+    type Prec = ();
 
-    fn parse(p: &mut Parser<'t>, expected_level: Self::Prec) -> PResult<Self> {
+    fn parse(p: &mut Parser<'t>, _level: Self::Prec) -> PResult<Self> {
         // let
         let (level, patp, arrow, bodyp, failp) = from_bind(p)?;
-
-        if let Some(expected) = expected_level
-            && level != expected
-        {
-            Err(ParseError::NotMatch(level, expected, p.span()))?
-        }
 
         // <T,*>
         let generics = match p.next_if(TKind::Lt)? {

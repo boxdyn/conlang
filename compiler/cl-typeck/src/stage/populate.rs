@@ -6,7 +6,7 @@ use crate::{
     table::{NodeKind, Table},
 };
 use cl_ast::{
-    At, Bind, BindOp, DefaultTypes, Expr, Op, Use,
+    At, Bind, BindOp, DefaultTypes, Expr, Match, MatchArm, Op, Use,
     types::Path,
     visit::{Visit, Walk},
 };
@@ -59,6 +59,7 @@ impl Visit<'_, DefaultTypes> for Populator<'_, '_> {
             Expr::Use(item) => self.visit_use(item),
             Expr::Bind(bind) => self.visit_bind(bind),
             Expr::Make(make) => self.visit_make(make),
+            Expr::Match(mtch) => self.visit_match(mtch),
 
             // outer meta is collected on the stack, and shared among all scoped items
             Expr::Op(Op::MetaOuter, exprs) => match exprs.as_slice() {
@@ -76,7 +77,6 @@ impl Visit<'_, DefaultTypes> for Populator<'_, '_> {
             },
             Expr::Op(Op::Const, exprs) => self.visit(exprs),
             Expr::Op(Op::Static, exprs) => self.visit(exprs),
-            Expr::Op(Op::Match, exprs) => self.new_entry(NodeKind::Scope).visit(exprs),
             Expr::Op(_, exprs) => self.visit(exprs),
         }
     }
@@ -126,6 +126,23 @@ impl Visit<'_, DefaultTypes> for Populator<'_, '_> {
             let id = scope.entry.id();
             self.entry.add_child(name, id);
         }
+        Ok(())
+    }
+
+    fn visit_match(&mut self, item: &Match<DefaultTypes>) -> Result<(), Self::Error> {
+        let cl_ast::Match(scrutinee, arms) = item;
+        scrutinee.visit_in(self)?;
+
+        for arm in arms {
+            self.new_entry(NodeKind::Scope).visit(arm)?;
+        }
+
+        Ok(())
+    }
+
+    fn visit_matcharm(&mut self, item: &MatchArm<DefaultTypes>) -> Result<(), Self::Error> {
+        let cl_ast::MatchArm(pat, expr) = item;
+        println!("TODO: MatchArm patterns may bind multiple items:\n{pat} => {expr}");
         Ok(())
     }
 

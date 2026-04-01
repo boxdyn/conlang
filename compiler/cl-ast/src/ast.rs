@@ -75,6 +75,8 @@ pub enum Expr<A: AstTypes = DefaultTypes> {
     Bind(Box<Bind<A>>),
     /// Expr { (Ident (: Expr)?),* }
     Make(Box<Make<A>>),
+    /// `match Expr { (Pat => Expr),* }`
+    Match(Box<Match<A>>),
     /// Op Expr | Expr Op | Expr (Op Expr)+ | Op Expr Expr else Expr
     Op(Op, Vec<At<Self, A>>),
 }
@@ -129,8 +131,6 @@ pub enum Op {
     Macro,
     /// `loop Expr`
     Loop,
-    /// `match Expr { <Bind(Match, ..)>,* }`
-    Match,
     /// `if Expr Expr (else Expr)?`
     If,
     /// `while Expr Expr (else Expr)?`
@@ -433,3 +433,14 @@ pub struct Make<A: AstTypes = DefaultTypes>(pub At<Expr<A>, A>, pub Vec<MakeArm<
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MakeArm<A: AstTypes = DefaultTypes>(pub A::Symbol, pub Option<At<Expr<A>, A>>);
+
+/// A match expression has a scrutinee and zero or more arms
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Match<A: AstTypes = DefaultTypes>(pub At<Expr<A>, A>, pub Vec<MatchArm<A>>);
+
+/// A single arm of a `match` expression
+/// ```text
+/// Pat => Expr
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct MatchArm<A: AstTypes = DefaultTypes>(pub Pat<A>, pub At<Expr<A>, A>);

@@ -66,6 +66,16 @@ pub trait Fold<From: AstTypes, To: AstTypes = From> {
     fn fold_makearm(&mut self, arm: MakeArm<From>) -> Result<MakeArm<To>, Self::Error> {
         arm.children(self)
     }
+
+    /// Consumes a [`Make`], possibly transforms it, and produces a replacement [`Make`]
+    fn fold_match(&mut self, mtch: Match<From>) -> Result<Match<To>, Self::Error> {
+        mtch.children(self)
+    }
+
+    /// Consumes a [`MakeArm`], possibly transforms it, and produces a replacement [`MakeArm`]
+    fn fold_matcharm(&mut self, arm: MatchArm<From>) -> Result<MatchArm<To>, Self::Error> {
+        arm.children(self)
+    }
 }
 
 pub trait Foldable<A: AstTypes, B: AstTypes>: Sized {
@@ -97,6 +107,7 @@ impl<A: AstTypes, B: AstTypes> Foldable<A, B> for Expr<A> {
             Self::Use(item) => Expr::Use(item.fold_in(folder)?),
             Self::Bind(bind) => Expr::Bind(bind.fold_in(folder)?),
             Self::Make(make) => Expr::Make(make.fold_in(folder)?),
+            Self::Match(mtch) => Expr::Match(mtch.fold_in(folder)?),
             Self::Op(op, annos) => Expr::Op(op, annos.fold_in(folder)?),
         })
     }
@@ -184,6 +195,32 @@ impl<A: AstTypes, B: AstTypes> Foldable<A, B> for MakeArm<A> {
     fn children<F: Fold<A, B> + ?Sized>(self, folder: &mut F) -> Result<Self::Out, F::Error> {
         let Self(name, expr) = self;
         Ok(MakeArm(folder.fold_symbol(name)?, expr.fold_in(folder)?))
+    }
+}
+
+impl<A: AstTypes, B: AstTypes> Foldable<A, B> for Match<A> {
+    type Out = Match<B>;
+
+    fn fold_in<F: Fold<A, B> + ?Sized>(self, folder: &mut F) -> Result<Self::Out, F::Error> {
+        folder.fold_match(self)
+    }
+
+    fn children<F: Fold<A, B> + ?Sized>(self, folder: &mut F) -> Result<Self::Out, F::Error> {
+        let Self(scrutinee, arms) = self;
+        Ok(Match(scrutinee.fold_in(folder)?, arms.fold_in(folder)?))
+    }
+}
+
+impl<A: AstTypes, B: AstTypes> Foldable<A, B> for MatchArm<A> {
+    type Out = MatchArm<B>;
+
+    fn fold_in<F: Fold<A, B> + ?Sized>(self, folder: &mut F) -> Result<Self::Out, F::Error> {
+        folder.fold_matcharm(self)
+    }
+
+    fn children<F: Fold<A, B> + ?Sized>(self, folder: &mut F) -> Result<Self::Out, F::Error> {
+        let Self(pat, expr) = self;
+        Ok(MatchArm(pat.fold_in(folder)?, expr.fold_in(folder)?))
     }
 }
 

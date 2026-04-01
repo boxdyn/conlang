@@ -48,6 +48,7 @@ impl ConstEval for Expr {
             Self::Use(_) => None,
             Self::Bind(_) => None,
             Self::Make(_) => None,
+            Self::Match(_) => None,
             Self::Op(op, ats) => match op {
                 Op::Do => ats.last().and_then(At::const_eval),
                 Op::As => ats.first().and_then(At::const_eval),
@@ -66,7 +67,6 @@ impl ConstEval for Expr {
                 Op::Static => ats.first().and_then(At::const_eval),
                 Op::Macro => todo!("Consteval {op}"),
                 Op::Loop => todo!("Consteval {op}"),
-                Op::Match => todo!("Consteval {op}"),
                 Op::If => todo!("Consteval {op}"),
                 Op::While => todo!("Consteval {op}"),
                 Op::Break => todo!("Consteval {op}"),

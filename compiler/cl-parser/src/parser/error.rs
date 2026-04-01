@@ -1,5 +1,4 @@
 use super::pat::Prec as PatPrec;
-use cl_ast::BindOp;
 use cl_lexer::LexError;
 use cl_structures::span::Span;
 use cl_token::TKind;
@@ -18,7 +17,7 @@ pub enum ParseError {
     NotLiteral(TKind, Span),
     NotUse(TKind, Span),
     NotPattern(TKind, PatPrec, Span),
-    NotMatch(BindOp, BindOp, Span),
+    NotBind(TKind, Span),
     NotPrefix(TKind, Span),
     NotInfix(TKind, Span),
     NotPostfix(TKind, Span),
@@ -40,8 +39,8 @@ impl Display for ParseError {
             Self::NotPattern(tk, prec, loc) => {
                 write!(f, "{loc}: {tk:?} is not valid in a {prec:?} pattern.")
             }
-            Self::NotMatch(bk, ex, loc) => {
-                write!(f, "{loc}: {bk:?} is not valid in a {ex:?} expression.")
+            Self::NotBind(bind, loc) => {
+                write!(f, "{loc}: {bind:?} is not valid in a bind expression.")
             }
             Self::NotPrefix(tk, loc) => write!(f, "{loc}: {tk:?} is not a prefix operator."),
             Self::NotInfix(tk, loc) => write!(f, "{loc}: {tk:?} is not a infix operator."),

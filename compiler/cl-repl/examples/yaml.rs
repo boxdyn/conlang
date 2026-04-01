@@ -160,6 +160,7 @@ pub mod yamlify {
                 Self::Use(item) => y.yaml(item),
                 Self::Bind(bind) => y.yaml(bind),
                 Self::Make(make) => y.yaml(make),
+                Self::Match(mtch) => y.yaml(mtch),
                 Self::Op(op, annos) => y.pair(op, annos),
             };
         }
@@ -199,6 +200,20 @@ pub mod yamlify {
         fn yaml(&self, y: &mut Yamler) {
             let Self(name, expr) = self;
             y.pair(name, expr);
+        }
+    }
+
+    impl Yamlify for Match {
+        fn yaml(&self, y: &mut Yamler) {
+            let Self(scrutinee, arms) = self;
+            y.pair("scrutinee", scrutinee).pair("arms", arms);
+        }
+    }
+
+    impl Yamlify for MatchArm {
+        fn yaml(&self, y: &mut Yamler) {
+            let Self(pat, expr) = self;
+            y.pair("pat", pat).pair("expr", expr);
         }
     }
 
