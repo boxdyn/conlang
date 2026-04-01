@@ -82,6 +82,7 @@ pub enum Ps {
     DoubleRef,  // && Expr
     Make,       // Expr{ Expr,* }
     ImplicitDo, // An implicit semicolon
+    Ellipsis,   // An ellipsis (...)
     End,        // Produces an empty value.
     Op(Op),     // A normal [ast::Op]
 }
@@ -137,6 +138,7 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
         TKind::Bar => (Ps::Lambda, Prec::Body),
         TKind::BarBar => (Ps::Lambda0, Prec::Body),
         TKind::DotDot => (Ps::Op(Op::RangeEx), Prec::Range),
+        TKind::DotDotDot => (Ps::Ellipsis, Prec::Max),
         TKind::DotDotEq => (Ps::Op(Op::RangeIn), Prec::Range),
         TKind::Minus => (Ps::Op(Op::Neg), Prec::Unary),
         TKind::Plus => (Ps::Op(Op::Identity), Prec::Unary),
@@ -260,6 +262,7 @@ impl<'t> Parse<'t> for Expr {
                         vec![comment, next],
                     )
                 }
+                Ps::Ellipsis => p.consume().then(Expr::Omitted),
                 Ps::Op(op @ (Op::MetaOuter | Op::MetaInner)) => Expr::Op(
                     op,
                     vec![

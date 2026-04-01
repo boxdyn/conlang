@@ -159,6 +159,8 @@ pub enum TKind {
     Dot,
     /// ..
     DotDot,
+    /// ...
+    DotDotDot,
     /// ..=
     DotDotEq,
     /// =

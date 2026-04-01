@@ -246,6 +246,7 @@ impl<'t> Lexer<'t> {
         // Handle trigraphs
         let tok = match (tok, self.consume().peek()) {
             (HashBang, Some('/')) => return self.line_comment(),
+            (DotDot, Some('.')) => DotDotDot,
             (DotDot, Some('=')) => DotDotEq,
             (GtGt, Some('=')) => GtGtEq,
             (LtLt, Some('=')) => LtLtEq,
