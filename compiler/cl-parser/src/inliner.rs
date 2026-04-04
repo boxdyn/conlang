@@ -68,9 +68,9 @@ impl ModuleInliner {
         self.has_errors().then_some((self.io_errs, self.parse_errs))
     }
 
-    /// Traverses a [File], attempting to inline all submodules.
+    /// Traverses an [Expr], attempting to inline all submodules.
     ///
-    /// This is a simple wrapper around [ModuleInliner::fold_file()] and
+    /// This is a simple wrapper around [ModuleInliner::fold_expr()] and
     /// [ModuleInliner::into_errs()]
     pub fn inline(mut self, expr: Expr) -> Result<Expr, (Expr, IoErrs, ParseErrs)> {
         let Ok(file) = self.fold_expr(expr);

@@ -1,13 +1,12 @@
 //! # Token
 //!
-//! Stores a component of a file as a [TokenKind], some [TokenData], and a line and column number
+//! Stores a component of a file as a [Lexeme], [TKind], and [struct@Span]
 #![warn(clippy::all)]
-#![feature(decl_macro)]
 //! The Token defines an interface between lexer and parser
 
 use cl_structures::span::Span;
 
-/// A unit of lexical information produced by the [Lexer](crate::lexer::Lexer)
+/// A unit of lexical information produced by a Lexer
 #[derive(Clone, Debug)]
 pub struct Token {
     pub lexeme: Lexeme,
@@ -16,14 +15,13 @@ pub struct Token {
 }
 
 impl Token {
-    /// Extracts the `kind` field of this Token
+    /// Extracts the [`kind`](Token::kind) field of this Token
     pub const fn kind(&self) -> TKind {
         self.kind
     }
 }
 
-/// The (possibly pre-processed) lexical information, in the form of a
-/// [String], [u128], or [char]
+/// The (possibly pre-processed) lexical information, in the form of a [String], [u128], or [char]
 #[derive(Clone, Debug)]
 pub enum Lexeme {
     String(String),

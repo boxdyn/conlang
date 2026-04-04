@@ -79,7 +79,7 @@ impl<'t> Lexer<'t> {
         Self { path, text, iter, head: 0, tail: 0 }
     }
 
-    /// Gets the [Span] of the current token.
+    /// Gets the [struct@Span] of the current token.
     ///
     /// When called from outside [Lexer::scan], this will return
     /// a zero-sized span marking the current lexer location.

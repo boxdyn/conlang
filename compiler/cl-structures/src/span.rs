@@ -1,5 +1,4 @@
-//! - [struct@Span]: Stores the start and end [struct@Loc] of a notable AST node
-//! - [struct@Loc]: Stores the line/column of a notable AST node
+//! - [struct@Span]: Stores the start and end position of a notable AST node
 #![allow(non_snake_case)]
 use std::ops::Range;
 
