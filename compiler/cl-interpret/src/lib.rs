@@ -30,11 +30,7 @@ pub mod function;
 
 pub mod builtin;
 
-pub mod pattern {}
-
 pub mod env;
-
-pub mod modules {}
 
 pub mod error;
 

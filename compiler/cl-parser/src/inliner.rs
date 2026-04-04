@@ -87,7 +87,7 @@ impl ModuleInliner {
         None
     }
 
-    /// Records a [parse error](crate::error::Error) for later
+    /// Records a [ParseError] for later
     fn handle_parse_error<T>(&mut self, path: PathBuf, error: ParseError) -> Option<T> {
         self.parse_errs.push((path, error));
         None

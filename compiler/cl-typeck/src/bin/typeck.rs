@@ -433,7 +433,7 @@ fn banner() {
 
 static EXPR_INTERNER: OnceLock<LeakyInterner<'static, Expr>> = OnceLock::new();
 
-/// Interns an [Expr](cl_ast::Expr), returning a static reference to it.
+/// Interns an [Expr], returning a static reference to it.
 fn interned(expr: Expr) -> &'static Expr {
     EXPR_INTERNER
         .get_or_init(Default::default)

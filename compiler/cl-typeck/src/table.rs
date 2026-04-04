@@ -17,13 +17,9 @@
 //!   nodes are back edges, but all back edges *must be* import nodes.
 //! - [Types](TypeKind): Contains type information populated through type checking and inference.
 //!   Nodes with unpopulated types may be considered type variables in the future.
-//! - [Spans][span]: Positional information from the source text. See [cl_structures::span].
 //! - [Meta](Expr): Metadata decorators. These may have an effect throughout the compiler.
-//! - [Sources](Source): Pointers back into the AST, for future analysis.
 //! - Impl Targets: Sparse mapping of `impl` nodes to their corresponding targets.
 //! - etc.
-//!
-//! [span]: struct@Span
 
 use crate::{
     entry::{Entry, EntryMut},

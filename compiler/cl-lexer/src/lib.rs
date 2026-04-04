@@ -125,7 +125,7 @@ impl<'t> Lexer<'t> {
         LexError { pos: self.span(), res }
     }
 
-    /// Gets the Lexer's current &[str] lexeme and [Span]
+    /// Gets the Lexer's current &[str] lexeme and [struct@Span]
     fn as_str(&self) -> (&'t str, Span) {
         let span = self.span();
         (&self.text[Range::from(span)], span)

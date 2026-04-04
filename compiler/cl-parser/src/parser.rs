@@ -1,4 +1,4 @@
-//! The parser takes a stream of [`Token`]s from the [`Lexer`], and turns them into [`crate::ast`]
+//! The parser takes a stream of [`Token`]s from the [`Lexer`], and turns them into [`cl_ast::ast`]
 //! nodes.
 use cl_ast::{
     types::{Literal, Path},

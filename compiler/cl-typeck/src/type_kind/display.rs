@@ -1,4 +1,4 @@
-//! [Display] implementations for [TypeKind], [Adt], and [Intrinsic]
+//! [Display] implementations for [TypeKind], [Adt], and [Primitive]
 
 use super::{Adt, Primitive, TypeKind};
 use crate::{format_utils::*, type_kind::Visibility};
