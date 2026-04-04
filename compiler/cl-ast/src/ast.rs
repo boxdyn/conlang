@@ -288,7 +288,6 @@ impl<A: AstTypes> Expr<A> {
 /// struct Pat
 /// enum   Pat
 /// for    Pat in Expr Expr (else Expr)?
-/// Pat => Expr // in match
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Bind<A: AstTypes = DefaultTypes>(
@@ -319,8 +318,6 @@ pub enum BindOp {
     Enum,
     /// A `for Pat in Expr Expr (else Expr)?` binding
     For,
-    /// A `Pat => Expr` binding
-    Match,
 }
 
 /// Binding patterns for each kind of matchable value.

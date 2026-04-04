@@ -228,7 +228,6 @@ impl Inference for Bind {
             (BindOp::Struct, [..]) => todo!("Infer {op:?} in {self}"),
             (BindOp::Enum, [..]) => todo!("Infer {op:?} in {self}"),
             (BindOp::For, [..]) => todo!("Infer {op:?} in {self}"),
-            (BindOp::Match, [..]) => todo!("Infer {op:?} in {self}"),
             _ => unimplemented!("ICE: malformed Bind expression {self}"),
         }
     }

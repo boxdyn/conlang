@@ -92,7 +92,6 @@ impl Visit<'_, DefaultTypes> for Populator<'_, '_> {
             BindOp::Struct => NodeKind::Type,
             BindOp::Enum => NodeKind::Type,
             BindOp::For => NodeKind::Temporary,
-            BindOp::Match => NodeKind::Temporary,
         });
 
         let mut outer: Vec<_> = scope.meta.iter().map(|&e| e.clone()).collect();
@@ -102,7 +101,7 @@ impl Visit<'_, DefaultTypes> for Populator<'_, '_> {
         item.children(&mut scope.without_meta())?;
 
         match op {
-            BindOp::Let | BindOp::For | BindOp::Match => {
+            BindOp::Let | BindOp::For => {
                 println!("TODO: {op}nodes bind multiple names: {pat}");
                 return Ok(());
             }

@@ -170,7 +170,6 @@ impl<A: AstTypes> Display for Bind<A> {
 
         match (op, exprs.as_slice()) {
             (_, [At(Expr::Omitted, _)]) => write!(f, "{pat}"),
-            (BindOp::Match, _) => f.delimit(fmt!("{pat} => "), "").list(exprs, ",!? "),
             (BindOp::Fn | BindOp::Mod | BindOp::Impl, [At(Expr::Op(Op::Block, _), _)]) => {
                 f.delimit(fmt!("{pat} "), "").list(exprs, ",!? ")
             }
@@ -213,7 +212,6 @@ impl Display for BindOp {
             Self::Mod => "mod ",
             Self::Impl => "impl ",
             Self::For => "for ",
-            Self::Match => "",
         })
     }
 }
