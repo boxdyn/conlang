@@ -5,6 +5,7 @@
 # Rust
 **/Cargo.lock
 target
+rustc-ice-*.txt
 
 # Symbol table dump?
 typeck-table.ron
