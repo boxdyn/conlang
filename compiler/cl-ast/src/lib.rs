@@ -11,7 +11,6 @@
 //!   - [Op] operators
 //! - [Pat]: Pattern matching operators
 #![warn(clippy::all)]
-#![feature(decl_macro)]
 
 pub use ast::*;
 

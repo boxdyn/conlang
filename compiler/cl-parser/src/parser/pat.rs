@@ -1,5 +1,8 @@
 use super::{PResult, PResultExt, Parse, ParseError, Parser, expr::Prec as ExPrec};
-use cl_ast::{types::Path, *};
+use cl_ast::{
+    types::{Literal, Path},
+    *,
+};
 use cl_token::{TKind, Token};
 
 /// Precedence levels of value and type pattern expressions.
@@ -57,6 +60,8 @@ pub enum Prefix {
     Underscore,
     Never,
     MetId,
+    DocOuter,
+    DocInner,
     Id,
     Array,
     Constant,
@@ -73,6 +78,10 @@ fn from_prefix(token: &Token) -> PResult<(Prefix, Prec)> {
         | TKind::String
         | TKind::Minus
         | TKind::Const => (Prefix::Constant, Prec::Max),
+        TKind::Hash => (Prefix::Op(PatOp::MetaOuter), Prec::Max),
+        TKind::OutDoc => (Prefix::DocOuter, Prec::Max),
+        TKind::HashBang => (Prefix::Op(PatOp::MetaInner), Prec::Max),
+        TKind::InDoc => (Prefix::DocInner, Prec::Max),
         TKind::Identifier if token.lexeme.str() == Some("_") => (Prefix::Underscore, Prec::Max),
         TKind::ColonColon | TKind::Identifier => (Prefix::Id, Prec::Max),
         TKind::Bang => (Prefix::Never, Prec::Max),
@@ -149,6 +158,30 @@ impl<'t> Parse<'t> for Pat {
                     _ => Pat::Op(op, vec![]),
                 }
             }
+
+            Prefix::DocOuter | Prefix::DocInner => {
+                let comment = Literal::Str(p.take_lexeme()?.string().unwrap());
+                let comment = Expr::Lit(comment).at(span);
+                Pat::Op(
+                    match op {
+                        Prefix::DocOuter => PatOp::MetaOuter,
+                        _ => PatOp::MetaInner,
+                    },
+                    vec![Pat::Value(comment.into()), p.parse(prec.next())?],
+                )
+            }
+            Prefix::Op(op @ (PatOp::MetaOuter | PatOp::MetaInner)) => Pat::Op(
+                op,
+                vec![
+                    Pat::Value(Box::new(
+                        p.consume()
+                            .expect(TKind::LBrack)?
+                            .opt(ExPrec::MIN, TKind::RBrack)?
+                            .unwrap_or_else(|| Expr::Op(Op::Tuple, vec![]).at(span)),
+                    )),
+                    p.parse(prec.next())?,
+                ],
+            ),
             Prefix::Op(op) => Pat::Op(op, vec![p.consume().parse(prec)?]),
             Prefix::Split(op) => {
                 p.split()?;

@@ -66,24 +66,7 @@ impl Interpret for Expr<DefaultTypes> {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         match self {
             Self::Omitted => Ok(ConValue::Empty),
-            Self::Id(path) => match path.parts.as_slice() {
-                &[name] => env.get(name),
-                [first, names @ ..] => {
-                    let mut value = env.get(*first)?;
-                    for name in names {
-                        value = match value {
-                            ConValue::Module(values) => {
-                                values.get(name).cloned().ok_or(Error::NotDefined(*name))?
-                            }
-                            ConValue::TypeInfo(ty) => ty.getattr(*name)?,
-                            _ => todo!("{self}")?,
-                        };
-                    }
-                    Ok(value)
-                }
-                [] => unimplemented!("Empty paths"),
-                _ => todo!("Extract value at {path}"),
-            },
+            Self::Id(path) => path.interpret(env),
             Self::MetId(_) => cl_todo!("Meta-identifiers are not allowed here"),
             Self::Lit(Literal::Bool(v)) => Ok(ConValue::Bool(*v)),
             Self::Lit(Literal::Char(v)) => Ok(ConValue::Char(*v)),
@@ -269,9 +252,7 @@ impl Interpret for (Op, &[At<Expr>]) {
             (Op::Identity, [expr]) => expr.interpret(env),
 
             // Reference manipulation operators
-            (Op::Refer, [expr]) => Ok(ConValue::Ref(
-                Place::new(expr.value(), env).map_err(|e| Error::Panic("asfd".into()))?,
-            )),
+            (Op::Refer, [expr]) => Ok(ConValue::Ref(Place::new(expr.value(), env)?)),
             (Op::Deref, [expr]) => match expr.interpret(env)? {
                 ConValue::Ref(place) => place.get(env).cloned(),
                 other => Ok(other),
@@ -519,6 +500,35 @@ impl Interpret for Bind<DefaultTypes> {
     }
 }
 
+impl Interpret for Path {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        match self.parts.as_slice() {
+            &[name] => env.get(name),
+            [first, names @ ..] => {
+                let mut value = env.get(*first)?;
+                for name in names {
+                    value = match value {
+                        ConValue::Module(values) => {
+                            values.get(name).cloned().ok_or(Error::NotDefined(*name))?
+                        }
+                        ConValue::TypeInfo(ty) => ty.getattr(*name)?,
+                        _ => todo!("{self}")?,
+                    };
+                }
+                Ok(value)
+            }
+            [] => unimplemented!("Empty paths"),
+            _ => todo!("Extract value at {self}"),
+        }
+    }
+}
+
+impl Interpret for Sym {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        env.get(*self)
+    }
+}
+
 fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)> {
     fn bind_struct_op(
         op: PatOp,
@@ -526,6 +536,7 @@ fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)
         env: &mut Environment,
     ) -> IResult<(Option<Sym>, Model)> {
         match (op, pats) {
+            (PatOp::MetaOuter | PatOp::MetaInner, [_doc, pat]) => bind_struct(pat, env),
             (PatOp::Pub | PatOp::Mut, [expr]) => bind_struct(expr, env),
             (PatOp::Ref, []) => todo!("Ref in bind_struct_op?"),
             (PatOp::Ptr, []) => todo!("Ptr in bind_struct_op?"),
@@ -556,7 +567,7 @@ fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)
                 (Some(name), model) => todo!("Typeprefixed {name} :: {model:?}"),
             },
             (PatOp::Generic, [first, ..]) => bind_struct(first, env),
-            _ => todo!("{op} ({pats:?})"),
+            _ => todo!("{op:?} ({pats:?})"),
         }
     }
     Ok(match pat {
@@ -699,6 +710,8 @@ impl Match for Pat {
 impl Match for (PatOp, &[Pat]) {
     fn matches<'env>(&self, value: ConValue, in_env: &mut MatchEnv<'env>) -> IResult<()> {
         match self {
+            (PatOp::MetaInner | PatOp::MetaOuter, [_doc, pat]) => pat.matches(value, in_env),
+            (PatOp::MetaInner | PatOp::MetaOuter, _) => unimplemented!(),
             (PatOp::Pub, [pat]) => pat.matches(value, &mut in_env.public()),
             (PatOp::Pub, _) => unimplemented!(),
             (PatOp::Mut, [pat]) => pat.matches(value, &mut in_env.mutable()),

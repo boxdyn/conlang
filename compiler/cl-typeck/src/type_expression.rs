@@ -44,6 +44,10 @@ impl TypeExpression for Pat {
             Pat::Name(name) => name.evaluate(table, node),
             Pat::Value(expr) => expr.0.evaluate(table, node),
 
+            Pat::Op(PatOp::MetaInner | PatOp::MetaOuter, pats) => match pats.as_slice() {
+                [pat] => pat.evaluate(table, node),
+                _ => unreachable!(),
+            },
             Pat::Op(PatOp::Pub, pats) => match pats.as_slice() {
                 [pat] => pat.evaluate(table, node),
                 _ => unreachable!(),

@@ -342,6 +342,10 @@ pub enum Pat<A: AstTypes = DefaultTypes> {
 /// Operators on lists of patterns
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PatOp {
+    /// `#![ .* ] Pat`
+    MetaInner,
+    /// `#[ .* ] Pat`
+    MetaOuter,
     /// Changes the visibility mode to "public"
     Pub,
     /// Changes the binding mode to "mutable"

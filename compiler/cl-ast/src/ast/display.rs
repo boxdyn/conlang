@@ -272,6 +272,15 @@ impl<A: AstTypes> Display for Pat<A> {
                 [] => op.fmt(f),
                 [first, rest @ ..] => f.delimit(fmt!("{first} "), "").list(rest, ",? "),
             },
+
+            Self::Op(PatOp::MetaInner, pats) => match pats.as_slice() {
+                [meta, pat @ ..] => f.delimit(fmt!("#![{meta}]\n"), "").list(pat, ","),
+                [] => write!(f, "#![]"),
+            },
+            Self::Op(PatOp::MetaOuter, pats) => match pats.as_slice() {
+                [meta, pat @ ..] => f.delimit(fmt!("#[{meta}]\n"), "").list(pat, ","),
+                [] => write!(f, "#[]"),
+            },
             Self::Op(op, pats) => match pats.as_slice() {
                 [] => op.fmt(f),
                 [rest] => write!(f, "{op}{rest}"),
@@ -284,6 +293,8 @@ impl<A: AstTypes> Display for Pat<A> {
 impl Display for PatOp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
+            Self::MetaInner => "#![]",
+            Self::MetaOuter => "#[]",
             Self::Pub => "pub ",
             Self::Mut => "mut ",
             Self::Ref => "&",
