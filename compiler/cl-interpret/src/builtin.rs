@@ -247,9 +247,12 @@ pub const Builtins: &[Builtin] = &builtins![
     }
 
     fn push(ConValue::Ref(index), item) @env{
-        let v = match index.get_mut(env)? {
-            ConValue::Array(v) => v,
-            other => Err(Error::TypeError("An array", other.typename()))?,
+        let mut index = index.get_mut(env)?;
+        while let ConValue::Ref(r) = index {
+            index = r.clone().get_mut(env)?;
+        }
+        let ConValue::Array(v) = index else {
+            Err(Error::TypeError("An array", index.typename()))?
         };
 
         let mut items = std::mem::take(v).into_vec();
