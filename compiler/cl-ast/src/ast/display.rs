@@ -88,6 +88,7 @@ impl Display for Op {
             Op::Tuple => "()",
             Op::MetaInner => "#![]",
             Op::MetaOuter => "#[]",
+            Op::TypeOf => ".type",
             Op::Try => "?",
             Op::Index => "",
             Op::Call => "",
