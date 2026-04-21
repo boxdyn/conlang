@@ -19,7 +19,7 @@ impl<T: Annotation, A: AstTypes> std::fmt::Debug for At<T, A> {
 impl<A: AstTypes> Display for Expr<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Omitted => "/* omitted */".fmt(f),
+            Self::Omitted => "...".fmt(f),
             Self::Id(id) => id.fmt(f),
             Self::MetId(id) => write!(f, "`{id}"),
             Self::Lit(literal) => literal.fmt(f),
