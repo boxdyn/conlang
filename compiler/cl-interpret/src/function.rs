@@ -83,6 +83,7 @@ impl Callable for Function {
                 println!("{depth:>4}: {pat} at {}", span.unwrap_or(self.span()));
                 Err(Error { kind: ErrorKind::Panic(e, depth + 1), span: None })
             }
+            Err(Error { kind: ErrorKind::Return(value), .. }) => Ok(value),
             other => other,
         }
     }
