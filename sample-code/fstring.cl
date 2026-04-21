@@ -11,7 +11,7 @@ fn f(__fmt: &str) -> &str {
                 if __depth <= 1 {
                     continue
                 }
-            },
+            };
             '}' => {
                 __depth -= 1;
                 if __depth <= 0 {
@@ -22,21 +22,21 @@ fn f(__fmt: &str) -> &str {
                     // (__expr, __label) = ("", "");
                     continue
                 }
-            },
+            };
             ':' => if __depth == 1 && __label.len() == 0 {
                 __label = __expr + __c;
                 continue
-            },
+            };
             '=' => if __depth == 1 && __label.len() == 0 {
                 __label = __expr + __c;
                 continue
-            },
+            };
             _ => {}
         }
         match (__depth, __label.len()) {
-            (0, _) => {__out += __c},
-            (_, 0) => {__expr += __c},
-            (_, _) => {__label += __c},
+            0, _ => __out += __c;
+            _, 0 => __expr += __c;
+            _, _ => __label += __c;
         }
     }
     __out

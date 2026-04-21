@@ -4,11 +4,11 @@
 // These two functions shouldn't actually be polymorphic, but
 // the AST interpreter doesn't know about type annotations
 // or operator overloading.
-pub fn max<T>(a: T, b: T) -> T {
+pub fn max<T: Cmp>(a: T, b: T) -> T {
     (if a < b { b } else { a })
 }
 
-pub fn min<T>(a: T, b: T) -> T {
+pub fn min<T: Cmp>(a: T, b: T) -> T {
     (if a > b { b } else { a })
 }
 

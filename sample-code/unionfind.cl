@@ -9,7 +9,7 @@ enum TreeNode {
 
 fn makeset(f, x) {
     match (*f)[x] {
-        () => {(*f)[x] = Filled { parent: x, rank: 0 }},
+        TreeNode::Empty => {(*f)[x] = TreeNode::Filled { parent: x, rank: 0 }};
         _ => {}
     }
 }
@@ -18,34 +18,35 @@ fn union(f, a, b) {
     let (a, b) = (find(f, a), find(f, b));
     if a == b { return; }
     match ((*f)[a], (*f)[b]) {
-        (Filled {parent: _, rank: r_a}, Filled {parent: _, rank: r_b}) => {
+        (TreeNode::Filled {parent: _, rank: r_a}, TreeNode::Filled {parent: _, rank: r_b}) => {
             if r_a < r_b {
                 union(f, b, a)
             } else {
                 (*f)[b].parent = a;
                 (*f)[a].rank += 1;
             }
-        }
+        };
+        _ => {}
     }
 }
 
 fn find(f, x) {
     match (*f)[x] {
-        Filled { parent, rank } => if parent == x {
+        TreeNode::Filled { parent, rank } => if parent == x {
             x
         } else {
             let parent = find(f, parent);
             (*f)[x].parent = parent;
             parent
-        },
-        () => x,
+        };
+        () => x;
     }
 }
 
 fn show(f) {
     for node in 0..(len((*f))) {
         match (*f)[node] {
-            Filled { parent, rank } => println(node, ": { parent: ", parent, ", rank: ", rank, " }"),
+            TreeNode::Filled { parent, rank } => println(node, ": { parent: ", parent, ", rank: ", rank, " }");
             _ => {}
         }
     }

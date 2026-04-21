@@ -10,15 +10,15 @@ enum Expr {
 /// executes an expression
 fn execute(&expr: Expr) -> f64 {
     match expr {
-        Expr::Atom(value) => value,
-        Expr::Op('*', [lhs, rhs]) => execute(lhs) * execute(rhs),
-        Expr::Op('/', [lhs, rhs]) => execute(lhs) / execute(rhs),
-        Expr::Op('%', [lhs, rhs]) => execute(lhs) % execute(rhs),
-        Expr::Op('+', [lhs, rhs]) => execute(lhs) + execute(rhs),
-        Expr::Op('-', [lhs, rhs]) => execute(lhs) - execute(rhs),
-        Expr::Op('>', [lhs, rhs]) => (execute(lhs) as u64 >> execute(rhs) as u64) as f64,
-        Expr::Op('<', [lhs, rhs]) => (execute(lhs) as u64 << execute(rhs) as u64) as f64,
-        Expr::Op('-', [lhs]) => - execute(lhs),
+        Expr::Atom(value) => value;
+        Expr::Op('*', [lhs, rhs]) => execute(lhs) * execute(rhs);
+        Expr::Op('/', [lhs, rhs]) => execute(lhs) / execute(rhs);
+        Expr::Op('%', [lhs, rhs]) => execute(lhs) % execute(rhs);
+        Expr::Op('+', [lhs, rhs]) => execute(lhs) + execute(rhs);
+        Expr::Op('-', [lhs, rhs]) => execute(lhs) - execute(rhs);
+        Expr::Op('>', [lhs, rhs]) => (execute(lhs) as u64 >> execute(rhs) as u64) as f64;
+        Expr::Op('<', [lhs, rhs]) => (execute(lhs) as u64 << execute(rhs) as u64) as f64;
+        Expr::Op('-', [lhs]) => - execute(lhs);
         other => {
             panic("Unknown operation: " + fmt(other))
         }
@@ -29,10 +29,10 @@ fn execute(&expr: Expr) -> f64 {
 /// Pretty-prints an expression
 fn fmt_expr(expr: Expr) -> str {
     match expr {
-        Expr::Atom(value) => fmt(value),
-        Expr::Op(operator, [lhs, rhs]) => fmt('(', fmt_expr(lhs), ' ', operator, ' ', fmt_expr(rhs), ')'),
-        Expr::Op(operator, [rhs]) => fmt(operator, fmt_expr(rhs)),
-        _ => println("Unexpected expr: ", expr),
+        Expr::Atom(value) => fmt(value);
+        Expr::Op(operator, [lhs, rhs]) => fmt('(', fmt_expr(lhs), ' ', operator, ' ', fmt_expr(rhs), ')');
+        Expr::Op(operator, [rhs]) => fmt(operator, fmt_expr(rhs));
+        _ => println("Unexpected expr: ", expr);
     }
 }
 fn print_expr(expr: Expr) {
@@ -49,13 +49,13 @@ fn parse(&line: &[char], power: i32) -> (Expr, [char]) {
     line = space(line);
 
     let (lhs, line) = match line {
-        ['0'..='9', ..] => number(line),
+        ['0'..='9', ..] => number(line);
         ['(', ..rest] => match parse(rest, Power::None) {
-                (expr, [')', ..rest]) => (expr, rest),
-                (expr, rest) => panic(fmt("Expected ')', got ", expr, ", ", rest)),
-            },
-        [op, ..rest] => parse(rest, pre_bp(op)).map(|lhs| Expr::Op(op, [lhs])),
-        other => panic("Unexpected end of input: ", other),
+            (expr, [')', ..rest]) => (expr, rest);
+            (expr, rest) => panic(fmt("Expected ')', got ", expr, ", ", rest));
+        };
+        [op, ..rest] => parse(rest, pre_bp(op)).map(|lhs| Expr::Op(op, [lhs]));
+        other => panic("Unexpected end of input: ", other);
     };
 
     while let [op, ..rest] = space(line) {
@@ -81,8 +81,8 @@ fn number(&line: [char]) -> (Expr, [char]) {
 
 fn space(line: [char]) -> [char] {
     match line {
-        [' ', ..rest] => space(rest),
-        ['\n', ..rest] => space(rest),
+        [' ', ..rest] => space(rest);
+        ['\n', ..rest] => space(rest);
         line => line
     }
 }
@@ -99,22 +99,22 @@ enum Power {
 fn inf_bp(op: char) -> (i32, i32) {
     (|x| (2 * x, 2 * x + 1))(
     match op {
-        '*' => Power::Term,
-        '/' => Power::Term,
-        '%' => Power::Term,
-        '+' => Power::Factor,
-        '-' => Power::Factor,
-        '>' => Power::Shift,
-        '<' => Power::Shift,
-        _ => Power::None,
+        '*' => Power::Term;
+        '/' => Power::Term;
+        '%' => Power::Term;
+        '+' => Power::Factor;
+        '-' => Power::Factor;
+        '>' => Power::Shift;
+        '<' => Power::Shift;
+        _ => Power::None;
     } as i32)
 }
 
 fn pre_bp(op: char) -> i32 {
     (|x| 2 * x + 1)(
     match op {
-        '-' => Power::Unary,
-        _ => panic("Unknown unary operator: " + op),
+        '-' => Power::Unary;
+        _ => panic("Unknown unary operator: " + op);
     } as i32)
 }
 

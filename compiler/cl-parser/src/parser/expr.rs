@@ -395,7 +395,7 @@ fn parse_array(p: &mut Parser<'_>) -> PResult<Expr> {
 ///
 /// ```ignore
 /// match scrutinee {
-///     (Pat => Expr),*
+///     (Pat => Expr);*
 /// }
 /// ```
 impl<'t> Parse<'t> for Match {
@@ -406,7 +406,7 @@ impl<'t> Parse<'t> for Match {
         Ok(Self(
             p.consume().parse(Prec::Logical.value())?,
             p.expect(TKind::LCurly)?
-                .list(vec![], (), TKind::Comma, TKind::RCurly)?,
+                .list(vec![], (), TKind::Semi, TKind::RCurly)?,
         ))
     }
 }
@@ -425,7 +425,7 @@ impl<'t> Parse<'t> for MatchArm {
         // Pat
         let pat = p.parse(PPrec::Alt)?;
         p.expect(TKind::FatArrow)?;
-        let body = p.parse(Prec::Body.value())?;
+        let body = p.parse(Prec::Assign.value())?;
 
         Ok(Self(pat, body))
     }

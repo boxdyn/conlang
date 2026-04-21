@@ -237,7 +237,7 @@ impl<A: AstTypes> Display for Match<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self(scrutinee, arms) = self;
         f.delimit_indented(fmt!("match {scrutinee} {{"), "}")
-            .list_wrap("\n", arms, ",\n", ",\n")
+            .list_wrap("\n", arms, ";\n", ";\n")
     }
 }
 
