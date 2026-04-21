@@ -198,7 +198,7 @@ const fn from_infix(token: &Token) -> PResult<(Ps, Prec)> {
         TKind::LParen => (Ps::Op(Op::Call), Prec::Extend),
 
         TKind::RParen | TKind::RBrack | TKind::RCurly => (Ps::End, Prec::Max),
-        TKind::As => (Ps::Op(Op::As), Prec::Project),
+        TKind::As => (Ps::Op(Op::As), Prec::Unary),
         _ => (Ps::ImplicitDo, Prec::Do),
     })
 }
