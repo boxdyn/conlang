@@ -15,7 +15,7 @@ use crate::{
 pub type TypeId = usize;
 pub type Type = Interned<'static, TypeInfo>;
 
-static TYPE_INTERNER: OnceLock<LeakyInterner<TypeInfo>> = OnceLock::new();
+pub(crate) static TYPE_INTERNER: OnceLock<LeakyInterner<TypeInfo>> = OnceLock::new();
 
 /// The elements of a type's value
 #[rustfmt::skip]
@@ -53,11 +53,14 @@ impl Display for Model {
             Self::Any => "_".fmt(f),
             Self::Never => "!".fmt(f),
             Self::Unit(_) => "()".fmt(f),
-            Self::Tuple(items) => f.delimit("struct (", ")").list(items, ", "),
+            Self::Tuple(items) => f.delimit("(", ")").list(items, ", "),
             Self::Struct(items, _) => {
-                let mut f = f.delimit("struct { ", "}");
-                for (name, idx) in items {
-                    write!(f, "{name}: {idx}, ")?;
+                let mut f = f.delimit("{", " }");
+                for (idx, (name, ty)) in items.iter().enumerate() {
+                    if idx > 0 {
+                        write!(f, ",")?;
+                    }
+                    write!(f, " {name}: {ty}")?;
                 }
                 Ok(())
             }
@@ -134,16 +137,18 @@ impl TypeInfo {
     pub fn getattr(&self, attr: Symbol) -> IResult<ConValue> {
         Ok(match (&self.model, attr.0) {
             (_, "Self") => ConValue::TypeInfo(self.already_interned()),
-            (&Model::Integer { signed, .. }, "SIGNED") => ConValue::Bool(signed),
-            (&Model::Integer { size, .. }, "SIZE") => ConValue::Int(size as _),
-            (&Model::Integer { size, .. }, "BITS") => ConValue::Int(8 * size as i128),
-            (&Model::Integer { min, .. }, "MIN") => ConValue::Int(min),
-            (&Model::Integer { max, .. }, "MAX") => ConValue::Int(max),
-            (&Model::Float { size }, "SIZE") => ConValue::Int(size as _),
-            (Model::Bool, "SIZE") => ConValue::Int(size_of::<bool>() as _),
-            (Model::Char, "SIZE") => ConValue::Int(size_of::<char>() as _),
+            (&Model::Integer { signed, .. }, "is_signed") => ConValue::Bool(signed),
+            (&Model::Integer { size, .. }, "size") => ConValue::Int(size as _),
+            (&Model::Integer { size, .. }, "bits") => ConValue::Int(8 * size as i128),
+            (&Model::Integer { min, .. }, "min") => ConValue::Int(min),
+            (&Model::Integer { max, .. }, "max") => ConValue::Int(max),
+            (&Model::Float { size }, "size") => ConValue::Int(size as _),
+            (&Model::Float { .. }, "inf") => ConValue::Float(f64::INFINITY),
+            (&Model::Float { .. }, "nan") => ConValue::Float(f64::NAN),
+            (Model::Bool, "size") => ConValue::Int(size_of::<bool>() as _),
+            (Model::Char, "size") => ConValue::Int(size_of::<char>() as _),
             (Model::Never, _) => Err(Error::NotDefined(attr))?,
-            (Model::Unit(_), "SIZE") => ConValue::Int(0),
+            (Model::Unit(_), "size") => ConValue::Int(0),
             (Model::Unit(_), _) => Err(Error::NotDefined(attr))?,
             (Model::Tuple(items), "ARITY") => ConValue::Int(items.len() as _),
             (Model::Struct(items, _), "NAMES") => {
@@ -152,6 +157,14 @@ impl TypeInfo {
             (Model::Struct(items, _), "TYPES") => {
                 ConValue::Array(items.iter().map(|(_, t)| ConValue::TypeInfo(*t)).collect())
             }
+            (Model::Struct(items, _), "MEMBERS") => ConValue::Array(
+                items
+                    .iter()
+                    .map(|(n, t)| {
+                        ConValue::Tuple([ConValue::Str(*n), ConValue::TypeInfo(*t)].into())
+                    })
+                    .collect(),
+            ),
             (Model::Struct(items, exhaustive), _) => items
                 .iter()
                 .find_map(|&(name, ty)| (name == attr).then_some(ConValue::TypeInfo(ty)))
@@ -224,7 +237,18 @@ impl Callable for TypeInfo {
 
 impl std::fmt::Display for TypeInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self { ident: _, model } = self;
-        write!(f, "{model}")
+        let Self { ident, model } = self;
+        match model {
+            Model::Any | Model::Unit(_) => write!(f, "{ident}"),
+            Model::Integer { .. }
+            | Model::Float { .. }
+            | Model::Bool
+            | Model::Char
+            | Model::Str
+            | Model::Never => write!(f, "{model}"),
+            Model::Tuple(_) | Model::Struct(_, _) | Model::Enum(_) => {
+                write!(f, "{ident}: {model}")
+            }
+        }
     }
 }

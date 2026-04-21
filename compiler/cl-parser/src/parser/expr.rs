@@ -103,11 +103,11 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
         }
         TKind::Use => (Ps::Use, Prec::Max),
 
-        TKind::Pub => (Ps::Op(Op::Pub), Prec::Body),
-        TKind::Const => (Ps::Op(Op::Const), Prec::Body),
-        TKind::Static => (Ps::Op(Op::Static), Prec::Body),
-        TKind::For => (Ps::For, Prec::Body),
-        TKind::Match => (Ps::Match, Prec::Body),
+        TKind::Pub => (Ps::Op(Op::Pub), Prec::Max),
+        TKind::Const => (Ps::Op(Op::Const), Prec::Max),
+        TKind::Static => (Ps::Op(Op::Static), Prec::Max),
+        TKind::For => (Ps::For, Prec::Max),
+        TKind::Match => (Ps::Match, Prec::Max),
         TKind::Macro => (Ps::Op(Op::Macro), Prec::Assign),
 
         TKind::Fn
@@ -116,14 +116,14 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
         | TKind::Let
         | TKind::Type
         | TKind::Struct
-        | TKind::Enum => (Ps::Def, Prec::Body),
+        | TKind::Enum => (Ps::Def, Prec::Max),
 
         TKind::Loop => (Ps::Op(Op::Loop), Prec::Body),
         TKind::If => (Ps::Op(Op::If), Prec::Body),
         TKind::While => (Ps::Op(Op::While), Prec::Body),
         TKind::Break => (Ps::Op(Op::Break), Prec::Body),
         TKind::Return => (Ps::Op(Op::Return), Prec::Body),
-        TKind::Continue => (Ps::Op(Op::Continue), Prec::Min),
+        TKind::Continue => (Ps::Op(Op::Continue), Prec::Max),
 
         TKind::LCurly => (Ps::Op(Op::Block), Prec::Min),
         TKind::RCurly => (Ps::End, Prec::Do),

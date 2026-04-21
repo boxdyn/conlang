@@ -3,7 +3,7 @@ use crate::{
     convalue::ConValue,
     env::Environment,
     error::{Error, ErrorKind, IResult},
-    interpret::Interpret,
+    interpret::{Interpret, todo},
 };
 use cl_ast::{
     At, Expr, Op,
@@ -146,7 +146,7 @@ impl Place {
                     let len = values.len();
                     values.get_mut(idx).ok_or(Error::OobIndex(idx, len))?
                 }
-                (place, Projection::DotIdx(_)) => todo!(),
+                (place, Projection::DotIdx(_)) => todo!()?,
                 (value, place) => Err(Error::Panic(format!(
                     "Failed to match {value} against {place:?}"
                 )))?,
@@ -168,21 +168,22 @@ impl Place {
                 (ConValue::Ref(place), Projection::Deref) => place.get(env)?,
                 (ConValue::Ref(place), projection) => place.clone().with(*projection).get(env)?,
                 (ConValue::Array(arr), &Projection::Index(idx, from_end)) => {
-                    let idx = if from_end { arr.len() - idx } else { idx };
-                    arr.get(idx).ok_or(Error::OobIndex(idx, arr.len()))?
+                    let len = arr.len();
+                    let idx = if from_end { len - idx } else { idx };
+                    arr.get(idx).ok_or(Error::OobIndex(idx, len))?
                 }
-                (place, Projection::Index(_, _)) => todo!("Index {self}"),
+                (place, Projection::Index(_, _)) => todo!("Index {self}")?,
                 (ConValue::Struct(_, values), Projection::DotSym(sym)) => {
                     values.get(sym).ok_or(Error::NotDefined(*sym))?
                 }
-                (place, Projection::DotSym(interned)) => todo!(),
+                (place, Projection::DotSym(interned)) => todo!(".sym projection for {place}")?,
                 (ConValue::Tuple(values), &Projection::DotIdx(idx)) => {
                     values.get(idx).ok_or(Error::OobIndex(idx, values.len()))?
                 }
                 (ConValue::TupleStruct(_, values), &Projection::DotIdx(idx)) => {
                     values.get(idx).ok_or(Error::OobIndex(idx, values.len()))?
                 }
-                (place, Projection::DotIdx(_)) => todo!(),
+                (place, Projection::DotIdx(_)) => todo!(".idx projection for {place}")?,
                 _ => Err(Error::MatchNonexhaustive())?,
             }
         }

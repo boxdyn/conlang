@@ -10,7 +10,7 @@ use super::*;
 use crate::{
     function::Function,
     place::Place,
-    typeinfo::{Model, TypeInfo},
+    typeinfo::{Model, Type, TypeInfo},
 };
 use cl_ast::{
     types::{Literal, Path},
@@ -80,7 +80,7 @@ impl Interpret for Expr<DefaultTypes> {
                 if self.is_place()
                     && let Ok(place) = Place::new(self, env)
                 {
-                    place.get_mut(env).cloned()
+                    place.get(env).cloned()
                 } else {
                     (*op, exprs.as_slice()).interpret(env)
                 }
@@ -215,6 +215,16 @@ impl Interpret for (Op, &[At<Expr>]) {
             (Op::Dot, [scrutinee, At(Expr::Lit(Literal::Int(idx, _)), _)]) => {
                 let place = Place::new_or_temporary(scrutinee.value(), env)?;
                 Ok(ConValue::Ref(place.dot_idx(*idx as _)))
+            }
+            (Op::Dot, [scrutinee, At(Expr::Id(path), _)]) if path.parts.len() == 1 => {
+                let name = path.parts[0];
+                match scrutinee.interpret(env)? {
+                    ConValue::Ref(r) => Ok(ConValue::Ref(r.dot_sym(name))),
+                    ConValue::Struct(_, mut p) => p.remove(&name).ok_or(Error::NotDefined(name)),
+                    ConValue::TypeInfo(ti) => ti.getattr(name),
+                    ConValue::Module(m) => m.get(&name).cloned().ok_or(Error::NotDefined(name)),
+                    other => Err(Error::TypeError(name.to_ref(), other.typename())),
+                }
             }
             (Op::Dot, [scrutinee, proj]) => cl_todo!("dot: {scrutinee}.{proj}"),
 
@@ -433,13 +443,13 @@ impl Interpret for Bind<DefaultTypes> {
             (BindOp::Impl, _, [body]) => cl_todo!("impl {pat} {body}"),
             (BindOp::Struct, pat, []) => {
                 let (name, model) = bind_struct(pat, env)?;
-                if let Some(name) = name {
+                Ok(ConValue::TypeInfo(if let Some(name) = name {
                     let typeid = env.def_type(name, model);
                     env.bind(name, ConValue::TypeInfo(typeid));
-                    Ok(ConValue::TypeInfo(typeid))
+                    typeid
                 } else {
-                    Err(Error::MatchNonexhaustive()) // todo: make sense
-                }
+                    TypeInfo { ident: Interned::default(), model }.intern()
+                }))
             }
             (BindOp::Struct, Pat::Name(name), []) => {
                 let typeid = env.def_type(*name, typeinfo::Model::Unit(0));
@@ -529,6 +539,18 @@ impl Interpret for Sym {
     }
 }
 
+fn find_interned_type(model: &Model) -> Option<Type> {
+    let mut ti: Option<Type> = None;
+    // TODO: these functions should return typeinfos
+    typeinfo::TYPE_INTERNER.get().unwrap().foreach(|v| {
+        if v.model == *model {
+            ti = Some(v.already_interned())
+        }
+    });
+    ti
+}
+
+// TODO: these functions should return typeinfos
 fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)> {
     fn bind_struct_op(
         op: PatOp,
@@ -538,11 +560,17 @@ fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)
         match (op, pats) {
             (PatOp::MetaOuter | PatOp::MetaInner, [_doc, pat]) => bind_struct(pat, env),
             (PatOp::Pub | PatOp::Mut, [expr]) => bind_struct(expr, env),
-            (PatOp::Ref, []) => todo!("Ref in bind_struct_op?"),
-            (PatOp::Ptr, []) => todo!("Ptr in bind_struct_op?"),
-            (PatOp::Rest, []) => todo!("Rest in bind_struct_op?"),
-            (PatOp::RangeEx, []) => todo!("RangeEx in bind_struct_op?"),
-            (PatOp::RangeIn, []) => todo!("RangeIn in bind_struct_op?"),
+            (PatOp::Ref, [..]) => todo!("Ref in bind_struct_op?"),
+            (PatOp::Ptr, [..]) => todo!("Ptr in bind_struct_op?"),
+            (PatOp::Rest, [..]) => {
+                println!(
+                    "Host backtrace:\n{}",
+                    std::backtrace::Backtrace::force_capture()
+                );
+                todo!("Rest in bind_struct_op?")
+            }
+            (PatOp::RangeEx, [..]) => todo!("RangeEx in bind_struct_op?"),
+            (PatOp::RangeIn, [..]) => todo!("RangeIn in bind_struct_op?"),
             (PatOp::Record, elements) => {
                 let mut members = Vec::new();
                 let mut exhaustive = true;
@@ -552,15 +580,35 @@ fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)
                         continue;
                     }
                     if let (Some(name), model) = bind_struct(member, env)? {
-                        members.push((name, env.get_type("_".into()).unwrap()));
+                        let mut ti: Option<Type> = find_interned_type(&model);
+                        members.push((name, ti.unwrap_or(env.get_type("_".into()).unwrap())));
                     }
                 }
                 Ok((None, Model::Struct(members.into_boxed_slice(), exhaustive)))
             }
             (PatOp::Tuple, elements) => {
-                let members = vec![env.get_type("_".into()).unwrap(); elements.len()];
-                Ok((None, Model::Tuple(members.into_boxed_slice())))
+                let members = elements
+                    .iter()
+                    .map(|pat| {
+                        let (_, model) =
+                            bind_struct_op(PatOp::Typed, &[Pat::Ignore, pat.clone()], env)?;
+                        Ok(find_interned_type(&model).unwrap_or(env.get_type("_".into()).unwrap()))
+                    })
+                    .collect::<IResult<_>>()?;
+                Ok((None, Model::Tuple(members)))
             }
+            (PatOp::Typed, [name, Pat::Name(ty)]) => match env.get(*ty)? {
+                ConValue::TypeInfo(ty) => {
+                    bind_struct(name, env).map(|(name, _)| (name, ty.model.clone()))
+                }
+                other => todo!("Typed {name}: {other}"),
+            },
+            (PatOp::Typed, [name, Pat::Value(expr)]) => match expr.interpret(env)? {
+                ConValue::TypeInfo(ty) => {
+                    bind_struct(name, env).map(|(name, _)| (name, ty.model.clone()))
+                }
+                other => todo!("Typed {name}: {other}"),
+            },
             (PatOp::Typed, [name, _ty]) => bind_struct(name, env),
             (PatOp::TypePrefixed, [name, ty]) => match bind_struct(ty, env)? {
                 (None, model) => Ok((name.name(), model)),
@@ -571,11 +619,14 @@ fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)
         }
     }
     Ok(match pat {
-        Pat::Ignore => todo!("Pat::Ignore in struct binding")?,
+        Pat::Ignore => (None, Model::Any),
         Pat::Never => todo!("Pat::Never in struct binding")?,
         Pat::MetId(_) => todo!("Pat::MetId in struct binding")?,
         Pat::Name(name) => (Some(*name), typeinfo::Model::Unit(0)),
-        Pat::Value(at) => todo!("Pat::Value in struct binding")?,
+        Pat::Value(at) => match at.interpret(env)? {
+            ConValue::TypeInfo(t) => (None, t.model.clone()),
+            other => todo!("Pat::Value({other}) in struct binding")?,
+        },
         Pat::Op(pat_op, pats) => bind_struct_op(*pat_op, pats, env)?,
     })
 }
@@ -586,16 +637,28 @@ fn bind_enum(pat: &Pat, env: &mut Environment) -> IResult<ConValue> {
         .ok_or_else(|| Error::PatFailed(Box::new(pat.clone())))?;
     let mut variants = vec![];
     if let Pat::Op(PatOp::TypePrefixed, pats) = pat
-        && let [_prefix, pats] = pats.as_slice()
+        && let [prefix, pats] = pats.as_slice()
         && let Pat::Op(PatOp::Record, pats) = pats
     {
+        let mut scope = env.frame(name.to_ref(), Default::default());
+        if let Pat::Op(PatOp::Generic, gens) = prefix
+            && let [prefix, vars @ ..] = gens.as_slice()
+        {
+            for var in vars {
+                let Some(name) = var.name() else {
+                    continue;
+                };
+                let t = TypeInfo::new(name, Model::Any).intern();
+                scope.bind(name, ConValue::TypeInfo(t));
+            }
+        }
         for (idx, pat) in pats.iter().enumerate() {
-            if let (Some(name), model) = bind_struct(pat, env)? {
+            if let (Some(name), model) = bind_struct(pat, &mut scope)? {
                 let model = match model {
                     Model::Unit(_) => Model::Unit(idx),
                     _ => model,
                 };
-                let typeid = env.def_type(name, model);
+                let typeid = scope.def_type(name, model);
                 variants.push((name, typeid));
             }
         }
@@ -830,15 +893,21 @@ impl Match for (PatOp, &[Pat]) {
             (PatOp::Fn, [args, _]) => args.matches(value, in_env),
             (PatOp::Fn, _) => todo!(),
             &(PatOp::Alt, alts) if value.is_cheap_to_copy() => {
-                let mut bind = HashMap::new();
                 for alt in alts {
-                    alt.matches(value.clone(), &mut MatchEnv::new(in_env.env, &mut bind))?;
+                    let mut bind = HashMap::new();
+                    if alt
+                        .matches(value.clone(), &mut MatchEnv::new(in_env.env, &mut bind))
+                        .is_ok()
+                    {
+                        in_env.bind.extend(bind);
+                        return Ok(());
+                    }
                 }
-                Ok(())
+                Err(Error::MatchNonexhaustive())
             }
-            (PatOp::Alt, alts) => todo!(
-                "Alternate patterns require trying the same value multiple times, which is expensive."
-            ),
+            (PatOp::Alt, alts) => {
+                todo!("Expensive alternate patterns are expensive: {value}")
+            }
         }
     }
 }

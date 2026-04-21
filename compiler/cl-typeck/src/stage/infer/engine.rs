@@ -522,7 +522,7 @@ impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
             (TypeKind::Adt(Adt::Enum(ia)), TypeKind::Adt(Adt::Enum(ib)))
                 if ia.len() == ib.len() =>
             {
-                for ((na, a), (nb, b)) in ia.clone().into_iter().zip(ib.clone().into_iter()) {
+                for ((na, a), (nb, b)) in ia.clone().into_iter().zip(ib.clone()) {
                     if na != nb {
                         return Err(InferenceError::Mismatch(ah, bh));
                     }
@@ -553,8 +553,7 @@ impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
             (TypeKind::Adt(Adt::Struct(ia)), TypeKind::Adt(Adt::Struct(ib)))
                 if ia.len() == ib.len() =>
             {
-                for ((na, va, a), (nb, vb, b)) in ia.clone().into_iter().zip(ib.clone().into_iter())
-                {
+                for ((na, va, a), (nb, vb, b)) in ia.clone().into_iter().zip(ib.clone()) {
                     if na != nb || va != vb {
                         return Err(InferenceError::Mismatch(ah, bh));
                     }
@@ -565,7 +564,7 @@ impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
             (TypeKind::Adt(Adt::TupleStruct(ia)), TypeKind::Adt(Adt::TupleStruct(ib)))
                 if ia.len() == ib.len() =>
             {
-                for ((va, a), (vb, b)) in ia.clone().into_iter().zip(ib.clone().into_iter()) {
+                for ((va, a), (vb, b)) in ia.clone().into_iter().zip(ib.clone()) {
                     if va != vb {
                         return Err(InferenceError::Mismatch(ah, bh));
                     }
