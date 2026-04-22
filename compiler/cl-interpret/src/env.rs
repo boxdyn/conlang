@@ -35,6 +35,8 @@ pub(crate) struct EnvFrame {
     pub base: usize,
     /// The bindings of name to stack position
     pub binds: StackBinds,
+    /// A list of deferred instructions to run on scope exit
+    pub defer: Vec<cl_ast::Expr>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -128,13 +130,20 @@ impl Environment {
         function.call(self, args)
     }
 
+    /// Defers an expression until the end of scope. The expression must not fail..?
+    pub fn defer(&mut self, expr: cl_ast::Expr) -> Option<()> {
+        let EnvFrame { name: _, span: _, base: _, binds: _, defer } = self.frames.last_mut()?;
+        defer.push(expr);
+        Some(())
+    }
+
     /// Binds a value to the given name in the current scope.
     pub fn bind(&mut self, name: impl Into<Symbol>, value: impl Into<ConValue>) {
         self.insert(name.into(), value.into());
     }
 
     pub fn bind_raw(&mut self, name: Symbol, id: usize) -> Option<()> {
-        let EnvFrame { name: _, span: _, base: _, binds } = self.frames.last_mut()?;
+        let EnvFrame { name: _, span: _, base: _, binds, defer: _ } = self.frames.last_mut()?;
         binds.insert(name, id);
         Some(())
     }
@@ -174,6 +183,7 @@ impl Environment {
             span: None,
             base: self.values.len(),
             binds: HashMap::new(),
+            defer: vec![],
         });
         for (k, v) in frame {
             self.insert(k, v);
@@ -182,7 +192,7 @@ impl Environment {
 
     pub fn pop_frame(&mut self) -> Option<(StackFrame, &'static str)> {
         let mut out = HashMap::new();
-        let EnvFrame { name, span: _, base, binds } = self.frames.pop()?;
+        let EnvFrame { name, span: _, base, binds, defer } = self.frames.pop()?;
         for (k, v) in binds {
             out.insert(k, self.values.get_mut(v).map(std::mem::take)?);
         }
@@ -293,6 +303,7 @@ impl<'scope> Frame<'scope> {
             span,
             base: scope.values.len(),
             binds: HashMap::new(),
+            defer: vec![],
         });
 
         Self { scope }
@@ -308,7 +319,7 @@ impl<'scope> Frame<'scope> {
     }
 
     pub fn into_binds(mut self) -> Option<StackBinds> {
-        let EnvFrame { name: _, span: _, base: _, binds } = self.frames.pop()?;
+        let EnvFrame { name: _, span: _, base: _, binds, defer: _ } = self.frames.pop()?;
         std::mem::forget(self);
         Some(binds)
     }
@@ -327,6 +338,11 @@ impl DerefMut for Frame<'_> {
 impl Drop for Frame<'_> {
     fn drop(&mut self) {
         if let Some(frame) = self.frames.pop() {
+            for defer in frame.defer {
+                if let Err(e) = defer.interpret(self) {
+                    println!("Error during scope cleanup: {e}")
+                }
+            }
             self.values.truncate(frame.base);
         }
     }

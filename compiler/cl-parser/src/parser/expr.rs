@@ -121,6 +121,7 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
         TKind::Loop => (Ps::Op(Op::Loop), Prec::Body),
         TKind::If => (Ps::Op(Op::If), Prec::Body),
         TKind::While => (Ps::Op(Op::While), Prec::Body),
+        TKind::Defer => (Ps::Op(Op::Defer), Prec::Body),
         TKind::Break => (Ps::Op(Op::Break), Prec::Body),
         TKind::Return => (Ps::Op(Op::Return), Prec::Body),
         TKind::Continue => (Ps::Op(Op::Continue), Prec::Max),

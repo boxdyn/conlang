@@ -97,6 +97,7 @@ impl Display for Op {
             Op::Loop => "loop ",
             Op::If => "if ",
             Op::While => "while ",
+            Op::Defer => "defer ",
             Op::Break => "break ",
             Op::Return => "return ",
             Op::Continue => "continue",

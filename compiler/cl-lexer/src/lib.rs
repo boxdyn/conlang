@@ -313,6 +313,7 @@ impl<'t> Lexer<'t> {
                 "break" => TKind::Break,
                 "const" => TKind::Const,
                 "continue" => TKind::Continue,
+                "defer" => TKind::Defer,
                 "do" => TKind::Do,
                 "else" => TKind::Else,
                 "enum" => TKind::Enum,

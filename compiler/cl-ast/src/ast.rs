@@ -135,6 +135,8 @@ pub enum Op {
     If,
     /// `while Expr Expr (else Expr)?`
     While,
+    /// `defer Expr`
+    Defer,
     /// `break Expr`
     Break,
     /// `return Expr`

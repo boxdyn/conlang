@@ -69,6 +69,7 @@ impl ConstEval for Expr {
                 Op::Loop => todo!("Consteval {op}"),
                 Op::If => todo!("Consteval {op}"),
                 Op::While => todo!("Consteval {op}"),
+                Op::Defer => todo!("Consteval {op}"),
                 Op::Break => todo!("Consteval {op}"),
                 Op::Return => todo!("Consteval {op}"),
                 Op::Continue => todo!("Consteval {op}"),

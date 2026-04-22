@@ -80,6 +80,7 @@ pub enum TKind {
     Break,
     Const,
     Continue,
+    Defer,
     Do,
     Else,
     Enum,

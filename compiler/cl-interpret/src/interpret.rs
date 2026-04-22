@@ -182,6 +182,10 @@ impl Interpret for (Op, &[At<Expr>]) {
                 }
                 fail.interpret(env)
             }
+            (Op::Defer, [expr]) => {
+                env.defer(expr.value().clone());
+                Ok(ConValue::Empty)
+            }
             (Op::Break, [expr]) => Err(Error::Break(expr.interpret(env)?)),
             (Op::Return, [expr]) => Err(Error::Return(expr.interpret(env)?)),
             (Op::Continue, []) => Err(Error::Continue()),
