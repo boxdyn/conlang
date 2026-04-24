@@ -18,6 +18,7 @@ use cl_structures::{intern::interned::Interned, span::Span};
 use std::{
     collections::HashMap,
     fmt::Display,
+    mem::take,
     ops::{Deref, DerefMut},
     rc::Rc,
 };
@@ -337,13 +338,16 @@ impl DerefMut for Frame<'_> {
 }
 impl Drop for Frame<'_> {
     fn drop(&mut self) {
-        if let Some(frame) = self.frames.pop() {
-            for defer in frame.defer {
+        if let Some(EnvFrame { base, defer, .. }) = self.frames.last_mut() {
+            let (base, deferred) = (*base, take(defer));
+            for defer in deferred.iter().rev() {
                 if let Err(e) = defer.interpret(self) {
                     println!("Error during scope cleanup: {e}")
                 }
             }
-            self.values.truncate(frame.base);
+
+            self.frames.pop();
+            self.values.truncate(base);
         }
     }
 }
