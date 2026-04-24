@@ -88,8 +88,8 @@ fn from_prefix(token: &Token) -> PResult<(Prefix, Prec)> {
         TKind::Amp => (Prefix::Op(PatOp::Ref), Prec::Fn),
         TKind::AmpAmp => (Prefix::Split(PatOp::Ref), Prec::Fn),
         TKind::Star => (Prefix::Op(PatOp::Ptr), Prec::Max),
-        TKind::Mut => (Prefix::Op(PatOp::Mut), Prec::Max),
-        TKind::Pub => (Prefix::Op(PatOp::Pub), Prec::Max),
+        TKind::Mut => (Prefix::Op(PatOp::Mut), Prec::Typed),
+        TKind::Pub => (Prefix::Op(PatOp::Pub), Prec::Typed),
         TKind::Dollar => (Prefix::MetId, Prec::Max),
 
         TKind::Fn => (Prefix::Op(PatOp::Fn), Prec::Fn),
@@ -114,6 +114,8 @@ fn from_infix(token: &Token) -> Option<(PatOp, Prec)> {
         TKind::DotDot => (PatOp::RangeEx, Prec::Range),
         TKind::DotDotEq => (PatOp::RangeIn, Prec::Range),
         TKind::Lt => (PatOp::Generic, Prec::Fn),
+        TKind::Mut => (PatOp::TypePrefixed, Prec::Typed),
+        TKind::Pub => (PatOp::TypePrefixed, Prec::Typed),
         TKind::LCurly => (PatOp::TypePrefixed, Prec::Typed),
         // LParen is used in function signatures
         TKind::LParen => (PatOp::TypePrefixed, Prec::Fn),
