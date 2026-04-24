@@ -47,6 +47,11 @@ pub trait Fold<From: AstTypes, To: AstTypes = From> {
         item.children(self)
     }
 
+    /// Folds an annotated pattern, so the pattern and annotation can be seen at once.
+    fn fold_at_pat(&mut self, pat: At<Pat<From>, From>) -> Result<At<Pat<To>, To>, Self::Error> {
+        pat.children(self)
+    }
+
     /// Consumes a [`Pat`], possibly transforms it, and produces a replacement [`Pat`]
     fn fold_pat(&mut self, pat: Pat<From>) -> Result<Pat<To>, Self::Error> {
         pat.children(self)
@@ -234,6 +239,19 @@ impl<A: AstTypes, B: AstTypes> Foldable<A, B> for At<Expr<A>, A> {
     fn children<F: Fold<A, B> + ?Sized>(self, folder: &mut F) -> Result<Self::Out, F::Error> {
         let Self(expr, anno) = self;
         Ok(At(expr.children(folder)?, folder.fold_annotation(anno)?))
+    }
+}
+
+impl<A: AstTypes, B: AstTypes> Foldable<A, B> for At<Pat<A>, A> {
+    type Out = At<Pat<B>, B>;
+
+    fn fold_in<F: Fold<A, B> + ?Sized>(self, folder: &mut F) -> Result<Self::Out, F::Error> {
+        folder.fold_at_pat(self)
+    }
+
+    fn children<F: Fold<A, B> + ?Sized>(self, folder: &mut F) -> Result<Self::Out, F::Error> {
+        let Self(pat, anno) = self;
+        Ok(At(pat.children(folder)?, folder.fold_annotation(anno)?))
     }
 }
 

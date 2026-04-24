@@ -169,7 +169,7 @@ impl<'t> Parse<'t> for Pat {
                         Prefix::DocOuter => PatOp::MetaOuter,
                         _ => PatOp::MetaInner,
                     },
-                    vec![Pat::Value(comment.into()), p.parse(prec.next())?],
+                    vec![Pat::Value(comment.into()).at(span), p.parse(prec.next())?],
                 )
             }
             Prefix::Op(op @ (PatOp::MetaOuter | PatOp::MetaInner)) => Pat::Op(
@@ -180,7 +180,8 @@ impl<'t> Parse<'t> for Pat {
                             .expect(TKind::LBrack)?
                             .opt(ExPrec::MIN, TKind::RBrack)?
                             .unwrap_or_else(|| Expr::Op(Op::Tuple, vec![]).at(span)),
-                    )),
+                    ))
+                    .at(span),
                     p.parse(prec.next())?,
                 ],
             ),
@@ -191,30 +192,39 @@ impl<'t> Parse<'t> for Pat {
             }
         };
 
-        while let Ok(Some(tok @ &Token { kind, .. })) = p.peek().allow_eof()
+        while let Ok(Some(tok @ &Token { kind, span: end, .. })) = p.peek().allow_eof()
             && let Some((op, prec)) = from_infix(tok)
             && level <= prec
         {
+            let span = span.merge(end);
             head = match op {
                 PatOp::RangeEx | PatOp::RangeIn => Pat::Op(
                     op,
                     if let Some(tok) = p.consume().peek().allow_eof()?
                         && from_prefix(tok).is_ok()
                     {
-                        vec![head, p.parse(prec)?]
+                        vec![head.at(span), p.parse(prec)?]
                     } else {
-                        vec![head]
+                        vec![head.at(span)]
                     },
                 ),
                 PatOp::Generic => Pat::Op(
                     op,
-                    p.consume()
-                        .list(vec![head], Prec::Typed, TKind::Comma, kind.flip())?,
+                    p.consume().list(
+                        vec![head.at(span)],
+                        Prec::Typed,
+                        TKind::Comma,
+                        kind.flip(),
+                    )?,
                 ),
-                PatOp::TypePrefixed => Pat::Op(op, vec![head, p.parse(prec)?]),
-                PatOp::Tuple => Pat::Op(op, p.consume().list_bare(vec![head], prec.next(), kind)?),
-                PatOp::Fn => Pat::Op(op, vec![head, p.consume().parse(prec)?]),
-                _ => Pat::Op(op, vec![head, p.consume().parse(prec.next())?]),
+                PatOp::TypePrefixed => Pat::Op(op, vec![head.at(span), p.parse(prec)?]),
+                PatOp::Tuple => Pat::Op(
+                    op,
+                    p.consume()
+                        .list_bare(vec![head.at(span)], prec.next(), kind)?,
+                ),
+                PatOp::Fn => Pat::Op(op, vec![head.at(span), p.consume().parse(prec)?]),
+                _ => Pat::Op(op, vec![head.at(span), p.consume().parse(prec.next())?]),
             }
         }
         Ok(head)
@@ -233,7 +243,7 @@ fn parse_array_pat(p: &mut Parser<'_>) -> PResult<Pat> {
 
     Ok(match (repeat, item) {
         (Some(repeat), item) => Pat::Op(PatOp::ArRep, vec![item, repeat]),
-        (None, Pat::Op(PatOp::Tuple, items)) => Pat::Op(PatOp::Slice, items),
+        (None, At(Pat::Op(PatOp::Tuple, items), ..)) => Pat::Op(PatOp::Slice, items),
         (None, item) => Pat::Op(PatOp::Slice, vec![item]),
     })
 }

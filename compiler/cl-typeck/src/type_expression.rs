@@ -2,7 +2,7 @@
 //! construct type bindings in a [Table]'s typing context.
 
 use crate::{consteval::ConstEval, handle::Handle, table::Table, type_kind::TypeKind};
-use cl_ast::{At, Expr, Pat, PatOp, types::Symbol};
+use cl_ast::{Annotation, AstTypes, At, Expr, Pat, PatOp, types::Symbol};
 
 #[derive(Clone, Debug, PartialEq, Eq)] // TODO: impl Display and Error
 pub enum Error {
@@ -85,7 +85,7 @@ impl TypeExpression for Pat {
             Pat::Op(PatOp::ArRep, pats) => match pats.as_slice() {
                 [pat, rep] => {
                     let ty = pat.evaluate(table, node)?;
-                    let rep = match rep {
+                    let rep = match rep.value() {
                         Self::Value(at) => at
                             .const_eval()
                             .ok_or_else(|| Error::ConstEval { parent: node, eval: at.clone() }),
@@ -157,5 +157,11 @@ impl<T: TypeExpression<U>, U> TypeExpression<Vec<U>> for [T] {
             out.push(te.evaluate(table, node)?) // try_collect is unstable
         }
         Ok(out)
+    }
+}
+
+impl<T: TypeExpression<U> + Annotation, U, A: AstTypes> TypeExpression<U> for At<T, A> {
+    fn evaluate(&self, table: &mut Table, node: Handle) -> Result<U, Error> {
+        self.0.evaluate(table, node)
     }
 }

@@ -558,12 +558,12 @@ fn find_interned_type(model: &Model) -> Option<Type> {
 fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)> {
     fn bind_struct_op(
         op: PatOp,
-        pats: &[Pat],
+        pats: &[At<Pat>],
         env: &mut Environment,
     ) -> IResult<(Option<Sym>, Model)> {
         match (op, pats) {
-            (PatOp::MetaOuter | PatOp::MetaInner, [_doc, pat]) => bind_struct(pat, env),
-            (PatOp::Pub | PatOp::Mut, [expr]) => bind_struct(expr, env),
+            (PatOp::MetaOuter | PatOp::MetaInner, [_doc, pat]) => bind_struct(pat.value(), env),
+            (PatOp::Pub | PatOp::Mut, [expr]) => bind_struct(expr.value(), env),
             (PatOp::Ref, [..]) => todo!("Ref in bind_struct_op?"),
             (PatOp::Ptr, [..]) => todo!("Ptr in bind_struct_op?"),
             (PatOp::Rest, [..]) => {
@@ -579,11 +579,11 @@ fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)
                 let mut members = Vec::new();
                 let mut exhaustive = true;
                 for (idx, member) in elements.iter().enumerate() {
-                    if let Pat::Op(PatOp::Rest, _) = member {
+                    if let Pat::Op(PatOp::Rest, _) = member.value() {
                         exhaustive = false;
                         continue;
                     }
-                    if let (Some(name), model) = bind_struct(member, env)? {
+                    if let (Some(name), model) = bind_struct(member.value(), env)? {
                         let mut ti: Option<Type> = find_interned_type(&model);
                         members.push((name, ti.unwrap_or(env.get_type("_".into()).unwrap())));
                     }
@@ -594,31 +594,34 @@ fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)
                 let members = elements
                     .iter()
                     .map(|pat| {
-                        let (_, model) =
-                            bind_struct_op(PatOp::Typed, &[Pat::Ignore, pat.clone()], env)?;
+                        let (_, model) = bind_struct_op(
+                            PatOp::Typed,
+                            &[Pat::Ignore.at(pat.1), pat.clone()],
+                            env,
+                        )?;
                         Ok(find_interned_type(&model).unwrap_or(env.get_type("_".into()).unwrap()))
                     })
                     .collect::<IResult<_>>()?;
                 Ok((None, Model::Tuple(members)))
             }
-            (PatOp::Typed, [name, Pat::Name(ty)]) => match env.get(*ty)? {
+            (PatOp::Typed, [name, At(Pat::Name(ty), ..)]) => match env.get(*ty)? {
                 ConValue::TypeInfo(ty) => {
-                    bind_struct(name, env).map(|(name, _)| (name, ty.model.clone()))
+                    bind_struct(name.value(), env).map(|(name, _)| (name, ty.model.clone()))
                 }
                 other => todo!("Typed {name}: {other}"),
             },
-            (PatOp::Typed, [name, Pat::Value(expr)]) => match expr.interpret(env)? {
+            (PatOp::Typed, [name, At(Pat::Value(expr), ..)]) => match expr.interpret(env)? {
                 ConValue::TypeInfo(ty) => {
-                    bind_struct(name, env).map(|(name, _)| (name, ty.model.clone()))
+                    bind_struct(name.value(), env).map(|(name, _)| (name, ty.model.clone()))
                 }
                 other => todo!("Typed {name}: {other}"),
             },
-            (PatOp::Typed, [name, _ty]) => bind_struct(name, env),
-            (PatOp::TypePrefixed, [name, ty]) => match bind_struct(ty, env)? {
-                (None, model) => Ok((name.name(), model)),
+            (PatOp::Typed, [name, _ty]) => bind_struct(name.value(), env),
+            (PatOp::TypePrefixed, [name, ty]) => match bind_struct(ty.value(), env)? {
+                (None, model) => Ok((name.value().name(), model)),
                 (Some(name), model) => todo!("Typeprefixed {name} :: {model:?}"),
             },
-            (PatOp::Generic, [first, ..]) => bind_struct(first, env),
+            (PatOp::Generic, [first, ..]) => bind_struct(first.value(), env),
             _ => todo!("{op:?} ({pats:?})"),
         }
     }
@@ -642,14 +645,14 @@ fn bind_enum(pat: &Pat, env: &mut Environment) -> IResult<ConValue> {
     let mut variants = vec![];
     if let Pat::Op(PatOp::TypePrefixed, pats) = pat
         && let [prefix, pats] = pats.as_slice()
-        && let Pat::Op(PatOp::Record, pats) = pats
+        && let Pat::Op(PatOp::Record, pats) = pats.value()
     {
         let mut scope = env.frame(name.to_ref(), Default::default());
-        if let Pat::Op(PatOp::Generic, gens) = prefix
+        if let Pat::Op(PatOp::Generic, gens) = prefix.value()
             && let [prefix, vars @ ..] = gens.as_slice()
         {
             for var in vars {
-                let Some(name) = var.name() else {
+                let Some(name) = var.value().name() else {
                     continue;
                 };
                 let t = TypeInfo::new(name, Model::Any).intern();
@@ -657,7 +660,7 @@ fn bind_enum(pat: &Pat, env: &mut Environment) -> IResult<ConValue> {
             }
         }
         for (idx, pat) in pats.iter().enumerate() {
-            if let (Some(name), model) = bind_struct(pat, &mut scope)? {
+            if let (Some(name), model) = bind_struct(pat.value(), &mut scope)? {
                 let model = match model {
                     Model::Unit(_) => Model::Unit(idx),
                     _ => model,
@@ -751,9 +754,15 @@ pub trait Match<Value = ConValue> {
     fn matches<'env>(&self, value: Value, in_env: &mut MatchEnv<'env>) -> IResult<()>;
 }
 
+impl Match for At<Pat> {
+    fn matches<'env>(&self, value: ConValue, in_env: &mut MatchEnv<'env>) -> IResult<()> {
+        self.value().matches(value, in_env)
+    }
+}
+
 impl Match for Pat {
     fn matches<'env>(&self, value: ConValue, in_env: &mut MatchEnv<'env>) -> IResult<()> {
-        match (self) {
+        match self {
             Self::Ignore => Ok(()),
             Self::Never => todo!("Never"),
             Self::MetId(_) => todo!("Meta-identifiers are not allowed here"),
@@ -774,7 +783,7 @@ impl Match for Pat {
     }
 }
 
-impl Match for (PatOp, &[Pat]) {
+impl Match for (PatOp, &[At<Pat>]) {
     fn matches<'env>(&self, value: ConValue, in_env: &mut MatchEnv<'env>) -> IResult<()> {
         match self {
             (PatOp::MetaInner | PatOp::MetaOuter, [_doc, pat]) => pat.matches(value, in_env),
@@ -788,7 +797,7 @@ impl Match for (PatOp, &[Pat]) {
                     let value = place
                         .get(in_env.env)
                         .cloned()
-                        .map_err(|_| Error::PatFailed(pat.clone().into()))?;
+                        .map_err(|_| Error::PatFailed(pat.value().clone().into()))?;
                     pat.matches(value, in_env)
                 }
                 // Auto-referencing in patterns..?
@@ -798,7 +807,7 @@ impl Match for (PatOp, &[Pat]) {
             (PatOp::Ptr, _) => todo!("Raw pointer/deref patterns?"),
             (PatOp::Rest, []) => Ok(()),
             // Rest pattern with const value is upper-bounded exclusive range
-            (PatOp::Rest, [Pat::Value(end)]) => {
+            (PatOp::Rest, [At(Pat::Value(end), ..)]) => {
                 if end.interpret(in_env.env)?.lt_eq(&value)?.truthy()? {
                     return Err(Error::MatchNonexhaustive());
                 }
@@ -806,14 +815,14 @@ impl Match for (PatOp, &[Pat]) {
             }
             (PatOp::Rest, [rest]) => rest.matches(value, in_env),
             (PatOp::Rest, _) => unimplemented!("rest pattern with more than one arg"),
-            (PatOp::RangeEx, [Pat::Value(start)]) => {
+            (PatOp::RangeEx, [At(Pat::Value(start), ..)]) => {
                 // RangeEx pattern with const value is lower-bounded exclusive range
                 if start.interpret(in_env.env)?.gt(&value)?.truthy()? {
                     return Err(Error::MatchNonexhaustive());
                 }
                 Ok(())
             }
-            (PatOp::RangeEx, [Pat::Value(start), Pat::Value(end)]) => {
+            (PatOp::RangeEx, [At(Pat::Value(start), ..), At(Pat::Value(end), ..)]) => {
                 if start.interpret(in_env.env)?.gt(&value)?.truthy()? {
                     return Err(Error::MatchNonexhaustive());
                 }
@@ -823,7 +832,7 @@ impl Match for (PatOp, &[Pat]) {
                 Ok(())
             }
             (PatOp::RangeEx, pats) => todo!("RangeEx patterns: {pats:?}"),
-            (PatOp::RangeIn, [Pat::Value(start), Pat::Value(end)]) => {
+            (PatOp::RangeIn, [At(Pat::Value(start), ..), At(Pat::Value(end), ..)]) => {
                 if start.interpret(in_env.env)?.gt(&value)?.truthy()? {
                     return Err(Error::MatchNonexhaustive());
                 }
@@ -850,7 +859,7 @@ impl Match for (PatOp, &[Pat]) {
             (PatOp::ArRep, _) => todo!(),
             (PatOp::Typed, [pat, _ty @ ..]) => pat.matches(value, in_env),
             (PatOp::Typed, _) => todo!(),
-            (PatOp::TypePrefixed, [Pat::Value(e), pat]) => {
+            (PatOp::TypePrefixed, [At(Pat::Value(e), ..), pat]) => {
                 let ty = match e.interpret(in_env.env)? {
                     ConValue::TypeInfo(ty) => ty,
                     other => Err(Error::TypeError("type", other.typename()))?,
@@ -869,7 +878,7 @@ impl Match for (PatOp, &[Pat]) {
             }
             (PatOp::TypePrefixed, [pat_name, pat]) => match value {
                 ConValue::TupleStruct(value_type, values) => {
-                    let Some(pat_name) = pat_name.name() else {
+                    let Some(pat_name) = pat_name.value().name() else {
                         todo!("{pat_name}({pat})")?
                     };
                     if in_env.env.get_type(pat_name) != Some(value_type) {
@@ -881,7 +890,7 @@ impl Match for (PatOp, &[Pat]) {
                     pat.matches(ConValue::Tuple(values), in_env)
                 }
                 ConValue::Struct(ty, _) => {
-                    let Some(pat_name) = pat_name.name() else {
+                    let Some(pat_name) = pat_name.value().name() else {
                         todo!("{pat_name}({pat})")?
                     };
                     if in_env.env.get_type(pat_name) != Some(ty) {
@@ -917,16 +926,16 @@ impl Match for (PatOp, &[Pat]) {
 }
 
 fn match_pat_for_struct<'env>(
-    pats: &[Pat],
+    pats: &[At<Pat>],
     value: ConValue,
     in_env: &mut MatchEnv<'env>,
 ) -> IResult<()> {
     fn match_typed<'env>(
-        pats: &[Pat],
+        pats: &[At<Pat>],
         values: &mut HashMap<Sym, ConValue>,
         in_env: &mut MatchEnv<'env>,
     ) -> IResult<()> {
-        let [Pat::Name(name), dest] = pats else {
+        let [At(Pat::Name(name), ..), dest] = pats else {
             todo!("match_typed could not find name in typed pattern")?
         };
         let Some(value) = values.remove(name) else {
@@ -941,7 +950,7 @@ fn match_pat_for_struct<'env>(
     };
 
     for pat in pats {
-        match pat {
+        match pat.value() {
             Pat::Name(name) => {
                 let Some(value) = values.remove(name) else {
                     todo!("Struct {values:?} has no value at {name}")?
@@ -961,13 +970,13 @@ enum SliceMode {
     Tuple,
 }
 
-impl Match<Box<[ConValue]>> for (SliceMode, &[Pat]) {
+impl Match<Box<[ConValue]>> for (SliceMode, &[At<Pat>]) {
     fn matches<'env>(&self, values: Box<[ConValue]>, in_env: &mut MatchEnv<'env>) -> IResult<()> {
         let (mode, pats) = self;
 
         let mut values = values.into_iter();
         let mut pats = pats.iter().peekable();
-        while !matches!(pats.peek(), None | Some(Pat::Op(PatOp::Rest, _))) {
+        while !matches!(pats.peek(), None | Some(At(Pat::Op(PatOp::Rest, _), ..))) {
             let (Some(pat), Some(value)) = (pats.next(), values.next()) else {
                 break;
             };
@@ -976,14 +985,14 @@ impl Match<Box<[ConValue]>> for (SliceMode, &[Pat]) {
 
         let mut values = values.rev();
         let mut pats = pats.rev().peekable();
-        while !matches!(pats.peek(), None | Some(Pat::Op(PatOp::Rest, _))) {
+        while !matches!(pats.peek(), None | Some(At(Pat::Op(PatOp::Rest, _), ..))) {
             let (Some(pat), Some(value)) = (pats.next(), values.next()) else {
                 break;
             };
             pat.matches(value, in_env)?;
         }
 
-        if let Some(Pat::Op(PatOp::Rest, pats)) = pats.next() {
+        if let Some(At(Pat::Op(PatOp::Rest, pats), ..)) = pats.next() {
             if let [pat] = pats.as_slice() {
                 let values = values.into_inner().collect();
                 match mode {

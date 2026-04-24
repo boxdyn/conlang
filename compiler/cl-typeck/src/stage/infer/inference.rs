@@ -246,7 +246,7 @@ impl Inference for Pat {
     }
 }
 
-fn infer_pat_op(op: PatOp, pats: &[Pat], e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+fn infer_pat_op(op: PatOp, pats: &[At<Pat>], e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
     match (op, pats) {
         (PatOp::Pub, [body]) => body.infer(e),
         (PatOp::Mut, [..]) => todo!(),

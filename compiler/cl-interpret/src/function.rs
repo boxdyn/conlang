@@ -60,7 +60,7 @@ impl Callable for Function {
             match pat {
                 Pat::Name(name) => Some(*name),
                 Pat::Op(PatOp::Tuple | PatOp::Slice | PatOp::Fn, _) => None,
-                Pat::Op(_op, pats) => pats.iter().find_map(get_name),
+                Pat::Op(_op, pats) => pats.iter().find_map(|At(pat, ..)| get_name(pat)),
                 _ => None,
             }
         }
@@ -92,7 +92,7 @@ impl Callable for Function {
 impl std::fmt::Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (pat, At(expr, ..)) = self.decl();
-        pat.fmt(f)?;
+        write!(f, "fn {pat}")?;
         match expr {
             Expr::Op(Op::Block, ..) => write!(f, " {expr}"),
             _ => write!(f, " = {expr}"),

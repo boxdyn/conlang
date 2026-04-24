@@ -177,11 +177,12 @@ impl<A: AstTypes> Display for Bind<A> {
             (BindOp::Fn, _) => f.delimit(fmt!("{pat} = "), "").list(exprs, ""),
             (BindOp::Mod | BindOp::Impl, _) => f.delimit(fmt!("{pat} "), "").list(exprs, "!?;"),
             (BindOp::Struct | BindOp::Enum, _) => match pat {
+                // TODO: Make these 'special' AST rules more robust
                 Pat::Op(PatOp::TypePrefixed, bind) => match bind.as_slice() {
-                    [name, Pat::Op(PatOp::Record, parts)] => f
+                    [name, At(Pat::Op(PatOp::Record, parts), ..)] => f
                         .delimit_indented(fmt!("{name} {{"), "}")
                         .list_wrap("\n", parts, ",\n", ",\n"),
-                    [name, Pat::Op(PatOp::Tuple, parts)] => {
+                    [name, At(Pat::Op(PatOp::Tuple, parts), ..)] => {
                         f.delimit(fmt!("{name}("), ")").list(parts, ", ")
                     }
                     _ => pat.fmt(f),

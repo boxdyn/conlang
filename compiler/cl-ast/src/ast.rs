@@ -44,6 +44,15 @@ impl<T: Annotation, A: AstTypes> At<T, A> {
     pub fn a(&self) -> &A::Annotation {
         &self.1
     }
+    pub fn map<U: Annotation>(self, f: impl FnOnce(T) -> U) -> At<U, A> {
+        At(f(self.0), self.1)
+    }
+    pub fn map_ref<U: Annotation>(&self, f: impl FnOnce(&T) -> U) -> At<U, A> {
+        At(f(&self.0), self.1.clone())
+    }
+    pub fn map_a<B: AstTypes>(self, f: impl FnOnce(A::Annotation) -> B::Annotation) -> At<T, B> {
+        At(self.0, f(self.1))
+    }
 }
 
 /// Expressions: The beating heart of Conlang.
@@ -338,7 +347,7 @@ pub enum Pat<A: AstTypes = DefaultTypes> {
     /// `Expr`: Matches a value by equality comparison
     Value(Box<At<Expr<A>, A>>),
     /// Matches a compound pattern
-    Op(PatOp, Vec<Pat<A>>),
+    Op(PatOp, Vec<At<Pat<A>, A>>),
 }
 
 /// Operators on lists of patterns
@@ -383,11 +392,15 @@ pub enum PatOp {
 }
 
 impl<A: AstTypes> Pat<A> {
+    /// Attaches this [Pat] to an [At] node with the provided [Annotation].
+    pub const fn at(self, annotation: A::Annotation) -> At<Pat<A>, A> {
+        At(self, annotation)
+    }
     /// Turns this pattern into a [`tuple`](PatOp::Tuple) if it isn't already one.
-    pub fn to_tuple(self) -> Self {
+    pub fn to_tuple(self, annotation: A::Annotation) -> Self {
         match self {
             Self::Op(PatOp::Tuple, _) => self,
-            _ => Self::Op(PatOp::Tuple, vec![self]),
+            _ => Self::Op(PatOp::Tuple, vec![self.at(annotation)]),
         }
     }
     /// Returns the single, unambiguous name bound by this pattern, if there is one.
@@ -401,7 +414,7 @@ impl<A: AstTypes> Pat<A> {
                 pats,
             ) => match pats.as_slice() {
                 [] => None,
-                [name, ..] => name.name(),
+                [At(name, _), ..] => name.name(),
             },
             _ => None,
         }

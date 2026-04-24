@@ -31,6 +31,7 @@ pub(crate) mod format_utils;
 pub mod list {
     use cl_ast::types::{Path, Symbol};
 
+    /// A (usually) stack-allocated linked list
     #[derive(Clone, Copy, Debug, Default)]
     pub enum List<'parent, T> {
         Cons(&'parent List<'parent, T>, T),
