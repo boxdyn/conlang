@@ -156,6 +156,9 @@ fn tokens<'e: 't, 't, T: Parse<'t> + ?Sized>(
             (Ok(Token { lexeme, kind, span: Span { path: _, head, tail } }), Verbosity::Pretty) => {
                 println!("{kind:?}\x1b[11G {head:<4} {tail:<4} {lexeme:?}")
             }
+            (Ok(token), Verbosity::DebugPretty) => {
+                println!("{token:#?}");
+            }
             (Ok(token), Verbosity::Debug) => {
                 println!("{token:?}")
             }
