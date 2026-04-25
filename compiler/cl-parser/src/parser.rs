@@ -304,7 +304,7 @@ impl<'t, P: Parse<'t> + Annotation> Parse<'t> for At<P> {
     type Prec = P::Prec;
     fn parse(p: &mut Parser<'t>, level: P::Prec) -> PResult<Self>
     where Self: Sized {
-        let start = p.span();
+        let start = p.peek().map(|t| t.span).unwrap_or_else(|_| p.span());
         Ok(At(p.parse(level)?, start.merge(p.span())))
     }
 }
