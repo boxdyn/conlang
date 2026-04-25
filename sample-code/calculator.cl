@@ -48,11 +48,11 @@ fn parse(&line: &[char], power: i32) -> (Expr, [char]) {
 
     line = space(line);
 
-    let (lhs, line) = match line {
+    let lhs, line = match line {
         ['0'..='9', ..] => number(line);
         ['(', ..rest] => match parse(rest, Power::None) {
-            (expr, [')', ..rest]) => (expr, rest);
-            (expr, rest) => panic(fmt("Expected ')', got ", expr, ", ", rest));
+            expr, [')', ..rest] => expr, rest;
+            expr, rest => panic(fmt("Expected ')', got ", expr, ", ", rest));
         };
         [op, ..rest] => parse(rest, pre_bp(op)).map(|lhs| Expr::Op(op, [lhs]));
         other => panic("Unexpected end of input: ", other);
@@ -64,10 +64,10 @@ fn parse(&line: &[char], power: i32) -> (Expr, [char]) {
             break;
         };
         let v = parse(rest, after).map(|rhs| Expr::Op(op, [lhs, rhs]));
-        lhs = *v.0;
-        line = *v.1;
+        lhs = v.0;
+        line = v.1;
     };
-    (lhs, line)
+    lhs, line
 }
 
 fn number(&line: [char]) -> (Expr, [char]) {
@@ -80,10 +80,10 @@ fn number(&line: [char]) -> (Expr, [char]) {
 }
 
 fn space(line: [char]) -> [char] {
-    match line {
-        [' ', ..rest] => space(rest);
-        ['\n', ..rest] => space(rest);
-        line => line
+    loop match line {
+        [' ', ..rest] => line = rest;
+        ['\n', ..rest] => line = rest;
+        [..] => break line;
     }
 }
 

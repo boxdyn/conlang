@@ -222,7 +222,7 @@ impl<'t> Parse<'t> for Pat {
                     )?,
                 ),
                 PatOp::TypePrefixed => match prefix_level(&head, level, tok) {
-                    Some(_prec) => add_typeprefix(p, head.at(span), Prec::Min)?,
+                    Some(_prec) => add_typeprefix(p, head.at(span), Prec::Typed)?,
                     _ => break,
                 },
                 PatOp::Tuple => Pat::Op(

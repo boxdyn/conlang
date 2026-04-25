@@ -11,8 +11,9 @@ fn main() {
 
     let lines = "";
     loop match get_line(if lines.len() "  > " else " .> ") {
-        "\n" => (debug(compile(lines)).run([]); lines = "");
+        "\n" => (compile(lines).run([]); lines = "");
         "clear\n" => (clear(); lines = "");
+        "exit\n" | "quit\n" => break;
         line => lines += line;
     }
 }

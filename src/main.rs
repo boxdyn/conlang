@@ -9,7 +9,7 @@ use cl_ast::{
 };
 use cl_interpret::{convalue::ConValue, env::Environment, interpret::Interpret};
 use cl_lexer::{EOF, LexError, Lexer};
-use cl_parser::{Parse, ParseError, Parser, inliner::ModuleInliner};
+use cl_parser::{PResultExt, Parse, ParseError, Parser, inliner::ModuleInliner};
 use cl_structures::span::Span;
 use cl_token::{TKind, Token};
 // use cl_typeck::Collector;
@@ -70,15 +70,19 @@ fn main() -> Result<(), Box<dyn Error>> {
                 rl.set_begin(verbose.begin());
                 Ok(Response::Accept)
             }
-            _ if line.ends_with("\n\n") => {
-                parsing.with()(&mut env, line, verbose);
+            _ if let ParseMode::Run = parsing => {
+                parsing.with()(&mut env, line, verbose)?;
+                Ok(Response::Accept)
+            }
+            v if v.ends_with("\n\n") => {
+                parsing.with()(&mut env, line, verbose)?;
                 Ok(Response::Accept)
             }
             _ => Ok(Response::Continue),
         })?;
     } else {
         let doc = std::io::read_to_string(stdin())?;
-        parsing.with()(&mut env, &doc, verbose);
+        parsing.with()(&mut env, &doc, verbose)?;
     }
     Ok(())
 }
@@ -142,7 +146,7 @@ fn tokens<'e: 't, 't, T: Parse<'t> + ?Sized>(
     _: &'e mut Environment,
     document: &'t str,
     verbose: Verbosity,
-) {
+) -> Result<(), Box<dyn Error>> {
     let _: PhantomData<T>; // for lifetime variance
     let mut lexer = Lexer::new("<interactive>".into(), document);
     loop {
@@ -166,9 +170,14 @@ fn tokens<'e: 't, 't, T: Parse<'t> + ?Sized>(
             _ => {}
         }
     }
+    Ok(())
 }
 
-fn parse<'env: 't, 't, T>(_: &'env mut Environment, document: &'t str, verbose: Verbosity)
+fn parse<'env: 't, 't, T>(
+    _: &'env mut Environment,
+    document: &'t str,
+    verbose: Verbosity,
+) -> Result<(), Box<dyn Error>>
 where
     T: Parse<'t>
         + Annotation
@@ -213,28 +222,25 @@ where
             _ => {}
         }
     }
+    Ok(())
 }
 
-fn run<'env: 't, 't>(env: &'env mut Environment, document: &'t str, verbose: Verbosity) {
+fn run<'env: 't, 't>(
+    env: &'env mut Environment,
+    document: &'t str,
+    verbose: Verbosity,
+) -> Result<(), Box<dyn Error>> {
     let mut parser = Parser::new(Lexer::new("<interactive>".into(), document));
     for idx in 0..6 {
-        match (
-            parser
-                .parse::<At<Expr>>(0)
-                .map(inline_modules)
-                .map(|expr| expr.interpret(env)),
-            verbose,
-        ) {
-            (Err(ParseError::EOF(_)), _) => break,
-            (Err(e), _) => {
-                println!("\x1b[91m{e}\x1b[0m");
-                break;
-            }
-            (Ok(Ok(ConValue::Empty)), Verbosity::Pretty) => {}
-            (Ok(Ok(value)), Verbosity::Pretty) => {
+        let Some(code) = parser.parse::<At<Expr>>(0).allow_eof()? else {
+            break;
+        };
+        match (inline_modules(code).interpret(env), verbose) {
+            (Ok(ConValue::Empty), Verbosity::Pretty) => {}
+            (Ok(value), Verbosity::Pretty) => {
                 println!("\x1b[{}m{value}", (idx + 5) % 6 + 31);
             }
-            (Ok(Err(error)), Verbosity::Pretty) => {
+            (Err(error), Verbosity::Pretty) => {
                 println!("\x1b[{}m{error}", (idx + 5) % 6 + 31);
             }
             (Ok(value), Verbosity::Debug) => {
@@ -246,35 +252,36 @@ fn run<'env: 't, 't>(env: &'env mut Environment, document: &'t str, verbose: Ver
             _ => {}
         }
     }
+    Ok(())
 }
 
-fn bubble<'env: 't, 't>(_: &'env mut Environment, document: &'t str, verbose: Verbosity) {
+fn bubble<'env: 't, 't>(
+    _: &'env mut Environment,
+    document: &'t str,
+    verbose: Verbosity,
+) -> Result<(), Box<dyn Error>> {
     let mut parser = Parser::new(Lexer::new("<interactive>".into(), document));
     for idx in 0..6 {
         match (
             parser
                 .parse::<At<Expr>>(Default::default())
                 .map(inline_modules)
-                .map(|v| v.fold_in(&mut Bubbler(verbose == Verbosity::Frob)).unwrap()),
+                .map(|v| v.fold_in(&mut Bubbler(verbose == Verbosity::Frob)).unwrap())?,
             verbose,
         ) {
-            (Err(ParseError::EOF(_)), _) => break,
-            (Err(e), _) => {
-                println!("\x1b[91m{e}\x1b[0m");
-                break;
-            }
-            (Ok(pat), Verbosity::Pretty) => {
+            (pat, Verbosity::Pretty) => {
                 println!("\x1b[{}m{pat}", (idx + 5) % 6 + 31);
             }
-            (Ok(pat), Verbosity::Debug) => {
+            (pat, Verbosity::Debug) => {
                 println!("\x1b[{}m{pat:?}", (idx + 5) % 6 + 31);
             }
-            (Ok(pat), Verbosity::DebugPretty) => {
+            (pat, Verbosity::DebugPretty) => {
                 println!("\x1b[{}m{pat:#?}", (idx + 5) % 6 + 31);
             }
             _ => {}
         }
     }
+    Ok(())
 }
 fn inline_modules<T>(expr: At<T>) -> At<T::Out>
 where
@@ -357,8 +364,12 @@ impl From<&str> for ParseMode {
         }
     }
 }
+
 impl ParseMode {
-    fn with<'env: 'a, 'a>(&self) -> fn(&'env mut Environment, &'a str, Verbosity) {
+    #[expect(clippy::type_complexity)]
+    fn with<'env: 'a, 'a>(
+        &self,
+    ) -> fn(&'env mut Environment, &'a str, Verbosity) -> Result<(), Box<dyn Error>> {
         match self {
             Self::Expr => parse::<'env, 'a, Expr>,
             Self::Pat => parse::<'env, 'a, Pat>,

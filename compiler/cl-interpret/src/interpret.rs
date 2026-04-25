@@ -168,7 +168,7 @@ impl Interpret for (Op, &[At<Expr>]) {
             }
             (Op::While, [cond, pass, fail]) => {
                 loop {
-                    let mut scope = env.frame("while", None);
+                    let mut scope = env.frame("while", Some(cond.1.merge(pass.1)));
                     if cond.interpret(&mut scope)?.truthy()? {
                         match pass.interpret(&mut scope) {
                             Ok(_) => {}
@@ -902,16 +902,19 @@ impl Match for (PatOp, &[At<Pat>]) {
             (PatOp::Fn, [args, _]) => args.matches(value, in_env),
             (PatOp::Fn, _) => todo!(),
             (PatOp::Guard, [pat, At(Pat::Value(cond), ..)]) => {
+                use std::mem::{replace, take};
                 pat.matches(value, in_env)?;
-                if cond.interpret(in_env.env)?.truthy()? {
+                let mut scope = in_env.env.with_frame("if-guard", take(in_env.bind));
+                if cond.interpret(&mut scope)?.truthy()? {
+                    *in_env.bind = scope.pop_values().unwrap_or_default();
                     Ok(())
                 } else {
                     Err(Error::MatchNonexhaustive(ConValue::Bool(false)))
                 }
             }
             (PatOp::Guard, _) => unimplemented!("Nonbinary guard patterns!"),
-            &(PatOp::Alt, alts) if value.is_cheap_to_copy() => {
-                for alt in alts {
+            &(PatOp::Alt, [first @ .., last]) => {
+                for alt in first {
                     let mut bind = HashMap::new();
                     if alt
                         .matches(value.clone(), &mut MatchEnv::new(in_env.env, &mut bind))
@@ -921,11 +924,9 @@ impl Match for (PatOp, &[At<Pat>]) {
                         return Ok(());
                     }
                 }
-                Err(Error::MatchNonexhaustive(value))
+                last.matches(value, in_env)
             }
-            (PatOp::Alt, alts) => {
-                todo!("Expensive alternate patterns are expensive: {value}")
-            }
+            (PatOp::Alt, _) => Err(Error::MatchNonexhaustive(value)),
         }
     }
 }
@@ -981,36 +982,36 @@ impl Match<Box<[ConValue]>> for (SliceMode, &[At<Pat>]) {
 
         let mut values = values.into_iter();
         let mut pats = pats.iter().peekable();
-        while values.len() > 0
-            && !matches!(pats.peek(), None | Some(At(Pat::Op(PatOp::Rest, _), ..)))
-            && let (Some(pat), Some(value)) = (pats.next(), values.next())
-        {
+        while !matches!(pats.peek(), None | Some(At(Pat::Op(PatOp::Rest, _), ..))) {
+            let (Some(pat), Some(value)) = (pats.next(), values.next()) else {
+                Err(Error::MatchNonexhaustive(ConValue::Empty))?
+            };
             pat.matches(value, in_env)?;
         }
 
         let mut values = values.rev();
         let mut pats = pats.rev().peekable();
-        while values.len() > 0
-            && !matches!(pats.peek(), None | Some(At(Pat::Op(PatOp::Rest, _), ..)))
-            && let (Some(pat), Some(value)) = (pats.next(), values.next())
-        {
+        while !matches!(pats.peek(), None | Some(At(Pat::Op(PatOp::Rest, _), ..))) {
+            let (Some(pat), Some(value)) = (pats.next(), values.next()) else {
+                Err(Error::MatchNonexhaustive(ConValue::Empty))?
+            };
             pat.matches(value, in_env)?;
         }
 
         let mut values = values.into_inner();
-        if pats.len() == 1
-            && let Some(At(Pat::Op(PatOp::Rest, rests), ..)) = pats.peek()
-            && let [pat] = rests.as_slice()
-        {
-            let values = values.collect();
-            match mode {
-                SliceMode::Slice => pat.matches(ConValue::Array(values), in_env),
-                SliceMode::Tuple => pat.matches(ConValue::Tuple(values), in_env),
+
+        match (pats.peek(), values.next()) {
+            (None, None) => Ok(()),
+            (None, Some(value)) => Err(Error::MatchNonexhaustive(value)),
+            (Some(At(Pat::Op(PatOp::Rest, rests), ..)), value) if let [pat] = &rests[..] => {
+                let values = value.into_iter().chain(values).collect();
+                match mode {
+                    SliceMode::Slice => pat.matches(ConValue::Array(values), in_env),
+                    SliceMode::Tuple => pat.matches(ConValue::Tuple(values), in_env),
+                }
             }
-        } else if let (0, 0) = (pats.len(), values.len()) {
-            Ok(())
-        } else {
-            Err(Error::MatchNonexhaustive(ConValue::Array(values.collect())))
+            (Some(At(Pat::Op(PatOp::Rest, rests), ..)), _) if rests.is_empty() => Ok(()),
+            (Some(pat), _) => Err(Error::PatFailed(pat.0.clone().into())),
         }
     }
 }

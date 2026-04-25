@@ -552,7 +552,7 @@ impl<'t> Parse<'t> for MakeArm {
                 .str()
                 .expect("Identifier should have String")
                 .into(),
-            p.opt_if(Prec::Body.value(), TKind::Colon)?,
+            p.opt_if(Prec::Tuple.next(), TKind::Colon)?,
         ))
     }
 }
