@@ -304,7 +304,7 @@ impl<A: AstTypes> Expr<A> {
 pub struct Bind<A: AstTypes = DefaultTypes>(
     pub BindOp,
     pub Vec<A::Path>,
-    pub Pat<A>,
+    pub At<Pat<A>, A>,
     pub Vec<At<Expr<A>, A>>,
 );
 
@@ -459,4 +459,4 @@ pub struct Match<A: AstTypes = DefaultTypes>(pub At<Expr<A>, A>, pub Vec<MatchAr
 /// Pat => Expr
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct MatchArm<A: AstTypes = DefaultTypes>(pub Pat<A>, pub At<Expr<A>, A>);
+pub struct MatchArm<A: AstTypes = DefaultTypes>(pub At<Pat<A>, A>, pub At<Expr<A>, A>);

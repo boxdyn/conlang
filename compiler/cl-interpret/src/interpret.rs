@@ -387,7 +387,7 @@ impl Interpret for (Op, &[At<Expr>]) {
 impl Interpret for Bind<DefaultTypes> {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Bind(op, _generics, pat, exprs) = self;
-        match (op, pat, exprs.as_slice()) {
+        match (op, pat.value(), exprs.as_slice()) {
             (BindOp::Let, _, []) => cl_todo!("let {pat}"),
             (BindOp::Let, _, [scrutinee]) => {
                 let mut bind = HashMap::new();
@@ -717,7 +717,7 @@ impl Interpret for cl_ast::ast::Match<DefaultTypes> {
                 return expr.interpret(&mut env.with_frame("match-arm", bind));
             }
         }
-        Err(Error::MatchNonexhaustive())
+        Err(Error::MatchNonexhaustive(ConValue::Empty))
     }
 }
 
@@ -809,7 +809,7 @@ impl Match for (PatOp, &[At<Pat>]) {
             // Rest pattern with const value is upper-bounded exclusive range
             (PatOp::Rest, [At(Pat::Value(end), ..)]) => {
                 if end.interpret(in_env.env)?.lt_eq(&value)?.truthy()? {
-                    return Err(Error::MatchNonexhaustive());
+                    return Err(Error::MatchNonexhaustive(value));
                 }
                 Ok(())
             }
@@ -818,26 +818,26 @@ impl Match for (PatOp, &[At<Pat>]) {
             (PatOp::RangeEx, [At(Pat::Value(start), ..)]) => {
                 // RangeEx pattern with const value is lower-bounded exclusive range
                 if start.interpret(in_env.env)?.gt(&value)?.truthy()? {
-                    return Err(Error::MatchNonexhaustive());
+                    return Err(Error::MatchNonexhaustive(value));
                 }
                 Ok(())
             }
             (PatOp::RangeEx, [At(Pat::Value(start), ..), At(Pat::Value(end), ..)]) => {
                 if start.interpret(in_env.env)?.gt(&value)?.truthy()? {
-                    return Err(Error::MatchNonexhaustive());
+                    return Err(Error::MatchNonexhaustive(value));
                 }
                 if end.interpret(in_env.env)?.lt_eq(&value)?.truthy()? {
-                    return Err(Error::MatchNonexhaustive());
+                    return Err(Error::MatchNonexhaustive(value));
                 }
                 Ok(())
             }
             (PatOp::RangeEx, pats) => todo!("RangeEx patterns: {pats:?}"),
             (PatOp::RangeIn, [At(Pat::Value(start), ..), At(Pat::Value(end), ..)]) => {
                 if start.interpret(in_env.env)?.gt(&value)?.truthy()? {
-                    return Err(Error::MatchNonexhaustive());
+                    return Err(Error::MatchNonexhaustive(value));
                 }
                 if end.interpret(in_env.env)?.lt(&value)?.truthy()? {
-                    return Err(Error::MatchNonexhaustive());
+                    return Err(Error::MatchNonexhaustive(value));
                 }
                 Ok(())
             }
@@ -845,15 +845,11 @@ impl Match for (PatOp, &[At<Pat>]) {
             (PatOp::Record, pats) => match_pat_for_struct(pats, value, in_env),
             (PatOp::Tuple, pats) => match value {
                 ConValue::Empty if pats.is_empty() => Ok(()),
-                ConValue::Tuple(values) if pats.len() <= values.len() => {
-                    (SliceMode::Tuple, *pats).matches(values, in_env)
-                }
+                ConValue::Tuple(values) => (SliceMode::Tuple, *pats).matches(values, in_env),
                 _ => todo!("Match {pats:?} against {value}"),
             },
             (PatOp::Slice, pats) => match value {
-                ConValue::Array(values) if pats.len() <= values.len() => {
-                    (SliceMode::Slice, *pats).matches(values, in_env)
-                }
+                ConValue::Array(values) => (SliceMode::Slice, *pats).matches(values, in_env),
                 _ => todo!("Match {pats:?} against {value}"),
             },
             (PatOp::ArRep, _) => todo!(),
@@ -916,7 +912,7 @@ impl Match for (PatOp, &[At<Pat>]) {
                         return Ok(());
                     }
                 }
-                Err(Error::MatchNonexhaustive())
+                Err(Error::MatchNonexhaustive(value))
             }
             (PatOp::Alt, alts) => {
                 todo!("Expensive alternate patterns are expensive: {value}")
@@ -976,37 +972,36 @@ impl Match<Box<[ConValue]>> for (SliceMode, &[At<Pat>]) {
 
         let mut values = values.into_iter();
         let mut pats = pats.iter().peekable();
-        while !matches!(pats.peek(), None | Some(At(Pat::Op(PatOp::Rest, _), ..))) {
-            let (Some(pat), Some(value)) = (pats.next(), values.next()) else {
-                break;
-            };
+        while values.len() > 0
+            && !matches!(pats.peek(), None | Some(At(Pat::Op(PatOp::Rest, _), ..)))
+            && let (Some(pat), Some(value)) = (pats.next(), values.next())
+        {
             pat.matches(value, in_env)?;
         }
 
         let mut values = values.rev();
         let mut pats = pats.rev().peekable();
-        while !matches!(pats.peek(), None | Some(At(Pat::Op(PatOp::Rest, _), ..))) {
-            let (Some(pat), Some(value)) = (pats.next(), values.next()) else {
-                break;
-            };
+        while values.len() > 0
+            && !matches!(pats.peek(), None | Some(At(Pat::Op(PatOp::Rest, _), ..)))
+            && let (Some(pat), Some(value)) = (pats.next(), values.next())
+        {
             pat.matches(value, in_env)?;
         }
 
-        if let Some(At(Pat::Op(PatOp::Rest, pats), ..)) = pats.next() {
-            if let [pat] = pats.as_slice() {
-                let values = values.into_inner().collect();
-                match mode {
-                    SliceMode::Slice => pat.matches(ConValue::Array(values), in_env)?,
-                    SliceMode::Tuple => pat.matches(ConValue::Tuple(values), in_env)?,
-                };
+        let mut values = values.into_inner();
+        if pats.len() == 1
+            && let Some(At(Pat::Op(PatOp::Rest, rests), ..)) = pats.peek()
+            && let [pat] = rests.as_slice()
+        {
+            let values = values.collect();
+            match mode {
+                SliceMode::Slice => pat.matches(ConValue::Array(values), in_env),
+                SliceMode::Tuple => pat.matches(ConValue::Tuple(values), in_env),
             }
-        } else if values.next().is_some() {
-            Err(Error::MatchNonexhaustive())?
-        }
-
-        match pats.next() {
-            Some(_) => unimplemented!("Match against multiple rest-patterns"),
-            None => Ok(()),
+        } else if let (0, 0) = (pats.len(), values.len()) {
+            Ok(())
+        } else {
+            Err(Error::MatchNonexhaustive(ConValue::Array(values.collect())))
         }
     }
 }

@@ -234,12 +234,12 @@ impl ConValue {
         }
     }
     cmp! {
-        lt: false, <;
-        lt_eq: true, <=;
-        eq: true, ==;
-        neq: false, !=;
-        gt_eq: true, >=;
-        gt: false, >;
+        lt: <;
+        lt_eq: <=;
+        eq: ==;
+        neq: !=;
+        gt_eq: >=;
+        gt: >;
     }
     assign! {
         add_assign: +;
@@ -285,13 +285,16 @@ impl Callable for ConValue {
         }
     }
 }
+
+macro into_inner($($fn:ident: $);*$(;)?) {}
+
 /// Templates comparison functions for [ConValue]
-macro cmp ($($fn:ident: $empty:literal, $op:tt);*$(;)?) {$(
+macro cmp ($($fn:ident: $op:tt);*$(;)?) {$(
     /// TODO: Remove when functions are implemented:
     ///       Desugar into function calls
     pub fn $fn(&self, other: &Self) -> IResult<Self> {
         match (self, other) {
-            (Self::Empty, Self::Empty) => Ok(Self::Bool($empty)),
+            (Self::Empty, Self::Empty) => Ok(Self::Bool(() $op ())),
             (Self::Int(a), Self::Int(b)) => Ok(Self::Bool(a $op b)),
             (Self::Float(a), Self::Float(b)) => Ok(Self::Bool(a $op b)),
             (Self::Bool(a), Self::Bool(b)) => Ok(Self::Bool(a $op b)),

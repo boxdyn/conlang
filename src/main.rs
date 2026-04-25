@@ -2,6 +2,7 @@
 
 use cl_ast::{
     Annotation, At, Bind, DefaultTypes, Expr, Pat, Use,
+    desugar::type_bubbler::Bubbler,
     fold::Foldable,
     macro_matcher::{Match, Subst},
     visit::Walk,
@@ -57,7 +58,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 Ok(Response::Accept)
             }
-            line @ ("run" | "tokens" | "expr" | "pat" | "bind" | "use") => {
+            line @ ("run" | "tokens" | "expr" | "pat" | "bind" | "use" | "bubble") => {
                 parsing = ParseMode::from(line);
                 println!("Parse mode set to '{parsing:?}'");
                 rl.set_color(parsing.color());
@@ -247,6 +248,34 @@ fn run<'env: 't, 't>(env: &'env mut Environment, document: &'t str, verbose: Ver
     }
 }
 
+fn bubble<'env: 't, 't>(_: &'env mut Environment, document: &'t str, verbose: Verbosity) {
+    let mut parser = Parser::new(Lexer::new("<interactive>".into(), document));
+    for idx in 0..6 {
+        match (
+            parser
+                .parse::<At<Expr>>(Default::default())
+                .map(inline_modules)
+                .map(|v| v.fold_in(&mut Bubbler(verbose == Verbosity::Frob)).unwrap()),
+            verbose,
+        ) {
+            (Err(ParseError::EOF(_)), _) => break,
+            (Err(e), _) => {
+                println!("\x1b[91m{e}\x1b[0m");
+                break;
+            }
+            (Ok(pat), Verbosity::Pretty) => {
+                println!("\x1b[{}m{pat}", (idx + 5) % 6 + 31);
+            }
+            (Ok(pat), Verbosity::Debug) => {
+                println!("\x1b[{}m{pat:?}", (idx + 5) % 6 + 31);
+            }
+            (Ok(pat), Verbosity::DebugPretty) => {
+                println!("\x1b[{}m{pat:#?}", (idx + 5) % 6 + 31);
+            }
+            _ => {}
+        }
+    }
+}
 fn inline_modules<T>(expr: At<T>) -> At<T::Out>
 where
     T: Annotation + Foldable<DefaultTypes, DefaultTypes>,
@@ -311,6 +340,7 @@ enum ParseMode {
     Use,
     Tokens,
     Run,
+    Bubble,
 }
 
 impl From<&str> for ParseMode {
@@ -322,6 +352,7 @@ impl From<&str> for ParseMode {
             "use" => Self::Use,
             "tokens" => Self::Tokens,
             "run" => Self::Run,
+            "bubble" => Self::Bubble,
             _ => Default::default(),
         }
     }
@@ -335,6 +366,7 @@ impl ParseMode {
             Self::Use => parse::<'env, 'a, Use>,
             Self::Tokens => tokens::<'env, 'a, dyn Parse<'a, Prec = ()>>,
             Self::Run => run::<'env, 'a>,
+            Self::Bubble => bubble::<'env, 'a>,
         }
     }
 
@@ -346,6 +378,7 @@ impl ParseMode {
             Self::Use => "\x1b[33m",
             Self::Tokens => "\x1b[32m",
             Self::Run => "\x1b[31m",
+            Self::Bubble => "\x1b[90m",
         }
     }
 }

@@ -78,10 +78,10 @@ fn from_prefix(token: &Token) -> PResult<(Prefix, Prec)> {
         | TKind::String
         | TKind::Minus
         | TKind::Const => (Prefix::Constant, Prec::Max),
-        TKind::Hash => (Prefix::Op(PatOp::MetaOuter), Prec::Max),
-        TKind::OutDoc => (Prefix::DocOuter, Prec::Max),
-        TKind::HashBang => (Prefix::Op(PatOp::MetaInner), Prec::Max),
-        TKind::InDoc => (Prefix::DocInner, Prec::Max),
+        TKind::Hash => (Prefix::Op(PatOp::MetaOuter), Prec::Typed),
+        TKind::OutDoc => (Prefix::DocOuter, Prec::Typed),
+        TKind::HashBang => (Prefix::Op(PatOp::MetaInner), Prec::Typed),
+        TKind::InDoc => (Prefix::DocInner, Prec::Typed),
         TKind::Identifier if token.lexeme.str() == Some("_") => (Prefix::Underscore, Prec::Max),
         TKind::ColonColon | TKind::Identifier => (Prefix::Id, Prec::Max),
         TKind::Bang => (Prefix::Never, Prec::Max),
@@ -113,12 +113,11 @@ fn from_infix(token: &Token) -> Option<(PatOp, Prec)> {
         TKind::Comma => (PatOp::Tuple, Prec::Tuple),
         TKind::DotDot => (PatOp::RangeEx, Prec::Range),
         TKind::DotDotEq => (PatOp::RangeIn, Prec::Range),
-        TKind::Lt => (PatOp::Generic, Prec::Fn),
-        TKind::Mut => (PatOp::TypePrefixed, Prec::Typed),
-        TKind::Pub => (PatOp::TypePrefixed, Prec::Typed),
+        // LParen is used in function signatures, but LCurly would clash.
         TKind::LCurly => (PatOp::TypePrefixed, Prec::Typed),
-        // LParen is used in function signatures
         TKind::LParen => (PatOp::TypePrefixed, Prec::Fn),
+        TKind::LBrack => (PatOp::TypePrefixed, Prec::Fn),
+        TKind::Lt => (PatOp::Generic, Prec::Fn),
         _ => None?,
     })
 }
@@ -142,7 +141,7 @@ impl<'t> Parse<'t> for Pat {
             Prefix::Array => parse_array_pat(p)?,
             Prefix::Id => {
                 let At(mut path, span): At<Path> = p.parse(())?;
-                // TODO: make these postfix.
+                // Name or Value pattern?
                 match path.parts.len() {
                     1 => Pat::Name(path.parts.pop().expect("name has 1 part")),
                     _ => Pat::Value(Box::new(At(Expr::Id(path), span))),
@@ -209,7 +208,7 @@ impl<'t> Parse<'t> for Pat {
                     },
                 ),
                 PatOp::Generic => Pat::Op(
-                    op,
+                    PatOp::Generic,
                     p.consume().list(
                         vec![head.at(span)],
                         Prec::Typed,
@@ -217,7 +216,10 @@ impl<'t> Parse<'t> for Pat {
                         kind.flip(),
                     )?,
                 ),
-                PatOp::TypePrefixed => Pat::Op(op, vec![head.at(span), p.parse(prec)?]),
+                PatOp::TypePrefixed => match prefix_level(&head, level, tok) {
+                    Some(prec) => add_typeprefix(p, head.at(span), prec)?,
+                    _ => break,
+                },
                 PatOp::Tuple => Pat::Op(
                     op,
                     p.consume()
@@ -229,6 +231,23 @@ impl<'t> Parse<'t> for Pat {
         }
         Ok(head)
     }
+}
+
+fn prefix_level(pat: &Pat, level: Prec, tok: &Token) -> Option<Prec> {
+    let (_, prec) = from_prefix(tok).ok()?;
+    match pat {
+        Pat::Name(_) | Pat::Value(_) | Pat::Op(PatOp::Generic, _) if level <= prec => Some(prec),
+        _ => None,
+    }
+}
+
+fn add_typeprefix(p: &mut Parser<'_>, name: At<Pat>, level: Prec) -> PResult<Pat> {
+    let At(mut name, span) = name;
+    name = Pat::Op(
+        PatOp::TypePrefixed,
+        vec![name.at(span.merge(p.span())), p.parse(level)?],
+    );
+    Ok(name)
 }
 
 fn parse_array_pat(p: &mut Parser<'_>) -> PResult<Pat> {

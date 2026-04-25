@@ -20,7 +20,7 @@ type Upvars = HashMap<Sym, ConValue>;
 #[derive(Clone, Debug)]
 pub struct Function {
     /// Stores the contents of the function declaration
-    decl: Rc<(Pat, At<Expr>)>,
+    decl: Rc<(At<Pat>, At<Expr>)>,
     /// Stores data from the enclosing scopes
     upvars: RefCell<Upvars>,
 }
@@ -36,7 +36,7 @@ impl Function {
             unimplemented!()
         }
     }
-    pub fn decl(&self) -> &(Pat, At<Expr>) {
+    pub fn decl(&self) -> &(At<Pat>, At<Expr>) {
         &self.decl
     }
     pub fn span(&self) -> Span {
@@ -64,7 +64,7 @@ impl Callable for Function {
                 _ => None,
             }
         }
-        get_name(&self.decl.0)
+        get_name(self.decl.0.value())
     }
     fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
         let args = ConValue::Tuple(args.into());

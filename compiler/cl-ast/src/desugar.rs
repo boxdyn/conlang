@@ -1,5 +1,6 @@
 //! Desugaring passes for Conlang
 
+pub mod type_bubbler;
 // pub mod constant_folder;
 // pub mod path_absoluter;
 // pub mod squash_groups;

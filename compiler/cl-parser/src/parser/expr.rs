@@ -238,19 +238,19 @@ impl<'t> Parse<'t> for Expr {
                     let args = if kind == TKind::Bar {
                         p.opt(PPrec::Tuple, TKind::Bar)?
                             .map(|At(pat, span): At<Pat>| pat.to_tuple(span).at(span))
-                            .unwrap_or(At(Pat::Op(PatOp::Tuple, vec![]), span))
+                            .unwrap_or(At(Pat::Op(PatOp::Tuple, vec![]), span.merge(p.span())))
                     } else {
                         Pat::Op(PatOp::Tuple, vec![]).at(span)
                     };
 
                     let rety = p
                         .opt_if(PPrec::Max, TKind::Arrow)?
-                        .unwrap_or(Pat::Ignore.at(span));
+                        .unwrap_or(Pat::Ignore.at(p.span()));
 
                     Expr::Bind(Box::new(Bind(
                         BindOp::Fn,
                         vec![],
-                        Pat::Op(PatOp::Fn, vec![args, rety]),
+                        Pat::Op(PatOp::Fn, vec![args, rety]).at(span.merge(p.span())),
                         vec![p.parse(Prec::Body.next())?],
                     )))
                 }

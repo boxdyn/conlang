@@ -184,7 +184,7 @@ impl Place {
                     values.get(idx).ok_or(Error::OobIndex(idx, values.len()))?
                 }
                 (place, Projection::DotIdx(_)) => todo!(".idx projection for {place}")?,
-                _ => Err(Error::MatchNonexhaustive())?,
+                _ => Err(Error::NotPlace())?,
             }
         }
 

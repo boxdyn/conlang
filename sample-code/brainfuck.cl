@@ -10,8 +10,8 @@ fn main() {
     clear();
 
     let lines = "";
-    loop match get_line(if lines.len() "  > " else " ,> ") {
-        "\n" => (debug(compile(lines)).run(); lines = "");
+    loop match get_line(if lines.len() "  > " else " .> ") {
+        "\n" => (debug(compile(lines)).run([]); lines = "");
         "clear\n" => (clear(); lines = "");
         line => lines += line;
     }
@@ -28,21 +28,21 @@ fn main() {
 /// [  Jump past the matching ] if the cell at the pointer is 0
 /// ]  Jump back to the matching [ if the cell at the pointer is nonzero
 enum Brainfuck {
-    // > Move the pointer to the right (`n` cells)
+    /// > Move the pointer to the right (`n` cells)
     Right(usize),
-    // < Move the pointer to the left (`n` cells)
+    /// < Move the pointer to the left (`n` cells)
     Left(usize),
-    // + Increment the memory cell at the pointer (by `n`)
+    /// + Increment the memory cell at the pointer (by `n`)
     Inc(usize),
-    // - Decrement the memory cell at the pointer (by `n`)
+    /// - Decrement the memory cell at the pointer (by `n`)
     Dec(usize),
-    // . Output the character signified by the cell at the pointer
+    /// . Output the character signified by the cell at the pointer
     Out(usize),
-    // , Input a character and store it in the cell at the pointer
+    /// , Input a character and store it in the cell at the pointer
     In,
-    // [ Jump past the matching ] if the cell at the pointer is 0
+    /// [ Jump past the matching ] if the cell at the pointer is 0
     Jz(usize),
-    // ] Jump back to the matching [ if the cell at the pointer is nonzero
+    /// ] Jump back to the matching [ if the cell at the pointer is nonzero
     Jnz(usize),
 }
 
@@ -86,10 +86,14 @@ fn join(list: &[Brainfuck], op: Brainfuck) = if list.len() {
 } else list.push(op);
 
 /// Runs a compiled Brainfuck program
-fn run(fucks: [Brainfuck]) {
+fn run(fucks: &[Brainfuck], ..input: [char]) {
     let tape = [0; 0x10000];
     let head = tape.len() / 2;
     let pc = -1;
+    let input = match input {
+        [..chars] => chars;
+        string => string.chars();
+    };
 
     while (pc += 1; pc < fucks.len()) match fucks[pc] {
         Brainfuck::Right(n) => head += n;
@@ -97,7 +101,11 @@ fn run(fucks: [Brainfuck]) {
         Brainfuck::Inc(n) => tape[head] = (tape[head] + n) as u8;
         Brainfuck::Dec(n) => tape[head] = (tape[head] - n) as u8;
         Brainfuck::Out(n) => for _ in 0..n print(tape[head] as char);
-        Brainfuck::In => tape[head] = get_line(" > ")[0] as u8;
+        Brainfuck::In => match input {
+            [] => tape[head] = 0;
+            [first, ..rest] => (input = rest;
+                tape[head] = first as u8);
+        };
         Brainfuck::Jz(goto) => if tape[head] == 0 { pc = goto };
         Brainfuck::Jnz(goto) => if tape[head] != 0 { pc = goto };
     }

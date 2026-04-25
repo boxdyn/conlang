@@ -103,26 +103,26 @@ impl Fold<DefaultTypes> for ModuleInliner {
             return bind.children(self);
         };
 
-        let name = if let Pat::Name(name) = pat {
-            name
-        } else if let Pat::Value(expr) = &pat
-            && let Expr::Lit(Literal::Str(path)) = &expr.as_ref().0
-            && let Some(Ok(At(out, span))) = self.inline_file_at(path)
-            && let [At(Expr::Omitted, _)] = exprs.as_slice()
-        {
-            let sym = Path::new(path).with_extension("");
-            let sym = sym.file_name().expect("should have filename after load");
-            let sym = sym
-                .to_str()
-                .unwrap_or(path)
-                .replace([',', '.', '-', ' '], "_")
-                .to_lowercase()
-                .as_str()
-                .into();
-            let expr = Expr::Op(Op::Block, vec![out.at(span)]).at(span);
-            return Ok(Bind(BindOp::Mod, ts, Pat::Name(sym), vec![expr]));
-        } else {
-            return Ok(Bind(BindOp::Mod, ts, pat, exprs));
+        let name = match pat.value() {
+            Pat::Name(name) => name,
+            Pat::Value(expr)
+                if let Expr::Lit(Literal::Str(path)) = &expr.as_ref().0
+                    && let Some(Ok(At(out, span))) = self.inline_file_at(path)
+                    && let [At(Expr::Omitted, _)] = exprs.as_slice() =>
+            {
+                let sym = Path::new(path).with_extension("");
+                let sym = sym.file_name().expect("should have filename after load");
+                let sym = sym
+                    .to_str()
+                    .unwrap_or(path)
+                    .replace([',', '.', '-', ' '], "_")
+                    .to_lowercase()
+                    .as_str()
+                    .into();
+                let expr = Expr::Op(Op::Block, vec![out.at(span)]).at(span);
+                return Ok(Bind(BindOp::Mod, ts, Pat::Name(sym).at(span), vec![expr]));
+            }
+            _ => return Ok(Bind(BindOp::Mod, ts, pat, exprs)),
         };
 
         self.path.push(name.0); // cd ./name

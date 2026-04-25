@@ -42,7 +42,7 @@ impl<A: AstTypes> Display for Expr<A> {
                 .delimit_indented("{", "}")
                 .list_wrap("\n", exprs, "\n", "\n"),
             Self::Op(Op::Tuple, exprs) => f.delimit("(", ")").list(exprs, ", "),
-            Self::Op(Op::Group, exprs) => f.list(exprs, ", "),
+            Self::Op(Op::Group, exprs) => f.delimit_indented("(", ")").list(exprs, ", "),
             Self::Op(Op::MetaInner, exprs) => match exprs.as_slice() {
                 [meta, expr @ ..] => f.delimit(fmt!("#![{meta}]\n"), "").list(expr, ","),
                 [] => write!(f, "#![]"),
@@ -176,7 +176,7 @@ impl<A: AstTypes> Display for Bind<A> {
             }
             (BindOp::Fn, _) => f.delimit(fmt!("{pat} = "), "").list(exprs, ""),
             (BindOp::Mod | BindOp::Impl, _) => f.delimit(fmt!("{pat} "), "").list(exprs, "!?;"),
-            (BindOp::Struct | BindOp::Enum, _) => match pat {
+            (BindOp::Struct | BindOp::Enum, _) => match pat.value() {
                 // TODO: Make these 'special' AST rules more robust
                 Pat::Op(PatOp::TypePrefixed, bind) => match bind.as_slice() {
                     [name, At(Pat::Op(PatOp::Record, parts), ..)] => f
@@ -257,7 +257,9 @@ impl<A: AstTypes> Display for Pat<A> {
             Self::Value(literal) => literal.fmt(f),
             Self::MetId(name) => write!(f, "`{name}"),
             Self::Name(name) => name.fmt(f),
-            Self::Op(PatOp::Record, pats) => f.delimit("{ ", " }").list(pats, ", "),
+            Self::Op(PatOp::Record, pats) => f
+                .delimit_indented("{", "}")
+                .list_wrap("\n", pats, ",\n", ",\n"),
             Self::Op(PatOp::Tuple, pats) => f.delimit("(", ")").list(pats, ", "),
             Self::Op(PatOp::Slice, pats) => f.delimit("[", "]").list(pats, ", "),
             Self::Op(op @ PatOp::ArRep, pats) => f.delimit("[", "]").list(pats, op),

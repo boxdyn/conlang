@@ -95,8 +95,8 @@ impl Error {
         Self { kind: ErrorKind::PatFailed(pat), span: None }
     }
     /// Fell through a non-exhaustive match
-    pub fn MatchNonexhaustive() -> Self {
-        Self { kind: ErrorKind::MatchNonexhaustive, span: None }
+    pub fn MatchNonexhaustive(value: ConValue) -> Self {
+        Self { kind: ErrorKind::MatchNonexhaustive(value), span: None }
     }
     /// Explicit panic
     pub fn Panic(msg: String) -> Self {
@@ -158,7 +158,7 @@ pub enum ErrorKind {
     /// A pattern failed to match
     PatFailed(Box<Pat>),
     /// Fell through a non-exhaustive match
-    MatchNonexhaustive,
+    MatchNonexhaustive(ConValue),
     /// Explicit panic
     Panic(String, usize),
     /// Error produced by a Builtin
@@ -210,8 +210,8 @@ impl std::fmt::Display for ErrorKind {
             ErrorKind::PatFailed(pattern) => {
                 write!(f, "Failed to match pattern {pattern}")
             }
-            ErrorKind::MatchNonexhaustive => {
-                write!(f, "Fell through a non-exhaustive match expression!")
+            ErrorKind::MatchNonexhaustive(value) => {
+                write!(f, "Failed to match {value}!")
             }
             ErrorKind::Panic(s, _depth) => write!(f, "{s}"),
             ErrorKind::BuiltinError(s) => write!(f, "{s}"),
