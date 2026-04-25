@@ -387,6 +387,8 @@ pub enum PatOp {
     Generic,
     /// Changes the binding mode to "function-body"
     Fn,
+    /// Matches a guard pattern (`Pat if Expr`)
+    Guard,
     /// Matches one of a list of alternatives
     Alt,
 }

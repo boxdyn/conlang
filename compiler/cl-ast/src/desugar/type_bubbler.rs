@@ -18,7 +18,7 @@ pub fn bubble_types(pat: At<Pat>, in_enum: bool) -> (At<Pat>, Option<At<Pat>>) {
         _ => return (pat, None),
     };
 
-    match (op, pats.as_mut_slice()) {
+    match (op, &mut pats[..]) {
         (PatOp::Typed, [pat, ty]) => {
             let (value, _ty2) = bubble_types(take(pat), in_enum);
             // TODO: unify ty, ty2
@@ -26,9 +26,15 @@ pub fn bubble_types(pat: At<Pat>, in_enum: bool) -> (At<Pat>, Option<At<Pat>>) {
         }
         (PatOp::TypePrefixed, [prefix, pat]) => {
             let (pat, ty) = bubble_types(take(pat), in_enum);
-            let ty = ty
-                .map(|At(ty, span)| Pat::Op(op, vec![prefix.clone(), ty.at(span)]).at(span))
-                .unwrap_or_else(|| prefix.clone());
+            let ty = match (ty, in_enum) {
+                (Some(At(ty, span)), false) => {
+                    Pat::Op(op, vec![prefix.clone(), ty.at(span)]).at(span)
+                }
+                (Some(At(ty, span)), true) => {
+                    Pat::Op(op, vec![Pat::Ignore.at(span), ty.at(span)]).at(span)
+                }
+                (None, _) => prefix.clone(),
+            };
             let value = Pat::Op(op, vec![take(prefix), pat]).at(span);
             (value, Some(ty))
         }

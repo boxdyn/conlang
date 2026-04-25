@@ -644,7 +644,7 @@ fn bind_enum(pat: &Pat, env: &mut Environment) -> IResult<ConValue> {
         .ok_or_else(|| Error::PatFailed(Box::new(pat.clone())))?;
     let mut variants = vec![];
     if let Pat::Op(PatOp::TypePrefixed, pats) = pat
-        && let [prefix, pats] = pats.as_slice()
+        && let [prefix, pats] = &pats[..]
         && let Pat::Op(PatOp::Record, pats) = pats.value()
     {
         let mut scope = env.frame(name.to_ref(), Default::default());
@@ -778,7 +778,7 @@ impl Match for Pat {
                     Ok(())
                 }
             }
-            Self::Op(pat_op, pats) => (*pat_op, pats.as_slice()).matches(value, in_env),
+            Self::Op(pat_op, pats) => (*pat_op, &pats[..]).matches(value, in_env),
         }
     }
 }
@@ -901,6 +901,15 @@ impl Match for (PatOp, &[At<Pat>]) {
             (PatOp::Generic, _) => todo!(),
             (PatOp::Fn, [args, _]) => args.matches(value, in_env),
             (PatOp::Fn, _) => todo!(),
+            (PatOp::Guard, [pat, At(Pat::Value(cond), ..)]) => {
+                pat.matches(value, in_env)?;
+                if cond.interpret(in_env.env)?.truthy()? {
+                    Ok(())
+                } else {
+                    Err(Error::MatchNonexhaustive(ConValue::Bool(false)))
+                }
+            }
+            (PatOp::Guard, _) => unimplemented!("Nonbinary guard patterns!"),
             &(PatOp::Alt, alts) if value.is_cheap_to_copy() => {
                 for alt in alts {
                     let mut bind = HashMap::new();

@@ -44,32 +44,20 @@ impl TypeExpression for Pat {
             Pat::Name(name) => name.evaluate(table, node),
             Pat::Value(expr) => expr.0.evaluate(table, node),
 
-            Pat::Op(PatOp::MetaInner | PatOp::MetaOuter, pats) => match pats.as_slice() {
-                [pat] => pat.evaluate(table, node),
-                _ => unreachable!(),
-            },
-            Pat::Op(PatOp::Pub, pats) => match pats.as_slice() {
-                [pat] => pat.evaluate(table, node),
-                _ => unreachable!(),
-            },
-            Pat::Op(PatOp::Mut, pats) => match pats.as_slice() {
-                [pat] => pat.evaluate(table, node),
-                _ => unreachable!(),
-            },
-            Pat::Op(PatOp::Ref, pats) => match pats.as_slice() {
-                [pat] => {
-                    let ty = pat.evaluate(table, node)?;
-                    Ok(table.anon_type(TypeKind::Ref(ty)))
-                }
-                _ => unreachable!(),
-            },
-            Pat::Op(PatOp::Ptr, pats) => match pats.as_slice() {
-                [pat] => {
-                    let ty = pat.evaluate(table, node)?;
-                    Ok(table.anon_type(TypeKind::Ptr(ty)))
-                }
-                _ => unreachable!(),
-            },
+            Pat::Op(PatOp::MetaInner | PatOp::MetaOuter, pats) if let [pat] = &pats[..] => {
+                pat.evaluate(table, node)
+            }
+            Pat::Op(PatOp::Pub, pats) if let [pat] = &pats[..] => pat.evaluate(table, node),
+            Pat::Op(PatOp::Mut, pats) if let [pat] = &pats[..] => pat.evaluate(table, node),
+            Pat::Op(PatOp::Ref, pats) if let [pat] = &pats[..] => {
+                let ty = pat.evaluate(table, node)?;
+                Ok(table.anon_type(TypeKind::Ref(ty)))
+            }
+            Pat::Op(PatOp::Ptr, pats) if let [pat] = &pats[..] => {
+                let ty = pat.evaluate(table, node)?;
+                Ok(table.anon_type(TypeKind::Ptr(ty)))
+            }
+            Pat::Op(PatOp::Guard, pats) if let [pat, _g] = &pats[..] => pat.evaluate(table, node),
             Pat::Op(PatOp::Rest, _pats) => Ok(table.inferred_type()),
             Pat::Op(PatOp::RangeEx, _pats) => todo!(),
             Pat::Op(PatOp::RangeIn, _pats) => todo!(),
@@ -82,30 +70,26 @@ impl TypeExpression for Pat {
                 Ok(table.anon_type(TypeKind::Tuple(tys)))
             }
             Pat::Op(PatOp::Slice, _) => todo!(""),
-            Pat::Op(PatOp::ArRep, pats) => match pats.as_slice() {
-                [pat, rep] => {
-                    let ty = pat.evaluate(table, node)?;
-                    let rep = match rep.value() {
-                        Self::Value(at) => at
-                            .const_eval()
-                            .ok_or_else(|| Error::ConstEval { parent: node, eval: at.clone() }),
-                        _ => todo!("{rep} in array-repetition patterns"),
-                    }?;
-                    Ok(table.anon_type(TypeKind::Array(ty, rep as _)))
-                }
-                _ => unreachable!(),
-            },
-            Pat::Op(PatOp::Typed, pats) => match pats.as_slice() {
-                [_, pat] => Ok(pat.evaluate(table, node)?),
-                _ => unreachable!(),
-            },
+            Pat::Op(PatOp::ArRep, pats) if let [pat, rep] = &pats[..] => {
+                let ty = pat.evaluate(table, node)?;
+                let rep = match rep.value() {
+                    Self::Value(at) => at
+                        .const_eval()
+                        .ok_or_else(|| Error::ConstEval { parent: node, eval: at.clone() }),
+                    _ => todo!("{rep} in array-repetition patterns"),
+                }?;
+                Ok(table.anon_type(TypeKind::Array(ty, rep as _)))
+            }
+            Pat::Op(PatOp::Typed, pats) if let [_, pat] = &pats[..] => {
+                Ok(pat.evaluate(table, node)?)
+            }
             Pat::Op(PatOp::TypePrefixed, pats) => todo!("TypePrefixed {pats:?}"),
-            Pat::Op(PatOp::Generic, pats) => match pats.as_slice() {
-                [pat, ..] => Ok(pat.evaluate(table, node)?),
-                _ => unreachable!(),
-            },
+            Pat::Op(PatOp::Generic, pats) if let [pat, ..] = &pats[..] => {
+                Ok(pat.evaluate(table, node)?)
+            }
             Pat::Op(PatOp::Fn, pats) => todo!("Fn {pats:?}"),
             Pat::Op(PatOp::Alt, pats) => todo!("Alt {pats:?}"),
+            _ => unreachable!(),
         }
     }
 }

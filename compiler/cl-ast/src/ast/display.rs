@@ -43,13 +43,9 @@ impl<A: AstTypes> Display for Expr<A> {
                 .list_wrap("\n", exprs, "\n", "\n"),
             Self::Op(Op::Tuple, exprs) => f.delimit("(", ")").list(exprs, ", "),
             Self::Op(Op::Group, exprs) => f.delimit_indented("(", ")").list(exprs, ", "),
-            Self::Op(Op::MetaInner, exprs) => match exprs.as_slice() {
-                [meta, expr @ ..] => f.delimit(fmt!("#![{meta}]\n"), "").list(expr, ","),
-                [] => write!(f, "#![]"),
-            },
-            Self::Op(Op::MetaOuter, exprs) => match exprs.as_slice() {
-                [meta, expr @ ..] => f.delimit(fmt!("#[{meta}]\n"), "").list(expr, ","),
-                [] => write!(f, "#[]"),
+            Self::Op(op @ (Op::MetaInner | Op::MetaOuter), exprs) => match &exprs[..] {
+                [meta, expr @ ..] => f.delimit(fmt!("{op}[{meta}]\n"), "").list(expr, ","),
+                [] => write!(f, "{op}[]"),
             },
 
             Self::Op(op @ Op::Call, exprs) => match exprs.as_slice() {
@@ -65,6 +61,7 @@ impl<A: AstTypes> Display for Expr<A> {
             },
 
             Self::Op(op @ Op::Do, exprs) => f.list(exprs, op),
+            Self::Op(op @ Op::Dot, exprs) => f.list(exprs, op),
             Self::Op(op @ Op::Macro, exprs) => f.delimit(op, "").list(exprs, " => "),
             Self::Op(op @ Op::Try, exprs) => f.delimit("(", fmt!("){op}")).list(exprs, ", "),
             Self::Op(op, exprs) => match exprs.as_slice() {
@@ -86,8 +83,8 @@ impl Display for Op {
             Op::ArRep => "; ",
             Op::Group => "()",
             Op::Tuple => "()",
-            Op::MetaInner => "#![]",
-            Op::MetaOuter => "#[]",
+            Op::MetaInner => "#!",
+            Op::MetaOuter => "#",
             Op::Try => "?",
             Op::Index => "",
             Op::Call => "",
@@ -263,29 +260,25 @@ impl<A: AstTypes> Display for Pat<A> {
             Self::Op(PatOp::Tuple, pats) => f.delimit("(", ")").list(pats, ", "),
             Self::Op(PatOp::Slice, pats) => f.delimit("[", "]").list(pats, ", "),
             Self::Op(op @ PatOp::ArRep, pats) => f.delimit("[", "]").list(pats, op),
-            Self::Op(op @ (PatOp::Typed | PatOp::Fn), pats) => match pats.as_slice() {
+            Self::Op(op @ (PatOp::Typed | PatOp::Fn), pats) => match &pats[..] {
                 [fun] => write!(f, "fn {fun}"), // TODO: reconsider this
                 pats => f.list(pats, op),
             },
             Self::Op(op @ PatOp::Alt, pats) => f.list(pats, op),
-            Self::Op(op @ PatOp::Generic, pats) => match pats.as_slice() {
+            Self::Op(op @ PatOp::Generic, pats) => match &pats[..] {
                 [] => op.fmt(f),
                 [first, rest @ ..] => f.delimit(fmt!("{first}<"), ">").list(rest, ", "),
             },
-            Self::Op(op @ PatOp::TypePrefixed, pats) => match pats.as_slice() {
+            Self::Op(op @ PatOp::TypePrefixed, pats) => match &pats[..] {
                 [] => op.fmt(f),
                 [first, rest @ ..] => f.delimit(fmt!("{first} "), "").list(rest, ",? "),
             },
 
-            Self::Op(PatOp::MetaInner, pats) => match pats.as_slice() {
-                [meta, pat @ ..] => f.delimit(fmt!("#![{meta}]\n"), "").list(pat, ","),
-                [] => write!(f, "#![]"),
+            Self::Op(op @ (PatOp::MetaInner | PatOp::MetaOuter), pats) => match &pats[..] {
+                [meta, pat @ ..] => f.delimit(fmt!("{op}[{meta}]\n"), "").list(pat, ","),
+                [] => write!(f, "{op}[]"),
             },
-            Self::Op(PatOp::MetaOuter, pats) => match pats.as_slice() {
-                [meta, pat @ ..] => f.delimit(fmt!("#[{meta}]\n"), "").list(pat, ","),
-                [] => write!(f, "#[]"),
-            },
-            Self::Op(op, pats) => match pats.as_slice() {
+            Self::Op(op, pats) => match &pats[..] {
                 [] => op.fmt(f),
                 [rest] => write!(f, "{op}{rest}"),
                 _ => f.delimit("(", ")").list(pats, op),
@@ -297,8 +290,8 @@ impl<A: AstTypes> Display for Pat<A> {
 impl Display for PatOp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            Self::MetaInner => "#![]",
-            Self::MetaOuter => "#[]",
+            Self::MetaInner => "#!",
+            Self::MetaOuter => "#",
             Self::Pub => "pub ",
             Self::Mut => "mut ",
             Self::Ref => "&",
@@ -314,6 +307,7 @@ impl Display for PatOp {
             Self::Generic => "T<>",
             Self::TypePrefixed => "T()",
             Self::Fn => " -> ",
+            Self::Guard => " if ",
             Self::Alt => " | ",
         })
     }

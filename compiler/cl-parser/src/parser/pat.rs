@@ -109,14 +109,14 @@ fn from_infix(token: &Token) -> Option<(PatOp, Prec)> {
     Some(match token.kind {
         TKind::Arrow => (PatOp::Fn, Prec::Fn),
         TKind::Bar => (PatOp::Alt, Prec::Alt),
-        TKind::Colon => (PatOp::Typed, Prec::Typed),
         TKind::Comma => (PatOp::Tuple, Prec::Tuple),
+        TKind::Colon => (PatOp::Typed, Prec::Typed),
+        TKind::If => (PatOp::Guard, Prec::Typed),
         TKind::DotDot => (PatOp::RangeEx, Prec::Range),
         TKind::DotDotEq => (PatOp::RangeIn, Prec::Range),
-        // LParen is used in function signatures, but LCurly would clash.
-        TKind::LCurly => (PatOp::TypePrefixed, Prec::Typed),
-        TKind::LParen => (PatOp::TypePrefixed, Prec::Fn),
+        TKind::LCurly => (PatOp::TypePrefixed, Prec::Fn),
         TKind::LBrack => (PatOp::TypePrefixed, Prec::Fn),
+        TKind::LParen => (PatOp::TypePrefixed, Prec::Fn),
         TKind::Lt => (PatOp::Generic, Prec::Fn),
         _ => None?,
     })
@@ -181,7 +181,7 @@ impl<'t> Parse<'t> for Pat {
                             .unwrap_or_else(|| Expr::Op(Op::Tuple, vec![]).at(span)),
                     ))
                     .at(span),
-                    p.parse(prec.next())?,
+                    p.parse(prec)?,
                 ],
             ),
             Prefix::Op(op) => Pat::Op(op, vec![p.consume().parse(prec)?]),
@@ -207,6 +207,11 @@ impl<'t> Parse<'t> for Pat {
                         vec![head.at(span)]
                     },
                 ),
+                PatOp::Guard => {
+                    let At(cond, cspan) = p.consume().parse(ExPrec::Logical.value())?;
+                    let cond = Pat::Value(Box::new(At(cond, cspan))).at(cspan);
+                    Pat::Op(op, vec![head.at(span), cond])
+                }
                 PatOp::Generic => Pat::Op(
                     PatOp::Generic,
                     p.consume().list(
@@ -217,7 +222,7 @@ impl<'t> Parse<'t> for Pat {
                     )?,
                 ),
                 PatOp::TypePrefixed => match prefix_level(&head, level, tok) {
-                    Some(prec) => add_typeprefix(p, head.at(span), prec)?,
+                    Some(_prec) => add_typeprefix(p, head.at(span), Prec::Min)?,
                     _ => break,
                 },
                 PatOp::Tuple => Pat::Op(

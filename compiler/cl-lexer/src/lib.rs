@@ -333,7 +333,6 @@ impl<'t> Lexer<'t> {
                 "return" => TKind::Return,
                 "static" => TKind::Static,
                 "struct" => TKind::Struct,
-                "then" => TKind::Do,
                 "true" => TKind::True,
                 "type" => TKind::Type,
                 "use" => TKind::Use,
