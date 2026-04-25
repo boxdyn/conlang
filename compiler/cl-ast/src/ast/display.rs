@@ -41,7 +41,6 @@ impl<A: AstTypes> Display for Expr<A> {
             Self::Op(Op::Block, exprs) => f
                 .delimit_indented("{", "}")
                 .list_wrap("\n", exprs, "\n", "\n"),
-            Self::Op(Op::Tuple, exprs) => f.delimit("(", ")").list(exprs, ", "),
             Self::Op(Op::Group, exprs) => f.delimit_indented("(", ")").list(exprs, ", "),
             Self::Op(op @ (Op::MetaInner | Op::MetaOuter), exprs) => match &exprs[..] {
                 [meta, expr @ ..] => f.delimit(fmt!("{op}[{meta}]\n"), "").list(expr, ","),
@@ -60,8 +59,7 @@ impl<A: AstTypes> Display for Expr<A> {
                 [] => write!(f, "{op}"),
             },
 
-            Self::Op(op @ Op::Do, exprs) => f.list(exprs, op),
-            Self::Op(op @ Op::Dot, exprs) => f.list(exprs, op),
+            Self::Op(op @ (Op::Do | Op::Tuple | Op::Dot), exprs) => f.list(exprs, op),
             Self::Op(op @ Op::Macro, exprs) => f.delimit(op, "").list(exprs, " => "),
             Self::Op(op @ Op::Try, exprs) => f.delimit("(", fmt!("){op}")).list(exprs, ", "),
             Self::Op(op, exprs) => match exprs.as_slice() {
@@ -82,7 +80,7 @@ impl Display for Op {
             Op::Array => "[]",
             Op::ArRep => "; ",
             Op::Group => "()",
-            Op::Tuple => "()",
+            Op::Tuple => ", ",
             Op::MetaInner => "#!",
             Op::MetaOuter => "#",
             Op::Try => "?",
