@@ -85,8 +85,11 @@ pub fn mode_run(ctx: &mut ctx::Context, line: &str) -> Result<Response, Box<dyn 
 
 pub fn mode_lex(_ctx: &mut ctx::Context, line: &str) -> Result<Response, Box<dyn Error>> {
     let mut lexer = Lexer::new("".into(), line);
-    while let Ok(token) = lexer.scan() {
-        crate::tools::print_token(&token);
+    while let Ok(t) = lexer.scan() {
+        println!(
+            "{:02}:{:02}: {:#19?} │{}│",
+            t.span.path, t.span.head, t.kind, t.lexeme,
+        )
     }
 
     Ok(Response::Accept)

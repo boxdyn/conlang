@@ -3,12 +3,12 @@ use crate::{
     args::{Args, Mode},
     ctx::Context,
     menu,
-    tools::print_token,
 };
 use cl_ast::{At, Expr, types::Symbol};
 use cl_interpret::{builtin::builtins, convalue::ConValue, env::Environment, interpret::Interpret};
 use cl_lexer::Lexer;
 use cl_parser::{Parser, inliner::ModuleInliner};
+use cl_token::Token;
 use std::{borrow::Cow, error::Error, path::Path};
 
 /// Run the command line interface
@@ -138,11 +138,11 @@ fn load_file(env: &mut Environment, path: impl AsRef<Path>) -> Result<ConValue, 
 
 fn lex_code(path: &str, code: &str) -> Result<(), Box<dyn Error>> {
     let mut lexer = Lexer::new(path.into(), code);
-    while let Ok(token) = lexer.scan() {
+    while let Ok(Token { lexeme, kind, span }) = lexer.scan() {
         if !path.is_empty() {
             print!("{path}:");
         }
-        print_token(&token);
+        println!("{:02}: {:#19?} │{}│", span.head, kind, lexeme,)
     }
     Ok(())
 }

@@ -8,16 +8,16 @@ pub enum Prec {
     Min,
     /// The Semicolon Operator gets its own precedence level
     Do,
-    /// An assignment
-    Assign,
-    /// Constructor for a tuple
-    Tuple,
     /// The body of a function, conditional, etc.
     Body,
+    /// An assignment
+    Assign,
     /// Constructor for a struct
     Make,
     /// The conditional of an `if` or `while` (which is really an `if`)
     Logical,
+    /// Constructor for a tuple
+    Tuple,
     /// The short-circuiting "boolean or" operator
     LogOr,
     /// The short-circuiting "boolean and" operator
@@ -428,7 +428,7 @@ impl<'t> Parse<'t> for MatchArm {
         // Pat
         let pat = p.parse(PPrec::Alt)?;
         p.expect(TKind::FatArrow)?;
-        let body = p.parse(Prec::Assign.value())?;
+        let body = p.parse(Prec::Body.value())?;
 
         Ok(Self(pat, body))
     }
