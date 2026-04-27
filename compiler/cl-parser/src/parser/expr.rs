@@ -14,10 +14,10 @@ pub enum Prec {
     Assign,
     /// Constructor for a struct
     Make,
-    /// The conditional of an `if` or `while` (which is really an `if`)
-    Logical,
     /// Constructor for a tuple
     Tuple,
+    /// The conditional of an `if` or `while` (which is really an `if`)
+    Logical,
     /// The short-circuiting "boolean or" operator
     LogOr,
     /// The short-circuiting "boolean and" operator
@@ -251,7 +251,7 @@ impl<'t> Parse<'t> for Expr {
                         BindOp::Fn,
                         vec![],
                         Pat::Op(PatOp::Fn, vec![args, rety]).at(span.merge(p.span())),
-                        vec![p.parse(Prec::Body.next())?],
+                        vec![p.parse(prec.next())?],
                     )))
                 }
                 Ps::DocOuter | Ps::DocInner => {
