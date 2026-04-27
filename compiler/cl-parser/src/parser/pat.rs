@@ -60,8 +60,8 @@ pub enum Prefix {
     Underscore,
     Never,
     MetId,
-    DocOuter,
     DocInner,
+    DocOuter,
     Id,
     Array,
     Constant,
@@ -78,10 +78,10 @@ fn from_prefix(token: &Token) -> PResult<(Prefix, Prec)> {
         | TKind::String
         | TKind::Minus
         | TKind::Const => (Prefix::Constant, Prec::Max),
-        TKind::Hash => (Prefix::Op(PatOp::MetaOuter), Prec::Typed),
-        TKind::OutDoc => (Prefix::DocOuter, Prec::Typed),
-        TKind::HashBang => (Prefix::Op(PatOp::MetaInner), Prec::Typed),
         TKind::InDoc => (Prefix::DocInner, Prec::Typed),
+        TKind::OutDoc => (Prefix::DocOuter, Prec::Typed),
+        TKind::Hash => (Prefix::Op(PatOp::MetaOuter), Prec::Typed),
+        TKind::HashBang => (Prefix::Op(PatOp::MetaInner), Prec::Typed),
         TKind::Identifier if token.lexeme.str() == Some("_") => (Prefix::Underscore, Prec::Max),
         TKind::ColonColon | TKind::Identifier => (Prefix::Id, Prec::Max),
         TKind::Bang => (Prefix::Never, Prec::Max),

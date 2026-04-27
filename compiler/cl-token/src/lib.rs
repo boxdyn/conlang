@@ -71,10 +71,10 @@ impl std::fmt::Display for Lexeme {
 pub enum TKind {
     /// Line or block comment
     Comment,
-    /// Outer doc comment ///.*
-    OutDoc,
     /// Inner doc comment: //!.*
     InDoc,
+    /// Outer doc comment ///.*
+    OutDoc,
 
     As,
     Break,

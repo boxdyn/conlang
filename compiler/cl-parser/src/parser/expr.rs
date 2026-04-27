@@ -91,8 +91,8 @@ pub enum Ps {
 /// and its [precedence level](Prec)
 fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
     Ok(match token.kind {
+        TKind::InDoc => (Ps::DocInner, Prec::Min),
         TKind::OutDoc => (Ps::DocOuter, Prec::Max),
-        TKind::InDoc => (Ps::DocInner, Prec::Max),
         TKind::Do => (Ps::Op(Op::Do), Prec::Do),
         TKind::Semi => (Ps::End, Prec::Body),
 
@@ -222,7 +222,7 @@ impl<'t> Parse<'t> for Expr {
                 // This happens when a semi or closing delimiter begins an expression.
                 // The token which emitted "End" cannot be consumed, as it is expected
                 // elsewhere.
-                Ps::End if (prec.value()..=prec.next()).contains(&level) => Expr::Omitted,
+                Ps::End if level <= prec.next() => Expr::Omitted,
                 Ps::End => Err(ParseError::NotPrefix(kind, span))?,
 
                 Ps::Id => Expr::Id(p.parse(())?),
@@ -257,7 +257,11 @@ impl<'t> Parse<'t> for Expr {
                 Ps::DocOuter | Ps::DocInner => {
                     let comment = Literal::Str(p.take_lexeme()?.string().unwrap());
                     let comment = Expr::Lit(comment).at(span);
-                    let next = p.parse(prec.next())?;
+                    // TODO: collapse consecutive doc comments into one
+                    let next = match p.peek().allow_eof()? {
+                        Some(_) => p.parse(prec.next())?,
+                        None => Expr::Omitted.at(span),
+                    };
                     Expr::Op(
                         match op {
                             Ps::DocOuter => Op::MetaOuter,
@@ -427,7 +431,7 @@ impl<'t> Parse<'t> for MatchArm {
         // };
 
         // Pat
-        let pat = p.parse(PPrec::Alt)?;
+        let pat = p.parse(PPrec::Min)?;
         p.expect(TKind::FatArrow)?;
         let body = p.parse(Prec::Body.value())?;
 
