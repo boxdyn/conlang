@@ -30,21 +30,48 @@ fn clear() {
     print!("\x1b[H\x1b[2J\x1b[3J");
 }
 
+fn pargs() -> Result<(Verbosity, ParseMode, String, String), Box<dyn Error>> {
+    let mut verbose = Verbosity::try_from(std::env::var("DO_VERBOSE").as_deref().unwrap_or(""))
+        .unwrap_or_default();
+    let mut parsing = ParseMode::try_from(std::env::var("DO_PARSING").as_deref().unwrap_or(""))
+        .unwrap_or_default();
+    let mut preamble = String::new();
+    let mut entrypoint = String::new();
+
+    for arg in std::env::args().skip(1) {
+        match arg.as_str() {
+            line if let Ok(mode) = ParseMode::try_from(line) => parsing = mode,
+            line if let Ok(mode) = Verbosity::try_from(line) => verbose = mode,
+            line if line.ends_with(".cl") => preamble += &format!("mod \"{line}\";\n"),
+            _ => entrypoint += &(arg + " "),
+        }
+    }
+
+    Ok((verbose, parsing, preamble, entrypoint))
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut verbose = Verbosity::from(std::env::var("DO_VERBOSE").as_deref().unwrap_or_default());
-    let mut parsing = ParseMode::from(std::env::var("DO_PARSING").as_deref().unwrap_or_default());
+    let (mut verbose, mut parsing, preamble, entrypoint) = pargs()?;
     let mut env = builtin::get_env();
     let color = parsing.color();
     let begin = verbose.begin();
-    banner();
+
+    if !preamble.is_empty() {
+        parsing.with()(&mut env, &preamble, verbose)?;
+    }
+    if !entrypoint.is_empty() {
+        parsing.with()(&mut env, &entrypoint, verbose)?;
+        return Ok(());
+    }
 
     if stdin().is_terminal() {
+        banner();
         read_and_mut(color, begin, "  > ", |rl, line| match line.trim_end() {
             "" => Ok(Response::Continue),
             "exit" => Ok(Response::Break),
             "help" => {
-                println!("Parsing: {parsing:?} (expr, pat, bind, use, tokens)");
-                println!("Verbose: {verbose:?} (pretty, debug, quiet)");
+                println!("Parsing: {parsing:?} (run, expr, pat, bind, use, tokens, bubble)");
+                println!("Verbose: {verbose:?} (pretty, debugpretty (dp), debug, quiet)");
                 Ok(Response::Deny)
             }
             "clear" => {
@@ -58,14 +85,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 Ok(Response::Accept)
             }
-            line @ ("run" | "tokens" | "expr" | "pat" | "bind" | "use" | "bubble") => {
-                parsing = ParseMode::from(line);
+            line if let Ok(mode) = ParseMode::try_from(line) => {
+                parsing = mode;
                 println!("Parse mode set to '{parsing:?}'");
                 rl.set_color(parsing.color());
                 Ok(Response::Accept)
             }
-            line @ ("quiet" | "debug" | "debugpretty" | "dp" | "frob" | "pretty") => {
-                verbose = Verbosity::from(line);
+            line if let Ok(mode) = Verbosity::try_from(line) => {
+                verbose = mode;
                 println!("Verbosity set to '{verbose:?}'");
                 rl.set_begin(verbose.begin());
                 Ok(Response::Accept)
@@ -148,16 +175,13 @@ fn tokens<'e: 't, 't, T: Parse<'t> + ?Sized>(
     verbose: Verbosity,
 ) -> Result<(), Box<dyn Error>> {
     let _: PhantomData<T>; // for lifetime variance
-    let mut lexer = Lexer::new("<interactive>".into(), document);
+    let mut lexer = Lexer::new("<tokens>".into(), document);
     loop {
         match (lexer.scan(), verbose) {
             (Err(LexError { res: EOF, .. }), _) => {
                 break;
             }
-            (Err(e), _) => {
-                println!("\x1b[31m{e}\x1b[0m");
-                break;
-            }
+            (Err(e), _) => Err(e)?,
             (Ok(Token { lexeme, kind, span: Span { path: _, head, tail } }), Verbosity::Pretty) => {
                 println!("{kind:?}\x1b[11G {head:<4} {tail:<4} {lexeme:?}")
             }
@@ -185,7 +209,7 @@ where
         + Foldable<DefaultTypes, DefaultTypes>,
     <T as Foldable<DefaultTypes, DefaultTypes>>::Out: Annotation,
 {
-    let mut parser = Parser::new(Lexer::new("<interactive>".into(), document));
+    let mut parser = Parser::new(Lexer::new("<parse>".into(), document));
     for idx in 0..6 {
         match (
             parser
@@ -193,6 +217,7 @@ where
                 .map(inline_modules),
             verbose,
         ) {
+            (Err(ParseError::EOF(_)), Verbosity::Quiet) => break,
             (Err(e @ ParseError::EOF(_)), _) => {
                 println!(
                     "\x1b[92m{e} (total {} byte{}, {idx} expression{})\x1b[0m",
@@ -202,10 +227,7 @@ where
                 );
                 break;
             }
-            (Err(e), _) => {
-                println!("\x1b[91m{e}\x1b[0m");
-                break;
-            }
+            (Err(e), _) => Err(e)?,
             (Ok(At(expr, span)), Verbosity::Pretty) => {
                 println!("\x1b[{}m{span:?}:\n{expr}", (idx + 5) % 6 + 31);
             }
@@ -230,18 +252,18 @@ fn run<'env: 't, 't>(
     document: &'t str,
     verbose: Verbosity,
 ) -> Result<(), Box<dyn Error>> {
-    let mut parser = Parser::new(Lexer::new("<interactive>".into(), document));
+    let mut parser = Parser::new(Lexer::new("<run>".into(), document));
     for idx in 0..6 {
         let Some(code) = parser.parse::<At<Expr>>(0).allow_eof()? else {
             break;
         };
         match (inline_modules(code).interpret(env), verbose) {
+            (Err(error), _) => {
+                println!("\x1b[{}m{error}", (idx + 5) % 6 + 31);
+            }
             (Ok(ConValue::Empty), Verbosity::Pretty) => {}
             (Ok(value), Verbosity::Pretty) => {
                 println!("\x1b[{}m{value}", (idx + 5) % 6 + 31);
-            }
-            (Err(error), Verbosity::Pretty) => {
-                println!("\x1b[{}m{error}", (idx + 5) % 6 + 31);
             }
             (Ok(value), Verbosity::Debug) => {
                 println!("\x1b[{}m{value:?}", (idx + 5) % 6 + 31);
@@ -260,22 +282,24 @@ fn bubble<'env: 't, 't>(
     document: &'t str,
     verbose: Verbosity,
 ) -> Result<(), Box<dyn Error>> {
-    let mut parser = Parser::new(Lexer::new("<interactive>".into(), document));
+    let mut parser = Parser::new(Lexer::new("<bubble>".into(), document));
     for idx in 0..6 {
         match (
             parser
                 .parse::<At<Expr>>(Default::default())
                 .map(inline_modules)
-                .map(|v| v.fold_in(&mut Bubbler(verbose == Verbosity::Frob)).unwrap())?,
+                .map(|v| v.fold_in(&mut Bubbler(verbose == Verbosity::Frob)).unwrap()),
             verbose,
         ) {
-            (pat, Verbosity::Pretty) => {
+            (Err(ParseError::EOF(_)), _) => break,
+            (Err(e), _) => Err(e)?,
+            (Ok(pat), Verbosity::Pretty | Verbosity::Frob) => {
                 println!("\x1b[{}m{pat}", (idx + 5) % 6 + 31);
             }
-            (pat, Verbosity::Debug) => {
+            (Ok(pat), Verbosity::Debug) => {
                 println!("\x1b[{}m{pat:?}", (idx + 5) % 6 + 31);
             }
-            (pat, Verbosity::DebugPretty) => {
+            (Ok(pat), Verbosity::DebugPretty) => {
                 println!("\x1b[{}m{pat:#?}", (idx + 5) % 6 + 31);
             }
             _ => {}
@@ -313,15 +337,17 @@ enum Verbosity {
     Quiet,
 }
 
-impl From<&str> for Verbosity {
-    fn from(value: &str) -> Self {
+impl TryFrom<&str> for Verbosity {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "quiet" | "false" | "0" | "no" => Verbosity::Quiet,
-            "debug" | "d" => Verbosity::Debug,
-            "debugpretty" | "debug_pretty" | "dp" => Verbosity::DebugPretty,
-            "frob" => Verbosity::Frob,
-            "pretty" => Verbosity::Pretty,
-            _ => Default::default(),
+            "quiet" => Ok(Verbosity::Quiet),
+            "debug" | "d" => Ok(Verbosity::Debug),
+            "debugpretty" | "debug_pretty" | "dp" => Ok(Verbosity::DebugPretty),
+            "frob" => Ok(Verbosity::Frob),
+            "pretty" => Ok(Verbosity::Pretty),
+            _ => Err(()),
         }
     }
 }
@@ -341,26 +367,28 @@ impl Verbosity {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum ParseMode {
     #[default]
+    Run,
     Expr,
     Pat,
     Bind,
     Use,
     Tokens,
-    Run,
     Bubble,
 }
 
-impl From<&str> for ParseMode {
-    fn from(value: &str) -> Self {
+impl TryFrom<&str> for ParseMode {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "expr" => Self::Expr,
-            "pat" => Self::Pat,
-            "bind" => Self::Bind,
-            "use" => Self::Use,
-            "tokens" => Self::Tokens,
-            "run" => Self::Run,
-            "bubble" => Self::Bubble,
-            _ => Default::default(),
+            "run" => Ok(Self::Run),
+            "fmt" | "format" | "expr" => Ok(Self::Expr),
+            "pat" => Ok(Self::Pat),
+            "bind" => Ok(Self::Bind),
+            "use" => Ok(Self::Use),
+            "tokens" => Ok(Self::Tokens),
+            "bubble" => Ok(Self::Bubble),
+            _ => Err(()),
         }
     }
 }
@@ -383,12 +411,12 @@ impl ParseMode {
 
     fn color(&self) -> &'static str {
         match self {
-            Self::Expr => "\x1b[36m",
-            Self::Pat => "\x1b[35m",
-            Self::Bind => "\x1b[34m",
-            Self::Use => "\x1b[33m",
-            Self::Tokens => "\x1b[32m",
-            Self::Run => "\x1b[31m",
+            Self::Run => "\x1b[36m",
+            Self::Expr => "\x1b[35m",
+            Self::Pat => "\x1b[34m",
+            Self::Bind => "\x1b[33m",
+            Self::Use => "\x1b[32m",
+            Self::Tokens => "\x1b[31m",
             Self::Bubble => "\x1b[90m",
         }
     }
