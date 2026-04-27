@@ -101,7 +101,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 parsing.with()(&mut env, line, verbose)?;
                 Ok(Response::Accept)
             }
-            v if v.ends_with("\n\n") => {
+            _ if line.ends_with("\n\n") => {
                 parsing.with()(&mut env, line, verbose)?;
                 Ok(Response::Accept)
             }
@@ -307,6 +307,7 @@ fn bubble<'env: 't, 't>(
     }
     Ok(())
 }
+
 fn inline_modules<T>(expr: At<T>) -> At<T::Out>
 where
     T: Annotation + Foldable<DefaultTypes, DefaultTypes>,
