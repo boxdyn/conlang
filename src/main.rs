@@ -40,6 +40,7 @@ fn pargs() -> Result<(Verbosity, ParseMode, String, String), Box<dyn Error>> {
 
     for arg in std::env::args().skip(1) {
         match arg.as_str() {
+            "clear" => clear(),
             line if let Ok(mode) = ParseMode::try_from(line) => parsing = mode,
             line if let Ok(mode) = Verbosity::try_from(line) => verbose = mode,
             line if line.ends_with(".cl") => preamble += &format!("mod \"{line}\";\n"),
