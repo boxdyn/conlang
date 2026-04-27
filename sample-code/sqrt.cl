@@ -5,7 +5,7 @@
 const let EPSILON: f64 = 8.8541878188 / 1000000000000.0;
 
 /// Calcuates the absolute value of a number
-fn f64_abs(n: f64) -> f64 {
+fn f64_abs(&n: &f64) -> f64 {
     let n = n as f64;
     if n < (0.0) {
         -n
