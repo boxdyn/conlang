@@ -258,6 +258,15 @@ impl<A: AstTypes> Expr<A> {
         Self::Op(Op::Do, exprs)
     }
 
+    /// Removes omitted expressions from positions where expressions are allowed to be omitted.
+    pub fn deomit(self) -> Self {
+        let Self::Op(op @ (Op::Do | Op::Tuple | Op::Array), mut exprs) = self else {
+            return self;
+        };
+        exprs.retain(|expr| !matches!(expr.0, Self::Omitted));
+        Self::Op(op, exprs)
+    }
+
     /// Turns this expression into a [`tuple`](Op::Tuple) if it isn't already one.
     pub fn to_tuple(self, annotation: A::Annotation) -> Self {
         match self {

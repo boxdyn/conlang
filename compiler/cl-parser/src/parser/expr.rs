@@ -358,7 +358,8 @@ impl<'t> Parse<'t> for Expr {
                         op,
                         p.consume()
                             .list_bare(vec![head.at(span)], prec.next(), kind)?,
-                    ),
+                    ) // then remove `...`s
+                    .deomit(),
                     Ps::Op(op @ Op::Try) => {
                         p.consume();
                         Expr::Op(op, vec![head.at(span)])
