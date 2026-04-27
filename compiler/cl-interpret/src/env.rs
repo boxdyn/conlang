@@ -96,9 +96,12 @@ impl Display for Environment {
 impl Default for Environment {
     fn default() -> Self {
         let mut this = Self::no_builtins();
-        for ty in TypeInfo::defaults() {
-            let value = this.def_type(ty.ident, ty.model);
-            this.bind(ty.ident, ConValue::TypeInfo(value));
+        for TypeInfo { ident, model } in TypeInfo::defaults() {
+            let Some(ident) = ident else {
+                continue;
+            };
+            let value = this.def_type(ident, model);
+            this.bind(ident, ConValue::TypeInfo(value));
         }
         this.add_builtins(Builtins).add_builtins(Math);
         this
@@ -264,7 +267,7 @@ impl Environment {
     }
 
     pub fn def_type(&mut self, name: Symbol, model: typeinfo::Model) -> Type {
-        let typeinfo = TypeInfo { ident: name, model }.intern();
+        let typeinfo = TypeInfo { ident: Some(name), model }.intern();
         self.types.insert(name, (typeinfo));
         typeinfo
     }

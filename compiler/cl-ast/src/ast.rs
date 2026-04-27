@@ -412,12 +412,14 @@ impl<A: AstTypes> Pat<A> {
         match self {
             Self::Name(name) => Some(*name),
             Self::Op(
-                PatOp::TypePrefixed | PatOp::Typed | PatOp::Pub | PatOp::Mut | PatOp::Generic,
+                PatOp::TypePrefixed
+                | PatOp::Typed
+                | PatOp::Pub
+                | PatOp::Mut
+                | PatOp::Generic
+                | PatOp::Guard,
                 pats,
-            ) => match pats.as_slice() {
-                [] => None,
-                [At(name, _), ..] => name.name(),
-            },
+            ) if let [At(pat, _), ..] = &pats[..] => pat.name(),
             _ => None,
         }
     }

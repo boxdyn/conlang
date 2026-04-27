@@ -31,6 +31,10 @@ pub enum Model {
     Never,
     /// The unit type (no elements)
     Unit(usize),
+    /// Reference to a value of [Type]
+    Ref(Type),
+    /// Slice of a list of [Type]
+    Slice(Type),
     /// The elements of a tuple
     Tuple(Box<[Type]>),
     /// The elements of a struct, and whether they are exhaustive
@@ -53,6 +57,8 @@ impl Display for Model {
             Self::Any => "_".fmt(f),
             Self::Never => "!".fmt(f),
             Self::Unit(_) => "()".fmt(f),
+            Self::Ref(t) => write!(f, "&{t}"),
+            Self::Slice(t) => write!(f, "[{t}]"),
             Self::Tuple(items) => f.delimit("(", ")").list(items, ", "),
             Self::Struct(items, _) => {
                 let mut f = f.delimit("{", " }");
@@ -78,7 +84,7 @@ impl Display for Model {
 /// The unabridged information for a type
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TypeInfo {
-    pub ident: Symbol,
+    pub ident: Option<Symbol>,
     pub model: Model,
 }
 
@@ -93,7 +99,14 @@ macro make_int($T:ty, $signed: expr) {
 
 impl TypeInfo {
     pub fn new(ident: impl Into<Symbol>, model: Model) -> Self {
-        Self { ident: ident.into(), model }
+        Self { ident: Some(ident.into()), model }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self.ident {
+            Some(name) => name.to_ref(),
+            None => "_",
+        }
     }
 
     pub fn default_int() -> Type {
@@ -178,9 +191,8 @@ impl TypeInfo {
     }
 
     pub fn make_tuple(&self, values: Box<[ConValue]>) -> IResult<ConValue> {
-        let typeids = match &self.model {
-            Model::Tuple(typeids) => typeids,
-            _ => return Err(Error::TypeError(self.ident.to_ref(), "not that")),
+        let Model::Tuple(typeids) = &self.model else {
+            Err(Error::TypeError(self.name(), "tuple struct"))?
         };
         if typeids.len() != values.len() {
             return Err(Error::ArgNumber(typeids.len(), values.len()));
@@ -189,9 +201,8 @@ impl TypeInfo {
     }
 
     pub fn make_struct(&self, mut values: HashMap<Symbol, ConValue>) -> IResult<ConValue> {
-        let (model, exhaustive) = match &self.model {
-            Model::Struct(model, exhaustive) => (model, exhaustive),
-            _ => Err(Error::TypeError(self.ident.to_ref(), "not that"))?,
+        let Model::Struct(model, exhaustive) = &self.model else {
+            Err(Error::TypeError(self.name(), "struct"))?
         };
 
         let mut members = HashMap::new();
@@ -216,7 +227,7 @@ impl TypeInfo {
         TYPE_INTERNER
             .get_or_init(LeakyInterner::new)
             .get(self)
-            .expect(&self.ident)
+            .unwrap_or_else(|| panic!("{}", self.name()))
     }
 }
 
@@ -231,23 +242,29 @@ impl Callable for TypeInfo {
     }
 
     fn name(&self) -> Option<Symbol> {
-        Some(self.ident)
+        self.ident
     }
 }
 
 impl std::fmt::Display for TypeInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self { ident, model } = self;
+        let Some(ident) = ident else {
+            return model.fmt(f);
+        };
         match model {
-            Model::Any | Model::Unit(_) => write!(f, "{ident}"),
+            Model::Any | Model::Unit(0) => write!(f, "{ident}"),
+            Model::Unit(n) => write!(f, "{ident} = {n}"),
             Model::Integer { .. }
             | Model::Float { .. }
             | Model::Bool
             | Model::Char
             | Model::Str
-            | Model::Never => write!(f, "{model}"),
+            | Model::Never
+            | Model::Ref(_)
+            | Model::Slice(_) => write!(f, "{model}"),
             Model::Tuple(_) | Model::Struct(_, _) | Model::Enum(_) => {
-                write!(f, "{ident}: {model}")
+                write!(f, "{ident} {model}")
             }
         }
     }

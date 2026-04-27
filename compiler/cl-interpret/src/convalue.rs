@@ -134,13 +134,13 @@ impl ConValue {
             ConValue::Slice(_, _) => "Slice",
             ConValue::Array(_) => "Array",
             ConValue::Tuple(_) => "Tuple",
-            ConValue::Struct(ty, _) => ty.ident.to_ref(),
-            ConValue::TupleStruct(ty, _) => ty.ident.to_ref(),
+            ConValue::Struct(ty, _) => ty.name(),
+            ConValue::TupleStruct(ty, _) => ty.name(),
             ConValue::Module(_) => "",
             ConValue::Quote(_) => "Quote",
             ConValue::Function(_) => "Fn",
             ConValue::Builtin(_) => "Fn",
-            ConValue::TypeInfo(ty) => ty.ident.to_ref(),
+            ConValue::TypeInfo(ty) => ty.name(),
         }
     }
 
@@ -458,11 +458,11 @@ impl std::fmt::Display for ConValue {
             ConValue::Array(array) => f.delimit('[', ']').list(array, ", "),
             ConValue::Tuple(tuple) => f.delimit('(', ')').list(tuple, ", "),
             ConValue::TupleStruct(id, tuple) => f
-                .delimit(format_args!("{} (", id.ident), ")")
+                .delimit(format_args!("{} (", id.name()), ")")
                 .list(tuple, ", "),
             ConValue::Struct(id, map) => {
                 use std::fmt::Write;
-                write!(f, "{} ", id.ident)?;
+                write!(f, "{} ", id.name())?;
                 let mut f = f.delimit_indented("{", "\n}");
                 for (k, v) in map.iter() {
                     write!(f, "\n{k}: {v},")?;
