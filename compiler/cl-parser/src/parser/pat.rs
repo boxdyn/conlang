@@ -128,9 +128,6 @@ impl<'t> Parse<'t> for Pat {
     fn parse(p: &mut Parser<'t>, level: Prec) -> PResult<Self> {
         let tok @ &Token { kind, span, .. } = p.peek()?;
         let (op, prec) = from_prefix(tok)?;
-        if level > prec {
-            return Err(ParseError::NotPattern(kind, level, span));
-        }
 
         let mut head = match op {
             Prefix::Consume => p.consume().parse(level)?,
