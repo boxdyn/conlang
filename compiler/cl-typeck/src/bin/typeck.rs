@@ -8,7 +8,9 @@ use cl_typeck::{
     type_expression::TypeExpression,
 };
 
-use cl_ast::{Expr, types::Path, visit::Visit};
+use cl_ast::{
+    At, Expr, desugar::{type_bubbler::Bubbler, while_else::WhileElseDesugar}, fold::Fold, types::Path, visit::Visit,
+};
 use cl_lexer::Lexer;
 use cl_parser::{Parser, inliner::ModuleInliner};
 use cl_structures::intern::{leaky_interner::LeakyInterner, string_interner::StringInterner};
@@ -119,7 +121,7 @@ fn enter_code(prj: &mut Table) -> Result<(), RlError> {
 
 fn live_desugar() -> Result<(), RlError> {
     read_and(C_RESV, "se> ", "? > ", |line| {
-        let code = Parser::new(Lexer::new("".into(), line)).parse::<Expr>(0)?;
+        let code = Parser::new(Lexer::new("".into(), line)).parse::<At<Expr>>(0)?;
         println!("Raw, as parsed:\n{C_LISTING}{code}\x1b[0m");
 
         // let code = ConstantFolder.fold_stmt(code);
@@ -128,8 +130,11 @@ fn live_desugar() -> Result<(), RlError> {
         // let code = SquashGroups.fold_stmt(code);
         // println!("SquashGroups\n{C_LISTING}{code}\x1b[0m");
 
-        // let code = WhileElseDesugar.fold_stmt(code);
-        // println!("WhileElseDesugar\n{C_LISTING}{code}\x1b[0m");
+        let code = WhileElseDesugar.fold_at_expr(code).unwrap();
+        println!("WhileElseDesugar\n{C_LISTING}{code}\x1b[0m");
+
+        let code = Bubbler(false).fold_at_expr(code).unwrap();
+        println!("Bubbler\n{C_LISTING}{code}\x1b[0m");
 
         // let code = NormalizePaths::new().fold_stmt(code);
         // println!("NormalizePaths\n{C_LISTING}{code}\x1b[0m");
