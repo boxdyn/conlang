@@ -231,11 +231,7 @@ pub const Builtins: &[Builtin] = &builtins![
 
     /// Returns the length of the input list as a [ConValue::Int]
     fn len(list) @env {
-        let mut value = list;
-        while let ConValue::Ref(r) = value {
-            value = r.get(env)?;
-        }
-        Ok(match value {
+        Ok(match list.dereference_in(env)? {
             ConValue::Empty => 0,
             ConValue::Str(s) => s.chars().count() as _,
             ConValue::String(s) => s.chars().count() as _,
@@ -276,11 +272,7 @@ pub const Builtins: &[Builtin] = &builtins![
     }
 
     fn chars(string) @env {
-        let mut value = string;
-        while let ConValue::Ref(r) = value {
-            value = r.get(env)?;
-        }
-        Ok(match value {
+        Ok(match string.dereference_in(env)? {
             ConValue::Str(s) => ConValue::Array(s.chars().map(Into::into).collect()),
             ConValue::String(s) => ConValue::Array(s.chars().map(Into::into).collect()),
             _ => Err(Error::TypeError("string", string.typename()))?,
@@ -299,21 +291,6 @@ pub const Builtins: &[Builtin] = &builtins![
     fn dump_symbols() {
         println!("{}", cl_structures::intern::string_interner::StringInterner::global());
         Ok(ConValue::Empty)
-    }
-
-    /// Builtin hex function to use when hex.cl isn't loaded
-    fn fmt_hex(ConValue::Int(v)) {
-        Ok(format!("{v:x}"))
-    }
-
-    /// Builtin oct function to use when hex.cl isn't loaded
-    fn fmt_oct(ConValue::Int(v)) {
-        Ok(format!("{v:o}"))
-    }
-
-    /// Builtin bin function to use when hex.cl isn't loaded
-    fn fmt_bin(ConValue::Int(v)) {
-        Ok(format!("{v:b}"))
     }
 
     fn catch_panic(lambda, args @ ..) @env {
@@ -473,10 +450,6 @@ pub const Math: &[Builtin] = &builtins![
 
     /// Does the opposite of `&`
     fn deref(tail) @env {
-        let mut value = tail;
-        while let ConValue::Ref(r) = value {
-            value = r.get(env)?;
-        }
-        Ok(value.clone())
+        Ok(tail.dereference_in(env)?.clone())
     }
 ];

@@ -7,22 +7,18 @@ use cl_lexer::Lexer;
 use cl_parser::Parser;
 use std::fs;
 
+const PREAMBLE: &str = include_str!("preamble.cl");
+
 pub fn get_env() -> Environment {
     let mut env = Environment::new();
     env.add_builtins(&builtins! {
         /// Lexes, parses, and evaluates an expression in the current env
         fn eval(string) @env {
-            let string = match string {
+            let string = match string.dereference_in(env)? {
                 ConValue::Str(string) => string.to_ref(),
                 ConValue::String(string) => string.as_str(),
-                ConValue::Ref(v) => {
-                    let string = v.get(env).cloned().unwrap_or_default();
-                    return eval(env, &[string])
-                }
                 _ => Err(Error::TypeError("string", string.typename()))?
             };
-
-
 
             match Parser::new(Lexer::new("eval".into(), string)).parse::<At<Expr>>(0).map(inline_modules) {
                 Err(e) => Ok(ConValue::String(format!("{e}"))),
@@ -36,8 +32,8 @@ pub fn get_env() -> Environment {
         }
 
         /// Gets a line of input from stdin
-        fn get_line(prompt) {
-            let prompt = match prompt {
+        fn get_line(prompt) @env {
+            let prompt = match prompt.dereference_in(env)? {
                 ConValue::Str(prompt) => prompt.to_ref(),
                 ConValue::String(prompt) => prompt.as_str(),
                 _ => Err(Error::TypeError("string", prompt.typename()))?,
@@ -52,29 +48,21 @@ pub fn get_env() -> Environment {
 
         // TODO: low level file abstraction
         fn read_file(path) @env {
-            let path = match path {
+            let path = match path.dereference_in(env)? {
                 ConValue::Str(path) => path.to_ref(),
                 ConValue::String(path) => path.as_str(),
-                ConValue::Ref(v) => {
-                    let string = v.get(env).cloned().unwrap_or_default();
-                    return read_file(env, &[string])
-                }
                 _ => Err(Error::TypeError("string", path.typename()))?,
             };
             fs::read_to_string(path).map_err(Error::BuiltinError)
         }
 
         fn write_file(path, data) @env {
-            let path = match path {
+            let path = match path.dereference_in(env)? {
                 ConValue::Str(v) => v.to_ref(),
                 ConValue::String(v) => v.as_str(),
-                ConValue::Ref(v) => {
-                    let path = v.get(env).cloned().unwrap_or_default();
-                    return write_file(env, &[path, data.clone()]) // TODO: pass args by-value!!!
-                }
                 v => Err(Error::TypeError("string", v.typename()))?,
             };
-            let data = match data {
+            let data = match data.dereference_in(env)? {
                 ConValue::Str(v) => v.to_ref(),
                 ConValue::String(v) => v.as_str(),
                 v => Err(Error::TypeError("string", v.typename()))?,
@@ -82,5 +70,9 @@ pub fn get_env() -> Environment {
             fs::write(path, data).map_err(Error::BuiltinError)
         }
     });
+
+    if let Ok(code) = Parser::new(Lexer::new("".into(), PREAMBLE)).parse::<At<Expr>>(0) {
+        code.interpret(&mut env).expect("PREAMBLE should not fail");
+    }
     env
 }

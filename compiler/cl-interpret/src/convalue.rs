@@ -192,6 +192,14 @@ impl ConValue {
         }
     }
 
+    pub fn dereference_in<'e>(&'e self, env: &'e Environment) -> IResult<&'e Self> {
+        let mut value = self;
+        while let ConValue::Ref(r) = value {
+            value = r.get(env)?;
+        }
+        Ok(value)
+    }
+
     #[allow(non_snake_case)]
     pub fn tuple_struct(id: Type, values: impl Into<Box<[ConValue]>>) -> Self {
         Self::TupleStruct(id, values.into())
