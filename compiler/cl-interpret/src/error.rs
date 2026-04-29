@@ -103,8 +103,8 @@ impl Error {
         Self { kind: ErrorKind::Panic(msg, 0), span: None }
     }
     /// Error produced by a Builtin
-    pub fn BuiltinError(msg: String) -> Self {
-        Self { kind: ErrorKind::BuiltinError(msg), span: None }
+    pub fn BuiltinError(msg: impl ToString) -> Self {
+        Self { kind: ErrorKind::BuiltinError(msg.to_string()), span: None }
     }
 }
 

@@ -1,15 +1,17 @@
 use crate::inline_modules;
 use cl_ast::{At, Expr};
-use cl_interpret::{builtin::builtins, convalue::ConValue, env::Environment, interpret::Interpret};
+use cl_interpret::{
+    builtin::builtins, convalue::ConValue, env::Environment, error::Error, interpret::Interpret,
+};
 use cl_lexer::Lexer;
 use cl_parser::Parser;
+use std::fs;
 
 pub fn get_env() -> Environment {
     let mut env = Environment::new();
     env.add_builtins(&builtins! {
         /// Lexes, parses, and evaluates an expression in the current env
         fn eval(string) @env {
-            use cl_interpret::error::Error;
             let string = match string {
                 ConValue::Str(string) => string.to_ref(),
                 ConValue::String(string) => string.as_str(),
@@ -35,7 +37,6 @@ pub fn get_env() -> Environment {
 
         /// Gets a line of input from stdin
         fn get_line(prompt) {
-            use cl_interpret::error::Error;
             let prompt = match prompt {
                 ConValue::Str(prompt) => prompt.to_ref(),
                 ConValue::String(prompt) => prompt.as_str(),
@@ -44,9 +45,41 @@ pub fn get_env() -> Environment {
             match repline::Repline::new("", prompt, "").read() {
                 Ok(line) => Ok(ConValue::String(line)),
                 Err(repline::Error::CtrlD(line)) => Ok(ConValue::String(line)),
-                Err(repline::Error::CtrlC(_)) => Err(cl_interpret::error::Error::Break(ConValue::Empty)),
+                Err(repline::Error::CtrlC(_)) => Err(Error::Break(ConValue::Empty)),
                 Err(e) => Ok(ConValue::String(e.to_string())),
             }
+        }
+
+        // TODO: low level file abstraction
+        fn read_file(path) @env {
+            let path = match path {
+                ConValue::Str(path) => path.to_ref(),
+                ConValue::String(path) => path.as_str(),
+                ConValue::Ref(v) => {
+                    let string = v.get(env).cloned().unwrap_or_default();
+                    return read_file(env, &[string])
+                }
+                _ => Err(Error::TypeError("string", path.typename()))?,
+            };
+            fs::read_to_string(path).map_err(Error::BuiltinError)
+        }
+
+        fn write_file(path, data) @env {
+            let path = match path {
+                ConValue::Str(v) => v.to_ref(),
+                ConValue::String(v) => v.as_str(),
+                ConValue::Ref(v) => {
+                    let path = v.get(env).cloned().unwrap_or_default();
+                    return write_file(env, &[path, data.clone()]) // TODO: pass args by-value!!!
+                }
+                v => Err(Error::TypeError("string", v.typename()))?,
+            };
+            let data = match data {
+                ConValue::Str(v) => v.to_ref(),
+                ConValue::String(v) => v.as_str(),
+                v => Err(Error::TypeError("string", v.typename()))?,
+            };
+            fs::write(path, data).map_err(Error::BuiltinError)
         }
     });
     env
