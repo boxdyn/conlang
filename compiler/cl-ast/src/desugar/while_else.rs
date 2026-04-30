@@ -3,7 +3,7 @@
 
 use crate::{
     ast::*,
-    fold::{Fold, Foldable},
+    fold::{Fold, Foldable, impl_default_fold},
 };
 
 /// Desugars while-else expressions
@@ -12,36 +12,7 @@ pub struct WhileElseDesugar;
 
 impl<A: AstTypes> Fold<A, A> for WhileElseDesugar {
     type Error = ();
-    fn fold_annotation(
-        &mut self,
-        anno: <A as AstTypes>::Annotation,
-    ) -> Result<<A as AstTypes>::Annotation, Self::Error> {
-        Ok(anno)
-    }
-    fn fold_macro_id(
-        &mut self,
-        name: <A as AstTypes>::MacroId,
-    ) -> Result<<A as AstTypes>::MacroId, Self::Error> {
-        Ok(name)
-    }
-    fn fold_symbol(
-        &mut self,
-        name: <A as AstTypes>::Symbol,
-    ) -> Result<<A as AstTypes>::Symbol, Self::Error> {
-        Ok(name)
-    }
-    fn fold_path(
-        &mut self,
-        path: <A as AstTypes>::Path,
-    ) -> Result<<A as AstTypes>::Path, Self::Error> {
-        Ok(path)
-    }
-    fn fold_literal(
-        &mut self,
-        lit: <A as AstTypes>::Literal,
-    ) -> Result<<A as AstTypes>::Literal, Self::Error> {
-        Ok(lit)
-    }
+    impl_default_fold!(A, A);
 
     fn fold_at_expr(&mut self, expr: At<Expr<A>, A>) -> Result<At<Expr<A>, A>, Self::Error> {
         let expr = expr.children(self)?;

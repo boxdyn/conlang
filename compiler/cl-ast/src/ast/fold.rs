@@ -83,6 +83,62 @@ pub trait Fold<From: AstTypes, To: AstTypes = From> {
     }
 }
 
+/// ```ignore
+/// pub macro impl_default_fold($Src: ty, $Dst: ty)
+/// ```
+///  Implements [`Into`]-based defaults for the required [`Fold`] members:
+/// - [`Fold::fold_annotation`] `where Src::Annotation: Into<Dst::Annotation>`
+/// - [`Fold::fold_macro_id`] `where Src::MacroId: Into<Dst::MacroId>`
+/// - [`Fold::fold_symbol`] `where Src::Symbol: Into<Dst::Symbol>`
+/// - [`Fold::fold_path`] `where Src::Path: Into<Dst::Path>`
+/// - [`Fold::fold_literal`] `where Src::Literal: Into<Dst::Literal>`
+///
+/// # Examples:
+/// Implements an "identity" folder
+/// ```rust
+/// # use cl_ast::ast::{AstTypes, Annotation};
+/// # use cl_ast::ast::fold::{Fold, impl_default_fold};
+/// struct IdentityFold;
+/// impl<A: AstTypes> Fold<A, A> for IdentityFold {
+///     type Error = std::convert::Infallible;
+///     impl_default_fold!(A, A);
+/// }
+/// ```
+pub macro impl_default_fold($Src: ty, $Dst: ty) {
+    fn fold_annotation(
+        &mut self,
+        anno: <$Src as AstTypes>::Annotation,
+    ) -> Result<<$Dst as AstTypes>::Annotation, Self::Error> {
+        Ok(anno.into())
+    }
+    fn fold_macro_id(
+        &mut self,
+        name: <$Src as AstTypes>::MacroId,
+    ) -> Result<<$Dst as AstTypes>::MacroId, Self::Error> {
+        Ok(name.into())
+    }
+    fn fold_symbol(
+        &mut self,
+        name: <$Src as AstTypes>::Symbol,
+    ) -> Result<<$Dst as AstTypes>::Symbol, Self::Error> {
+        Ok(name.into())
+    }
+    fn fold_path(
+        &mut self,
+        path: <$Src as AstTypes>::Path,
+    ) -> Result<<$Dst as AstTypes>::Path, Self::Error> {
+        Ok(path.into())
+    }
+    fn fold_literal(
+        &mut self,
+        lit: <$Src as AstTypes>::Literal,
+    ) -> Result<<$Dst as AstTypes>::Literal, Self::Error> {
+        Ok(lit.into())
+    }
+}
+
+pub struct ExprFolder<F: FnMut()>(F);
+
 pub trait Foldable<A: AstTypes, B: AstTypes>: Sized {
     /// The return type of the associated [Fold] function
     type Out;

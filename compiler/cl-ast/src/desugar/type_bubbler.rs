@@ -3,8 +3,8 @@
 use std::{convert::Infallible, mem::replace};
 
 use crate::{
-    AstTypes, At, Bind, DefaultTypes, Pat, PatOp,
-    fold::{Fold, Foldable},
+    At, Bind, DefaultTypes, Pat, PatOp,
+    fold::{Fold, Foldable, impl_default_fold},
 };
 
 fn take(At(pat, span): &mut At<Pat>) -> At<Pat> {
@@ -107,41 +107,7 @@ pub struct Bubbler(pub bool);
 
 impl Fold<DefaultTypes, DefaultTypes> for Bubbler {
     type Error = Infallible;
-
-    fn fold_annotation(
-        &mut self,
-        anno: <DefaultTypes as AstTypes>::Annotation,
-    ) -> Result<<DefaultTypes as AstTypes>::Annotation, Self::Error> {
-        Ok(anno)
-    }
-
-    fn fold_macro_id(
-        &mut self,
-        name: <DefaultTypes as AstTypes>::MacroId,
-    ) -> Result<<DefaultTypes as AstTypes>::MacroId, Self::Error> {
-        Ok(name)
-    }
-
-    fn fold_symbol(
-        &mut self,
-        name: <DefaultTypes as AstTypes>::Symbol,
-    ) -> Result<<DefaultTypes as AstTypes>::Symbol, Self::Error> {
-        Ok(name)
-    }
-
-    fn fold_path(
-        &mut self,
-        path: <DefaultTypes as AstTypes>::Path,
-    ) -> Result<<DefaultTypes as AstTypes>::Path, Self::Error> {
-        Ok(path)
-    }
-
-    fn fold_literal(
-        &mut self,
-        lit: <DefaultTypes as AstTypes>::Literal,
-    ) -> Result<<DefaultTypes as AstTypes>::Literal, Self::Error> {
-        Ok(lit)
-    }
+    impl_default_fold!(DefaultTypes, DefaultTypes);
 
     fn fold_at_pat(
         &mut self,

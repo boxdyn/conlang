@@ -17,7 +17,7 @@ pub trait Annotation: Clone + std::fmt::Display + std::fmt::Debug + PartialEq + 
 impl<T: Clone + std::fmt::Debug + std::fmt::Display + PartialEq + Eq + Hash> Annotation for T {}
 
 pub trait AstTypes: Annotation {
-    /// An annotation on an arbitrary [Expr]
+    /// An annotation on an arbitrary [Expr] or [Pat]
     type Annotation: Annotation;
 
     /// A literal value
