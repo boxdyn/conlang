@@ -16,7 +16,7 @@ use cl_token::{TKind, Token};
 use repline::prebaked::*;
 use std::{
     error::Error,
-    io::{IsTerminal, stdin},
+    io::{IsTerminal, stdin, stdout},
     marker::PhantomData,
 };
 
@@ -30,42 +30,68 @@ fn clear() {
     print!("\x1b[H\x1b[2J\x1b[3J");
 }
 
-fn pargs() -> Result<(Verbosity, ParseMode, String, String), Box<dyn Error>> {
+fn usage(command: &str) {
+    println!("Usage: {command} [help | clear] [PARSEMODE] [VERBOSITY] [*.cl ...] [CODE ...]");
+    println!();
+    println!("Commands:");
+    println!("    *.cl        Import a source file (by name)");
+    println!("    code        Run some Conlang code");
+    println!("    help        Print this help-text");
+    println!("    clear       Clear the terminal on startup");
+    println!();
+    println!("Flags:");
+    println!("    PARSEMODE   run, expr, pat, bind, use, tokens, or bubble");
+    println!("    VERBOSITY   pretty, debugpretty or dp, debug, or quiet");
+    println!();
+}
+
+type Args = (Verbosity, ParseMode, String, String, bool);
+
+fn pargs() -> Result<Args, Box<dyn Error>> {
     let mut verbose = Verbosity::try_from(std::env::var("DO_VERBOSE").as_deref().unwrap_or(""))
         .unwrap_or_default();
     let mut parsing = ParseMode::try_from(std::env::var("DO_PARSING").as_deref().unwrap_or(""))
         .unwrap_or_default();
-    let mut preamble = String::new();
+    let mut includes = String::new();
     let mut entrypoint = String::new();
+    let mut interactive = stdin().is_terminal() && stdout().is_terminal();
 
-    for arg in std::env::args().skip(1) {
+    let mut args = std::env::args();
+    let command = args.next();
+    for arg in args {
         match arg.as_str() {
             "clear" => clear(),
+            "-i" | "--interactive" => interactive = true,
+            "--" => interactive = false,
+            "help" | "-h" | "--help" => {
+                usage(command.as_deref().unwrap_or("conlang"));
+                std::process::exit(0);
+            }
             line if let Ok(mode) = ParseMode::try_from(line) => parsing = mode,
             line if let Ok(mode) = Verbosity::try_from(line) => verbose = mode,
-            line if line.ends_with(".cl") => preamble += &format!("mod \"{line}\";\n"),
+            line if line.ends_with(".cl") => includes += &format!("mod \"{line}\";\n"),
             _ => entrypoint += &(arg + " "),
         }
     }
 
-    Ok((verbose, parsing, preamble, entrypoint))
+    Ok((verbose, parsing, includes, entrypoint, interactive))
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let (mut verbose, mut parsing, preamble, entrypoint) = pargs()?;
+    let (mut verbose, mut parsing, includes, entrypoint, interactive) = pargs()?;
     let mut env = builtin::get_env();
     let color = parsing.color();
     let begin = verbose.begin();
 
-    if !preamble.is_empty() {
-        parsing.with()(&mut env, &preamble, verbose)?;
+    if !includes.is_empty() {
+        parsing.with()(&mut env, &includes, verbose)?;
     }
     if !entrypoint.is_empty() {
         parsing.with()(&mut env, &entrypoint, verbose)?;
         return Ok(());
     }
 
-    if stdin().is_terminal() {
+    if interactive {
         banner();
         read_and_mut(color, begin, "  > ", |rl, line| match line.trim_end() {
             "" => Ok(Response::Continue),
