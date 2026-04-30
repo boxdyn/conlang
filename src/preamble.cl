@@ -21,12 +21,12 @@ pub mod builtin_preamble {
             if (if adj >= 0.0 adj else -adj) < EPSILON break z;
         }
     }
-    pub fn radix(n: i64, radix: i64) {
-        fn as_digit(n: u32) -> char = match n {
-            ..10 => n + '0' as u32;
-            _ => n - 10 + 'a' as u32;
-        } as char;
 
+    pub fn as_digit(n: u32) -> char = match n {
+        ..10 => n + '0' as u32;
+        _ => n - 10 + 'a' as u32;
+    } as char;
+    pub fn radix(n: i64, radix: i64) {
         fn recurse(n: i64, radix: i64) = if n == 0 "" else {
             recurse(n / radix, radix) + as_digit(n % radix)
         }
