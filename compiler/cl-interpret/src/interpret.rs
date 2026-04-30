@@ -56,7 +56,7 @@ pub trait Interpret {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue>;
 }
 
-impl<T: Annotation + Interpret> Interpret for At<T> {
+impl<T: AstNode + Interpret> Interpret for At<T> {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         self.0.interpret(env).map_err(|e| e.with_span(self.1))
     }

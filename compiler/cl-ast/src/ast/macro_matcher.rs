@@ -63,7 +63,7 @@ pub trait Match<A: AstTypes> {
     }
 }
 
-impl<M: Match<A> + Annotation, A: AstTypes> Match<A> for At<M, A> {
+impl<M: Match<A> + AstNode, A: AstTypes> Match<A> for At<M, A> {
     fn recurse(sub: &mut Subst<A>, pat: &Self, expr: &Self) -> bool {
         Match::recurse(sub, &pat.0, &expr.0)
     }

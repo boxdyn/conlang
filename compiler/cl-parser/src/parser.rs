@@ -300,7 +300,7 @@ impl<'t> Parse<'t> for Use {
     }
 }
 
-impl<'t, P: Parse<'t> + Annotation> Parse<'t> for At<P> {
+impl<'t, P: Parse<'t> + AstNode> Parse<'t> for At<P> {
     type Prec = P::Prec;
     fn parse(p: &mut Parser<'t>, level: P::Prec) -> PResult<Self>
     where Self: Sized {

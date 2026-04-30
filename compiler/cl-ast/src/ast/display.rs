@@ -2,13 +2,13 @@ use super::*;
 use crate::fmt::FmtAdapter;
 use std::{fmt::Display, format_args as fmt};
 
-impl<T: Display + Annotation, A: AstTypes> Display for At<T, A> {
+impl<T: Display + AstNode, A: AstTypes> Display for At<T, A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl<T: Annotation, A: AstTypes> std::fmt::Debug for At<T, A> {
+impl<T: AstNode, A: AstTypes> std::fmt::Debug for At<T, A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         <A::Annotation as std::fmt::Debug>::fmt(&self.1, f)?;
         f.write_str(" ")?;

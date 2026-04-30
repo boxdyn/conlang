@@ -11,44 +11,44 @@ pub mod visit;
 
 pub use types::DefaultTypes;
 
-/// An annotation: bounds on AST parameters
-pub trait Annotation: Clone + std::fmt::Display + std::fmt::Debug + PartialEq + Eq + Hash {}
+/// Common bounds on AST nodes
+pub trait AstNode: Clone + std::fmt::Display + std::fmt::Debug + PartialEq + Eq + Hash {}
 
-impl<T: Clone + std::fmt::Debug + std::fmt::Display + PartialEq + Eq + Hash> Annotation for T {}
+impl<T: Clone + std::fmt::Debug + std::fmt::Display + PartialEq + Eq + Hash> AstNode for T {}
 
-pub trait AstTypes: Annotation {
+pub trait AstTypes: AstNode {
     /// An annotation on an arbitrary [Expr] or [Pat]
-    type Annotation: Annotation;
+    type Annotation: AstNode + Copy;
 
     /// A literal value
-    type Literal: Annotation;
+    type Literal: AstNode;
 
     /// A (possibly interned) symbol or index which implements [`AsRef<str>`]
-    type MacroId: Annotation + Hash + AsRef<str>;
+    type MacroId: AstNode + Hash + AsRef<str>;
 
     /// A (possibly interned) symbol or index
-    type Symbol: Annotation + Copy + Hash;
+    type Symbol: AstNode + Copy + Hash;
 
     /// A (possibly compound) symbol or index
-    type Path: Annotation;
+    type Path: AstNode;
 }
 
 /// A value with an annotation.
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct At<T: Annotation, A: AstTypes = DefaultTypes>(pub T, pub A::Annotation);
+pub struct At<T: AstNode, A: AstTypes = DefaultTypes>(pub T, pub A::Annotation);
 
-impl<T: Annotation, A: AstTypes> At<T, A> {
+impl<T: AstNode, A: AstTypes> At<T, A> {
     pub fn value(&self) -> &T {
         &self.0
     }
     pub fn a(&self) -> &A::Annotation {
         &self.1
     }
-    pub fn map<U: Annotation>(self, f: impl FnOnce(T) -> U) -> At<U, A> {
+    pub fn map<U: AstNode>(self, f: impl FnOnce(T) -> U) -> At<U, A> {
         At(f(self.0), self.1)
     }
-    pub fn map_ref<U: Annotation>(&self, f: impl FnOnce(&T) -> U) -> At<U, A> {
-        At(f(&self.0), self.1.clone())
+    pub fn map_ref<U: AstNode>(&self, f: impl FnOnce(&T) -> U) -> At<U, A> {
+        At(f(&self.0), self.1)
     }
     pub fn map_a<B: AstTypes>(self, f: impl FnOnce(A::Annotation) -> B::Annotation) -> At<T, B> {
         At(self.0, f(self.1))

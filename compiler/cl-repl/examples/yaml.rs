@@ -229,7 +229,7 @@ pub mod yamlify {
         }
     }
 
-    impl<T: Yamlify + Annotation, A: AstTypes> Yamlify for At<T, A>
+    impl<T: Yamlify + AstNode, A: AstTypes> Yamlify for At<T, A>
     where A::Annotation: Yamlify
     {
         fn yaml(&self, y: &mut Yamler) {

@@ -1,7 +1,7 @@
 //! Tests the lexer\
 
 use cl_ast::{
-    Annotation, At, Bind, DefaultTypes, Expr, Pat, Use,
+    AstNode, At, Bind, DefaultTypes, Expr, Pat, Use,
     desugar::type_bubbler::Bubbler,
     fold::Foldable,
     macro_matcher::{Match, Subst},
@@ -204,11 +204,8 @@ fn parse<'env: 't, 't, T>(
     verbose: Verbosity,
 ) -> Result<(), Box<dyn Error>>
 where
-    T: Parse<'t>
-        + Annotation
-        + for<'a> Walk<'a, DefaultTypes>
-        + Foldable<DefaultTypes, DefaultTypes>,
-    <T as Foldable<DefaultTypes, DefaultTypes>>::Out: Annotation,
+    T: Parse<'t> + AstNode + for<'a> Walk<'a, DefaultTypes> + Foldable<DefaultTypes, DefaultTypes>,
+    <T as Foldable<DefaultTypes, DefaultTypes>>::Out: AstNode,
 {
     let mut parser = Parser::new(Lexer::new("<parse>".into(), document));
     for idx in 0..6 {
@@ -311,8 +308,8 @@ fn bubble<'env: 't, 't>(
 
 fn inline_modules<T>(expr: At<T>) -> At<T::Out>
 where
-    T: Annotation + Foldable<DefaultTypes, DefaultTypes>,
-    T::Out: Annotation,
+    T: AstNode + Foldable<DefaultTypes, DefaultTypes>,
+    T::Out: AstNode,
 {
     let mut mi = ModuleInliner::new(".");
     let At(expr, span) = expr;

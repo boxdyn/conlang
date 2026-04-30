@@ -186,7 +186,7 @@ impl<'a, A: AstTypes> Walk<'a, A> for MatchArm<A> {
     }
 }
 
-impl<'a, T: Annotation + Walk<'a, A>, A: AstTypes> Walk<'a, A> for At<T, A> {
+impl<'a, T: AstNode + Walk<'a, A>, A: AstTypes> Walk<'a, A> for At<T, A> {
     #[inline]
     fn children<V: Visit<'a, A> + ?Sized>(&'a self, v: &mut V) -> Result<(), V::Error> {
         self.0.children(v)

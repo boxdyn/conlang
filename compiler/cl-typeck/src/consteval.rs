@@ -1,6 +1,6 @@
 use std::ops;
 
-use cl_ast::{Annotation, At, Expr, Op, types::Literal};
+use cl_ast::{AstNode, At, Expr, Op, types::Literal};
 
 pub trait ConstEval {
     fn const_eval(&self) -> Option<i128> {
@@ -8,7 +8,7 @@ pub trait ConstEval {
     }
 }
 
-impl<T: ConstEval + Annotation> ConstEval for At<T> {
+impl<T: ConstEval + AstNode> ConstEval for At<T> {
     fn const_eval(&self) -> Option<i128> {
         self.0.const_eval()
     }

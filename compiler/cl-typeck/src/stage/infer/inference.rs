@@ -15,7 +15,7 @@ pub trait Inference {
     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult;
 }
 
-impl<T: Annotation + Inference, A: AstTypes> Inference for At<T, A> {
+impl<T: AstNode + Inference, A: AstTypes> Inference for At<T, A> {
     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
         self.0.infer(e)
     }
