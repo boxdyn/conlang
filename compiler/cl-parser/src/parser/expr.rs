@@ -277,7 +277,7 @@ impl<'t> Parse<'t> for Expr {
                         p.consume()
                             .expect(TKind::LBrack)?
                             .opt(MIN, TKind::RBrack)?
-                            .unwrap_or_else(|| Expr::Op(Op::Tuple, vec![]).at(span)),
+                            .unwrap_or_else(|| Expr::Omitted.at(span)),
                         p.parse(prec.next())?,
                     ],
                 ),
@@ -301,7 +301,7 @@ impl<'t> Parse<'t> for Expr {
                             Ok(Token { kind: TKind::Else, .. }) => {
                                 p.consume().parse(prec.next())?
                             }
-                            _ => Expr::Op(Op::Tuple, vec![]).at(span.merge(p.span())),
+                            _ => Expr::Omitted.at(span.merge(p.span())),
                         },
                     ];
                     Expr::Op(op, exprs)
@@ -342,7 +342,7 @@ impl<'t> Parse<'t> for Expr {
                         span,
                         match p.consume().peek().allow_eof()? {
                             Some(_) => p.parse(prec.next())?,
-                            None => At(Expr::Omitted, span),
+                            None => At(Expr::Omitted, p.span()),
                         },
                     ),
                     Ps::Op(Op::Index) => Expr::Op(
@@ -451,7 +451,7 @@ fn parse_for(p: &mut Parser<'_>, _level: ()) -> PResult<Expr> {
     // else Expr?
     let fail = match p.next_if(TKind::Else).allow_eof()? {
         Some(Ok(_)) => p.parse(Prec::Body.next())?,
-        _ => Expr::Op(Op::Tuple, vec![]).at(pspan),
+        _ => Expr::Omitted.at(pspan),
     };
     /*
     TODO: desugar for into loop-match:

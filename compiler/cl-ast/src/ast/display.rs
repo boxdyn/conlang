@@ -30,7 +30,7 @@ impl<A: AstTypes> Display for Expr<A> {
 
             Self::Op(op @ Op::Continue, exprs) => f.delimit(op, "").list(exprs, "!?,"),
             Self::Op(op @ (Op::If | Op::While), exprs) => match exprs.as_slice() {
-                [cond, pass, At(Expr::Op(Op::Tuple, e), _)] if e.is_empty() => {
+                [cond, pass, At(Expr::Omitted, _)] => {
                     write!(f, "{op}{cond} {pass}")
                 }
                 [cond, pass, fail] => write!(f, "{op}{cond} {pass} else {fail}"),
@@ -59,6 +59,7 @@ impl<A: AstTypes> Display for Expr<A> {
                 [] => write!(f, "{op}"),
             },
 
+            Self::Op(Op::Tuple, exprs) if exprs.is_empty() => "()".fmt(f),
             Self::Op(op @ (Op::Do | Op::Tuple | Op::Dot), exprs) => f.list(exprs, op),
             Self::Op(op @ Op::Macro, exprs) => f.delimit(op, "").list(exprs, " => "),
             Self::Op(op @ Op::Try, exprs) => f.delimit("(", fmt!("){op}")).list(exprs, ", "),
@@ -184,7 +185,7 @@ impl<A: AstTypes> Display for Bind<A> {
                 },
                 _ => pat.fmt(f),
             },
-            (BindOp::For, [iter, pass, At(Expr::Op(Op::Tuple, e), _)]) if e.is_empty() => {
+            (BindOp::For, [iter, pass, At(Expr::Omitted, _)]) => {
                 write!(f, "{pat} in {iter} {pass}")
             }
             (BindOp::For, [iter, pass, fail]) => write!(f, "{pat} in {iter} {pass} else {fail}"),
