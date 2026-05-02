@@ -5,14 +5,14 @@ pub mod builtin_preamble {
     //! Conlang functions which are loaded into the default REPL
     //! 
     //! Contains generally-useful functions which don't require
-    //! special functionality which the Conlang interpreter
+    //! special functionality that the Conlang interpreter
     //! doesn't yet have.
 
     pub fn max<T: Cmp>(a: T, b: T) -> T = if a < b b else a;
     pub fn min<T: Cmp>(a: T, b: T) -> T = if a > b b else a;
     pub fn sqrt(mut n: f64) -> f64 {
         const let EPSILON: f64 = 8.8541878188 / 1000000000000.0;
-        if n < 0.0 return f64::nan; // TODO: re-uppercase
+        if n < 0.0 return f64::NaN; // TODO: re-uppercase
         if n == 0.0 return 0.0;
         let z = n;
         loop {
@@ -39,7 +39,7 @@ pub mod builtin_preamble {
         }
     }
     pub fn count_leading_zeroes(n: u64) -> u64 {
-        let mut xd = u64::bits;
+        let mut xd = u64::BITS;
         if n < 0 return 0;
         while n != 0 {
             xd -= 1;
