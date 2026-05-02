@@ -412,7 +412,7 @@ impl<'t> Parse<'t> for Match {
     fn parse(p: &mut Parser<'t>, _level: Self::Prec) -> PResult<Self>
     where Self: Sized {
         Ok(Self(
-            p.consume().parse(Prec::Logical.value())?,
+            p.consume().parse(Prec::Tuple.value())?,
             p.expect(TKind::LCurly)?
                 .list(vec![], (), TKind::Semi, TKind::RCurly)?,
         ))
