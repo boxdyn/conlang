@@ -636,8 +636,7 @@ fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)
         Pat::MetId(_) => todo!("Pat::MetId in struct binding")?,
         Pat::Name(name) => match env.get(*name) {
             Ok(ConValue::TypeInfo(ty)) => (Some(*name), ty.model.clone()),
-            Ok(other) => todo!("Pat::Name({name}) = {other} in struct binding")?,
-            Err(_) => (Some(*name), Model::Unit(0)),
+            _ => (Some(*name), Model::Unit(0)),
         },
         Pat::Value(at) => match at.interpret(env)? {
             ConValue::TypeInfo(t) => (None, t.model.clone()),
