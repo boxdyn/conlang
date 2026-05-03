@@ -1,10 +1,9 @@
-//! The pattern separator separates patterns into their Value and Type components.
+//! Separates [Patterns](Pat) into their Value and Type components.
 
 use std::{convert::Infallible, mem::replace};
 
 use crate::{
-    At, Bind, DefaultTypes, Pat, PatOp,
-    fold::{Fold, Foldable, impl_default_fold},
+    At, Bind, BindOp, DefaultTypes, Pat, PatOp, fold::{Fold, Foldable, impl_default_fold}
 };
 
 fn take(At(pat, span): &mut At<Pat>) -> At<Pat> {
@@ -101,7 +100,11 @@ pub fn bubble_types(pat: At<Pat>, in_enum: bool) -> (At<Pat>, Option<At<Pat>>) {
     }
 }
 
-/// The [Bubbler]
+/// The [Bubbler] separates [Patterns](Pat) into their value and type-annotation components,
+/// "bubbling" [PatOp::Typed] annotations up to the top of all pattern-expressions.
+/// 
+/// Its [`bool`] argument tracks whether or not it's inside of a [`BindOp::Enum`] expression,
+/// which gets different binding rules.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Bubbler(pub bool);
 
@@ -120,7 +123,7 @@ impl Fold<DefaultTypes, DefaultTypes> for Bubbler {
     }
 
     fn fold_bind(&mut self, bind: Bind<DefaultTypes>) -> Result<Bind<DefaultTypes>, Self::Error> {
-        let mut bubbler = Bubbler(bind.0 == crate::BindOp::Enum);
+        let mut bubbler = Bubbler(bind.0 == BindOp::Enum);
         bind.children(&mut bubbler)
     }
 }
