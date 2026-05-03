@@ -137,8 +137,7 @@ pub macro impl_default_fold($Src: ty, $Dst: ty) {
     }
 }
 
-pub struct ExprFolder<F: FnMut()>(F);
-
+/// Implements depth-first traversal for folders
 pub trait Foldable<A: AstTypes, B: AstTypes>: Sized {
     /// The return type of the associated [Fold] function
     type Out;
