@@ -1,3 +1,5 @@
+//! Conlang's [Expression](Expr) parser.
+
 use super::{PResult, PResultExt, Parse, ParseError, Parser, no_eof, pat::Prec as PPrec};
 use cl_ast::{types::Literal, *};
 use cl_token::{TKind, Token};

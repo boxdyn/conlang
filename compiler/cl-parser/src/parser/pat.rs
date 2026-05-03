@@ -1,3 +1,5 @@
+//! Conlang's [Pattern](Pat) parser.
+
 use super::{PResult, PResultExt, Parse, ParseError, Parser, expr::Prec as ExPrec};
 use cl_ast::{
     types::{Literal, Path},

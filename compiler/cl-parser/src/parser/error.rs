@@ -4,22 +4,32 @@ use cl_structures::span::Span;
 use cl_token::TKind;
 use std::{error::Error, fmt::Display};
 
+/// All the ways a [Parser](crate::parser::Parser) can fail
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ParseError {
     /// Reached the expected end of input.
     EOF(Span),
-    /// Unexpectedly reached end of input.
+    /// *Unexpectedly* reached end of input.
     UnexpectedEOF(Span),
     /// Did not reach end of enput when expected.
     ExpectedEOF(TKind, Span),
+    /// The [`Lexer`](cl_lexer::Lexer) didn't like that.
     FromLexer(LexError),
+    /// Expected [`TKind`] `0`, got [`TKind`] `1` at [`Span`]
     Expected(TKind, TKind, Span),
+    /// Tried to parse a literal, but got [`TKind`] instead, at [`Span`]
     NotLiteral(TKind, Span),
+    /// Tried to parse a use item, but got [`TKind`] instead, at [`Span`]
     NotUse(TKind, Span),
+    /// Tried to parse a pattern, but got [`TKind`] at [`PatPrec`] instead, at [`Span`]
     NotPattern(TKind, PatPrec, Span),
+    /// Tried to parse a bind item, but got [`TKind`] instead, at [`Span`]
     NotBind(TKind, Span),
+    /// Tried to parse a prefix expression, but got [`TKind`] instead, at [`Span`]
     NotPrefix(TKind, Span),
+    /// Tried to parse an infix expression, but got [`TKind`] instead, at [`Span`]
     NotInfix(TKind, Span),
+    /// Tried to parse a postfix expression, but got [`TKind`] instead, at [`Span`]
     NotPostfix(TKind, Span),
 }
 
