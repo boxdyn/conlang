@@ -73,7 +73,7 @@ fn join(list: &[Brainfuck], op: Brainfuck) = if list.len() {
 
 /// Runs a compiled Brainfuck program
 fn run(fucks: &[Brainfuck], ..input: [char]) {
-    let tape = [0; 0x10000];
+    let tape = [0; 0x1000000];
     let head = tape.len() / 2;
     let pc = -1;
     let input = match input {
@@ -86,7 +86,7 @@ fn run(fucks: &[Brainfuck], ..input: [char]) {
         Brainfuck::Left(n) => head -= n;
         Brainfuck::Inc(n) => tape[head] = (tape[head] + n) as u8;
         Brainfuck::Dec(n) => tape[head] = (tape[head] - n) as u8;
-        Brainfuck::Out(n) => for _ in 0..n print(tape[head] as char);
+        Brainfuck::Out(n) => for _ in 0..n putchar(tape[head] as char);
         Brainfuck::In => match input {
             [] => tape[head] = 0;
             [first, ..rest] => (tape[head] = first as u8; input = rest);

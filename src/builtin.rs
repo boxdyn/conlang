@@ -5,7 +5,10 @@ use cl_interpret::{
 };
 use cl_lexer::Lexer;
 use cl_parser::Parser;
-use std::fs;
+use std::{
+    fs,
+    io::{Write, stdout},
+};
 
 const PREAMBLE: &str = include_str!("preamble.cl");
 
@@ -26,8 +29,11 @@ pub fn get_env() -> Environment {
             }
         }
 
+        /// Puts a single character, flushing stdout
         fn putchar(ConValue::Char(c)) {
-            print!("{c}");
+            let mut stdout = stdout().lock();
+            let _ = write!(stdout, "{c}");
+            let _ = stdout.flush();
             Ok(ConValue::Empty)
         }
 
