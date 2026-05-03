@@ -1,4 +1,17 @@
-//! Tests the lexer\
+//! The new Conlang REPL
+//!
+//! # Introduction
+//! Conlang is a ~~statically-typed~~ expressional language in the ML language family.
+//!
+//! It aims for maximal flexibility at (almost) any cost, allowing you to use
+//! (almost) any syntax in (almost) any context, with as minimal bracketing
+//! as possible.
+//!
+//! # Syntax
+//!
+//! ```ignore
+#![doc = include_str!("tutorial.cl")]
+//! ```
 
 use cl_ast::{
     AstNode, At, Bind, DefaultTypes, Expr, Pat, Use,
@@ -22,14 +35,17 @@ use std::{
 
 mod builtin;
 
+/// Prints the `--- conlang version ---` banner
 fn banner() {
     println!("--- conlang v{} 💪🦈 ---", env!("CARGO_PKG_VERSION"))
 }
 
+/// Clears the terminal
 fn clear() {
     print!("\x1b[H\x1b[2J\x1b[3J");
 }
 
+/// Prints the usage string
 fn usage(command: &str) {
     println!("Usage: {command} [help | clear] [PARSEMODE] [VERBOSITY] [*.cl ...] [CODE ...]");
     println!();
@@ -45,8 +61,10 @@ fn usage(command: &str) {
     println!();
 }
 
+/// The return type of [pargs]
 type Args = (Verbosity, ParseMode, String, String, bool);
 
+/// Parses [Args]
 fn pargs() -> Result<Args, Box<dyn Error>> {
     let mut verbose = Verbosity::try_from(std::env::var("DO_VERBOSE").as_deref().unwrap_or(""))
         .unwrap_or_default();
@@ -141,6 +159,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Performs macro substitution
 fn subst() -> Result<(), Box<dyn Error>> {
     let mut rl = repline::Repline::new("\x1b[35mexp", " >", "?>");
     let exp = rl.read()?;
@@ -189,6 +208,7 @@ fn subst() -> Result<(), Box<dyn Error>> {
     }
 }
 
+/// Gets the English-language pluralizer for `count`
 fn plural(count: usize) -> &'static str {
     match count {
         1 => "",
@@ -196,6 +216,7 @@ fn plural(count: usize) -> &'static str {
     }
 }
 
+/// Prints the tokenization of the input
 fn tokens<'e: 't, 't, T: Parse<'t> + ?Sized>(
     _: &'e mut Environment,
     document: &'t str,
@@ -224,6 +245,7 @@ fn tokens<'e: 't, 't, T: Parse<'t> + ?Sized>(
     Ok(())
 }
 
+/// Parses and displays `T`s from the input
 fn parse<'env: 't, 't, T>(
     _: &'env mut Environment,
     document: &'t str,
@@ -271,6 +293,7 @@ where
     Ok(())
 }
 
+/// Parses and executes expressions from the input
 fn run<'env: 't, 't>(
     env: &'env mut Environment,
     document: &'t str,
@@ -301,6 +324,7 @@ fn run<'env: 't, 't>(
     Ok(())
 }
 
+/// Performs experimental desugaring on expressions from the input
 fn bubble<'env: 't, 't>(
     _: &'env mut Environment,
     document: &'t str,
@@ -332,6 +356,7 @@ fn bubble<'env: 't, 't>(
     Ok(())
 }
 
+/// Inlines modules at a given `T` relative to the PWD
 fn inline_modules<T>(expr: At<T>) -> At<T::Out>
 where
     T: AstNode + Foldable<DefaultTypes, DefaultTypes>,
@@ -352,6 +377,7 @@ where
     At(expr, span)
 }
 
+/// How much information to show about results
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum Verbosity {
     #[default]
@@ -378,6 +404,7 @@ impl TryFrom<&str> for Verbosity {
 }
 
 impl Verbosity {
+    /// Gets a prompt string representing this verbosity
     fn begin(self) -> &'static str {
         match self {
             Self::Pretty => " .> ",
@@ -389,6 +416,7 @@ impl Verbosity {
     }
 }
 
+/// What the next operation should be
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum ParseMode {
     #[default]
@@ -419,6 +447,7 @@ impl TryFrom<&str> for ParseMode {
 }
 
 impl ParseMode {
+    /// Gets a function implementing this operation
     #[expect(clippy::type_complexity)]
     fn with<'env: 'a, 'a>(
         &self,
@@ -434,6 +463,7 @@ impl ParseMode {
         }
     }
 
+    /// Gets an ANSI color representing this operation
     fn color(&self) -> &'static str {
         match self {
             Self::Run => "\x1b[36m",

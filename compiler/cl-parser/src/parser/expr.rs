@@ -273,12 +273,17 @@ impl<'t> Parse<'t> for Expr {
                     )
                 }
                 Ps::Ellipsis => p.consume().then(Expr::Omitted),
+
+                // Warning: the guard of this pattern modifies the parser.
+                Ps::Op(Op::MetaOuter | Op::MetaInner)
+                    if p.consume().expect(TKind::LBrack).is_err() =>
+                {
+                    return p.parse(level);
+                }
                 Ps::Op(op @ (Op::MetaOuter | Op::MetaInner)) => Expr::Op(
                     op,
                     vec![
-                        p.consume()
-                            .expect(TKind::LBrack)?
-                            .opt(MIN, TKind::RBrack)?
+                        p.opt(MIN, TKind::RBrack)?
                             .unwrap_or_else(|| Expr::Omitted.at(span)),
                         p.parse(prec.next())?,
                     ],
