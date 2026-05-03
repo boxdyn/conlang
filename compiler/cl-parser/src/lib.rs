@@ -13,7 +13,7 @@
 //! [Expr]: cl_ast::ast::Expr
 //! [Pat]: cl_ast::ast::Pat
 //! [Token]: cl_token::Token
-//! [Span]: cl_structures::span::Span
+//! [Span]: struct@cl_structures::span::Span
 
 pub mod inliner;
 mod parser;

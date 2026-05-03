@@ -240,7 +240,7 @@ pub enum Op {
 }
 
 impl<A: AstTypes> Expr<A> {
-    /// Attaches this [Expr] to an [At] node with the provided [Annotation].
+    /// Attaches this [Expr] to an [At] node with the provided [AstTypes::Annotation].
     pub const fn at(self, annotation: A::Annotation) -> At<Expr<A>, A> {
         At(self, annotation)
     }
@@ -403,7 +403,7 @@ pub enum PatOp {
 }
 
 impl<A: AstTypes> Pat<A> {
-    /// Attaches this [Pat] to an [At] node with the provided [Annotation].
+    /// Attaches this [Pat] to an [At] node with the provided [AstTypes::Annotation].
     pub const fn at(self, annotation: A::Annotation) -> At<Pat<A>, A> {
         At(self, annotation)
     }

@@ -15,21 +15,21 @@ pub enum ParseError {
     ExpectedEOF(TKind, Span),
     /// The [`Lexer`](cl_lexer::Lexer) didn't like that.
     FromLexer(LexError),
-    /// Expected [`TKind`] `0`, got [`TKind`] `1` at [`Span`]
+    /// Expected [`TKind`] `0`, got [`TKind`] `1` at [`struct@Span`]
     Expected(TKind, TKind, Span),
-    /// Tried to parse a literal, but got [`TKind`] instead, at [`Span`]
+    /// Tried to parse a literal, but got [`TKind`] instead, at [`struct@Span`]
     NotLiteral(TKind, Span),
-    /// Tried to parse a use item, but got [`TKind`] instead, at [`Span`]
+    /// Tried to parse a use item, but got [`TKind`] instead, at [`struct@Span`]
     NotUse(TKind, Span),
-    /// Tried to parse a pattern, but got [`TKind`] at [`PatPrec`] instead, at [`Span`]
+    /// Tried to parse a pattern, but got [`TKind`] at [`PatPrec`] instead, at [`struct@Span`]
     NotPattern(TKind, PatPrec, Span),
-    /// Tried to parse a bind item, but got [`TKind`] instead, at [`Span`]
+    /// Tried to parse a bind item, but got [`TKind`] instead, at [`struct@Span`]
     NotBind(TKind, Span),
-    /// Tried to parse a prefix expression, but got [`TKind`] instead, at [`Span`]
+    /// Tried to parse a prefix expression, but got [`TKind`] instead, at [`struct@Span`]
     NotPrefix(TKind, Span),
-    /// Tried to parse an infix expression, but got [`TKind`] instead, at [`Span`]
+    /// Tried to parse an infix expression, but got [`TKind`] instead, at [`struct@Span`]
     NotInfix(TKind, Span),
-    /// Tried to parse a postfix expression, but got [`TKind`] instead, at [`Span`]
+    /// Tried to parse a postfix expression, but got [`TKind`] instead, at [`struct@Span`]
     NotPostfix(TKind, Span),
 }
 
