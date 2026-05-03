@@ -1,32 +1,40 @@
 //! The parser takes a stream of [`Token`]s from the [`Lexer`], and turns them into [`cl_ast::ast`]
 //! nodes.
-use cl_ast::{
-    types::{Literal, Path},
-    *,
-};
-use cl_lexer::{LexError, LexFailure, Lexer};
-use cl_structures::span::Span;
-use cl_token::{Lexeme, TKind, Token};
-
-pub trait Parse<'t> {
-    type Prec: Copy + Default;
-
-    fn parse(p: &mut Parser<'t>, _level: Self::Prec) -> PResult<Self>
-    where Self: Sized;
-}
 
 pub mod expr;
 pub mod pat;
 
 pub mod error;
+
+use cl_ast::{types::*, *};
+use cl_lexer::{LexError, LexFailure, Lexer};
+use cl_structures::span::Span;
+use cl_token::{Lexeme, TKind, Token};
 pub use error::{EOF, PResult, PResultExt, ParseError, no_eof};
+
+/// Parse an expression from a [Parser]'s token stream at a given precedence level
+pub trait Parse<'t> {
+    /// The possible precedence `level`s for this parser implementation
+    type Prec: Copy + Default;
+
+    /// Parses `Self` from the tokens (and extra data) held in a [Parser]
+    fn parse(p: &mut Parser<'t>, _level: Self::Prec) -> PResult<Self>
+    where Self: Sized;
+}
 
 /// Handles stateful extraction from a [Lexer], with single-[Token] lookahead.
 #[derive(Debug)]
 pub struct Parser<'t> {
+    /// A stream of tokens produced from some source text
     pub lexer: Lexer<'t>,
+
+    /// The currently-peeked output from the [Lexer]
     pub next_tok: Option<PResult<Token>>,
+
+    /// The span of the last-consumed [Token]
     pub last_loc: Span,
+
+    /// Whether the last-consumed [Token] can stand in for a semicolon in a `do` sequence
     pub elide_do: bool,
 }
 
