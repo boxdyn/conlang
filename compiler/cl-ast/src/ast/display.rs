@@ -10,9 +10,65 @@ impl<T: Display + AstNode, A: AstTypes> Display for At<T, A> {
 
 impl<T: AstNode, A: AstTypes> std::fmt::Debug for At<T, A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        <A::Annotation as std::fmt::Debug>::fmt(&self.1, f)?;
-        f.write_str(" ")?;
+        if f.alternate() {
+            f.write_str("/* ")?;
+            <A::Annotation as std::fmt::Display>::fmt(&self.1, f)?;
+            f.write_str(" */\n")?;
+        }
         <T as std::fmt::Debug>::fmt(&self.0, f)
+    }
+}
+
+impl<A: AstTypes> std::fmt::Debug for Expr<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use std::fmt::Debug;
+        match self {
+            Self::Omitted => write!(f, "Omitted"),
+            Self::Id(arg0) => write!(f, "Id({arg0:?})"),
+            Self::MetId(arg0) => write!(f, "MetId({arg0:?})"),
+            Self::Lit(arg0) => write!(f, "Lit({arg0:?})"),
+            Self::Use(arg0) => f.debug_tuple("Use").field(arg0).finish(),
+            Self::Bind(arg0) => Debug::fmt(arg0, f),
+            Self::Make(arg0) => Debug::fmt(arg0, f),
+            Self::Match(arg0) => Debug::fmt(arg0, f),
+            Self::Op(arg0, arg1) => {
+                let mut tup = f.debug_tuple(&format!("{arg0:?}"));
+                for arg in arg1 {
+                    tup.field(arg);
+                }
+                tup.finish()
+            }
+        }
+    }
+}
+
+impl<A: AstTypes> std::fmt::Debug for Pat<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Ignore => write!(f, "Ignore"),
+            Self::Never => write!(f, "Never"),
+            Self::MetId(arg0) => write!(f, "MetId({arg0:?})"),
+            Self::Name(arg0) => write!(f, "Name({arg0:?})"),
+            Self::Value(arg0) => f.debug_tuple("Value").field(arg0).finish(),
+            Self::Op(arg0, arg1) => {
+                let mut tup = f.debug_tuple(&format!("{arg0:?}"));
+                for arg in arg1 {
+                    tup.field(arg);
+                }
+                tup.finish()
+            }
+        }
+    }
+}
+
+impl<A: AstTypes> std::fmt::Debug for Bind<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self(op, generics, pat, exprs) = self;
+        f.debug_tuple(&format!("Bind::{op:?}"))
+            .field(generics)
+            .field(pat)
+            .field(exprs)
+            .finish()
     }
 }
 

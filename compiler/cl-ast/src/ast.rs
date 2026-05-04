@@ -67,7 +67,7 @@ impl<T: AstNode, A: AstTypes> At<T, A> {
 /// in whichever way the compiler sees fit. This is especially important when
 /// performing import resolution, as imports typically depend on the order
 /// in which names are bound.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Expr<A: AstTypes = DefaultTypes> {
     /// Omitted by semicolon insertion-elision rules
     Omitted,
@@ -309,7 +309,7 @@ impl<A: AstTypes> Expr<A> {
 /// enum   Pat
 /// for    Pat in Expr Expr (else Expr)?
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Bind<A: AstTypes = DefaultTypes>(
     pub BindOp,
     pub Vec<A::Path>,
@@ -343,7 +343,7 @@ pub enum BindOp {
 /// Binding patterns for each kind of matchable value.
 ///
 /// This covers both bindings and type annotations in [Bind] expressions.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Pat<A: AstTypes = DefaultTypes> {
     /// `_`: Matches anything without binding
     Ignore,
