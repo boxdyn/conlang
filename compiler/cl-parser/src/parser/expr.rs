@@ -235,18 +235,15 @@ impl<'t> Parse<'t> for Expr {
                 Ps::For => parse_for(p, ())?,
                 Ps::Match => Expr::Match(p.parse(())?),
                 Ps::Lambda | Ps::Lambda0 => {
-                    p.consume();
+                    p.split()?;
 
-                    let args = if kind == TKind::Bar {
-                        p.opt(PPrec::Tuple, TKind::Bar)?
-                            .map(|At(pat, span): At<Pat>| pat.to_tuple(span).at(span))
-                            .unwrap_or(At(Pat::Op(PatOp::Tuple, vec![]), span.merge(p.span())))
-                    } else {
-                        Pat::Op(PatOp::Tuple, vec![]).at(span)
-                    };
+                    let args = p
+                        .opt(PPrec::Tuple, TKind::Bar)?
+                        .map(|At(pat, span): At<Pat>| pat.to_tuple(span).at(span))
+                        .unwrap_or(At(Pat::Op(PatOp::Tuple, vec![]), span.merge(p.span())));
 
                     let rety = p
-                        .opt_if(PPrec::Max, TKind::Arrow)?
+                        .opt_if(PPrec::Fn, TKind::Arrow)?
                         .unwrap_or(Pat::Ignore.at(p.span()));
 
                     Expr::Bind(Box::new(Bind(
@@ -313,12 +310,10 @@ impl<'t> Parse<'t> for Expr {
                     ];
                     Expr::Op(op, exprs)
                 }
-                Ps::DoubleRef => p.consume().parse(prec.next()).map(|At(expr, span)| {
-                    Expr::Op(
-                        Op::Refer,
-                        vec![At(Expr::Op(Op::Refer, vec![At(expr, span)]), span)],
-                    )
-                })?,
+                Ps::DoubleRef => {
+                    p.split()?;
+                    Expr::Op(Op::Refer, vec![p.parse(prec.next())?])
+                }
 
                 Ps::Op(op) => Expr::Op(op, vec![p.consume().parse(prec.next())?]),
                 _ => unimplemented!("prefix {op:?}"),
