@@ -296,10 +296,8 @@ impl<'t> Parse<'t> for Expr {
                         // conditional restricted to Logical operators or above
                         p.parse(Prec::Logical.value())?,
                         p.parse(prec.next())?,
-                        match p.peek() {
-                            Ok(Token { kind: TKind::Else, .. }) => {
-                                p.consume().parse(prec.next())?
-                            }
+                        match p.next_if(TKind::Else).allow_eof()? {
+                            Some(Ok(_)) => p.parse(prec.next())?,
                             _ => Expr::Omitted.at(span.merge(p.span())),
                         },
                     ];
@@ -324,13 +322,13 @@ impl<'t> Parse<'t> for Expr {
 
                 head = match op {
                     // Make (structor expressions) are context-sensitive
-                    Ps::Make => match &head {
-                        Expr::Id(_) | Expr::MetId(_) => Expr::Make(Box::new(Make(
+                    Ps::Make if let Expr::Id(_) | Expr::MetId(_) = head => {
+                        Expr::Make(Box::new(Make(
                             head.at(span),
                             p.consume().list(vec![], (), TKind::Comma, TKind::RCurly)?,
-                        ))),
-                        _ => break,
-                    },
+                        )))
+                    }
+                    Ps::Make => break,
                     // As is ImplicitDo (semicolon elision)
                     Ps::ImplicitDo if p.elide_do => head.and_do(span, p.parse(prec.next())?),
                     Ps::ImplicitDo => break,
