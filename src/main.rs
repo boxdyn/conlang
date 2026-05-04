@@ -257,6 +257,7 @@ where
 {
     let mut parser = Parser::new(Lexer::new("<parse>".into(), document));
     for idx in 0..6 {
+        let color_tag = if idx == 0 { 96 } else { (idx + 4) % 6 + 31 };
         match (
             parser
                 .parse::<At<T, _>>(T::Prec::default())
@@ -275,17 +276,20 @@ where
             }
             (Err(e), _) => Err(e)?,
             (Ok(At(expr, span)), Verbosity::Pretty) => {
-                println!("\x1b[{}m{span:?}:\n{expr}", (idx + 5) % 6 + 31);
+                println!("\x1b[{color_tag}m{span:?}:\n{expr}");
             }
             // (Ok(At(expr, span)), Verbosity::Frob) => {
-            //     println!("\x1b[{}m{span}:\n", (idx + 5) % 6 + 31);
+            //     println!("\x1b[{color_tag}m{span}:\n");
             //     let _ = expr.visit_in(&mut Collector::new());
             // }
             (Ok(expr), Verbosity::Debug) => {
-                println!("\x1b[{}m{expr:?}", (idx + 5) % 6 + 31);
+                println!("\x1b[{color_tag}m{expr:?}");
             }
             (Ok(expr), Verbosity::DebugPretty) => {
-                println!("\x1b[{}m{expr:#?}", (idx + 5) % 6 + 31);
+                println!("\x1b[{color_tag}m{expr:#?}");
+            }
+            (Ok(expr), Verbosity::Quiet) => {
+                println!("{expr}");
             }
             _ => {}
         }
@@ -301,22 +305,23 @@ fn run<'env: 't, 't>(
 ) -> Result<(), Box<dyn Error>> {
     let mut parser = Parser::new(Lexer::new("<run>".into(), document));
     for idx in 0..6 {
+        let color_tag = (idx + 5) % 6 + 31;
         let Some(code) = parser.parse::<At<Expr>>(0).allow_eof()? else {
             break;
         };
         match (inline_modules(code).interpret(env), verbose) {
             (Err(error), _) => {
-                println!("\x1b[{}m{error}", (idx + 5) % 6 + 31);
+                println!("\x1b[31m{error}");
             }
             (Ok(ConValue::Empty), Verbosity::Pretty) => {}
             (Ok(value), Verbosity::Pretty) => {
-                println!("\x1b[{}m{value}", (idx + 5) % 6 + 31);
+                println!("\x1b[{color_tag}m{value}");
             }
             (Ok(value), Verbosity::Debug) => {
-                println!("\x1b[{}m{value:?}", (idx + 5) % 6 + 31);
+                println!("\x1b[{color_tag}m{value:?}");
             }
             (Ok(value), Verbosity::DebugPretty) => {
-                println!("\x1b[{}m{value:#?}", (idx + 5) % 6 + 31);
+                println!("\x1b[{color_tag}m{value:#?}");
             }
             _ => {}
         }
