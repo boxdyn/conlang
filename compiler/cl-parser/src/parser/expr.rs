@@ -275,14 +275,10 @@ impl<'t> Parse<'t> for Expr {
                     if p.consume().expect(TKind::LBrack).is_err() {
                         return p.parse(level);
                     }
-                    Expr::Op(
-                        op,
-                        vec![
-                            p.opt(MIN, TKind::RBrack)?
-                                .unwrap_or_else(|| Expr::Omitted.at(span)),
-                            p.parse(prec.next())?,
-                        ],
-                    )
+                    let meta = p
+                        .opt(MIN, TKind::RBrack)?
+                        .unwrap_or_else(|| Expr::Omitted.at(span));
+                    Expr::Op(op, vec![meta, p.parse(prec.next())?])
                 }
                 Ps::Op(Op::Block) => Expr::Op(
                     Op::Block,
