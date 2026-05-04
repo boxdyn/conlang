@@ -235,7 +235,7 @@ impl<'t> Parse<'t> for Expr {
                 Ps::For => parse_for(p, ())?,
                 Ps::Match => Expr::Match(p.parse(())?),
                 Ps::Lambda | Ps::Lambda0 => {
-                    p.split()?;
+                    p.split()?; // is either `||`, which can be split, or `|`, which can't
 
                     let args = p
                         .opt(PPrec::Tuple, TKind::Bar)?
