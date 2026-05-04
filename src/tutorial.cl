@@ -60,7 +60,7 @@ if condition() {
 }
 
 /// ... and return the result of whichever branch executed!
-let v = if condition() { 
+let v = if condition() {
     do_thing(10, 20)
 } else {
     do_not()

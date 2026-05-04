@@ -9,40 +9,40 @@ comment "//"
 color #000,#800 "[[:graph:]]"
 color normal,#400 "[[:cntrl:]]"
 ## unary
-color italic,magenta "&|&&|\*|\+|-|!|@|~"
+color magenta "&|&&|\*|\+|-|!|@|~"
 ## dot
-color italic,lightmagenta "[.?]"
+color lightmagenta "[.?]"
 ## binary
-color italic,lightgreen "& |[\|]|\^"
+color lightgreen "& |[\|]|\^"
 
 ## do
 color #911 ";"
 ## assign (part 1)
-color italic,#c33 "="
+color #c33 "="
 ## tuple
-color italic,brown ","
+color brown ","
 ## body, make
-color italic,yellow "[{}]"
+color yellow "[{}]"
 ## logical (lower prec, but more specific)
-color italic,lightyellow "&& |\|\||\^\^"
+color lightyellow "&& |\|\||\^\^"
 ## compare
-color italic,lime "(==)|(<=)|(<)|(>)|(>=)|(!=)"
+color lime "(==)|(<=)|(<)|(>)|(>=)|(!=)"
 ## range
-color italic,green "\.\.=?"
+color green "\.\.=?"
 ## shift
-color italic,cyan "<<|>>"
+color cyan "<<|>>"
 ## factor
-color italic,blue "([+]|-)\s"
+color blue "([+]|-)\s"
 ## term
-color italic,#36c "(\*|/|%)\s"
+color #36c "(\*|/|%)\s"
 ## assign (part 2)
-color italic,#c33 "([*/%^+\&|-]|<<|>>)="
+color #c33 "([*/%^+\&|-]|<<|>>)="
 ## projection
-color italic,#8da "[][]"
+color #8da "[][]"
 color bold,brown "[()]"
 ## misc
 color sand "->|=>|:"
-color bold,italic,#add "::"
+color bold,#add "::"
 
 
 # attributes
@@ -55,7 +55,7 @@ color italic,orange "0(x[0-9A-Fa-f]+|d[0-9]+|o[0-7]+|b[01]+|~[0-9A-Za-z]+)|[0-9]
 # identifiers
 color italic,lightcyan "\<[a-z_][[:alnum:]_]*\>"
 color white "_"
-color italic,lightcyan "\<_[[:alnum:]_]+\>"
+color italic,lightcyan "\<[a-z_][[:alnum:]_]+\>"
 
 # constants
 color bold,cyan "\<[A-Z][A-Z0-9_]+\>"
@@ -84,7 +84,7 @@ color yellow "\\"
 color green "^#!/.*$"
 color gray "^(\s)*//.*"
 color gray "\s+//\s*.*"
-color gray start="^\s*/\*" end="\*/"
+color gray start="/\*" end="\*/"
 
 color lime "^\s*//[/!].*"
 color bold,brick "^\s*//\?.*"
