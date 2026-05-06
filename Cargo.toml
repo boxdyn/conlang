@@ -24,6 +24,7 @@ opt-level = 1
 
 [package]
 name = "conlang"
+default-run = "conlang"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
