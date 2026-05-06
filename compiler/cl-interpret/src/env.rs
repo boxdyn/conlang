@@ -1,4 +1,4 @@
-//! Lexical and non-lexical scoping for variables
+//! Lexical & non-lexical [scoping](Environment) for variables, and [Backtrace] support
 
 use crate::{
     builtin::Builtin,

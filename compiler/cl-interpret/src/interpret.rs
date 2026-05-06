@@ -1,4 +1,4 @@
-//! A work-in-progress tree walk interpreter for Conlang
+//! A work-in-progress tree walk [interpreter](Interpret) for Conlang
 //!
 //! Currently, major parts of the interpreter are not yet implemented, and major parts will never be
 //! implemented in its current form. Namely, since no [ConValue] has a stable location, it's

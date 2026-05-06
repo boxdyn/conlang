@@ -1,4 +1,4 @@
-//! Represents a block of code which lives inside the Interpreter
+//! Represents a [block of code](Function) which lives inside the Interpreter
 
 use crate::{
     error::ErrorKind,

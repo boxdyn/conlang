@@ -1,3 +1,5 @@
+//! Runtime [type information](TypeInfo)
+
 use std::{collections::HashMap, fmt::Display, sync::OnceLock};
 
 use cl_ast::{Pat, PatOp, fmt::FmtAdapter, types::Symbol};

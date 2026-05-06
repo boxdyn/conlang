@@ -1,3 +1,4 @@
+//! Interpreter [Builtin] functions, and [builtin] macro to define them
 #![allow(non_upper_case_globals)]
 
 use cl_ast::types::Symbol;

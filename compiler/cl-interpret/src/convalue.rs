@@ -1,6 +1,6 @@
-//! Values in the dynamically typed AST interpreter.
+//! [Conlang Values](ConValue) in the dynamically typed AST interpreter.
 //!
-//! The most permanent fix is a temporary one.
+//! > The most permanent fix is a temporary one.
 use cl_ast::{Expr, fmt::FmtAdapter, types::Symbol};
 use cl_structures::intern::interned::Interned;
 
