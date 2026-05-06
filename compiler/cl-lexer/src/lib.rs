@@ -311,6 +311,7 @@ impl<'t> Lexer<'t> {
             kind: match lexeme {
                 "as" => TKind::As,
                 "break" => TKind::Break,
+                "catch" => TKind::Catch,
                 "const" => TKind::Const,
                 "continue" => TKind::Continue,
                 "defer" => TKind::Defer,
@@ -334,6 +335,7 @@ impl<'t> Lexer<'t> {
                 "static" => TKind::Static,
                 "struct" => TKind::Struct,
                 "true" => TKind::True,
+                "try" => TKind::Try,
                 "type" => TKind::Type,
                 "use" => TKind::Use,
                 "while" => TKind::While,

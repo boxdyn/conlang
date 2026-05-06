@@ -78,6 +78,7 @@ pub enum TKind {
 
     As,
     Break,
+    Catch,
     Const,
     Continue,
     Defer,
@@ -101,6 +102,7 @@ pub enum TKind {
     Static,
     Struct,
     True,
+    Try,
     Type,
     Use,
     While,

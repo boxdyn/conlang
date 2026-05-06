@@ -45,12 +45,12 @@ macro_rules! intify {
 }
 
 impl Prec {
-    const fn from_int(value: u32) -> Self {
+    pub const fn from_int(value: u32) -> Self {
         intify! {Prec(value) = Min, Max, Alt, Tuple, Typed, Fn, Range}
     }
 
     /// Returns the level of precedence higher than this one
-    const fn next(self) -> Self {
+    pub const fn next(self) -> Self {
         Self::from_int(self as u32 + 1)
     }
 }

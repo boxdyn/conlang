@@ -83,6 +83,7 @@ pub enum Ps {
     DoubleRef,  // && Expr
     Make,       // Expr{ Expr,* }
     Match,      // match Expr { (Pat => Expr),* }
+    TryCatch,   // try Expr (catch Pat Expr?)* (else Expr)?
     ImplicitDo, // An implicit semicolon
     Ellipsis,   // An ellipsis (...)
     End,        // Produces an empty value.
@@ -110,6 +111,7 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
         TKind::Static => (Ps::Op(Op::Static), Prec::Max),
         TKind::For => (Ps::For, Prec::Max),
         TKind::Match => (Ps::Match, Prec::Max),
+        TKind::Try => (Ps::TryCatch, Prec::Max),
         TKind::Macro => (Ps::Op(Op::Macro), Prec::Assign),
 
         TKind::Fn
@@ -234,6 +236,7 @@ impl<'t> Parse<'t> for Expr {
                 Ps::Def => Expr::Bind(p.parse(())?),
                 Ps::For => parse_for(p, ())?,
                 Ps::Match => Expr::Match(p.parse(())?),
+                Ps::TryCatch => Expr::Match(Box::new(parse_try_catch(p, ())?)),
                 Ps::Lambda | Ps::Lambda0 => {
                     p.split()?; // is either `||`, which can be split, or `|`, which can't
 
@@ -432,6 +435,25 @@ impl<'t> Parse<'t> for MatchArm {
 
         Ok(Self(pat, body))
     }
+}
+
+fn parse_try_catch(p: &mut Parser<'_>, _level: ()) -> PResult<Match> {
+    let scrutinee: At<_> = p.consume().parse(Prec::Body.next())?;
+    let mut arms = vec![];
+    while let Some(Ok(_)) = p.next_if(TKind::Catch).allow_eof()? {
+        let pat = p.parse(PPrec::Fn)?;
+        match p.peek().allow_eof()? {
+            Some(&Token { kind: TKind::Catch | TKind::Else, span, .. }) => {
+                arms.push(MatchArm(pat, Expr::Omitted.at(span)))
+            }
+            _ => arms.push(MatchArm(pat, p.parse(Prec::Body.next())?)),
+        }
+    }
+    if let Some(Ok(Token { span, .. })) = p.next_if(TKind::Else).allow_eof()? {
+        arms.push(MatchArm(Pat::Ignore.at(span), p.parse(Prec::Body.next())?));
+    }
+
+    Ok(Match(scrutinee, arms))
 }
 
 /// Parses a `for` loop expression
