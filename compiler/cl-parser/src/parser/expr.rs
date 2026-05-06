@@ -437,6 +437,13 @@ impl<'t> Parse<'t> for MatchArm {
     }
 }
 
+/// Parses a try-catch expression
+///
+/// ```rust,ignore
+/// try Expr
+/// catch Pat Expr? // repeat
+/// else Expr       // optional
+/// ```
 fn parse_try_catch(p: &mut Parser<'_>, _level: ()) -> PResult<Match> {
     let scrutinee: At<_> = p.consume().parse(Prec::Body.next())?;
     let mut arms = vec![];
