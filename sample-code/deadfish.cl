@@ -1,4 +1,4 @@
-#!/usr/bin/env -S conlang-repl -r false
+#!/usr/bin/env -S conlang main()
 //! Implements the [Deadfish][df] language
 //! ```
 //! iissiiisdsdddddddddddddddddddddddddddddd

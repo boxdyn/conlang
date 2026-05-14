@@ -1,4 +1,4 @@
-#!/usr/bin/env -S conlang -r false
+#!/usr/bin/env -S conlang main()
 // Showcases `get_line` behavior by sorting stdin
 
 fn in_range(this: &Ord, min: Ord, max: Ord) -> bool {

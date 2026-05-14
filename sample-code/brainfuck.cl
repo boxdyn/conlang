@@ -1,4 +1,4 @@
-#!/usr/bin/env -S conlang-repl -r false
+#!/usr/bin/env -S conlang main()
 
 fn clear() = println("\x1b[H\x1b[3J\x1b[2JBrainfuck:");
 

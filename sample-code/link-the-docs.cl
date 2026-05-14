@@ -1,4 +1,4 @@
-#!/usr/bin/env -S conlang -r false
+#!/usr/bin/env -S conlang main()
 
 fn link (link, text) -> &str
     "\x1b]8;;" + link + "\x1b\\" + text + "\x1b]8;;\x1b\\";

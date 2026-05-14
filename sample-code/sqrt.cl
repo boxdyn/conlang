@@ -1,4 +1,4 @@
-#!/usr/bin/env conlang-run
+#!/usr/bin/env conlang main()
 //! Square root approximation, and example applications
 
 /// A really small nonzero number
