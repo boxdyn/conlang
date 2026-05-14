@@ -38,39 +38,32 @@ pub trait FmtAdapter: Write {
 
     /// Formats bracketed lists of the kind (Item (Comma Item)*)?
     #[inline]
-    fn list<Item: Display, Sep: Display>(&mut self, items: &[Item], sep: Sep) -> std::fmt::Result {
-        self.list_wrap("", items, sep, "")
-    }
-
-    fn list_end<Item: Display, Sep: Display, End: Display>(
+    fn list<Iter: IntoIterator<Item: Display>, Sep: Display>(
         &mut self,
-        items: &[Item],
+        items: Iter,
         sep: Sep,
-        end: End,
     ) -> std::fmt::Result {
-        self.list_wrap("", items, sep, end)
+        self.list_wrap("", items, sep, "")
     }
 
     /// Wraps a list in `open` and `close`.
     /// This differs from [`FmtAdapter::delimit`] because it prints nothing
     /// if the list is empty.
-    fn list_wrap<Item: Display, Sep: Display, O: Display, E: Display>(
+    fn list_wrap<Iter: IntoIterator<Item: Display>, Sep: Display, O: Display, E: Display>(
         &mut self,
         open: O,
-        mut items: &[Item],
+        items: Iter,
         sep: Sep,
         close: E,
     ) -> std::fmt::Result {
-        if items.is_empty() {
+        let mut iter = items.into_iter();
+        let Some(item) = iter.next() else {
             return Ok(());
-        }
-        write!(self, "{open}")?;
-        while let [pat, rest @ ..] = items {
-            write!(self, "{pat}")?;
-            if !rest.is_empty() {
-                write!(self, "{sep}")?;
-            }
-            items = rest;
+        };
+
+        write!(self, "{open}{item}")?;
+        for item in iter {
+            write!(self, "{sep}{item}")?;
         }
         write!(self, "{close}")
     }
