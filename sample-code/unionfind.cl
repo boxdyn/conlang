@@ -7,64 +7,63 @@ enum TreeNode {
 
 // TODO: Namespace based on type of first argument
 
-fn makeset(f, x) {
-    match (*f)[x] {
-        TreeNode::Empty => {(*f)[x] = TreeNode::Filled { parent: x, rank: 0 }};
+fn makeset(f: &[TreeNode], x: usize) {
+    match f[x] {
+        TreeNode::Empty => f[x] = TreeNode::Filled { parent: x, rank: 0 };
         _ => {}
     }
 }
 
-fn union(f, a, b) {
-    let (a, b) = (find(f, a), find(f, b));
-    if a == b { return; }
-    match ((*f)[a], (*f)[b]) {
-        (TreeNode::Filled {parent: _, rank: r_a}, TreeNode::Filled {parent: _, rank: r_b}) => {
-            if r_a < r_b {
-                union(f, b, a)
-            } else {
-                (*f)[b].parent = a;
-                (*f)[a].rank += 1;
-            }
-        };
-        _ => {}
+fn union(f: &[TreeNode], a: usize, b: usize) {
+    let a, b = f.find(a), f.find(b);
+    if a == b return;
+
+    match f[a], f[b] {
+        TreeNode::Empty => ();
+        TreeNode::Filled { rank: ra }, TreeNode::Filled { rank: rb } if ra < rb => union(f, b, a);
+        TreeNode::Filled {..}, TreeNode::Filled {..} => {
+            f[b].parent = a;
+            f[a].rank += 1;
+        }
     }
 }
 
-fn find(f, x) {
-    match (*f)[x] {
-        TreeNode::Filled { parent, rank } => if parent == x {
-            x
-        } else {
+fn find(f: &[TreeNode], x: usize) {
+    match f[x] {
+        TreeNode::Filled { parent if parent != x, rank } => {
             let parent = find(f, parent);
-            (*f)[x].parent = parent;
+            f[x].parent = parent;
             parent
         };
         _ => x;
     }
 }
 
-fn show(f) {
-    for node in 0..(len((*f))) {
-        match (*f)[node] {
-            TreeNode::Filled { parent, rank } => println(node, ": { parent: ", parent, ", rank: ", rank, " }");
-            _ => {}
-        }
+fn show(f: &[TreeNode]) {
+    for node in 0..f.len() match f[node] {
+        TreeNode::Filled { parent, rank } => println(node, ": { parent: ", parent, ", rank: ", rank, " }");
+        _ => {}
     }
 }
 
-fn test(f) {
+fn test(f: &[TreeNode]) {
     "Union Find on Disjoint Set Forest".println();
-    for i in 0..10 { makeset(f, i) }
-    for i in 10..20 { makeset(f, i) }
-    show(f);
+    for i in 0..f.len() makeset(f, i);
+    f.show();
     println();
     
-    for i in 1..10 { union(f, i*2-1, i*2) }
-    for i in 5..10 { union(f, i*2+1, i*2) }
-    show(f)
+
+    // Disjoint fizzbuzz sets
+    for i in 1..f.len() match i % 3, i % 5 {
+        0, 0 => union(f, 15, i);
+        0, _ => union(f, 3, i);
+        _, 0 => union(f, 5, i);
+        _, _ => union(f, 0, i);
+    }
+
+    f.show()
 }
 
 fn main() {
-    let f = [TreeNode::Empty;20];
-    f.test()
+    [TreeNode::Empty;40].test()
 }
