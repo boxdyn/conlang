@@ -39,7 +39,7 @@ fn find(f, x) {
             (*f)[x].parent = parent;
             parent
         };
-        () => x;
+        _ => x;
     }
 }
 
@@ -65,6 +65,6 @@ fn test(f) {
 }
 
 fn main() {
-    let f = [();20];
+    let f = [TreeNode::Empty;20];
     f.test()
 }
