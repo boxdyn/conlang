@@ -3,7 +3,7 @@
 use crate::{
     builtin::Builtin,
     place::Place,
-    typeinfo::{self, Type, TypeInfo},
+    typeinfo::{self, Model, Type},
 };
 
 use super::{
@@ -82,7 +82,7 @@ impl Display for Environment {
                 write!(f, "{idx:4} {name}: ")?;
                 match self.values.get(*idx) {
                     Some(ConValue::TypeInfo(t)) => {
-                        writeln!(f, "\t{t:?}")
+                        writeln!(f, "\ttype {t}")
                     }
                     Some(value) => writeln!(f, "\t{value}"),
                     None => writeln!(f, "ERROR: {name}'s address blows the stack!"),
@@ -96,11 +96,8 @@ impl Display for Environment {
 impl Default for Environment {
     fn default() -> Self {
         let mut this = Self::no_builtins();
-        for TypeInfo { ident, model } in TypeInfo::defaults() {
-            let Some(ident) = ident else {
-                continue;
-            };
-            let value = this.def_type(ident, model);
+        for (ident, model) in Model::defaults() {
+            let value = this.def_type(ident.into(), model.intern());
             this.bind(ident, ConValue::TypeInfo(value));
         }
         this.add_builtins(Builtins).add_builtins(Math);
@@ -181,29 +178,6 @@ impl Environment {
         self
     }
 
-    pub fn push_frame(&mut self, name: &'static str, frame: StackFrame) {
-        self.frames.push(EnvFrame {
-            name: Some(name),
-            span: None,
-            base: self.values.len(),
-            binds: HashMap::new(),
-            defer: vec![],
-        });
-        for (k, v) in frame {
-            self.insert(k, v);
-        }
-    }
-
-    pub fn pop_frame(&mut self) -> Option<(StackFrame, &'static str)> {
-        let mut out = HashMap::new();
-        let EnvFrame { name, span: _, base, binds, defer } = self.frames.pop()?;
-        for (k, v) in binds {
-            out.insert(k, self.values.get_mut(v).map(std::mem::take)?);
-        }
-        self.values.truncate(base);
-        Some((out, name.unwrap_or("")))
-    }
-
     /// Enters a nested scope, returning a [`Frame`] stack-guard.
     ///
     /// [`Frame`] implements Deref/DerefMut for [`Environment`].
@@ -221,14 +195,6 @@ impl Environment {
             scope.insert(k, v);
         }
         scope
-    }
-
-    /// Resolves a variable mutably.
-    ///
-    /// Returns a mutable reference to the variable's record, if it exists.
-    pub fn get_mut(&mut self, name: Symbol) -> IResult<&mut ConValue> {
-        let at = self.id_of(name)?;
-        self.get_id_mut(at).ok_or(Error::NotDefined(name))
     }
 
     /// Resolves a variable immutably.
@@ -250,27 +216,21 @@ impl Environment {
         Err(Error::NotDefined(name))
     }
 
+    /// Returns a shared reference to the `id`'s record, if it exists.
     pub fn get_id(&self, id: usize) -> Option<&ConValue> {
         self.values.get(id)
     }
 
+    /// Returns a mutable reference to the `id`'s record, if it exists.
     pub fn get_id_mut(&mut self, id: usize) -> Option<&mut ConValue> {
         self.values.get_mut(id)
     }
 
-    pub fn get_slice(&self, start: usize, len: usize) -> Option<&[ConValue]> {
-        self.values.get(start..start + len)
+    pub fn def_type(&mut self, name: Symbol, ty: Type) -> Type {
+        self.types.insert(name, ty);
+        ty
     }
 
-    pub fn get_slice_mut(&mut self, start: usize, len: usize) -> Option<&mut [ConValue]> {
-        self.values.get_mut(start..start + len)
-    }
-
-    pub fn def_type(&mut self, name: Symbol, model: typeinfo::Model) -> Type {
-        let typeinfo = TypeInfo { ident: Some(name), model }.intern();
-        self.types.insert(name, (typeinfo));
-        typeinfo
-    }
     pub fn get_type(&self, name: Symbol) -> Option<Type> {
         self.types.get(&name).copied()
     }
@@ -280,11 +240,6 @@ impl Environment {
         if self.bind_raw(k, self.values.len()).is_some() {
             self.values.push(v);
         }
-    }
-
-    /// Gets the current stack top position
-    pub fn pos(&self) -> usize {
-        self.values.len()
     }
 
     /// Allocates a local variable
@@ -315,17 +270,11 @@ impl<'scope> Frame<'scope> {
 
     pub fn pop_values(mut self) -> Option<StackFrame> {
         let mut out = HashMap::new();
-        let binds = std::mem::take(&mut self.frames.last_mut()?.binds);
+        let binds = take(&mut self.frames.last_mut()?.binds);
         for (k, v) in binds {
-            out.insert(k, self.values.get_mut(v).map(std::mem::take)?);
+            out.insert(k, self.values.get_mut(v).map(take)?);
         }
         Some(out)
-    }
-
-    pub fn into_binds(mut self) -> Option<StackBinds> {
-        let EnvFrame { name: _, span: _, base: _, binds, defer: _ } = self.frames.pop()?;
-        std::mem::forget(self);
-        Some(binds)
     }
 }
 impl Deref for Frame<'_> {

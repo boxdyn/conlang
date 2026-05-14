@@ -28,7 +28,7 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
                     let string = v.get(env).cloned().unwrap_or_default();
                     return eval(env, &[string])
                 }
-                _ => Err(Error::TypeError("string", string.typename()))?
+                _ => Err(Error::TypeError("string", string.type_of()))?
             };
             match Parser::new(Lexer::new("eval".into(), string)).parse::<Expr>(0) {
                 Err(e) => Ok(ConValue::String(format!("{e}"))),
@@ -42,7 +42,7 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
             match path {
                 ConValue::Str(path) => load_file(env, &**path).or(Ok(ConValue::Empty)),
                 ConValue::String(path) => load_file(env, &**path).or(Ok(ConValue::Empty)),
-                _ => Err(Error::TypeError("string", path.typename()))
+                _ => Err(Error::TypeError("string", path.type_of()))
             }
         }
 
@@ -57,7 +57,7 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
             let prompt = match prompt {
                 ConValue::Str(prompt) => prompt.to_ref(),
                 ConValue::String(prompt) => prompt.as_str(),
-                _ => Err(Error::TypeError("string", prompt.typename()))?,
+                _ => Err(Error::TypeError("string", prompt.type_of()))?,
             };
             match repline::Repline::new("", prompt, "").read() {
                 Ok(line) => Ok(ConValue::String(line)),

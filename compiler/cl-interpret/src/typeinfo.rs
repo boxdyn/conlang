@@ -15,9 +15,9 @@ use crate::{
 };
 
 pub type TypeId = usize;
-pub type Type = Interned<'static, TypeInfo>;
+pub type Type = Interned<'static, Model>;
 
-pub(crate) static TYPE_INTERNER: OnceLock<LeakyInterner<TypeInfo>> = OnceLock::new();
+pub(crate) static TYPE_INTERNER: OnceLock<LeakyInterner<Model>> = OnceLock::new();
 
 /// The elements of a type's value
 #[rustfmt::skip]
@@ -38,9 +38,9 @@ pub enum Model {
     /// Slice of a list of [Type]
     Slice(Type),
     /// The elements of a tuple
-    Tuple(Box<[Type]>),
+    Tuple(Option<Symbol>, Box<[Type]>),
     /// The elements of a struct, and whether they are exhaustive
-    Struct(Box<[(Symbol, Type)]>, bool),
+    Struct(Option<Symbol>, Box<[(Symbol, Type)]>, bool),
     /// The variants of an enumeration
     Enum(Box<[(Symbol, Type)]>),
 }
@@ -61,8 +61,21 @@ impl Display for Model {
             Self::Unit(_) => "()".fmt(f),
             Self::Ref(t) => write!(f, "&{t}"),
             Self::Slice(t) => write!(f, "[{t}]"),
-            Self::Tuple(items) => f.delimit("(", ")").list(items, ", "),
-            Self::Struct(items, _) => {
+            Self::Tuple(Some(name), items) => {
+                f.delimit(format_args!("{name}("), ")").list(items, ", ")
+            }
+            Self::Tuple(_name, items) => f.delimit("(", ")").list(items, ", "),
+            Self::Struct(Some(name), items, _exhaustive) => {
+                let mut f = f.delimit(format_args!("{name}("), " }");
+                for (idx, (name, ty)) in items.iter().enumerate() {
+                    if idx > 0 {
+                        write!(f, ",")?;
+                    }
+                    write!(f, " {name}: {ty}")?;
+                }
+                Ok(())
+            }
+            Self::Struct(name, items, _exhaustive) => {
                 let mut f = f.delimit("{", " }");
                 for (idx, (name, ty)) in items.iter().enumerate() {
                     if idx > 0 {
@@ -83,74 +96,119 @@ impl Display for Model {
     }
 }
 
-/// The unabridged information for a type
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TypeInfo {
-    pub ident: Option<Symbol>,
-    pub model: Model,
-}
-
-macro make_int($T:ty, $signed: expr) {
-    Model::Integer {
-        signed: $signed,
-        size: size_of::<$T>(),
-        min: <$T>::MIN as _,
-        max: <$T>::MAX as _,
+impl Model {
+    pub fn intern(self) -> Type {
+        TYPE_INTERNER
+            .get_or_init(LeakyInterner::new)
+            .get_or_insert(self)
     }
-}
-
-impl TypeInfo {
-    pub fn new(ident: impl Into<Symbol>, model: Model) -> Self {
-        Self { ident: Some(ident.into()), model }
+    pub fn already_interned(&self) -> Type {
+        TYPE_INTERNER
+            .get_or_init(LeakyInterner::new)
+            .get(self)
+            .unwrap_or_else(|| panic!("Brand new type was assumed interned: {}", self))
+    }
+    pub fn default_integer() -> Type {
+        make_int!(i128, true).already_interned()
+    }
+    pub fn default_float() -> Type {
+        Self::Float { size: size_of::<f64>() }.already_interned()
     }
 
-    pub fn name(&self) -> &'static str {
-        match self.ident {
-            Some(name) => name.to_ref(),
-            None => "_",
+    pub fn name(&self) -> Option<&'static str> {
+        Some(match self {
+            Self::Integer { signed: true, size: 1, .. } => "i8",
+            Self::Integer { signed: true, size: 2, .. } => "i16",
+            Self::Integer { signed: true, size: 4, .. } => "i32",
+            Self::Integer { signed: true, size: 8, .. } => "i64",
+            Self::Integer { signed: true, size: 16, .. } => "i128",
+            Self::Integer { signed: true, .. } => "int",
+            Self::Integer { signed: false, size: 1, .. } => "u8",
+            Self::Integer { signed: false, size: 2, .. } => "u16",
+            Self::Integer { signed: false, size: 4, .. } => "u32",
+            Self::Integer { signed: false, size: 8, .. } => "u64",
+            Self::Integer { signed: false, size: 16, .. } => "u128",
+            Self::Integer { signed: false, .. } => "uint",
+            Self::Float { size: 4 } => "f32",
+            Self::Float { size: 8 } => "f64",
+            Self::Bool => "bool",
+            Self::Char => "char",
+            Self::Str => "str",
+            Self::Any => "",
+            Self::Never => "!",
+            Self::Unit(_) => "unit",
+            Self::Ref(interned) => "&...",
+            Self::Slice(interned) => "[...]",
+            Self::Tuple(Some(name), ..) => name.to_ref(),
+            Self::Struct(Some(name), ..) => name.to_ref(),
+            _ => return None,
+        })
+    }
+
+    pub fn make_tuple(&self, values: Box<[ConValue]>) -> IResult<ConValue> {
+        match self {
+            Model::Any => Ok(ConValue::TupleStruct(self.already_interned(), values)),
+            Model::Tuple(_, typeids) if typeids.len() != values.len() => {
+                Err(Error::ArgNumber(typeids.len(), values.len()))
+            }
+            Model::Tuple(_, typeids) => Ok(ConValue::TupleStruct(self.already_interned(), values)),
+            _ => Err(Error::NotCallable(ConValue::TypeInfo(
+                self.already_interned(),
+            ))),
         }
     }
 
-    pub fn default_int() -> Type {
-        Self::new("i128", make_int!(i128, true)).intern()
-    }
+    pub fn make_struct(&self, mut values: HashMap<Symbol, ConValue>) -> IResult<ConValue> {
+        let mut members = HashMap::new();
+        match self {
+            Model::Struct(_, model, true) => {
+                for (key, _id) in model {
+                    let value = values.get_mut(key).ok_or(Error::NotInitialized(*key))?;
+                    members.insert(*key, value.take());
+                }
+            }
+            Model::Struct(..) | Model::Any => members = values,
+            _ => Err(Error::TypeError("struct", self.already_interned()))?,
+        }
 
+        Ok(ConValue::Struct(self.already_interned(), Box::new(members)))
+    }
     #[rustfmt::skip]
-    pub fn defaults() -> Vec<Self> {
-        let unknown = Self::new("_", Model::Any).intern();
+    pub fn defaults() -> Vec<(&'static str, Self)> {
+        let any = Model::Any.intern();
         let types = [
-            Self::new("_", Model::Any),
-            Self::new("unit", Model::Unit(0)),
-            Self::new("bool", Model::Bool),
-            Self::new("char", Model::Char),
-            Self::new("str", Model::Str),
-            Self::new("never", Model::Never),
-            Self::new("f32", Model::Float{size: size_of::<f32>()}),
-            Self::new("f64", Model::Float{size: size_of::<f64>()}),
-            Self::new("i8", make_int!(i8, true)),
-            Self::new("i16", make_int!(i16, true)),
-            Self::new("i32", make_int!(i32, true)),
-            Self::new("i64", make_int!(i64, true)),
-            Self::new("i128", make_int!(i128, true)),
-            Self::new("isize", make_int!(isize, true)),
-            Self::new("int", make_int!(isize, true)),
-            Self::new("u8", make_int!(u8, false)),
-            Self::new("u16", make_int!(u16, false)),
-            Self::new("u32", make_int!(u32, false)),
-            Self::new("u64", make_int!(u64, false)),
-            Self::new("u128", make_int!(u128, false)),
-            Self::new("usize", make_int!(usize, false)),
-            Self::new("uint", make_int!(usize, false)),
-            Self::new("RangeExc", Model::Tuple([unknown, unknown].into())),
-            Self::new("RangeInc", Model::Tuple([unknown, unknown].into())),
-            Self::new("RangeTo", Model::Tuple([unknown].into())),
-            Self::new("RangeToInc", Model::Tuple([unknown].into())),
+            ("_", Model::Any),
+            ("unit", Model::Unit(0)),
+            ("bool", Model::Bool),
+            ("char", Model::Char),
+            ("str", Model::Str),
+            ("never", Model::Never),
+            ("f32", Model::Float{size: size_of::<f32>()}),
+            ("f64", Model::Float{size: size_of::<f64>()}),
+            ("i8", make_int!(i8, true)),
+            ("i16", make_int!(i16, true)),
+            ("i32", make_int!(i32, true)),
+            ("i64", make_int!(i64, true)),
+            ("i128", make_int!(i128, true)),
+            ("isize", make_int!(isize, true)),
+            ("int", make_int!(isize, true)),
+            ("u8", make_int!(u8, false)),
+            ("u16", make_int!(u16, false)),
+            ("u32", make_int!(u32, false)),
+            ("u64", make_int!(u64, false)),
+            ("u128", make_int!(u128, false)),
+            ("usize", make_int!(usize, false)),
+            ("uint", make_int!(usize, false)),
+            ("RangeExc", Model::Tuple(Some("RangeExc".into()), [any, any].into())),
+            ("RangeInc", Model::Tuple(Some("RangeInc".into()), [any, any].into())),
+            ("RangeTo", Model::Tuple(Some("RangeTo".into()), [any].into())),
+            ("RangeToInc", Model::Tuple(Some("RangeToInc".into()), [any].into())),
         ];
         types.into()
     }
 
     pub fn getattr(&self, attr: Symbol) -> IResult<ConValue> {
-        Ok(match (&self.model, attr.0) {
+        Ok(match (self, attr.0) {
             (_, "Self") => ConValue::TypeInfo(self.already_interned()),
             (&Model::Integer { signed, .. }, "SIGNED") => ConValue::Bool(signed),
             (&Model::Integer { size, .. }, "SIZE") => ConValue::Int(size as _),
@@ -165,14 +223,14 @@ impl TypeInfo {
             (Model::Never, _) => Err(Error::NotDefined(attr))?,
             (Model::Unit(_), "SIZE") => ConValue::Int(0),
             (Model::Unit(_), _) => Err(Error::NotDefined(attr))?,
-            (Model::Tuple(items), "ARITY") => ConValue::Int(items.len() as _),
-            (Model::Struct(items, _), "NAMES") => {
+            (Model::Tuple(_, items), "ARITY") => ConValue::Int(items.len() as _),
+            (Model::Struct(_, items, _), "NAMES") => {
                 ConValue::Array(items.iter().map(|(n, _)| ConValue::Str(*n)).collect())
             }
-            (Model::Struct(items, _), "TYPES") => {
+            (Model::Struct(_, items, _), "TYPES") => {
                 ConValue::Array(items.iter().map(|(_, t)| ConValue::TypeInfo(*t)).collect())
             }
-            (Model::Struct(items, _), "MEMBERS") => ConValue::Array(
+            (Model::Struct(_, items, _), "MEMBERS") => ConValue::Array(
                 items
                     .iter()
                     .map(|(n, t)| {
@@ -180,7 +238,7 @@ impl TypeInfo {
                     })
                     .collect(),
             ),
-            (Model::Struct(items, exhaustive), _) => items
+            (Model::Struct(_, items, exhaustive), _) => items
                 .iter()
                 .find_map(|&(name, ty)| (name == attr).then_some(ConValue::TypeInfo(ty)))
                 .ok_or(Error::NotDefined(attr))?,
@@ -191,83 +249,23 @@ impl TypeInfo {
             (model, _) => Err(Error::NotDefined(attr))?,
         })
     }
+}
 
-    pub fn make_tuple(&self, values: Box<[ConValue]>) -> IResult<ConValue> {
-        let Model::Tuple(typeids) = &self.model else {
-            Err(Error::TypeError(self.name(), "tuple struct"))?
-        };
-        if typeids.len() != values.len() {
-            return Err(Error::ArgNumber(typeids.len(), values.len()));
-        }
-        Ok(ConValue::TupleStruct(self.already_interned(), values))
-    }
-
-    pub fn make_struct(&self, mut values: HashMap<Symbol, ConValue>) -> IResult<ConValue> {
-        let Model::Struct(model, exhaustive) = &self.model else {
-            Err(Error::TypeError(self.name(), "struct"))?
-        };
-
-        let mut members = HashMap::new();
-        if *exhaustive {
-            for (key, _id) in model {
-                let value = values.get_mut(key).ok_or(Error::NotInitialized(*key))?;
-                members.insert(*key, value.take());
-            }
-        } else {
-            members = values;
-        }
-
-        Ok(ConValue::Struct(self.already_interned(), Box::new(members)))
-    }
-
-    pub fn intern(self) -> Type {
-        TYPE_INTERNER
-            .get_or_init(LeakyInterner::new)
-            .get_or_insert(self)
-    }
-    pub fn already_interned(&self) -> Type {
-        TYPE_INTERNER
-            .get_or_init(LeakyInterner::new)
-            .get(self)
-            .unwrap_or_else(|| panic!("{}", self.name()))
+macro make_int($T:ty, $signed: expr) {
+    Model::Integer {
+        signed: $signed,
+        size: size_of::<$T>(),
+        min: <$T>::MIN as _,
+        max: <$T>::MAX as _,
     }
 }
 
-impl Callable for TypeInfo {
+impl Callable for Model {
     fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
-        match &self.model {
-            Model::Tuple(_) => self.make_tuple(args.into()),
-            _ => Err(Error::NotCallable(ConValue::TypeInfo(
-                self.already_interned(),
-            )))?,
-        }
+        self.make_tuple(args.into())
     }
 
     fn name(&self) -> Option<Symbol> {
-        self.ident
-    }
-}
-
-impl std::fmt::Display for TypeInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self { ident, model } = self;
-        let Some(ident) = ident else {
-            return model.fmt(f);
-        };
-        match model {
-            Model::Any | Model::Unit(0) => write!(f, "{ident}"),
-            Model::Unit(n) => write!(f, "{ident} = {n}"),
-            Model::Integer { .. }
-            | Model::Float { .. }
-            | Model::Bool
-            | Model::Char
-            | Model::Str
-            | Model::Never
-            | Model::Ref(_)
-            | Model::Slice(_) => write!(f, "{model}"),
-            Model::Tuple(_) | Model::Struct(_, _) | Model::Enum(_) => {
-                write!(f, "{ident} {model}")
-            }
-        }
+        Some(format!("{self}").as_str().into())
     }
 }

@@ -41,7 +41,7 @@ pub mod interned {
         }
 
         /// Gets the internal value as a reference with the interner's lifetime
-        pub fn to_ref(&self) -> &'a T {
+        pub fn to_ref(self) -> &'a T {
             self.0
         }
     }

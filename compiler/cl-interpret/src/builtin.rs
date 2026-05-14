@@ -90,7 +90,10 @@ pub macro builtin(
         // Allow for single argument `fn foo(args @ ..)` pattern
         #[allow(clippy::redundant_at_rest_pattern, irrefutable_let_patterns)]
         let [$($arg),*] = _args else {
-            Err($crate::error::Error::TypeError(concat!("(", $(stringify!($arg,),)* ")"), "something weird"))?
+            Err($crate::error::Error::TypeError(
+                concat!("(", $(stringify!($arg,),)* ")"),
+                $crate::typeinfo::Model::Any.intern()
+            ))?
         };
         $body.map(Into::into)
     }
@@ -239,7 +242,7 @@ pub const Builtins: &[Builtin] = &builtins![
             ConValue::Slice(_, len) => *len as _,
             ConValue::Array(arr) => arr.len() as _,
             ConValue::Tuple(t) => t.len() as _,
-            other => Err(Error::TypeError("A type with a length", other.typename()))?,
+            other => Err(Error::TypeError("A type with a length", other.type_of()))?,
         })
     }
 
@@ -249,7 +252,7 @@ pub const Builtins: &[Builtin] = &builtins![
             index = r.clone().get_mut(env)?;
         }
         let ConValue::Array(v) = index else {
-            Err(Error::TypeError("An array", index.typename()))?
+            Err(Error::TypeError("An array", index.type_of()))?
         };
 
         let mut items = std::mem::take(v).into_vec();
@@ -262,7 +265,7 @@ pub const Builtins: &[Builtin] = &builtins![
     fn pop(ConValue::Ref(index)) @env {
         let v = match index.get_mut(env)? {
             ConValue::Array(v) => v,
-            other => Err(Error::TypeError("An array", other.typename()))?,
+            other => Err(Error::TypeError("An array", other.type_of()))?,
         };
 
         let mut items = std::mem::take(v).into_vec();
@@ -276,7 +279,7 @@ pub const Builtins: &[Builtin] = &builtins![
         Ok(match string.dereference_in(env)? {
             ConValue::Str(s) => ConValue::Array(s.chars().map(Into::into).collect()),
             ConValue::String(s) => ConValue::Array(s.chars().map(Into::into).collect()),
-            _ => Err(Error::TypeError("string", string.typename()))?,
+            _ => Err(Error::TypeError("string", string.type_of()))?,
         })
     }
 
@@ -316,7 +319,7 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a * b),
-            _ => Err(Error::TypeError("type implements Mul", lhs.typename()))?,
+            _ => Err(Error::TypeError("type implements Mul", lhs.type_of()))?,
         })
     }
 
@@ -325,7 +328,7 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs){
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a / b),
-            _ => Err(Error::TypeError("type implements Div", lhs.typename()))?,
+            _ => Err(Error::TypeError("type implements Div", lhs.type_of()))?,
         })
     }
 
@@ -334,7 +337,7 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a % b),
-            _ => Err(Error::TypeError("type implements Rem", lhs.typename()))?,
+            _ => Err(Error::TypeError("type implements Rem", lhs.type_of()))?,
         })
     }
 
@@ -352,7 +355,7 @@ pub const Math: &[Builtin] = &builtins![
             (ConValue::Char(a), ConValue::Char(b)) => {
                 ConValue::String([a, b].into_iter().collect())
             }
-            _ => Err(Error::TypeError("type implements Add", lhs.typename()))?,
+            _ => Err(Error::TypeError("type implements Add", lhs.type_of()))?,
         })
     }
 
@@ -361,7 +364,7 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a - b),
-            _ => Err(Error::TypeError("type implements Sub", lhs.typename()))?,
+            _ => Err(Error::TypeError("type implements Sub", lhs.type_of()))?,
         })
     }
 
@@ -370,8 +373,8 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a << b),
-            (ConValue::Int(a), b) => Err(Error::TypeError("int", b.typename()))?,
-            _ => Err(Error::TypeError("type implements Shl", lhs.typename()))?,
+            (ConValue::Int(a), b) => Err(Error::TypeError("int", b.type_of()))?,
+            _ => Err(Error::TypeError("type implements Shl", lhs.type_of()))?,
         })
     }
 
@@ -380,8 +383,8 @@ pub const Math: &[Builtin] = &builtins![
         Ok(match (lhs, rhs) {
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a >> b),
-            (ConValue::Int(a), b) => Err(Error::TypeError("int", b.typename()))?,
-            _ => Err(Error::TypeError("type implements Shr", lhs.typename()))?,
+            (ConValue::Int(a), b) => Err(Error::TypeError("int", b.type_of()))?,
+            _ => Err(Error::TypeError("type implements Shr", lhs.type_of()))?,
         })
     }
 
@@ -391,7 +394,7 @@ pub const Math: &[Builtin] = &builtins![
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a & b),
             (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a & b),
-            _ => Err(Error::TypeError("type implements BitAnd", lhs.typename()))?,
+            _ => Err(Error::TypeError("type implements BitAnd", lhs.type_of()))?,
         })
     }
 
@@ -401,7 +404,7 @@ pub const Math: &[Builtin] = &builtins![
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a | b),
             (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a | b),
-            _ => Err(Error::TypeError("type implements BitOr", lhs.typename()))?,
+            _ => Err(Error::TypeError("type implements BitOr", lhs.type_of()))?,
         })
     }
 
@@ -411,7 +414,7 @@ pub const Math: &[Builtin] = &builtins![
             (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
             (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a ^ b),
             (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a ^ b),
-            _ => Err(Error::TypeError("type implements BitXor", lhs.typename()))?,
+            _ => Err(Error::TypeError("type implements BitXor", lhs.type_of()))?,
         })
     }
 
@@ -421,7 +424,7 @@ pub const Math: &[Builtin] = &builtins![
             ConValue::Empty => ConValue::Empty,
             ConValue::Int(v) => ConValue::Int(-v),
             ConValue::Float(v) => ConValue::Float(-v),
-            _ => Err(Error::TypeError("type implements Neg", tail.typename()))?,
+            _ => Err(Error::TypeError("type implements Neg", tail.type_of()))?,
         })
     }
 
@@ -431,7 +434,7 @@ pub const Math: &[Builtin] = &builtins![
             ConValue::Empty => ConValue::Empty,
             ConValue::Int(v) => ConValue::Int(!v),
             ConValue::Bool(v) => ConValue::Bool(!v),
-            _ => Err(Error::TypeError("type implements Not", tail.typename()))?,
+            _ => Err(Error::TypeError("type implements Not", tail.type_of()))?,
         })
     }
 

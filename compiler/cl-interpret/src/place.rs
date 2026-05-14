@@ -51,7 +51,7 @@ impl Place {
                 match idx.interpret(env)? {
                     ConValue::Int(idx @ ..0) => Ok(place.index(-idx as usize, true)),
                     ConValue::Int(idx @ 0..) => Ok(place.index(idx as usize, false)),
-                    err => Err(Error::TypeError("int", err.typename()))?,
+                    err => Err(Error::TypeError("int", err.type_of()))?,
                 }
             }
             (Op::Dot, [place, At(Expr::Lit(Literal::Int(idx, _)), _)]) => {
@@ -136,7 +136,7 @@ impl Place {
                     values.get_mut(sym).ok_or(Error::NotDefined(*sym))?
                 }
                 (place, Projection::DotSym(name)) => {
-                    Err(Error::TypeError(name.to_ref(), place.typename()))?
+                    Err(Error::TypeError(name, place.type_of()))?
                 }
                 (ConValue::Tuple(values), &Projection::DotIdx(idx)) => {
                     let len = values.len();

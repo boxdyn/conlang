@@ -3,6 +3,8 @@
 use cl_ast::{Pat, types::Symbol};
 use cl_structures::span::Span;
 
+use crate::typeinfo::Type;
+
 use super::convalue::ConValue;
 
 pub type IResult<T> = Result<T, Error>;
@@ -55,8 +57,8 @@ impl Error {
     }
     /// Type incompatibility
     // TODO: store the type information in this error
-    pub fn TypeError(want: &'static str, got: &'static str) -> Self {
-        Self { kind: ErrorKind::TypeError(want, got), span: None }
+    pub fn TypeError(want: impl ToString, got: Type) -> Self {
+        Self { kind: ErrorKind::TypeError(want.to_string(), got), span: None }
     }
     /// In clause of For loop didn't yield a Range
     pub fn NotIterable() -> Self {
@@ -138,7 +140,7 @@ pub enum ErrorKind {
     ScopeExit,
     /// Type incompatibility
     // TODO: store the type information in this error
-    TypeError(&'static str, &'static str),
+    TypeError(String, Type),
     /// In clause of For loop didn't yield a Range
     NotIterable,
     /// A value could not be indexed
