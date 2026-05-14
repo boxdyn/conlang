@@ -1,4 +1,4 @@
-#!/usr/bin/env -S conlang -r false
+#!/usr/bin/env -S conlang main()
 //! Prints out the characters in the ASCII printable range
 //! and the Latin-1 supplement in the format of a hex-dump
 
