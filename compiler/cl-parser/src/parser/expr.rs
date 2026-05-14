@@ -445,7 +445,7 @@ impl<'t> Parse<'t> for MatchArm {
 /// else Expr       // optional
 /// ```
 fn parse_try_catch(p: &mut Parser<'_>, _level: ()) -> PResult<Match> {
-    let scrutinee: At<_> = p.consume().parse(Prec::Body.next())?;
+    let scrutinee: At<_> = p.consume().parse(Prec::Min.value())?;
     let mut arms = vec![];
     while let Some(Ok(_)) = p.next_if(TKind::Catch).allow_eof()? {
         let pat = p.parse(PPrec::Fn)?;

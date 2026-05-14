@@ -62,8 +62,11 @@ impl Display for ParseError {
 pub type PResult<T> = Result<T, ParseError>;
 
 pub trait PResultExt<T> {
+    /// Turns [`ParseError::EOF`] into [`ParseError::UnexpectedEOF`]
     fn no_eof(self) -> PResult<T>;
+    /// Maps [`ParseError::EOF`] to [`None`], [`Ok`] to [`Some`]
     fn allow_eof(self) -> PResult<Option<T>>;
+    /// Returns whether this is [Err] containing [ParseError::EOF]
     fn is_eof(&self) -> bool;
 }
 
