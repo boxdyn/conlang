@@ -18,7 +18,7 @@ pub trait FmtAdapter: Write {
     }
 
     /// Pastes `indent` after each newline.
-    fn indent_with(&mut self, indent: &'static str) -> Indent<'_, Self> {
+    fn indent_with<I: Display>(&mut self, indent: I) -> Indent<'_, Self, I> {
         Indent::new(self, indent)
     }
 
@@ -77,14 +77,14 @@ pub trait FmtAdapter: Write {
 }
 
 /// Pads text with leading indentation after every newline
-pub struct Indent<'f, F: Write + ?Sized> {
-    indent: &'static str,
+pub struct Indent<'f, F: Write + ?Sized, I: Display = &'static str> {
+    indent: I,
     needs_indent: bool,
     f: &'f mut F,
 }
 
-impl<'f, F: Write + ?Sized> Indent<'f, F> {
-    pub const fn new(f: &'f mut F, indent: &'static str) -> Self {
+impl<'f, F: Write + ?Sized, I: Display> Indent<'f, F, I> {
+    pub const fn new(f: &'f mut F, indent: I) -> Self {
         Indent { f, needs_indent: false, indent }
     }
 
@@ -94,20 +94,20 @@ impl<'f, F: Write + ?Sized> Indent<'f, F> {
     }
 }
 
-impl<F: Write + ?Sized> Write for Indent<'_, F> {
+impl<F: Write + ?Sized, I: Display> Write for Indent<'_, F, I> {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         for s in s.split_inclusive('\n') {
             if self.needs_indent {
-                self.f.write_str(self.indent)?;
+                write!(self.f, "{}", self.indent)?;
             }
-            self.f.write_str(s)?;
             self.needs_indent = s.ends_with('\n');
+            self.f.write_str(s)?;
         }
         Ok(())
     }
     fn write_char(&mut self, c: char) -> std::fmt::Result {
         if self.needs_indent {
-            self.f.write_str(self.indent)?;
+            write!(self.f, "{}", self.indent)?;
         }
         self.needs_indent = c == '\n';
         self.f.write_char(c)
