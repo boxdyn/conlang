@@ -97,8 +97,7 @@ enum Power {
 }
 
 fn inf_bp(op: char) -> (i32, i32) {
-    (|x| (2 * x, 2 * x + 1))(
-    match op {
+    (|x| 2 * x, 2 * x + 1)(match op {
         '*' => Power::Term;
         '/' => Power::Term;
         '%' => Power::Term;
@@ -111,18 +110,15 @@ fn inf_bp(op: char) -> (i32, i32) {
 }
 
 fn pre_bp(op: char) -> i32 {
-    (|x| 2 * x + 1)(
-    match op {
+    (|x| 2 * x + 1)(match op {
         '-' => Power::Unary;
         _ => panic("Unknown unary operator: " + op);
     } as i32)
 }
 
-fn main() {
-    loop {
-        let line = get_line("calc > ");
-        let (expr, rest) = line.chars().parse(0);
+fn main() loop {
+    let line = get_line("calc > ");
+    let (expr, rest) = line.chars().parse(0);
 
-        println(fmt_expr(expr), " -> ", execute(expr));
-    }
+    println(fmt_expr(expr), " -> ", execute(expr));
 }
