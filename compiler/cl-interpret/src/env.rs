@@ -13,7 +13,7 @@ use super::{
     error::{Error, IResult},
     function::Function,
 };
-use cl_ast::{Bind as FnDecl, types::Symbol};
+use cl_ast::{Bind as FnDecl, fmt::FmtAdapter, types::Symbol};
 use cl_structures::{intern::interned::Interned, span::Span};
 use std::{
     collections::HashMap,
@@ -69,6 +69,7 @@ pub struct Environment {
 
 impl Display for Environment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use std::fmt::Write as _;
         for EnvFrame { name, binds, .. } in self.frames.iter().rev() {
             writeln!(
                 f,
@@ -79,12 +80,12 @@ impl Display for Environment {
             let mut binds: Vec<_> = binds.iter().collect();
             binds.sort_by_key(|(_, a)| *a);
             for (name, idx) in binds {
-                write!(f, "{idx:4} {name}: ")?;
+                let mut f = f.indent();
+                write!(f, "{idx:4} {:16} ", format!("{name}:"))?;
                 match self.values.get(*idx) {
-                    Some(ConValue::TypeInfo(t)) => {
-                        writeln!(f, "\ttype {t}")
-                    }
-                    Some(value) => writeln!(f, "\t{value}"),
+                    Some(ConValue::TypeInfo(t)) => writeln!(f, "type {t}"),
+                    Some(ConValue::Function(v)) => writeln!(f, "\n{v}"),
+                    Some(value) => writeln!(f, "{value}"),
                     None => writeln!(f, "ERROR: {name}'s address blows the stack!"),
                 }?
             }

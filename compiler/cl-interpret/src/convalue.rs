@@ -1,7 +1,7 @@
 //! [Conlang Values](ConValue) in the dynamically typed AST interpreter.
 //!
 //! > The most permanent fix is a temporary one.
-use cl_ast::{Expr, fmt::FmtAdapter, types::Symbol};
+use cl_ast::{At, Expr, fmt::FmtAdapter, types::Symbol};
 use cl_structures::intern::interned::Interned;
 
 use crate::{
@@ -75,7 +75,7 @@ pub enum ConValue {
     /// An entire namespace
     Module(Box<HashMap<Symbol, ConValue>>),
     /// A quoted expression
-    Quote(Rc<Expr>),
+    Quote(Box<At<Expr>>),
     /// A callable thing
     Function(Rc<Function>),
     /// A built-in function
@@ -123,24 +123,24 @@ impl ConValue {
 
     pub fn type_of(&self) -> Type {
         match self {
-            Self::Empty => Model::Unit(0).intern(),
+            Self::Empty => Model::Unit(0).already_interned(),
             Self::Int(_) => Model::default_integer(),
-            Self::Float(_) => todo!(),
-            Self::Bool(_) => todo!(),
-            Self::Char(_) => todo!(),
-            Self::Str(interned) => todo!(),
-            Self::String(_) => todo!(),
+            Self::Float(_) => Model::default_float(),
+            Self::Bool(_) => Model::Bool.already_interned(),
+            Self::Char(_) => Model::Char.already_interned(),
+            Self::Str(_) => Model::Str.already_interned(),
+            Self::String(_) => Model::Str.already_interned(),
             Self::Ref(place) => todo!(),
             Self::Slice(place, _) => todo!(),
-            Self::Array(con_values) => todo!(),
-            Self::Tuple(con_values) => todo!(),
-            Self::Struct(interned, hash_map) => todo!(),
-            Self::TupleStruct(interned, con_values) => todo!(),
-            Self::Module(hash_map) => todo!(),
-            Self::Quote(expr) => todo!(),
-            Self::Function(function) => todo!(),
-            Self::Builtin(builtin) => todo!(),
-            Self::TypeInfo(interned) => todo!(),
+            Self::Array(_) => todo!(),
+            Self::Tuple(vs) => Model::Tuple(None, vs.iter().map(Self::type_of).collect()).intern(),
+            Self::Struct(ty, _) => *ty,
+            Self::TupleStruct(ty, _) => *ty,
+            Self::Module(_) => todo!(),
+            Self::Quote(_) => todo!(),
+            Self::Function(_) => todo!(),
+            Self::Builtin(_) => todo!(),
+            Self::TypeInfo(ty) => *ty,
         }
     }
 
@@ -345,7 +345,7 @@ from! {
     char => ConValue::Char,
     Symbol => ConValue::Str,
     &str => ConValue::Str,
-    Expr => ConValue::Quote,
+    At<Expr> => ConValue::Quote,
     String => ConValue::String,
     Function => ConValue::Function,
     Vec<ConValue> => ConValue::Tuple,
@@ -465,12 +465,12 @@ impl std::fmt::Display for ConValue {
             ConValue::Slice(id, len) => write!(f, "&<{id}>[{len}..]"),
             ConValue::Array(array) => f.delimit('[', ']').list(array, ", "),
             ConValue::Tuple(tuple) => f.delimit('(', ')').list(tuple, ", "),
-            ConValue::TupleStruct(id, tuple) => {
-                f.delimit(format_args!("{}(", id), ")").list(tuple, ", ")
-            }
+            ConValue::TupleStruct(id, tuple) => f
+                .delimit(format_args!("{}(", id.name()), ")")
+                .list(tuple, ", "),
             ConValue::Struct(id, map) => {
                 use std::fmt::Write;
-                write!(f, "{} ", id)?;
+                write!(f, "{} ", id.name())?;
                 let mut f = f.delimit_indented("{", "\n}");
                 for (k, v) in map.iter() {
                     write!(f, "\n{k}: {v},")?;

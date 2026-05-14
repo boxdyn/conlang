@@ -23,11 +23,17 @@ pub(crate) static TYPE_INTERNER: OnceLock<LeakyInterner<Model>> = OnceLock::new(
 #[rustfmt::skip]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Model {
+    /// A primitive integer ([u8], [i32], ...)
     Integer { signed: bool, size: usize, min: i128, max: i128 },
+    /// A float ([f32], [f64])
     Float { size: usize },
+    /// A [bool]
     Bool,
+    /// A [char]
     Char,
+    /// A [str]
     Str,
+    /// Any type. A placeholder wildcard type
     Any,
     /// The "never" type (no variants)
     Never,
@@ -42,7 +48,7 @@ pub enum Model {
     /// The elements of a struct, and whether they are exhaustive
     Struct(Option<Symbol>, Box<[(Symbol, Type)]>, bool),
     /// The variants of an enumeration
-    Enum(Box<[(Symbol, Type)]>),
+    Enum(Symbol, Box<[(Symbol, Type)]>),
 }
 
 impl Display for Model {
@@ -65,28 +71,14 @@ impl Display for Model {
                 f.delimit(format_args!("{name}("), ")").list(items, ", ")
             }
             Self::Tuple(_name, items) => f.delimit("(", ")").list(items, ", "),
-            Self::Struct(Some(name), items, _exhaustive) => {
-                let mut f = f.delimit(format_args!("{name}("), " }");
-                for (idx, (name, ty)) in items.iter().enumerate() {
-                    if idx > 0 {
-                        write!(f, ",")?;
-                    }
-                    write!(f, " {name}: {ty}")?;
-                }
-                Ok(())
-            }
-            Self::Struct(name, items, _exhaustive) => {
-                let mut f = f.delimit("{", " }");
-                for (idx, (name, ty)) in items.iter().enumerate() {
-                    if idx > 0 {
-                        write!(f, ",")?;
-                    }
-                    write!(f, " {name}: {ty}")?;
-                }
-                Ok(())
-            }
-            Self::Enum(items) => {
-                let mut f = f.delimit_indented("enum {", "\n}");
+            Self::Struct(Some(name), items, _exhaustive) => f
+                .delimit(format_args!("{name}("), " }")
+                .list(items.iter().map(|(name, ty)| format!(" {name}: {ty}")), ","),
+            Self::Struct(name, items, _exhaustive) => f
+                .delimit("{", " }")
+                .list(items.iter().map(|(name, ty)| format!(" {name}: {ty}")), ","),
+            Self::Enum(name, items) => {
+                let mut f = f.delimit_indented(format_args!("enum {name}{{"), "\n}");
                 for (name, idx) in items {
                     write!(f, "\n{name}: {idx},")?;
                 }
@@ -115,8 +107,17 @@ impl Model {
         Self::Float { size: size_of::<f64>() }.already_interned()
     }
 
-    pub fn name(&self) -> Option<&'static str> {
-        Some(match self {
+    pub fn with_name(self, name: Symbol) -> Self {
+        match self {
+            Self::Tuple(_, items) => Self::Tuple(Some(name), items),
+            Self::Struct(_, items, e) => Self::Struct(Some(name), items, e),
+            Self::Enum(_, items) => Self::Enum(name, items),
+            _ => self,
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
             Self::Integer { signed: true, size: 1, .. } => "i8",
             Self::Integer { signed: true, size: 2, .. } => "i16",
             Self::Integer { signed: true, size: 4, .. } => "i32",
@@ -141,8 +142,9 @@ impl Model {
             Self::Slice(interned) => "[...]",
             Self::Tuple(Some(name), ..) => name.to_ref(),
             Self::Struct(Some(name), ..) => name.to_ref(),
-            _ => return None,
-        })
+            Self::Enum(name, _items) => name.to_ref(),
+            _ => "",
+        }
     }
 
     pub fn make_tuple(&self, values: Box<[ConValue]>) -> IResult<ConValue> {
@@ -242,7 +244,7 @@ impl Model {
                 .iter()
                 .find_map(|&(name, ty)| (name == attr).then_some(ConValue::TypeInfo(ty)))
                 .ok_or(Error::NotDefined(attr))?,
-            (Model::Enum(items), _) => items
+            (Model::Enum(_, items), _) => items
                 .iter()
                 .find_map(|&(name, ty)| (name == attr).then_some(ConValue::TypeInfo(ty)))
                 .ok_or(Error::NotDefined(attr))?,
