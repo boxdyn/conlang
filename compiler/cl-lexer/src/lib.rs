@@ -180,7 +180,7 @@ impl<'t> Lexer<'t> {
             ')' => RParen,
             '*' => Star,
             '+' => Plus,
-            ',' => return self.consume().trailing(Comma),
+            ',' => Comma,
             '-' => Minus,
             '.' => Dot,
             '/' => Slash,
@@ -254,16 +254,6 @@ impl<'t> Lexer<'t> {
         };
 
         Ok(self.consume().produce(tok))
-    }
-
-    /// Elides the trailing [Token] `kind` when it comes before a list terminator.
-    pub fn trailing(&mut self, kind: TKind) -> Result<Token, LexError> {
-        Ok(match self.skip_whitespace().peek() {
-            // Some(')') => self.consume().produce(TKind::RParen), // maybe.
-            // Some(']') => self.consume().produce(TKind::RBrack),
-            Some('}') => self.consume().produce(TKind::RCurly),
-            _ => self.produce(kind),
-        })
     }
 
     /// Consumes characters until the lexer reaches a newline `'\n'`
