@@ -3,7 +3,8 @@
 use std::{convert::Infallible, mem::replace};
 
 use crate::{
-    At, Bind, BindOp, DefaultTypes, Pat, PatOp, fold::{Fold, Foldable, impl_default_fold}
+    At, Bind, BindOp, DefaultTypes, Pat, PatOp,
+    fold::{Fold, Foldable, impl_default_fold},
 };
 
 fn take(At(pat, span): &mut At<Pat>) -> At<Pat> {
@@ -102,7 +103,7 @@ pub fn bubble_types(pat: At<Pat>, in_enum: bool) -> (At<Pat>, Option<At<Pat>>) {
 
 /// The [Bubbler] separates [Patterns](Pat) into their value and type-annotation components,
 /// "bubbling" [PatOp::Typed] annotations up to the top of all pattern-expressions.
-/// 
+///
 /// Its [`bool`] argument tracks whether or not it's inside of a [`BindOp::Enum`] expression,
 /// which gets different binding rules.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
