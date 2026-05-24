@@ -157,7 +157,7 @@ impl ConValue {
                     _ => return self,
                 };
                 if i == min || i == max {
-                    self
+                    ConValue::Int(i)
                 } else if signed {
                     ConValue::Int(i.wrapping_rem(max))
                 } else {
