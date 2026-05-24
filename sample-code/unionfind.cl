@@ -9,7 +9,7 @@ enum TreeNode {
 
 fn makeset(f: &[TreeNode], x: usize) {
     match f[x] {
-        TreeNode::Empty => f[x] = TreeNode::Filled { parent: x, rank: 0 };
+        TreeNode::Empty => f[x] = TreeNode::Filled { parent: x, rank: 0 }
         _ => {}
     }
 }
@@ -19,11 +19,11 @@ fn union(f: &[TreeNode], a: usize, b: usize) {
     if a == b return;
 
     match f[a], f[b] {
-        TreeNode::Empty => ();
+        TreeNode::Empty => {}
         TreeNode::Filled { rank: ra }, TreeNode::Filled { rank: rb } if ra < rb => union(f, b, a);
         TreeNode::Filled {..}, TreeNode::Filled {..} => {
             f[b].parent = a;
-            f[a].rank += 1;
+            f[a].rank += ((f[a].rank == f[b].rank) as usize);
         }
     }
 }
@@ -34,7 +34,7 @@ fn find(f: &[TreeNode], x: usize) {
             let parent = find(f, parent);
             f[x].parent = parent;
             parent
-        };
+        }
         _ => x;
     }
 }
