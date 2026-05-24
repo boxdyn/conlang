@@ -1,4 +1,4 @@
-//! Runtime [type information](TypeInfo)
+//! Runtime [type information](Model)
 
 use std::{collections::HashMap, fmt::Display, sync::OnceLock};
 
@@ -72,7 +72,7 @@ impl Display for Model {
             }
             Self::Tuple(_name, items) => f.delimit("(", ")").list(items, ", "),
             Self::Struct(Some(name), items, _exhaustive) => f
-                .delimit(format_args!("{name}("), " }")
+                .delimit(format_args!("{name}{{"), " }")
                 .list(items.iter().map(|(name, ty)| format!(" {name}: {ty}")), ","),
             Self::Struct(name, items, _exhaustive) => f
                 .delimit("{", " }")
