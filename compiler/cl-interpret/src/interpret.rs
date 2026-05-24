@@ -72,7 +72,11 @@ impl Interpret for Expr<DefaultTypes> {
             Self::Lit(Literal::Char(v)) => Ok(ConValue::Char(*v)),
             Self::Lit(Literal::Int(v, _)) => Ok(ConValue::Int(*v as _)),
             Self::Lit(Literal::Str(v)) => Ok(ConValue::Str(v.as_str().into())),
-            Self::Use(_) => cl_todo!("Use `{self}`"),
+            Self::Use(_) => {
+                #[rustfmt::skip]
+                println!("TODO: Use `{self}` (at {}:{}:{})", file!(), line!(), column!());
+                Ok(ConValue::Empty)
+            }
             Self::Bind(bind) => bind.interpret(env),
             Self::Make(make) => make.interpret(env),
             Self::Match(mtch) => mtch.interpret(env),
