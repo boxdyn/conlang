@@ -103,7 +103,7 @@ impl Place {
 
         let mut place = unsafe { &mut *env }
             .get_id_mut(*place)
-            .ok_or(Error::StackOverflow(*place as _))?;
+            .ok_or(Error::StackOob(*place as _))?;
 
         for projection in projections {
             place = match (place, projection) {
@@ -135,9 +135,7 @@ impl Place {
                 (ConValue::Struct(_, values), Projection::DotSym(sym)) => {
                     values.get_mut(sym).ok_or(Error::NotDefined(*sym))?
                 }
-                (place, Projection::DotSym(name)) => {
-                    Err(Error::TypeError(name, place.type_of()))?
-                }
+                (place, Projection::DotSym(name)) => Err(Error::TypeError(name, place.type_of()))?,
                 (ConValue::Tuple(values), &Projection::DotIdx(idx)) => {
                     let len = values.len();
                     values.get_mut(idx).ok_or(Error::OobIndex(idx, len))?
@@ -159,9 +157,7 @@ impl Place {
     pub fn get<'e>(&self, env: &'e Environment) -> IResult<&'e ConValue> {
         let Self { place, projections } = self;
 
-        let mut place = env
-            .get_id(*place)
-            .ok_or(Error::StackOverflow(*place as _))?;
+        let mut place = env.get_id(*place).ok_or(Error::StackOob(*place as _))?;
 
         for projection in projections {
             place = match (place, projection) {

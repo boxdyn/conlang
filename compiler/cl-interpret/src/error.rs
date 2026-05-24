@@ -43,13 +43,9 @@ impl Error {
     pub fn Continue() -> Self {
         Self { kind: ErrorKind::Continue, span: None }
     }
-    /// Underflowed the stack
-    pub fn StackUnderflow() -> Self {
-        Self { kind: ErrorKind::StackUnderflow, span: None }
-    }
-    /// Overflowed the stack
-    pub fn StackOverflow(place: usize) -> Self {
-        Self { kind: ErrorKind::StackOverflow(place), span: None }
+    /// Indexed out of bounds in the stack
+    pub fn StackOob(place: usize) -> Self {
+        Self { kind: ErrorKind::StackOob(place), span: None }
     }
     /// Exited the last scope
     pub fn ScopeExit() -> Self {
@@ -132,10 +128,8 @@ pub enum ErrorKind {
     BadBreak(ConValue),
     /// Continue to the next iteration of a loop
     Continue,
-    /// Underflowed the stack
-    StackUnderflow,
     /// Overflowed the stack
-    StackOverflow(usize),
+    StackOob(usize),
     /// Exited the last scope
     ScopeExit,
     /// Type incompatibility
@@ -175,9 +169,8 @@ impl std::fmt::Display for ErrorKind {
             ErrorKind::Break(value) => write!(f, "break {value}"),
             ErrorKind::BadBreak(value) => write!(f, "rogue break: {value}"),
             ErrorKind::Continue => "continue".fmt(f),
-            ErrorKind::StackUnderflow => "Stack underflow".fmt(f),
-            ErrorKind::StackOverflow(id) => {
-                write!(f, "Attempt to access <{id}> resulted in stack overflow.")
+            ErrorKind::StackOob(id) => {
+                write!(f, "Out of bounds access of stack entry <{id}>.")
             }
             ErrorKind::ScopeExit => "Exited the last scope. This is a logic bug.".fmt(f),
             ErrorKind::TypeError(want, got) => {
