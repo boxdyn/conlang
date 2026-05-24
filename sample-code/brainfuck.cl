@@ -46,12 +46,12 @@ fn compile(program: str) {
         '[' => {
             stack.push(fucks.len());
             Brainfuck::Jz(-1 as usize)
-        };
+        }
         ']' => {
             let begin = stack.pop();
             fucks[begin] = Brainfuck::Jz(fucks.len());
             Brainfuck::Jnz(begin)
-        };
+        }
         _ => continue;
     });
     if stack.len() panic("Stack ", stack, " not empty!");
@@ -90,9 +90,9 @@ fn run(fucks: &[Brainfuck], ..input: [char]) {
         Brainfuck::In => match input {
             [] => tape[head] = 0;
             [first, ..rest] => (tape[head] = first as u8; input = rest);
-        };
-        Brainfuck::Jz(goto) => if tape[head] == 0 { pc = goto };
-        Brainfuck::Jnz(goto) => if tape[head] != 0 { pc = goto };
+        }
+        Brainfuck::Jz(goto) => if tape[head] == 0 { pc = goto }
+        Brainfuck::Jnz(goto) => if tape[head] != 0 { pc = goto }
     }
     println()
 }
