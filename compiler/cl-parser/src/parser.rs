@@ -35,13 +35,13 @@ pub struct Parser<'t> {
     pub last_loc: Span,
 
     /// Whether the last-consumed [Token] can stand in for a semicolon in a `do` sequence
-    pub elide_do: bool,
+    pub can_do: bool,
 }
 
 impl<'t> Parser<'t> {
     /// Constructs a new Parser
     pub fn new(lexer: Lexer<'t>) -> Self {
-        Self { last_loc: lexer.span(), lexer, next_tok: None, elide_do: false }
+        Self { last_loc: lexer.span(), lexer, next_tok: None, can_do: false }
     }
 
     /// The identity function. This exists to make production chaining easier.
@@ -104,10 +104,7 @@ impl<'t> Parser<'t> {
 
         if let Ok(tok) = &tok {
             self.last_loc = tok.span;
-            self.elide_do = matches!(
-                tok.kind,
-                TKind::RCurly | TKind::Semi | TKind::DotDot | TKind::DotDotEq
-            )
+            self.can_do = matches!(tok.kind, TKind::RCurly | TKind::Semi)
         }
 
         tok

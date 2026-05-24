@@ -330,7 +330,7 @@ impl<'t> Parse<'t> for Expr {
                     }
                     Ps::Make => break,
                     // As is ImplicitDo (semicolon elision)
-                    Ps::ImplicitDo if p.elide_do => head.and_do(span, p.parse(prec.next())?),
+                    Ps::ImplicitDo if p.can_do => head.and_do(span, p.parse(prec.next())?),
                     Ps::ImplicitDo => break,
                     // Allow `;` at end of file
                     Ps::Op(Op::Do) => head.and_do(
@@ -340,6 +340,8 @@ impl<'t> Parse<'t> for Expr {
                             None => At(Expr::Omitted, p.span()),
                         },
                     ),
+                    // If we can elide a `;`, `(...)`/`[...]` is ambiguous, so disallow it
+                    Ps::Op(Op::Call | Op::Index) if p.can_do => break,
                     Ps::Op(Op::Index) => Expr::Op(
                         Op::Index,
                         p.consume()
@@ -404,13 +406,19 @@ fn parse_array(p: &mut Parser<'_>) -> PResult<Expr> {
 impl<'t> Parse<'t> for Match {
     type Prec = ();
 
-    fn parse(p: &mut Parser<'t>, _level: Self::Prec) -> PResult<Self>
-    where Self: Sized {
-        Ok(Self(
-            p.consume().parse(Prec::Tuple.value())?,
-            p.expect(TKind::LCurly)?
-                .list(vec![], (), TKind::Semi, TKind::RCurly)?,
-        ))
+    fn parse(p: &mut Parser<'t>, _level: Self::Prec) -> PResult<Self> {
+        let scrutinee = p.consume().parse(Prec::Tuple.value())?;
+        let mut arms = vec![];
+
+        p.expect(TKind::LCurly)?;
+        while p.next_if(TKind::RCurly)?.is_err() {
+            arms.push(p.parse(())?);
+            if p.next_if(TKind::Semi)?.is_err() && !p.can_do {
+                break;
+            }
+        }
+
+        Ok(Self(scrutinee, arms))
     }
 }
 
