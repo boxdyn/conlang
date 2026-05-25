@@ -2,7 +2,6 @@
 
 use crate::{
     entry::EntryMut,
-    list::List,
     table::{NodeKind, Table},
 };
 use cl_ast::{
@@ -10,6 +9,7 @@ use cl_ast::{
     types::Path,
     visit::{Visit, Walk},
 };
+use cl_structures::list::List;
 
 mod name_finder;
 use name_finder::NameFinder;

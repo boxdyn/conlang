@@ -18,6 +18,8 @@ pub mod span;
 
 pub mod tree;
 
+pub mod list;
+
 pub mod stack;
 
 pub mod index_map;
