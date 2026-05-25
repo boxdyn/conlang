@@ -19,7 +19,10 @@ impl<A: AstTypes> Fold<A, A> for WhileElseDesugar {
         let At(Expr::Op(Op::While, mut parts), span) = expr else {
             return Ok(expr);
         };
-        assert_eq!(parts.len(), 3, "`while` must have exactly 3 branches");
+        if parts.len() != 3 {
+            std::hint::cold_path();
+            panic!("`while` must have exactly 3 branches")
+        }
         let fail = parts.pop().unwrap();
         let pass = parts.pop().unwrap();
         let cond = parts.pop().unwrap();
