@@ -38,8 +38,8 @@ pub mod builtin_preamble {
             _ => recurse(n, radix);
         }
     }
-    pub fn count_leading_zeroes(n: u64) -> u64 {
-        let mut xd = u64::BITS;
+    pub fn count_leading_zeroes(n: u128) -> u128 {
+        let mut xd = u128::BITS;
         if n < 0 return 0;
         while n != 0 {
             xd -= 1;
@@ -47,24 +47,24 @@ pub mod builtin_preamble {
         }
         xd
     }
-    pub fn hex(n: u64) {
+    pub fn hex(n: u128) {
         let out = "0x";
-        for xd in min(count_leading_zeroes(n) / 4, 15)..16 {
-            out += as_digit((n >> (15 - xd) * 4) & 0xf)
+        for xd in min(count_leading_zeroes(n) / 4, 31)..32 {
+            out += as_digit(n >> (31 - xd) * 4 & 0xf)
         }
         out
     }
-    pub fn oct(n: u64) {
+    pub fn oct(n: u128) {
         let out = "0o";
-        for xd in min((count_leading_zeroes(n) + 2) / 3, 21)..22 {
-            out += as_digit((n >> max(63 - (3 * xd), 0)) & 7)
+        for xd in min((count_leading_zeroes(n) + 1) / 3, 42)..43 {
+            out += as_digit(n >> (42 - xd) * 3 & 7)
         }
         out
     }
-    pub fn bin(n: u64) {
+    pub fn bin(n: u128) {
         let out = "0b";
-        for xd in min(count_leading_zeroes(n), 63)..64 {
-            out += as_digit((n >> 63 - xd) & 1)
+        for xd in min(count_leading_zeroes(n), 127)..128 {
+            out += as_digit(n >> 127 - xd & 1)
         }
         out
     }
