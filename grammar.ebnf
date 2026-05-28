@@ -53,11 +53,10 @@ ExprMax = (
   | '[' ExprTuple? ']'
   | '[' ExprTuple (';' ExprTuple)? ']'
   | OutAttr ExprMax
+  | InAttr Expr (* FIXME: move this *)
   | "use" Use
   | Match
   | Bind
-  | OutDoc ExprMax
-  | InDoc Expr
   | Omitted
   | Path
 );
@@ -66,7 +65,7 @@ Omitted = '...' ;
 Match = "match" ExprTuple '{' (MatchArm ';')* MatchArm? '}' ;
 MatchArm = Pat '=>' ExprBody ;
 
-Bind = BindLet| BindType| BindStruct | BindEnum| BindFn| BindMod| BindImpl| BindFor;
+Bind = BindLet | BindType | BindStruct | BindEnum | BindFn | BindMod | BindImpl | BindFor ;
 BindLet    = "let"    BoundGeneric? PatTuple ('=' ExprTuple   ("else" ExprBody)?)? ;
 BindType   = "type"   BoundGeneric? PatAlt   ('=' ExprTuple)? ;
 BindStruct = "struct" BoundGeneric? PatTuple ;
