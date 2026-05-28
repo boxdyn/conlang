@@ -66,6 +66,7 @@ impl ConstEval for Expr {
                 Op::Const => ats.first().and_then(At::const_eval),
                 Op::Static => ats.first().and_then(At::const_eval),
                 Op::Macro => todo!("Consteval {op}"),
+                Op::Quote => todo!("Consteval {op}"),
                 Op::Loop => todo!("Consteval {op}"),
                 Op::If => todo!("Consteval {op}"),
                 Op::While => todo!("Consteval {op}"),

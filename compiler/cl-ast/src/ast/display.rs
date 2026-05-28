@@ -100,6 +100,7 @@ impl<A: AstTypes> Display for Expr<A> {
             Self::Op(Op::Group, exprs) if let [At(Expr::Op(Op::Do, _), _)] = &exprs[..] => {
                 f.delimit_indented("(", ")").list(exprs, ";\n")
             }
+            Self::Op(Op::Quote, exprs) => f.delimit("`", "`").list(exprs, ", "),
             Self::Op(Op::Group, exprs) => f.delimit("(", ")").list(exprs, ", "),
             Self::Op(op @ (Op::MetaInner | Op::MetaOuter), exprs) => match &exprs[..] {
                 [meta, expr @ ..] => f.delimit(fmt!("{op}[{meta}]\n"), "").list(expr, ","),
@@ -136,6 +137,7 @@ impl Display for Op {
             Op::Do => ";\n",
             Op::As => " as ",
             Op::Macro => "macro ",
+            Op::Quote => "`",
             Op::Block => "{}",
             Op::Array => "[]",
             Op::ArRep => "; ",

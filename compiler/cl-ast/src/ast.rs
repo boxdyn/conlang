@@ -138,6 +138,8 @@ pub enum Op {
     Static,
     /// `macro Expr`
     Macro,
+    /// <code>`Expr`</code>
+    Quote,
     /// `loop Expr`
     Loop,
     /// `if Expr Expr (else Expr)?`

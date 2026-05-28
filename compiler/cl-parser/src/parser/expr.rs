@@ -74,7 +74,7 @@ pub enum Ps {
     Mid,        // MetaIdentifier
     Lit,        // Literal
     Use,        // use Use
-    Def,        // any definition (let, struct, enum, fn, ...)
+    Bind,       // any definition (let, struct, enum, fn, ...)
     DocInner,   // Documentation Comment `//!`
     DocOuter,   // Documentation Comment `///`
     For,        // for Pat in Expr Expr else Expr
@@ -93,10 +93,13 @@ pub enum Ps {
 /// and its [precedence level](Prec)
 fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
     Ok(match token.kind {
-        TKind::InDoc => (Ps::DocInner, Prec::Min),
-        TKind::OutDoc => (Ps::DocOuter, Prec::Max),
         TKind::Do => (Ps::Op(Op::Do), Prec::Do),
         TKind::Semi => (Ps::End, Prec::Body),
+
+        TKind::InDoc => (Ps::DocInner, Prec::Min),
+        TKind::OutDoc => (Ps::DocOuter, Prec::Max),
+        TKind::HashBang => (Ps::Op(Op::MetaInner), Prec::Min),
+        TKind::Hash => (Ps::Op(Op::MetaOuter), Prec::Max),
 
         TKind::Identifier | TKind::ColonColon => (Ps::Id, Prec::Max),
         TKind::Dollar => (Ps::Mid, Prec::Max),
@@ -118,7 +121,7 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
         | TKind::Let
         | TKind::Type
         | TKind::Struct
-        | TKind::Enum => (Ps::Def, Prec::Max),
+        | TKind::Enum => (Ps::Bind, Prec::Max),
 
         TKind::Loop => (Ps::Op(Op::Loop), Prec::Body),
         TKind::If => (Ps::Op(Op::If), Prec::Body),
@@ -134,6 +137,7 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
         TKind::RBrack => (Ps::End, Prec::Tuple),
         TKind::LParen => (Ps::Op(Op::Group), Prec::Min),
         TKind::RParen => (Ps::End, Prec::Tuple),
+        TKind::Grave => (Ps::Op(Op::Quote), Prec::Min),
         TKind::Amp => (Ps::Op(Op::Refer), Prec::Unary),
         TKind::AmpAmp => (Ps::DoubleRef, Prec::Unary),
         TKind::Bang => (Ps::Op(Op::Not), Prec::Unary),
@@ -146,8 +150,6 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
         TKind::Minus => (Ps::Op(Op::Neg), Prec::Unary),
         TKind::Plus => (Ps::Op(Op::Identity), Prec::Unary),
         TKind::Star => (Ps::Op(Op::Deref), Prec::Unary),
-        TKind::Hash => (Ps::Op(Op::MetaOuter), Prec::Max),
-        TKind::HashBang => (Ps::Op(Op::MetaInner), Prec::Max),
 
         kind => Err(ParseError::NotPrefix(kind, token.span))?,
     })
@@ -200,7 +202,7 @@ const fn from_infix(token: &Token) -> PResult<(Ps, Prec)> {
         TKind::LBrack => (Ps::Op(Op::Index), Prec::Project),
         TKind::LParen => (Ps::Op(Op::Call), Prec::Extend),
 
-        TKind::RParen | TKind::RBrack | TKind::RCurly => (Ps::End, Prec::Max),
+        TKind::RParen | TKind::RBrack | TKind::RCurly | TKind::Grave => (Ps::End, Prec::Max),
         TKind::As => (Ps::Op(Op::As), Prec::Unary),
         _ => (Ps::ImplicitDo, Prec::Do),
     })
@@ -231,7 +233,7 @@ impl<'t> Parse<'t> for Expr {
                 Ps::Mid => Expr::MetId(p.consume().next()?.lexeme.to_string().as_str().into()),
                 Ps::Lit => Expr::Lit(p.parse(())?),
                 Ps::Use => Expr::Use(p.consume().parse(())?),
-                Ps::Def => Expr::Bind(p.parse(())?),
+                Ps::Bind => Expr::Bind(p.parse(())?),
                 Ps::For => parse_for(p, ())?,
                 Ps::Match => Expr::Match(p.parse(())?),
                 Ps::Lambda | Ps::Lambda0 => {
@@ -280,10 +282,9 @@ impl<'t> Parse<'t> for Expr {
                         .unwrap_or_else(|| Expr::Omitted.at(span));
                     Expr::Op(op, vec![meta, p.parse(prec.next())?])
                 }
-                Ps::Op(Op::Block) => Expr::Op(
-                    Op::Block,
-                    p.consume().opt(MIN, kind.flip())?.into_iter().collect(),
-                ),
+                Ps::Op(op @ (Op::Block | Op::Quote)) => {
+                    Expr::Op(op, p.consume().opt(MIN, kind.flip())?.into_iter().collect())
+                }
                 Ps::Op(Op::Array) => parse_array(p)?,
                 Ps::Op(Op::Group) => match p.consume().opt(MIN, kind.flip())? {
                     Some(value) => Expr::Op(Op::Group, vec![value]),
@@ -502,7 +503,7 @@ impl<'t> Parse<'t> for Bind {
 
     fn parse(p: &mut Parser<'t>, _level: Self::Prec) -> PResult<Self> {
         // let
-        let (level, patp, arrow, bodyp, failp) = from_bind(p)?;
+        let (bind, patp, equals, bodyp, failp) = from_bind(p)?;
 
         // <T,*>
         let generics = match p.next_if(TKind::Lt)? {
@@ -514,13 +515,13 @@ impl<'t> Parse<'t> for Bind {
         let pat = p.parse(patp)?;
 
         let Some(bodyp) = bodyp else {
-            return Ok(Self(level, generics, pat, vec![]));
+            return Ok(Self(bind, generics, pat, vec![]));
         };
 
         // `=>` for match, `=` for `let`, `type`
-        if let Some(arrow) = arrow {
-            if p.next_if(arrow).allow_eof()?.is_none_or(|v| v.is_err()) {
-                return Ok(Self(level, generics, pat, vec![]));
+        if let Some(equals) = equals {
+            if p.next_if(equals).allow_eof()?.is_none_or(|v| v.is_err()) {
+                return Ok(Self(bind, generics, pat, vec![]));
             }
         } else {
             // Allow prefix `=`? for the rest of them
@@ -531,7 +532,7 @@ impl<'t> Parse<'t> for Bind {
         let body = p.parse(bodyp.value())?;
 
         let Some(failp) = failp else {
-            return Ok(Self(level, generics, pat, vec![body]));
+            return Ok(Self(bind, generics, pat, vec![body]));
         };
 
         // `else` Expr
@@ -539,12 +540,12 @@ impl<'t> Parse<'t> for Bind {
             .allow_eof()?
             .is_none_or(|v| v.is_err())
         {
-            return Ok(Self(level, generics, pat, vec![body]));
+            return Ok(Self(bind, generics, pat, vec![body]));
         }
 
         let fail = p.parse(failp.value())?;
 
-        Ok(Self(level, generics, pat, vec![body, fail]))
+        Ok(Self(bind, generics, pat, vec![body, fail]))
     }
 }
 
