@@ -105,14 +105,15 @@ PatRange = (
   | PatMax
 );
 PatMax = (
-    "pub" PatMax    (* Publicity  *)
-  | "mut" PatMax    (* Mutability *)
-  | '*' PatMax      (* Ptr *)
-  | '$' Token       (* Metaidentifier *)
-  | '!'             (* Never *)
-  | '_'             (* Wildcard *)
-  | Identifier      (* Binding wildcard *)
-  | PatConst        (* Constant expression *)
+    '[' PatTuple (';' PatTuple)? ']' (* Slices and Arrays*)
+  | "pub" PatMax                     (* Publicity  *)
+  | "mut" PatMax                     (* Mutability *)
+  | '*' PatMax                       (* Ptr *)
+  | '$' Token                        (* Metaidentifier *)
+  | '!'                              (* Never *)
+  | '_'                              (* Wildcard *)
+  | Identifier                       (* Binding wildcard *)
+  | PatConst                         (* Constant expression *)
 );
 PatConst = (
     Literal
