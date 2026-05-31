@@ -104,6 +104,7 @@ pub enum TKind {
     True,
     Try,
     Type,
+    Underscore,
     Use,
     While,
 

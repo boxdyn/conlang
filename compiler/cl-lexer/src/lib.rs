@@ -299,6 +299,7 @@ impl<'t> Lexer<'t> {
         let token = self.produce(TKind::Identifier);
         Ok(Token {
             kind: match lexeme {
+                "_" => TKind::Underscore,
                 "as" => TKind::As,
                 "break" => TKind::Break,
                 "catch" => TKind::Catch,

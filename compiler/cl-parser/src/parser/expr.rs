@@ -1,7 +1,10 @@
 //! Conlang's [Expression](Expr) parser.
 
 use super::{PResult, PResultExt, Parse, ParseError, Parser, no_eof, pat::Prec as PPrec};
-use cl_ast::{types::Literal, *};
+use cl_ast::{
+    types::{Literal, Path},
+    *,
+};
 use cl_token::{TKind, Token};
 
 /// Organizes the precedence hierarchy for syntactic elements
@@ -72,6 +75,7 @@ impl Prec {
 pub enum Ps {
     Id,         // Identifier
     Mid,        // MetaIdentifier
+    Underscore, // _
     Lit,        // Literal
     Use,        // use Use
     Bind,       // any definition (let, struct, enum, fn, ...)
@@ -102,6 +106,7 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
         TKind::Hash => (Ps::Op(Op::MetaOuter), Prec::Max),
 
         TKind::Identifier | TKind::ColonColon => (Ps::Id, Prec::Max),
+        TKind::Underscore => (Ps::Underscore, Prec::Max),
         TKind::Dollar => (Ps::Mid, Prec::Max),
         TKind::True | TKind::False | TKind::Character | TKind::Integer | TKind::String => {
             (Ps::Lit, Prec::Max)
@@ -231,6 +236,10 @@ impl<'t> Parse<'t> for Expr {
 
                 Ps::Id => Expr::Id(p.parse(())?),
                 Ps::Mid => Expr::MetId(p.consume().next()?.lexeme.to_string().as_str().into()),
+                Ps::Underscore => {
+                    p.consume();
+                    Expr::Id(Path { parts: vec!["_".into()] })
+                }
                 Ps::Lit => Expr::Lit(p.parse(())?),
                 Ps::Use => Expr::Use(p.consume().parse(())?),
                 Ps::Bind => Expr::Bind(p.parse(())?),
