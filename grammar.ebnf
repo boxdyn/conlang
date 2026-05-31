@@ -11,39 +11,40 @@ ExprDo = (ExprBody? ';')+ ExprBody? | ExprBody ;
 ExprBody = ExprAssign ;
 ExprAssign = ExprMake (AssignOp ExprMake)* ;
 AssignOp = (
-    '='  | '*=' | '/='  | '%='
-  | '+=' | '-=' | '<<=' | '>>='
-  | '&=' | '^=' | '|='
+    '<<=' | '>>=' | '*=' | '/='
+  | '%='  | '+='  | '-=' | '&='
+  | '^='  | '|='  | '='
 );
 (* Hack: grammar is context-sensitive. Parser uses look-behind to disambiguate *)
 ExprMake = !(Path '{') ExprTuple | Path '{' (MakeArm ',')* MakeArm? '}' ;
 MakeArm = Identifier (':' ExprLogical)? ;
+
 ExprTuple = ExprLogical (',' ExprLogical)* ;
 ExprLogical = ExprLogOr ('^^' ExprLogOr)* ;
 ExprLogOr = ExprLogAnd ('||' ExprLogAnd)* ;
 ExprLogAnd = ExprCompare ('&&' ExprCompare)* ;
-ExprCompare = ExprRange (('<=' | '!=' | '==' | '>=' | '<' | '>') ExprRange)*;
+ExprCompare = ExprRange (('<=' | '!=' | '==' | '>=' | '<' | '>') ExprRange)* ;
 ExprRange = (
     ExprBinary? ('..' | '..=') ExprBinary?
   | ExprBinary
 );
-ExprBinary = ExprShift (('&' | '|' | '^') ExprShift)*;
-ExprShift = ExprFactor (('<<' | '>>') ExprFactor)?;
-ExprFactor = ExprTerm (('+' | '-') ExprTerm)*;
-ExprTerm = ExprUnary (('*' | '/' | '%') ExprUnary)*;
+ExprBinary = ExprShift (('&' | '|' | '^') ExprShift)* ;
+ExprShift = ExprFactor (('<<' | '>>') ExprFactor)? ;
+ExprFactor = ExprTerm (('+' | '-') ExprTerm)* ;
+ExprTerm = ExprCast (('*' | '/' | '%') ExprCast)* ;
+ExprCast = ExprUnary ("as" ExprProject)* ;
 ExprUnary = (
-    ExprProject ('as' ExprProject)?
-  | ('&' | '&&') ExprProject      (* Ref, DoubleRef *)
-  | ('!' | '!!') ExprProject      (* Not, Identity *)
-  | ('-' | '+' | '*') ExprProject (* Neg, Identity, Deref *)
+    ('&' | '&&') ExprUnary      (* Ref, DoubleRef *)
+  | ('!' | '!!') ExprUnary      (* Not, Identity *)
+  | ('-' | '+' | '*') ExprUnary (* Neg, Identity, Deref *)
+  | ExprProject
 );
 (* hack: Pest, which I'm validating this with, doesn't know '..' is better than '.' *)
 ExprProject = ExprExtend (!'..' '.' ExprExtend | '[' Expr? ']')* ;
 ExprExtend = ExprMax ('(' Expr? ')')* ;
 
 ExprMax = (
-    Literal
-  | "do" Expr
+    "do" Expr
   | ("pub" | "const" | "static") ExprMax
   | ("loop" | "defer" | "break" | "return") ExprBody
   | ("if" | "while") ExprLogical ExprBody ("else" ExprBody)?
@@ -55,14 +56,14 @@ ExprMax = (
   | '[' ExprTuple (';' ExprTuple)? ']'
   | "use" Use
   | '$' Token
+  | '...'
   | OutAttr ExprMax
   | InAttr Expr (* FIXME: move this *)
   | Match
   | Bind
-  | Omitted
+  | Literal
   | Path
 );
-Omitted = '...' ;
 
 Match = "match" ExprTuple '{' (MatchArm ';')* MatchArm? '}' ;
 MatchArm = Pat '=>' ExprBody ;
@@ -98,8 +99,8 @@ PatFn = (
   | PatRange PatGenerics* PatParams? PatGuard? ('->' PatFn)?
 );
 PatGenerics = '<' (PatTyped ',')* PatTyped? '>' ;
-PatParams = '(' (PatTyped ',')* PatTyped? ')' ;
-PatGuard = 'if' ExprLogical ;
+PatParams   = '(' (PatTyped ',')* PatTyped? ')' ;
+PatGuard    = "if" ExprLogical ;
 
 PatRange = (
     PatMax? '..' PatMax?
@@ -119,9 +120,9 @@ PatMax = (
   | PatConst                         (* Constant expression *)
 );
 PatConst = (
-    Literal
-  | "const" Expr
+    "const" Expr
   | '-' Expr
+  | Literal
   | Path
 );
 
@@ -141,9 +142,9 @@ Literal = (
 );
 
 Use = (
-    '*'
-  | '{' (Use ',')* Use? '}'
-  | Identifier '::' Use
-  | Identifier "as" Identifier
-  | Identifier
+    '*'                        (* Glob *)
+  | '{' (Use ',')* Use? '}'    (* Tree *)
+  | Identifier '::' Use        (* Path *)
+  | Identifier "as" Identifier (* Alias *)
+  | Identifier                 (* Name *)
 );
