@@ -77,7 +77,7 @@ pub fn get_env() -> Environment {
         }
     });
 
-    if let Ok(code) = Parser::new(Lexer::new("".into(), PREAMBLE)).parse::<At<Expr>>(0) {
+    if let Ok(code) = Parser::new(Lexer::new("preamble.cl".into(), PREAMBLE)).parse::<At<Expr>>(0) {
         code.interpret(&mut env).expect("PREAMBLE should not fail");
     }
     env
