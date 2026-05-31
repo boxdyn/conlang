@@ -1,5 +1,6 @@
 (* Conlang Expression Grammar *)
 
+
 Start = SOI Expr? EOI ;
 
 (* Expressions *)
@@ -52,9 +53,10 @@ ExprMax = (
   | '(' Expr? ')'
   | '[' ExprTuple? ']'
   | '[' ExprTuple (';' ExprTuple)? ']'
+  | "use" Use
+  | '$' Token
   | OutAttr ExprMax
   | InAttr Expr (* FIXME: move this *)
-  | "use" Use
   | Match
   | Bind
   | Omitted
@@ -112,6 +114,7 @@ PatMax = (
   | '$' Token                        (* Metaidentifier *)
   | '!'                              (* Never *)
   | '_'                              (* Wildcard *)
+  | '$' Token                        (* Metaidentifier *)
   | Identifier                       (* Binding wildcard *)
   | PatConst                         (* Constant expression *)
 );
