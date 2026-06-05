@@ -69,8 +69,8 @@ Match = "match" ExprTuple '{' (MatchArm ';')* MatchArm? '}' ;
 MatchArm = Pat '=>' ExprBody ;
 
 Bind = BindLet | BindType | BindStruct | BindEnum | BindFn | BindMod | BindImpl | BindFor ;
-BindLet    = "let"    BoundGeneric? PatTuple ('=' ExprTuple   ("else" ExprBody)?)? ;
-BindType   = "type"   BoundGeneric? PatAlt   ('=' ExprTuple)? ;
+BindLet    = "let"    BoundGeneric? PatTuple ('=' ExprBody   ("else" ExprBody)?)? ;
+BindType   = "type"   BoundGeneric? PatAlt   ('=' ExprBody)? ;
 BindStruct = "struct" BoundGeneric? PatTuple ;
 BindEnum   = "enum"   BoundGeneric? PatTuple ;
 BindFn     = "fn"     BoundGeneric? PatFn    ('='? ExprBody) ;

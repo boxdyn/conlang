@@ -493,8 +493,8 @@ fn parse_for(p: &mut Parser<'_>, _level: ()) -> PResult<Expr> {
 fn from_bind(p: &mut Parser<'_>) -> PResult<(BindOp, PPrec, Option<TKind>, Option<Prec>, Option<Prec>)> {
     let bk = match p.peek()?.kind {
         // Token            Operator        Pat prec      Body Token             Body prec            Else prec
-        TKind::Let =>    (BindOp::Let,    PPrec::Tuple, Some(TKind::Eq),       Some(Prec::Tuple),  Some(Prec::Body)),
-        TKind::Type =>   (BindOp::Type,   PPrec::Alt,   Some(TKind::Eq),       Some(Prec::Tuple),  None),
+        TKind::Let =>    (BindOp::Let,    PPrec::Tuple, Some(TKind::Eq),       Some(Prec::Body),   Some(Prec::Body)),
+        TKind::Type =>   (BindOp::Type,   PPrec::Alt,   Some(TKind::Eq),       Some(Prec::Body),   None),
         TKind::Struct => (BindOp::Struct, PPrec::Tuple, None,                  None,               None),
         TKind::Enum =>   (BindOp::Enum,   PPrec::Tuple, None,                  None,               None),
         TKind::Fn =>     (BindOp::Fn,     PPrec::Fn,    None,                  Some(Prec::Body),   None),
