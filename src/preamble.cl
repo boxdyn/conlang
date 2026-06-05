@@ -7,6 +7,12 @@ pub mod builtin_preamble {
     //! Contains generally-useful functions which don't require
     //! special functionality that the Conlang interpreter
     //! doesn't yet have.
+    
+    enum Option<T> { Some(T), None }
+    enum Result<T, E> { Ok(T), Err(E) }
+    let Some, None, Ok, Err = {
+        Option::Some, Option::None, Result::Ok, Result::Err
+    } // TODO: implement `use`
 
     pub fn max<T: Cmp>(a: T, b: T) -> T = if a < b b else a;
     pub fn min<T: Cmp>(a: T, b: T) -> T = if a > b b else a;
