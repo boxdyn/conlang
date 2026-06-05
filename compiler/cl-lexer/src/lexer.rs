@@ -124,7 +124,7 @@ impl<'t> Lexer<'t> {
             '$' => Dollar,
             '%' => Rem,
             '&' => Amp,
-            '\'' => return self.character(),
+            '\'' => return self.character(false),
             '(' => LParen,
             ')' => RParen,
             '*' => Star,
@@ -152,6 +152,7 @@ impl<'t> Lexer<'t> {
             '}' => RCurly,
             '~' => Tilde,
             '_' => return self.identifier(),
+            'r' => Identifier, // "Raw" string/character
             c if is_xid_start(c) => return self.identifier(),
             c => Err(self.error(Unexpected(c)))?,
         };
@@ -164,6 +165,9 @@ impl<'t> Lexer<'t> {
             (Integer, Some('x')) => return self.consume().digits::<16>(),
             (Integer, Some('~')) => return self.consume().digits::<36>(),
             (Integer, _) => return self.digits::<10>(),
+            (Identifier, Some('\'')) => return self.character(true),
+            (Identifier, Some('#' | '"')) => todo!("Raw strings!"),
+            (Identifier, Some(_)) => return self.identifier(),
             (Amp, Some('&')) => AmpAmp,
             (Amp, Some('=')) => AmpEq,
             (Bang, Some('!')) => BangBang,
@@ -286,17 +290,20 @@ impl<'t> Lexer<'t> {
     }
 
     /// Eagerly parses a character literal starting at the current lexer position.
-    pub fn character(&mut self) -> Result<Token, LexError> {
+    pub fn character(&mut self, as_int: bool) -> Result<Token, LexError> {
         let c = match self.consume().take() {
             Some('\\') => self.escape()?,
             Some(c) => c,
             None => '\0',
         };
-        if self.take().is_some_and(|c| c == '\'') {
-            Ok(self.produce_with_lexeme(TKind::Character, Lexeme::Char(c)))
-        } else {
-            Err(self.error(UnterminatedCharacter))
+        if !self.take().is_some_and(|c| c == '\'') {
+            return Err(self.error(UnterminatedCharacter));
         }
+        let (kind, lexeme) = match as_int {
+            true => (TKind::Integer, Lexeme::Integer(c as _, 16)),
+            false => (TKind::Character, Lexeme::Char(c)),
+        };
+        Ok(self.produce_with_lexeme(kind, lexeme))
     }
 
     // Eagerly parses a string literal starting at the current lexer position.
