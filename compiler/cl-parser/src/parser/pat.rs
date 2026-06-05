@@ -115,8 +115,8 @@ fn from_infix(token: &Token) -> Option<(PatOp, Prec)> {
         TKind::Colon => (PatOp::Typed, Prec::Typed),
         TKind::DotDot => (PatOp::RangeEx, Prec::Range),
         TKind::DotDotEq => (PatOp::RangeIn, Prec::Range),
-        TKind::If => (PatOp::Guard, Prec::Fn),
-        TKind::LCurly => (PatOp::TypePrefixed, Prec::Fn),
+        TKind::If => (PatOp::Guard, Prec::Typed),
+        TKind::LCurly => (PatOp::TypePrefixed, Prec::Typed),
         TKind::LBrack => (PatOp::TypePrefixed, Prec::Fn),
         TKind::LParen => (PatOp::TypePrefixed, Prec::Fn),
         TKind::Lt => (PatOp::Generic, Prec::Fn),
@@ -221,7 +221,7 @@ impl<'t> Parse<'t> for Pat {
                     )?,
                 ),
                 PatOp::TypePrefixed => match prefix_level(&head, level, tok) {
-                    Some(_prec) => add_typeprefix(p, head.at(span), Prec::Typed)?,
+                    Some(_prec) => add_typeprefix(p, head.at(span), prec)?,
                     _ => break,
                 },
                 PatOp::Tuple => Pat::Op(
@@ -246,12 +246,11 @@ fn prefix_level(pat: &Pat, level: Prec, tok: &Token) -> Option<Prec> {
 }
 
 fn add_typeprefix(p: &mut Parser<'_>, name: At<Pat>, level: Prec) -> PResult<Pat> {
-    let At(mut name, span) = name;
-    name = Pat::Op(
+    let At(name, span) = name;
+    Ok(Pat::Op(
         PatOp::TypePrefixed,
         vec![name.at(span.merge(p.span())), p.parse(level)?],
-    );
-    Ok(name)
+    ))
 }
 
 fn parse_array_pat(p: &mut Parser<'_>) -> PResult<Pat> {

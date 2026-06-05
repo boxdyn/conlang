@@ -90,17 +90,18 @@ PatTyped = Attr? (
   | PatFn '{' (PatTyped ',')* PatTyped? '}'
   | PatFn ':' PatTyped
   | PatFn
-);
+) PatGuard? ;
+PatGuard = "if" ExprLogical ;
+
 PatFn = (
     PatParams
   | "fn" PatFn
   | '&' PatFn
   | '&&' PatFn
-  | PatRange PatGenerics* PatParams? PatGuard? ('->' PatFn)?
+  | PatRange PatGenerics* PatParams? ('->' PatFn)?
 );
 PatGenerics = '<' (PatTyped ',')* PatTyped? '>' ;
 PatParams   = '(' (PatTyped ',')* PatTyped? ')' ;
-PatGuard    = "if" ExprLogical ;
 
 PatRange = (
     PatMax? '..' PatMax?
