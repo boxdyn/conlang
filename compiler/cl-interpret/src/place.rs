@@ -51,6 +51,12 @@ impl Place {
                 match idx.interpret(env)? {
                     ConValue::Int(idx @ ..0) => Ok(place.index(-idx as usize, true)),
                     ConValue::Int(idx @ 0..) => Ok(place.index(idx as usize, false)),
+                    ConValue::TupleStruct(t, ref arr)
+                        if let ([ConValue::Int(start), ConValue::Int(end)], "RangeExc") =
+                            (&arr[..], t.0.name()) =>
+                    {
+                        todo!("Projection::Slice ({start}, {end})")
+                    }
                     err => Err(Error::TypeError("int", err.type_of()))?,
                 }
             }
@@ -121,8 +127,8 @@ impl Place {
                     let idx = if from_end { len - idx } else { idx };
                     arr.get_mut(idx).ok_or_else(|| Error::OobIndex(idx, len))?
                 }
-                (ConValue::Slice(place, len), &Projection::Index(idx, from_end)) => {
-                    if idx >= *len {
+                (ConValue::Slice(place, start, len), &Projection::Index(idx, from_end)) => {
+                    if *start + idx >= *len {
                         Err(Error::OobIndex(idx, *len))?
                     };
                     // SAFETY: see above
@@ -218,5 +224,43 @@ impl Display for Place {
             }
         }
         format_inner(*place, projections, f)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct PlaceIndexIter {
+    place: Place,
+    start: usize,
+    end: usize,
+    projection: Projection,
+}
+
+impl PlaceIndexIter {
+    pub fn index(place: Place, start: usize, length: usize) -> Self {
+        Self { place, start, end: start + length, projection: Projection::Index(0, false) }
+    }
+    pub fn slice(place: Place, start: usize, end: usize) -> Self {
+        Self { place, start, end, projection: Projection::Index(0, false) }
+    }
+    pub fn dot_idx(place: Place, start: usize, length: usize) -> Self {
+        Self { place, start, end: start + length, projection: Projection::DotIdx(0) }
+    }
+}
+
+impl Iterator for PlaceIndexIter {
+    type Item = Place;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let Self { place, start, end, projection } = self;
+        if start >= end {
+            return None;
+        }
+        let out = match projection {
+            Projection::Index(_, from_end) => place.clone().index(*start, *from_end),
+            Projection::DotIdx(_) => place.clone().dot_idx(*start),
+            _ => place.clone().with(*projection),
+        };
+        *start += 1;
+        Some(out)
     }
 }

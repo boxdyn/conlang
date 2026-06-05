@@ -62,7 +62,7 @@ pub enum ConValue {
     /// A reference
     Ref(Place),
     /// A reference to an array
-    Slice(Place, usize),
+    Slice(Place, usize, usize),
     /// An Array
     Array(Box<[ConValue]>),
     /// A tuple
@@ -107,7 +107,7 @@ impl ConValue {
             | Self::Char(_)
             | Self::Str(_) => true,
             Self::Ref(_) => true,
-            Self::Slice(_, _) => true,
+            Self::Slice(_, _, _) => true,
             Self::Quote(_) => true,
             Self::Function(_) => true,
             Self::Builtin(_) => true,
@@ -131,7 +131,7 @@ impl ConValue {
             Self::Str(_) => Model::Str.already_interned(),
             Self::String(_) => Model::Str.already_interned(),
             Self::Ref(place) => Model::Ref(Model::Any.already_interned()).intern(),
-            Self::Slice(place, _) => Model::Slice(Model::Any.already_interned()).intern(),
+            Self::Slice(place, _, _) => Model::Slice(Model::Any.already_interned()).intern(),
             Self::Array(arr) if !arr.is_empty() => Model::Slice(arr[0].type_of()).intern(),
             Self::Array(_) => Model::Slice(Model::Any.already_interned()).intern(),
             Self::Tuple(vs) => Model::Tuple(None, vs.iter().map(Self::type_of).collect()).intern(),
@@ -229,7 +229,7 @@ impl ConValue {
                 .get(index as usize)
                 .cloned()
                 .ok_or(Error::OobIndex(index as usize, arr.len())),
-            ConValue::Slice(place, len) => {
+            ConValue::Slice(place, start, len) => {
                 if (index.unsigned_abs() as usize) < len {
                     Ok(ConValue::Ref(place.index(index as _, index < 0)))
                 } else {
@@ -463,7 +463,7 @@ impl std::fmt::Display for ConValue {
             ConValue::Str(v) => v.fmt(f),
             ConValue::String(v) => v.fmt(f),
             ConValue::Ref(v) => write!(f, "&<{}>", v),
-            ConValue::Slice(id, len) => write!(f, "&<{id}>[{len}..]"),
+            ConValue::Slice(id, start, len) => write!(f, "&<{id}>[{start}..{len}]"),
             ConValue::Array(array) => f.delimit('[', ']').list(array, ", "),
             ConValue::Tuple(tuple) => f.delimit('(', ')').list(tuple, ", "),
             ConValue::TupleStruct(id, tuple) => f

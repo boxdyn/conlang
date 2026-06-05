@@ -9,7 +9,7 @@
 use super::*;
 use crate::{
     function::Function,
-    place::Place,
+    place::{Place, PlaceIndexIter},
     typeinfo::{Model, Type},
 };
 use cl_ast::{
@@ -479,24 +479,30 @@ impl Interpret for Bind<DefaultTypes> {
                     }
                     ConValue::String(str) => Box::new(str.into_chars().map(ConValue::Char)),
                     ConValue::Str(str) => Box::new(str.to_ref().chars().map(ConValue::Char)),
-                    ConValue::TupleStruct(
-                        Interned(Model::Tuple(Some(Interned("RangeExc", ..)), ..), ..),
-                        bounds,
-                    ) => match *bounds {
-                        [ConValue::Int(start), ConValue::Int(end)] => {
-                            Box::new((start..end).map(ConValue::Int))
+                    ConValue::TupleStruct(Interned(model, ..), bounds)
+                        if model.name() == "RangeExc"
+                            && let &[ConValue::Int(start), ConValue::Int(end)] = &bounds[..] =>
+                    {
+                        Box::new((start..end).map(ConValue::Int))
+                    }
+                    ConValue::TupleStruct(Interned(model, ..), bounds)
+                        if model.name() == "RangeInc"
+                            && let &[ConValue::Int(start), ConValue::Int(end)] = &bounds[..] =>
+                    {
+                        Box::new((start..=end).map(ConValue::Int))
+                    }
+                    ConValue::Ref(place) => match place.get(env)? {
+                        ConValue::Array(a) => {
+                            Box::new(PlaceIndexIter::index(place, 0, a.len()).map(ConValue::Ref))
                         }
-                        _ => Err(Error::NotIterable())?,
-                    },
-                    ConValue::TupleStruct(
-                        Interned(Model::Tuple(Some(Interned("RangeInc", ..)), ..), ..),
-                        bounds,
-                    ) => match *bounds {
-                        [ConValue::Int(start), ConValue::Int(end)] => {
-                            Box::new((start..=end).map(ConValue::Int))
+                        ConValue::Tuple(a) | ConValue::TupleStruct(_, a) => {
+                            Box::new(PlaceIndexIter::dot_idx(place, 0, a.len()).map(ConValue::Ref))
                         }
-                        _ => Err(Error::NotIterable())?,
+                        item => todo!("Iterate over references to {item}")?,
                     },
+                    ConValue::Slice(p, start, end) => {
+                        Box::new(PlaceIndexIter::index(p.clone(), start, end).map(ConValue::Ref))
+                    }
                     _ => Err(Error::NotIterable())?,
                 };
                 for item in iter {
