@@ -47,6 +47,7 @@ fn pub vformat(stream: &fn(char), format: str, args: (..)) {
 fn pub format(stream: &fn(str), format: str, ..args) = vformat(stream, format, args);
 
 fn pub printf(format: &str, ..args) = vformat(putchar, format, args);
+fn pub printfn(format: &str, ..args) = (vformat(putchar, format, args); putchar('\n'));
 
 fn pub sprintf(format: &str, ..args) {
     let out = "";
