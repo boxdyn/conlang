@@ -384,8 +384,8 @@ ops! {
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a + b),
         (ConValue::Str(a), ConValue::Str(b)) => (a.to_string() + &*b).into(),
         (ConValue::Str(a), ConValue::String(b)) => (a.to_string() + &*b).into(),
-        (ConValue::String(a), ConValue::Str(b)) => (a.to_string() + &*b).into(),
-        (ConValue::String(a), ConValue::String(b)) => (a.to_string() + &*b).into(),
+        (ConValue::String(a), ConValue::Str(b)) => (a + &*b).into(),
+        (ConValue::String(a), ConValue::String(b)) => (a + &*b).into(),
         (ConValue::Str(s), ConValue::Char(c)) => { let mut s = s.to_string(); s.push(c); s.into() }
         (ConValue::String(s), ConValue::Char(c)) => { let mut s = s.to_string(); s.push(c); s.into() }
         (ConValue::Char(a), ConValue::Char(b)) => {

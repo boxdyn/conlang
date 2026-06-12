@@ -80,10 +80,10 @@ impl super::Callable for Builtin {
 /// };
 /// ```
 pub macro builtin(
-    $(#[$($meta:tt)*])*
+    $(#[doc = $($docs:tt)*])*
     fn $name:ident ($($arg:pat),*$(,)?) $(@$env:tt)? $body:block
 ) {{
-    $(#[$($meta)*])*
+    $(#[doc = $($docs)*])*
     fn $name(_env: &mut Environment, _args: &[ConValue]) -> IResult<ConValue> {
         // Set up the builtin! environment
         $(#[allow(unused)]let $env = _env;)?
@@ -99,7 +99,10 @@ pub macro builtin(
     }
     Builtin {
         name: stringify!($name),
-        desc: stringify![builtin fn $name($($arg),*)],
+        desc: concat![
+            $("///", $($docs,)* "\n",)*
+            stringify!(builtin fn $name($($arg),*))
+        ],
         func: &$name,
     }
 }}
@@ -455,5 +458,19 @@ pub const Math: &[Builtin] = &builtins![
     /// Does the opposite of `&`
     fn deref(tail) @env {
         Ok(tail.dereference_in(env)?.clone())
+    }
+
+    fn f64_to_bits(float) @env {
+        match float.dereference_in(env)? {
+            &ConValue::Float(f) => Ok(ConValue::Int(f.to_bits() as _)),
+            other => Err(error_format!("Cannot convert {other} from float to bits")),
+        }
+    }
+
+    fn f64_from_bits(bits) @env {
+        match bits.dereference_in(env)? {
+            &ConValue::Int(i) => Ok(ConValue::Float(f64::from_bits(i as u64))),
+            other => Err(error_format!("Cannot convert {other} from float to bits")),
+        }
     }
 ];

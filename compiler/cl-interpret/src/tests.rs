@@ -52,8 +52,8 @@ mod macros {
 
     use super::*;
 
-    pub fn test_inside_block(block: &Expr, env: &mut Environment) -> IResult<()> {
-        todo!("Interpret {block}");
+    pub fn test_eval_expr(block: &Expr, env: &mut Environment) -> IResult<()> {
+        block.interpret(env)?;
         Ok(())
     }
 
@@ -61,7 +61,7 @@ mod macros {
     ///
     /// Returns a `Result<`[`Expr`]`, ParseError>`
     pub macro expr($($t:tt)*) {
-        Expr::parse(&mut Parser::new(Lexer::new("test".into(), stringify!({ $($t)* }))), 0)
+        Expr::parse(&mut Parser::new(Lexer::new("test".into(), stringify!( $($t)* ))), 0)
     }
 
     /// Evaluates a block of code in the given environment
@@ -75,7 +75,7 @@ mod macros {
     /// )
     /// ```
     pub macro eval($env: path, $($t:tt)*) {{
-        test_inside_block(&expr!($($t)*)
+        test_eval_expr(&expr!($($t)*)
             .expect("code passed to eval! should parse correctly"),
             &mut $env)
     }}
@@ -217,7 +217,7 @@ mod fn_declarations {
         assert_eval!(env, fn empty_fn() {});
         // TODO: true equality for functions
         assert_eq!(
-            "fn empty_fn () {}",
+            "fn empty_fn() {}",
             format!(
                 "{}",
                 env.get("empty_fn".into())
@@ -455,7 +455,7 @@ mod operators {
     fn assignment_is_left_assoc_and_returns_empty() {
         let mut env = Default::default();
         assert_eval!(env,
-            let x; // uninitialized (no type)
+            let x = (); // TODO: uninitialized variables
             let y = 0xdeadbeef;
             let z = 10;
 
@@ -544,8 +544,8 @@ mod control_flow {
         assert_eval!(env,
             let x = '\u{1f988}';
             let passed = match x {
-                '\u{1f988}' => true,
-                _ => false,
+                '\u{1f988}' => true;
+                _ => false;
             };
         );
         env_eq!(env.passed, true);
@@ -557,8 +557,8 @@ mod control_flow {
         assert_eval!(env,
             let x = '\u{1f988}';
             let passed = match x {
-                _ => true,
-                '\u{1f988}' => false,
+                _ => true;
+                '\u{1f988}' => false;
             };
         );
         env_eq!(env.passed, true);

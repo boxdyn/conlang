@@ -155,7 +155,7 @@ impl Interpret for (Op, &[At<Expr>]) {
             // Control-flow
             (Op::Macro, _) => cl_todo!("Macros are not supported in the interpreter"),
             (Op::Loop, [expr]) => loop {
-                match expr.interpret(env) {
+                match expr.interpret(&mut env.frame("loop", Some(expr.1))) {
                     Ok(_) => {}
                     Err(Error { kind: ErrorKind::Break(v), .. }) => break Ok(v),
                     Err(Error { kind: ErrorKind::Continue, .. }) => continue,
