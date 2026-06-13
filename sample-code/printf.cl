@@ -1,3 +1,7 @@
+#!/bin/false
+//! Silly non-type-safe implementation of printf
+//! This'll have to get removed later, but it's a bit of fun :P
+
 
 /// Outputs the `radix` form of `n` to the `stream`
 fn radix_by_chars(stream: &fn(char), n: i128, radix: i64) {
@@ -44,17 +48,23 @@ fn vformat(stream: &fn(char), format: str, args: (..)) {
     }
 }
 
+/// vformat, but it takes its args variadically.
 fn format(stream: &fn(str), format: str, ..args) = vformat(stream, format, args);
 
+/// Prints the formatted output to stdout
 fn printf(format: &str, ..args) = vformat(putchar, format, args);
+
+/// Prints the formatted output to stdout, followed by a newline
 fn printfn(format: &str, ..args) = (vformat(putchar, format, args); putchar('\n'));
 
+/// Prints the formatted output into a string
 fn sprintf(format: &str, ..args) {
     let out = "";
     vformat((|c| out += c), format, args);
     out
 }
 
+/// Gets the length (in codepoints) of the formatted string
 fn formatted_length(format: &str, ..args) {
     let out = 0;
     vformat((|_| out += 1), format, args);
