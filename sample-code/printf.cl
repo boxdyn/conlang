@@ -1,6 +1,6 @@
 
 /// Outputs the `radix` form of `n` to the `stream`
-pub fn radix_by_chars(stream: &fn(char), n: i128, radix: i64) {
+fn radix_by_chars(stream: &fn(char), n: i128, radix: i64) {
     fn recurse(stream: &fn(char), n: i128, radix: i64) = if n > 0 {
         recurse(stream, n / radix, radix);
         stream(as_digit(n % radix))
@@ -16,7 +16,7 @@ pub fn radix_by_chars(stream: &fn(char), n: i128, radix: i64) {
 
 /// Base formatting functionality: outputs a formatted char sequence,
 /// one at a time, to the `stream`.
-fn pub vformat(stream: &fn(char), format: str, args: (..)) {
+fn vformat(stream: &fn(char), format: str, args: (..)) {
     let buf = format.chars();
     fn take() = if (let [chr, ..rest] = buf) Some(buf = rest; chr) else None;
     fn arg() {
@@ -44,18 +44,18 @@ fn pub vformat(stream: &fn(char), format: str, args: (..)) {
     }
 }
 
-fn pub format(stream: &fn(str), format: str, ..args) = vformat(stream, format, args);
+fn format(stream: &fn(str), format: str, ..args) = vformat(stream, format, args);
 
-fn pub printf(format: &str, ..args) = vformat(putchar, format, args);
-fn pub printfn(format: &str, ..args) = (vformat(putchar, format, args); putchar('\n'));
+fn printf(format: &str, ..args) = vformat(putchar, format, args);
+fn printfn(format: &str, ..args) = (vformat(putchar, format, args); putchar('\n'));
 
-fn pub sprintf(format: &str, ..args) {
+fn sprintf(format: &str, ..args) {
     let out = "";
     vformat((|c| out += c), format, args);
     out
 }
 
-fn pub formatted_length(format: &str, ..args) {
+fn formatted_length(format: &str, ..args) {
     let out = 0;
     vformat((|_| out += 1), format, args);
     out
