@@ -18,12 +18,6 @@ impl AstTypes for DefaultTypes {
     type Path = Path;
 }
 
-impl std::fmt::Display for DefaultTypes {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Ok(())
-    }
-}
-
 /// An interned symbol (i.e. a name)
 pub type Symbol = Interned<'static, str>;
 

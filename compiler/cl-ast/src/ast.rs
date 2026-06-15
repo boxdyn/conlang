@@ -16,7 +16,8 @@ pub trait AstNode: Clone + std::fmt::Display + std::fmt::Debug + PartialEq + Eq 
 
 impl<T: Clone + std::fmt::Debug + std::fmt::Display + PartialEq + Eq + Hash> AstNode for T {}
 
-pub trait AstTypes: AstNode {
+/// The replaceable types within major AST nodes
+pub trait AstTypes: Clone + std::fmt::Debug + PartialEq + Eq + Hash {
     /// An annotation on an arbitrary [Expr] or [Pat]
     type Annotation: AstNode + Copy;
 
