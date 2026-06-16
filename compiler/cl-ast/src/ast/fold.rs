@@ -13,6 +13,10 @@ use super::*;
 pub trait Fold<From: AstTypes, To: AstTypes = From> {
     type Error;
 
+    fn fold<F: Foldable<From, To>>(&mut self, f: F) -> Result<F::Out, Self::Error> {
+        f.fold_in(self)
+    }
+
     /// Consumes an Annotation in A, possibly transforms it, and produces a replacement Annotation
     /// in B
     fn fold_annotation(&mut self, anno: From::Annotation) -> Result<To::Annotation, Self::Error>;
@@ -105,37 +109,44 @@ pub trait Fold<From: AstTypes, To: AstTypes = From> {
 /// }
 /// ```
 pub macro impl_default_fold($Src: ty, $Dst: ty) {
-    fn fold_annotation(
-        &mut self,
-        anno: <$Src as AstTypes>::Annotation,
-    ) -> Result<<$Dst as AstTypes>::Annotation, Self::Error> {
-        Ok(anno.into())
-    }
-    fn fold_macro_id(
-        &mut self,
-        name: <$Src as AstTypes>::MacroId,
-    ) -> Result<<$Dst as AstTypes>::MacroId, Self::Error> {
-        Ok(name.into())
-    }
-    fn fold_symbol(
-        &mut self,
-        name: <$Src as AstTypes>::Symbol,
-    ) -> Result<<$Dst as AstTypes>::Symbol, Self::Error> {
-        Ok(name.into())
-    }
-    fn fold_path(
-        &mut self,
-        path: <$Src as AstTypes>::Path,
-    ) -> Result<<$Dst as AstTypes>::Path, Self::Error> {
-        Ok(path.into())
-    }
-    fn fold_literal(
-        &mut self,
-        lit: <$Src as AstTypes>::Literal,
-    ) -> Result<<$Dst as AstTypes>::Literal, Self::Error> {
-        Ok(lit.into())
+    $crate::ast::fold::impl_fold! {
+        in Fold<$Src, $Dst>
+        fn fold_annotation(self, from: Annotation) = from.into();
+        fn fold_macro_id(self, from: MacroId) = from.into();
+        fn fold_symbol(self, from: Symbol) = from.into();
+        fn fold_path(self, from: Path) = from.into();
+        fn fold_literal(self, from: Literal) = from.into();
     }
 }
+
+/// Implements [`Into`]-based defaults for required [`Fold`] members.
+///
+/// Since [`Fold`] is so general, it requires a lot of boilerplate
+/// This macro compresses the Fold boilerplate to a handful of lines,
+/// while still giving you full flexibility.
+///
+/// Takes as argument an abbreviation of the required [`Fold`] functions
+/// ([`Fold::fold_annotation`], [`Fold::fold_macro_id`], [`Fold::fold_symbol`],
+/// [`Fold::fold_path`], [`Fold::fold_literal`])
+/// as follows:
+/// ```ignore
+/// in Fold<FromType, ToType>
+/// fn fold_annotation(self, from: Annotation) = ...;
+/// fn fold_macro_id(self, from: MacroId) = ...;
+/// fn fold_symbol(self, from: Symbol) = ...;
+/// fn fold_path(self, from: Path) = ...;
+/// fn fold_literal(self, from: Literal) = ...;
+/// ```
+/// where `...` is any expression.
+pub macro impl_fold(
+    in Fold<$Src:ty, $Dst:ty>
+    $(fn $f:ident ($self:ident, $param:ident : $ty:ident) $(=)? $body: expr;)*
+) {$(
+    fn $f (
+        &mut $self,
+        $param: <$Src as AstTypes>::$ty
+    ) -> Result<<$Dst as AstTypes>::$ty, Self::Error> { Ok($body) }
+)*}
 
 /// Implements depth-first traversal for folders
 pub trait Foldable<A: AstTypes, B: AstTypes>: Sized {
@@ -293,7 +304,7 @@ impl<A: AstTypes, B: AstTypes> Foldable<A, B> for At<Expr<A>, A> {
 
     fn children<F: Fold<A, B> + ?Sized>(self, folder: &mut F) -> Result<Self::Out, F::Error> {
         let Self(expr, anno) = self;
-        Ok(At(expr.children(folder)?, folder.fold_annotation(anno)?))
+        Ok(At(expr.fold_in(folder)?, folder.fold_annotation(anno)?))
     }
 }
 
@@ -306,7 +317,7 @@ impl<A: AstTypes, B: AstTypes> Foldable<A, B> for At<Pat<A>, A> {
 
     fn children<F: Fold<A, B> + ?Sized>(self, folder: &mut F) -> Result<Self::Out, F::Error> {
         let Self(pat, anno) = self;
-        Ok(At(pat.children(folder)?, folder.fold_annotation(anno)?))
+        Ok(At(pat.fold_in(folder)?, folder.fold_annotation(anno)?))
     }
 }
 
