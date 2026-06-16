@@ -3,15 +3,19 @@
 use std::{convert::Infallible, mem::replace};
 
 use crate::{
-    At, Bind, BindOp, DefaultTypes, Pat, PatOp,
+    AstTypes, At, Bind, BindOp, Pat, PatOp,
     fold::{Fold, Foldable, impl_default_fold},
 };
 
-fn take(At(pat, span): &mut At<Pat>) -> At<Pat> {
+fn take<A: AstTypes>(At(pat, span): &mut At<Pat<A>, A>) -> At<Pat<A>, A> {
     At(replace(pat, Pat::Ignore), *span)
 }
 
-pub fn bubble_types(pat: At<Pat>, in_enum: bool) -> (At<Pat>, Option<At<Pat>>) {
+#[allow(clippy::type_complexity)]
+pub fn bubble_types<A: AstTypes>(
+    pat: At<Pat<A>, A>,
+    in_enum: bool,
+) -> (At<Pat<A>, A>, Option<At<Pat<A>, A>>) {
     //! Bubbles up type annotations from within a pattern to the top level.
     let (op, mut pats, span) = match pat {
         At(Pat::Op(op, pats), span) => (op, pats, span),
@@ -109,21 +113,18 @@ pub fn bubble_types(pat: At<Pat>, in_enum: bool) -> (At<Pat>, Option<At<Pat>>) {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Bubbler(pub bool);
 
-impl Fold<DefaultTypes, DefaultTypes> for Bubbler {
+impl<A: AstTypes> Fold<A, A> for Bubbler {
     type Error = Infallible;
-    impl_default_fold!(DefaultTypes, DefaultTypes);
+    impl_default_fold!(A, A);
 
-    fn fold_at_pat(
-        &mut self,
-        pat: At<Pat<DefaultTypes>, DefaultTypes>,
-    ) -> Result<At<Pat<DefaultTypes>, DefaultTypes>, Self::Error> {
+    fn fold_at_pat(&mut self, pat: At<Pat<A>, A>) -> Result<At<Pat<A>, A>, Self::Error> {
         Ok(match bubble_types(pat, self.0) {
             (value @ At(_, span), Some(ty)) => Pat::Op(PatOp::Typed, vec![value, ty]).at(span),
             (value, None) => value,
         })
     }
 
-    fn fold_bind(&mut self, bind: Bind<DefaultTypes>) -> Result<Bind<DefaultTypes>, Self::Error> {
+    fn fold_bind(&mut self, bind: Bind<A>) -> Result<Bind<A>, Self::Error> {
         let mut bubbler = Bubbler(bind.0 == BindOp::Enum);
         bind.children(&mut bubbler)
     }
