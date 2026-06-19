@@ -49,6 +49,7 @@ impl ConstEval for Expr {
             Self::Bind(_) => None,
             Self::Make(_) => None,
             Self::Match(_) => None,
+            Self::Label(_) => None,
             Self::Op(op, ats) => match op {
                 Op::Do => ats.last().and_then(At::const_eval),
                 Op::As => ats.first().and_then(At::const_eval),

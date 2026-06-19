@@ -46,6 +46,10 @@ pub trait Fold<From: AstTypes, To: AstTypes = From> {
         expr.children(self)
     }
 
+    fn fold_label(&mut self, label: Label<From>) -> Result<Label<To>, Self::Error> {
+        label.children(self)
+    }
+
     /// Consumes a [`Use`], possibly transforms it, and produces a replacement [`Use`]
     fn fold_use(&mut self, item: Use<From>) -> Result<Use<To>, Self::Error> {
         item.children(self)
@@ -179,8 +183,22 @@ impl<A: AstTypes, B: AstTypes> Foldable<A, B> for Expr<A> {
             Self::Bind(bind) => Expr::Bind(bind.fold_in(folder)?),
             Self::Make(make) => Expr::Make(make.fold_in(folder)?),
             Self::Match(mtch) => Expr::Match(mtch.fold_in(folder)?),
+            Self::Label(label) => Expr::Label(label.fold_in(folder)?),
             Self::Op(op, annos) => Expr::Op(op, annos.fold_in(folder)?),
         })
+    }
+}
+
+impl<A: AstTypes, B: AstTypes> Foldable<A, B> for Label<A> {
+    type Out = Label<B>;
+
+    fn fold_in<F: Fold<A, B> + ?Sized>(self, folder: &mut F) -> Result<Self::Out, F::Error> {
+        folder.fold_label(self)
+    }
+
+    fn children<F: Fold<A, B> + ?Sized>(self, folder: &mut F) -> Result<Self::Out, F::Error> {
+        let Self(label, expr) = self;
+        Ok(Label(folder.fold_symbol(label)?, expr.fold_in(folder)?))
     }
 }
 

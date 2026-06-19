@@ -108,6 +108,8 @@ impl<A: AstTypes> Match<A> for Expr<A> {
             (Expr::Make(..), _) => false,
             (Expr::Match(pat), Expr::Match(expr)) => Match::recurse(sub, pat, expr),
             (Expr::Match(..), _) => false,
+            (Expr::Label(pat), Expr::Label(expr)) => Match::recurse(sub, pat, expr),
+            (Expr::Label(..), _) => false,
             (Expr::Op(pat_op, pat_exprs), Expr::Op(expr_op, expr_exprs)) => {
                 Match::recurse(sub, pat_op, expr_op) && Match::recurse(sub, pat_exprs, expr_exprs)
             }
@@ -126,11 +128,24 @@ impl<A: AstTypes> Match<A> for Expr<A> {
             Expr::Bind(expr) => expr.apply(sub),
             Expr::Make(expr) => expr.apply(sub),
             Expr::Match(expr) => expr.apply(sub),
+            Expr::Label(expr) => expr.apply(sub),
             Expr::Op(op, exprs) => {
                 op.apply(sub);
                 exprs.apply(sub);
             }
         }
+    }
+}
+
+impl<A: AstTypes> Match<A> for crate::ast::Label<A> {
+    fn recurse(sub: &mut Subst<A>, pat: &Self, expr: &Self) -> bool {
+        let (Label(pat_label, pat_expr), Label(expr_label, expr_expr)) = (pat, expr);
+        pat_label == expr_label && Match::recurse(sub, pat_expr, expr_expr)
+    }
+
+    fn apply(&mut self, sub: &Subst<A>) {
+        let Label(_, expr) = self;
+        expr.apply(sub);
     }
 }
 

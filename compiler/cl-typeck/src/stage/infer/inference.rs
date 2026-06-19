@@ -34,6 +34,7 @@ impl Inference for Expr {
             Self::Bind(bind) => bind.infer(e),
             Self::Make(make) => make.infer(e),
             Self::Match(mtch) => mtch.infer(e),
+            Self::Label(labl) => labl.infer(e),
             Self::Op(op, exprs) => infer_expr_op(*op, exprs, e),
         }
     }
@@ -133,11 +134,7 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_, '_>
             }
 
             // Infer the fail branch
-            let fail = if let [fail] = fail {
-                fail.infer(e)?
-            } else {
-                e.unit()
-            };
+            let fail = if let [fail] = fail { fail.infer(e)? } else { e.unit() };
 
             // Unify the fail branch with breakset
             if let Some(bset) = bset {
@@ -145,6 +142,14 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_, '_>
                 e.unify(bset, fail)?;
             }
             Ok(fail)
+        }
+        (Op::Break, [body]) if let Expr::Label(label) = body.value() => {
+            let Label(_label, body) = label.as_ref();
+            let ty = body.infer(e)?;
+            // Unify it with the breakset of the loop
+            e.bset(ty)?;
+            // Return never
+            Ok(e.never())
         }
         (Op::Break, [body]) => {
             let ty = body.infer(e)?;
@@ -211,6 +216,12 @@ impl Inference for Literal {
             Self::Int(_, _) => e.integer_literal(),
             Self::Str(_) => e.str(),
         })
+    }
+}
+
+impl Inference for Label {
+    fn infer(&self, _e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+        todo!("Turn breakset into a stackly-linked list")
     }
 }
 

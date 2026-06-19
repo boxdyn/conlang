@@ -5,7 +5,7 @@ use cl_ast::{
     types::{Literal, Path},
     *,
 };
-use cl_token::{TKind, Token};
+use cl_token::{Lexeme, TKind, Token};
 
 /// Organizes the precedence hierarchy for syntactic elements
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -87,6 +87,7 @@ pub enum Ps {
     DoubleRef,  // && Expr
     Make,       // Expr{ Expr,* }
     Match,      // match Expr { (Pat => Expr),* }
+    Label,      // 'label Expr
     ImplicitDo, // An implicit semicolon
     Ellipsis,   // An ellipsis (...)
     End,        // Produces an empty value.
@@ -118,6 +119,7 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
         TKind::Static => (Ps::Op(Op::Static), Prec::Max),
         TKind::For => (Ps::For, Prec::Max),
         TKind::Match => (Ps::Match, Prec::Max),
+        TKind::Label => (Ps::Label, Prec::Body),
         TKind::Macro => (Ps::Op(Op::Macro), Prec::Assign),
 
         TKind::Fn
@@ -245,6 +247,7 @@ impl<'t> Parse<'t> for Expr {
                 Ps::Bind => Expr::Bind(p.parse(())?),
                 Ps::For => parse_for(p, ())?,
                 Ps::Match => Expr::Match(p.parse(())?),
+                Ps::Label => Expr::Label(p.parse(prec.next())?),
                 Ps::Lambda | Ps::Lambda0 => {
                     p.split()?; // is either `||`, which can be split, or `|`, which can't
 
@@ -404,6 +407,20 @@ fn parse_array(p: &mut Parser<'_>) -> PResult<Expr> {
         (None, At(Expr::Op(Op::Tuple, items), _)) => Expr::Op(Op::Array, items),
         (None, item) => Expr::Op(Op::Array, vec![item]),
     })
+}
+
+impl<'t> Parse<'t> for Label {
+    type Prec = usize;
+
+    fn parse(p: &mut Parser<'t>, level: Self::Prec) -> PResult<Self> {
+        let token = p.next()?;
+        let Token { lexeme: Lexeme::String(label), kind: TKind::Label, .. } = token else {
+            Err(ParseError::Expected(TKind::Label, token.kind, token.span))?
+        };
+
+        let expr = p.parse(level)?;
+        Ok(Self((*label).into(), expr))
+    }
 }
 
 /// Parses a `match` expression

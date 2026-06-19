@@ -80,6 +80,7 @@ impl Interpret for Expr<DefaultTypes> {
             Self::Bind(bind) => bind.interpret(env),
             Self::Make(make) => make.interpret(env),
             Self::Match(mtch) => mtch.interpret(env),
+            Self::Label(labl) => labl.interpret(env),
             Self::Op(op, exprs) => {
                 if self.is_place()
                     && let Ok(place) = Place::new(self, env)
@@ -157,7 +158,9 @@ impl Interpret for (Op, &[At<Expr>]) {
             (Op::Loop, [expr]) => loop {
                 match expr.interpret(&mut env.frame("loop", Some(expr.1))) {
                     Ok(_) => {}
-                    Err(Error { kind: ErrorKind::Break(v), .. }) => break Ok(v),
+                    Err(e @ Error { kind: ErrorKind::Break(..), .. }) => {
+                        break e.catch_a_break("loop", true);
+                    }
                     Err(Error { kind: ErrorKind::Continue, .. }) => continue,
                     Err(e) => Err(e)?,
                 }
@@ -176,8 +179,10 @@ impl Interpret for (Op, &[At<Expr>]) {
                     if cond.interpret(&mut scope)?.truthy()? {
                         match pass.interpret(&mut scope) {
                             Ok(_) => {}
-                            Err(Error { kind: ErrorKind::Break(value), .. }) => return Ok(value),
                             Err(Error { kind: ErrorKind::Continue, .. }) => continue,
+                            Err(e @ Error { kind: ErrorKind::Break(..), .. }) => {
+                                return e.catch_a_break("while", true);
+                            }
                             Err(e) => Err(e)?,
                         }
                     } else {
@@ -190,7 +195,13 @@ impl Interpret for (Op, &[At<Expr>]) {
                 env.defer(expr.value().clone());
                 Ok(ConValue::Empty)
             }
-            (Op::Break, [expr]) => Err(Error::Break(expr.interpret(env)?)),
+            #[allow(irrefutable_let_patterns)] // tfw no deref patterns
+            (Op::Break, [expr]) => match expr.value() {
+                Expr::Label(label) if let Label(label, expr) = label.as_ref() => {
+                    Err(Error::BreakLabel(label.to_ref(), expr.interpret(env)?))
+                }
+                _ => Err(Error::Break(expr.interpret(env)?)),
+            },
             (Op::Return, [expr]) => Err(Error::Return(expr.interpret(env)?)),
             (Op::Continue, []) => Err(Error::Continue()),
 
@@ -300,20 +311,12 @@ impl Interpret for (Op, &[At<Expr>]) {
             // Logical (control flow) operators
             (Op::LogAnd, [lhs, rhs]) => {
                 let lhs = lhs.interpret(env)?;
-                if lhs.truthy()? {
-                    rhs.interpret(env)
-                } else {
-                    Ok(lhs)
-                }
+                if lhs.truthy()? { rhs.interpret(env) } else { Ok(lhs) }
             }
             (Op::LogXor, [lhs, rhs]) => todo!(),
             (Op::LogOr, [lhs, rhs]) => {
                 let lhs = lhs.interpret(env)?;
-                if lhs.truthy()? {
-                    Ok(lhs)
-                } else {
-                    rhs.interpret(env)
-                }
+                if lhs.truthy()? { Ok(lhs) } else { rhs.interpret(env) }
             }
 
             // Assignment operators
@@ -385,6 +388,14 @@ impl Interpret for (Op, &[At<Expr>]) {
             }
             (op, exprs) => cl_unimplemented!("Evaluate {op:?} {exprs:#?}"),
         }
+    }
+}
+
+impl Interpret for Label<DefaultTypes> {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        let Self(label, expr) = self;
+        expr.interpret(&mut env.frame(label.to_ref(), None))
+            .or_else(|e| e.catch_a_break(label.to_ref(), false))
     }
 }
 
@@ -512,7 +523,9 @@ impl Interpret for Bind<DefaultTypes> {
                     let mut scope = env.with_frame("for-loop", bind);
                     match pass.interpret(&mut scope) {
                         Ok(_) => {}
-                        Err(Error { kind: ErrorKind::Break(value), .. }) => return Ok(value),
+                        Err(e @ Error { kind: ErrorKind::Break(..), .. }) => {
+                            return e.catch_a_break("for", true);
+                        }
                         Err(Error { kind: ErrorKind::Continue, .. }) => continue,
                         Err(e) => Err(e)?,
                     }

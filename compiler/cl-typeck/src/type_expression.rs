@@ -105,6 +105,7 @@ impl TypeExpression for cl_ast::Expr {
             Self::Bind(bind) => todo!("Bind-items ({bind}) in type expressions!"),
             Self::Make(make) => todo!("Make-items ({make}) in type expressions!"),
             Self::Match(mtch) => todo!("Match-exprs ({mtch}) in type expressions!"),
+            Self::Label(labl) => todo!("Label-exprs ({labl}) in type expressions!"),
             Self::Op(op, ats) => todo!("Op({op}, {ats:?})"),
         }
     }

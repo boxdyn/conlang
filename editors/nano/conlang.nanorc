@@ -60,20 +60,24 @@ color white "\<_\>"
 color bold,cyan "\<[A-Z][A-Z0-9_]+\>"
 
 # function definitions
-color cyan "fn\s+[a-z_][A-Za-z_]*"
+color cyan "fn\s+(r')?[a-z_][[:alnum:]_]*\>"
 
 # enums/structs/types/etc.
 color bold,sky "\<[A-Z][a-z0-9][A-Za-z0-9]*\>"
 
 # keyword-types
-color bold,sky "\<([iuf](8|16|32|64|128|size)|bool|char|str)\>"
+color bold,sky "\<([iuf](8|16|32|64|128|size)|u?int|bool|char|str)\>"
 
 # keywords
 color lightmagenta "\<(as|break|const|continue|do|else|enum|false|fn|for|if|impl|in|let|loop|macro|match|mod|mut|pub|return|static|struct|then|true|type|use|while)\>"
 
 # string and character literals, escapes
-color orange "\"([^"]|\\")*\""
-color tawny "'([^']|\\')*'"
+#color orange "(\<r)?\"([^"]|\\")*\""
+color orange start="(\<r)?\"" end="([^"]|\\")*\""
+color lime "(\<r)?'([[:alnum:]_]+)\>"
+color lightcyan "\<r'([[:alnum:]_]+)\>"
+color tawny "'(\\.([0-9A-Fa-f]{0,2}|\{[^}]{,6}\})?|[^'])'"
+color orange "\<r'(\\.([0-9A-Fa-f]{0,2}|\{[^}]{,6}\})?|[^'])'"
 
 color lime "\\(u\{[0-9A-Fa-f]*\}|x[0-9A-Fa-f]{2})"
 color lightyellow "\\[ 0abefnrtux'"]"

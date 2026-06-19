@@ -109,6 +109,7 @@ pub enum TKind {
     While,
 
     Identifier, // or Keyword
+    Label,
     Character,
     String,
     /// `0(x[0-9A-Fa-f]* | d[0-9]* | o[0-7]* | b[0-1]*) | [1-9][0-9]*`

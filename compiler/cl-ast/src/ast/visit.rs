@@ -28,6 +28,9 @@ pub trait Visit<'a, A: AstTypes> {
     fn visit_expr(&mut self, expr: &'a Expr<A>) -> Result<(), Self::Error> {
         expr.children(self)
     }
+    fn visit_label(&mut self, item: &'a Label<A>) -> Result<(), Self::Error> {
+        item.children(self)
+    }
     fn visit_use(&mut self, item: &'a Use<A>) -> Result<(), Self::Error> {
         item.children(self)
     }
@@ -70,6 +73,7 @@ impl<'a, A: AstTypes> Walk<'a, A> for Expr<A> {
             Self::Bind(bind) => bind.visit_in(v),
             Self::Make(make) => make.visit_in(v),
             Self::Match(mtch) => mtch.visit_in(v),
+            Self::Label(labl) => labl.visit_in(v),
             Self::Op(_op, exprs) => exprs.visit_in(v),
         }
     }
@@ -77,6 +81,19 @@ impl<'a, A: AstTypes> Walk<'a, A> for Expr<A> {
     #[inline]
     fn visit_in<V: Visit<'a, A> + ?Sized>(&'a self, v: &mut V) -> Result<(), V::Error> {
         v.visit_expr(self)
+    }
+}
+
+impl<'a, A: AstTypes> Walk<'a, A> for Label<A> {
+    fn children<V: Visit<'a, A> + ?Sized>(&'a self, v: &mut V) -> Result<(), V::Error> {
+        let Self(label, expr) = self;
+        v.visit_symbol(label)?;
+        expr.visit_in(v)
+    }
+
+    #[inline]
+    fn visit_in<V: Visit<'a, A> + ?Sized>(&'a self, v: &mut V) -> Result<(), V::Error> {
+        v.visit_label(self)
     }
 }
 

@@ -31,6 +31,7 @@ impl<A: AstTypes> std::fmt::Debug for Expr<A> {
             Self::Bind(arg0) => Debug::fmt(arg0, f),
             Self::Make(arg0) => Debug::fmt(arg0, f),
             Self::Match(arg0) => Debug::fmt(arg0, f),
+            Self::Label(arg0) => Debug::fmt(arg0, f),
             Self::Op(arg0, arg1) => {
                 let mut tup = f.debug_tuple(&format!("{arg0:?}"));
                 for arg in arg1 {
@@ -83,6 +84,7 @@ impl<A: AstTypes> Display for Expr<A> {
             Self::Bind(v) => v.fmt(f),
             Self::Make(v) => v.fmt(f),
             Self::Match(v) => v.fmt(f),
+            Self::Label(v) => v.fmt(f),
 
             Self::Op(op @ Op::Continue, exprs) => f.delimit(op, "").list(exprs, "!?,"),
             Self::Op(op @ (Op::If | Op::While), exprs) => match exprs.as_slice() {
@@ -197,6 +199,13 @@ impl Display for Op {
             Op::XorSet => " ^= ",
             Op::OrSet => " |= ",
         })
+    }
+}
+
+impl<A: AstTypes> Display for Label<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self(label, expr) = self;
+        write!(f, "'{label} {expr}")
     }
 }
 

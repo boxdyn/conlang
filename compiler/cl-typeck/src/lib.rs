@@ -28,7 +28,6 @@
 
 pub(crate) mod format_utils;
 
-
 pub mod consteval;
 
 pub mod table;

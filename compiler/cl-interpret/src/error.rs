@@ -27,13 +27,25 @@ impl Error {
         &self.kind
     }
 
+    pub fn catch_a_break(self, label: &'static str, or_unlabeled: bool) -> IResult<ConValue> {
+        match self.kind {
+            ErrorKind::Break(Some(broke_with), value) if broke_with == label => Ok(value),
+            ErrorKind::Break(None, value) if or_unlabeled => Ok(value),
+            _ => Err(self),
+        }
+    }
+
     /// Propagate a Return value
     pub fn Return(value: ConValue) -> Self {
         Self { kind: ErrorKind::Return(value), span: None }
     }
     /// Propagate a Break value
     pub fn Break(value: ConValue) -> Self {
-        Self { kind: ErrorKind::Break(value), span: None }
+        Self { kind: ErrorKind::Break(None, value), span: None }
+    }
+    /// Propagate a Break value
+    pub fn BreakLabel(label: &'static str, value: ConValue) -> Self {
+        Self { kind: ErrorKind::Break(Some(label), value), span: None }
     }
     /// Break propagated across function bounds
     pub fn BadBreak(value: ConValue) -> Self {
@@ -123,7 +135,7 @@ pub enum ErrorKind {
     /// Propagate a Return value
     Return(ConValue),
     /// Propagate a Break value
-    Break(ConValue),
+    Break(Option<&'static str>, ConValue),
     /// Break propagated across function bounds
     BadBreak(ConValue),
     /// Continue to the next iteration of a loop
@@ -166,7 +178,8 @@ impl std::fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ErrorKind::Return(value) => write!(f, "return {value}"),
-            ErrorKind::Break(value) => write!(f, "break {value}"),
+            ErrorKind::Break(Some(label), value) => write!(f, "break '{label} {value}"),
+            ErrorKind::Break(None, value) => write!(f, "break {value}"),
             ErrorKind::BadBreak(value) => write!(f, "rogue break: {value}"),
             ErrorKind::Continue => "continue".fmt(f),
             ErrorKind::StackOob(id) => {

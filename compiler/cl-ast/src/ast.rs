@@ -87,6 +87,8 @@ pub enum Expr<A: AstTypes = DefaultTypes> {
     Make(Box<Make<A>>),
     /// `match Expr { (Pat => Expr),* }`
     Match(Box<Match<A>>),
+    /// `'label Expr`
+    Label(Box<Label<A>>),
     /// Op Expr | Expr Op | Expr (Op Expr)+ | Op Expr Expr else Expr
     Op(Op, Vec<At<Self, A>>),
 }
@@ -300,6 +302,19 @@ impl<A: AstTypes> Expr<A> {
         }
     }
 }
+
+/// A labeled expression
+///
+/// This creates a jump target which `break` can break to:
+/// ```ignore
+/// let seven = 'label
+///     for x in 1..100 {
+///         if x % 10 == 7
+///             break 'label x;
+///     } else 7
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Label<A: AstTypes = DefaultTypes>(pub A::Symbol, pub At<Expr<A>, A>);
 
 /// A pattern binding
 /// ```ignore

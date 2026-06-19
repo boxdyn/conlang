@@ -290,20 +290,32 @@ impl<'t> Lexer<'t> {
     }
 
     /// Eagerly parses a character literal starting at the current lexer position.
-    pub fn character(&mut self, as_int: bool) -> Result<Token, LexError> {
+    pub fn character(&mut self, raw: bool) -> Result<Token, LexError> {
         let c = match self.consume().take() {
             Some('\\') => self.escape()?,
             Some(c) => c,
             None => '\0',
         };
-        if !self.take().is_some_and(|c| c == '\'') {
-            return Err(self.error(UnterminatedCharacter));
-        }
-        let (kind, lexeme) = match as_int {
+        match self.next_if('\'') {
+            Some(_) => {}
+            None if is_xid_start(c) => return self.label(raw),
+            _ => return Err(self.error(UnterminatedCharacter)),
+        };
+        let (kind, lexeme) = match raw {
             true => (TKind::Integer, Lexeme::Integer(c as _, 16)),
             false => (TKind::Character, Lexeme::Char(c)),
         };
         Ok(self.produce_with_lexeme(kind, lexeme))
+    }
+
+    /// Parses the remainder of a label
+    pub fn label(&mut self, raw: bool) -> Result<Token, LexError> {
+        while self.peek().is_some_and(is_xid_continue) {
+            self.consume();
+        }
+        let kind = if raw { TKind::Identifier } else { TKind::Label };
+        let label = self.as_str().0.trim_start_matches('r');
+        Ok(self.produce_with_lexeme(kind, Lexeme::String(label.trim_start_matches('\'').into())))
     }
 
     // Eagerly parses a string literal starting at the current lexer position.

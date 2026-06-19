@@ -295,28 +295,49 @@ impl Callable for ConValue {
     }
 }
 
-macro into_inner($($fn:ident: $);*$(;)?) {}
-
 /// Templates comparison functions for [ConValue]
 macro cmp ($($fn:ident: $op:tt);*$(;)?) {$(
     /// TODO: Remove when functions are implemented:
     ///       Desugar into function calls
     pub fn $fn(&self, other: &Self) -> IResult<Self> {
-        match (self, other) {
-            (Self::Empty, Self::Empty) => Ok(Self::Bool(() $op ())),
-            (Self::Int(a), Self::Int(b)) => Ok(Self::Bool(a $op b)),
-            (Self::Float(a), Self::Float(b)) => Ok(Self::Bool(a $op b)),
-            (Self::Bool(a), Self::Bool(b)) => Ok(Self::Bool(a $op b)),
-            (Self::Char(a), Self::Char(b)) => Ok(Self::Bool(a $op b)),
-            (Self::Str(a), Self::Str(b)) => Ok(Self::Bool(&**a $op &**b)),
-            (Self::Str(a), Self::String(b)) => Ok(Self::Bool(&**a $op &**b)),
-            (Self::String(a), Self::Str(b)) => Ok(Self::Bool(&**a $op &**b)),
-            (Self::String(a), Self::String(b)) => Ok(Self::Bool(&**a $op &**b)),
-            (Self::TypeInfo(a), Self::TypeInfo(b)) => Ok(Self::Bool(&*a $op &*b)),
-            (a, _) => Err(Error::TypeError("type implements Cmp", a.type_of()))?,
-        }
+        Ok(ConValue::Bool(self.compare(other)? $op 0))
     }
 )*}
+
+impl ConValue {
+    pub fn compare(&self, other: &Self) -> IResult<isize> {
+        use std::cmp::Ord;
+        Ok(match (self, other) {
+            (Self::Empty, Self::Empty) => 0,
+            (Self::Int(a), Self::Int(b)) => a.cmp(b) as _,
+            (Self::Float(a), Self::Float(b)) => {
+                a.partial_cmp(b).unwrap_or_else(|| a.total_cmp(b)) as _
+            }
+            (Self::Bool(a), Self::Bool(b)) => a.cmp(b) as _,
+            (Self::Char(a), Self::Char(b)) => a.cmp(b) as _,
+            (Self::Str(a), Self::Str(b)) => a.cmp(b) as _,
+            (Self::Str(a), Self::String(b)) => a.to_ref().cmp(b) as _,
+            (Self::String(a), Self::Str(b)) => a.deref().cmp(b.to_ref()) as _,
+            (Self::String(a), Self::String(b)) => a.cmp(b) as _,
+            (Self::Array(a), Self::Array(b)) | (Self::Tuple(a), Self::Tuple(b)) => {
+                if a.len() != b.len() {
+                    return Ok(a.len().cmp(&b.len()) as _);
+                };
+                let mut res = 0;
+                for (a, b) in a.iter().zip(b.iter()) {
+                    res = a.compare(b)?;
+                    if res != 0 {
+                        break;
+                    }
+                }
+                res
+            }
+            (Self::TypeInfo(a), Self::TypeInfo(b)) => a.cmp(b) as _,
+            (a, b) => Err(Error::TypeError("Cmp", a.type_of()))?,
+        })
+    }
+}
+
 macro assign($( $fn: ident: $op: tt );*$(;)?) {$(
     pub fn $fn(&mut self, other: Self) -> IResult<()> {
         *self = (std::mem::take(self) $op other)?;

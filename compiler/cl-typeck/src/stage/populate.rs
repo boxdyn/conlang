@@ -60,6 +60,7 @@ impl Visit<'_, DefaultTypes> for Populator<'_, '_> {
             Expr::Bind(bind) => self.visit_bind(bind),
             Expr::Make(make) => self.visit_make(make),
             Expr::Match(mtch) => self.visit_match(mtch),
+            Expr::Label(labl) => self.visit_label(labl),
 
             // outer meta is collected on the stack, and shared among all scoped items
             Expr::Op(Op::MetaOuter, exprs) => match exprs.as_slice() {
