@@ -1,7 +1,9 @@
 //! The [Error] type represents any error thrown by the [Environment](super::Environment)
 
-use cl_ast::{Pattern, Sym};
+use cl_ast::{Pat, types::Symbol};
 use cl_structures::span::Span;
+
+use crate::typeinfo::Type;
 
 use super::convalue::ConValue;
 
@@ -25,13 +27,25 @@ impl Error {
         &self.kind
     }
 
+    pub fn catch_a_break(self, label: &'static str, or_unlabeled: bool) -> IResult<ConValue> {
+        match self.kind {
+            ErrorKind::Break(Some(broke_with), value) if broke_with == label => Ok(value),
+            ErrorKind::Break(None, value) if or_unlabeled => Ok(value),
+            _ => Err(self),
+        }
+    }
+
     /// Propagate a Return value
     pub fn Return(value: ConValue) -> Self {
         Self { kind: ErrorKind::Return(value), span: None }
     }
     /// Propagate a Break value
     pub fn Break(value: ConValue) -> Self {
-        Self { kind: ErrorKind::Break(value), span: None }
+        Self { kind: ErrorKind::Break(None, value), span: None }
+    }
+    /// Propagate a Break value
+    pub fn BreakLabel(label: &'static str, value: ConValue) -> Self {
+        Self { kind: ErrorKind::Break(Some(label), value), span: None }
     }
     /// Break propagated across function bounds
     pub fn BadBreak(value: ConValue) -> Self {
@@ -41,13 +55,9 @@ impl Error {
     pub fn Continue() -> Self {
         Self { kind: ErrorKind::Continue, span: None }
     }
-    /// Underflowed the stack
-    pub fn StackUnderflow() -> Self {
-        Self { kind: ErrorKind::StackUnderflow, span: None }
-    }
-    /// Overflowed the stack
-    pub fn StackOverflow(place: usize) -> Self {
-        Self { kind: ErrorKind::StackOverflow(place), span: None }
+    /// Indexed out of bounds in the stack
+    pub fn StackOob(place: usize) -> Self {
+        Self { kind: ErrorKind::StackOob(place), span: None }
     }
     /// Exited the last scope
     pub fn ScopeExit() -> Self {
@@ -55,8 +65,8 @@ impl Error {
     }
     /// Type incompatibility
     // TODO: store the type information in this error
-    pub fn TypeError() -> Self {
-        Self { kind: ErrorKind::TypeError, span: None }
+    pub fn TypeError(want: impl ToString, got: Type) -> Self {
+        Self { kind: ErrorKind::TypeError(want.to_string(), got), span: None }
     }
     /// In clause of For loop didn't yield a Range
     pub fn NotIterable() -> Self {
@@ -70,16 +80,16 @@ impl Error {
     pub fn OobIndex(index: usize, length: usize) -> Self {
         Self { kind: ErrorKind::OobIndex(index, length), span: None }
     }
-    /// An expression is not assignable
-    pub fn NotAssignable() -> Self {
-        Self { kind: ErrorKind::NotAssignable, span: None }
+    /// An expression in place position is not a place-expression
+    pub fn NotPlace() -> Self {
+        Self { kind: ErrorKind::NotPlace, span: None }
     }
     /// A name was not defined in scope before being used
-    pub fn NotDefined(name: Sym) -> Self {
+    pub fn NotDefined(name: Symbol) -> Self {
         Self { kind: ErrorKind::NotDefined(name), span: None }
     }
     /// A name was defined but not initialized
-    pub fn NotInitialized(name: Sym) -> Self {
+    pub fn NotInitialized(name: Symbol) -> Self {
         Self { kind: ErrorKind::NotInitialized(name), span: None }
     }
     /// A value was called, but is not callable
@@ -91,20 +101,20 @@ impl Error {
         Self { kind: ErrorKind::ArgNumber { want, got }, span: None }
     }
     /// A pattern failed to match
-    pub fn PatFailed(pat: Box<Pattern>) -> Self {
+    pub fn PatFailed(pat: Box<Pat>) -> Self {
         Self { kind: ErrorKind::PatFailed(pat), span: None }
     }
     /// Fell through a non-exhaustive match
-    pub fn MatchNonexhaustive() -> Self {
-        Self { kind: ErrorKind::MatchNonexhaustive, span: None }
+    pub fn MatchNonexhaustive(value: ConValue) -> Self {
+        Self { kind: ErrorKind::MatchNonexhaustive(value), span: None }
     }
     /// Explicit panic
     pub fn Panic(msg: String) -> Self {
         Self { kind: ErrorKind::Panic(msg, 0), span: None }
     }
     /// Error produced by a Builtin
-    pub fn BuiltinError(msg: String) -> Self {
-        Self { kind: ErrorKind::BuiltinError(msg), span: None }
+    pub fn BuiltinError(msg: impl ToString) -> Self {
+        Self { kind: ErrorKind::BuiltinError(msg.to_string()), span: None }
     }
 }
 
@@ -112,8 +122,8 @@ impl std::error::Error for Error {}
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self { kind, span } = self;
-        if let Some(Span { head, tail }) = span {
-            write!(f, "{head}..{tail}: ")?;
+        if let Some(Span { path, head, tail }) = span {
+            write!(f, "{path}:{head}..{tail}: ")?;
         }
         write!(f, "{kind}")
     }
@@ -125,20 +135,18 @@ pub enum ErrorKind {
     /// Propagate a Return value
     Return(ConValue),
     /// Propagate a Break value
-    Break(ConValue),
+    Break(Option<&'static str>, ConValue),
     /// Break propagated across function bounds
     BadBreak(ConValue),
     /// Continue to the next iteration of a loop
     Continue,
-    /// Underflowed the stack
-    StackUnderflow,
     /// Overflowed the stack
-    StackOverflow(usize),
+    StackOob(usize),
     /// Exited the last scope
     ScopeExit,
     /// Type incompatibility
     // TODO: store the type information in this error
-    TypeError,
+    TypeError(String, Type),
     /// In clause of For loop didn't yield a Range
     NotIterable,
     /// A value could not be indexed
@@ -146,19 +154,19 @@ pub enum ErrorKind {
     /// An array index went out of bounds
     OobIndex(usize, usize),
     /// An expression is not assignable
-    NotAssignable,
+    NotPlace,
     /// A name was not defined in scope before being used
-    NotDefined(Sym),
+    NotDefined(Symbol),
     /// A name was defined but not initialized
-    NotInitialized(Sym),
+    NotInitialized(Symbol),
     /// A value was called, but is not callable
     NotCallable(ConValue),
     /// A function was called with the wrong number of arguments
     ArgNumber { want: usize, got: usize },
     /// A pattern failed to match
-    PatFailed(Box<Pattern>),
+    PatFailed(Box<Pat>),
     /// Fell through a non-exhaustive match
-    MatchNonexhaustive,
+    MatchNonexhaustive(ConValue),
     /// Explicit panic
     Panic(String, usize),
     /// Error produced by a Builtin
@@ -170,15 +178,17 @@ impl std::fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ErrorKind::Return(value) => write!(f, "return {value}"),
-            ErrorKind::Break(value) => write!(f, "break {value}"),
+            ErrorKind::Break(Some(label), value) => write!(f, "break '{label} {value}"),
+            ErrorKind::Break(None, value) => write!(f, "break {value}"),
             ErrorKind::BadBreak(value) => write!(f, "rogue break: {value}"),
             ErrorKind::Continue => "continue".fmt(f),
-            ErrorKind::StackUnderflow => "Stack underflow".fmt(f),
-            ErrorKind::StackOverflow(id) => {
-                write!(f, "Attempt to access <{id}> resulted in stack overflow.")
+            ErrorKind::StackOob(id) => {
+                write!(f, "Out of bounds access of stack entry <{id}>.")
             }
             ErrorKind::ScopeExit => "Exited the last scope. This is a logic bug.".fmt(f),
-            ErrorKind::TypeError => "Incompatible types".fmt(f),
+            ErrorKind::TypeError(want, got) => {
+                write!(f, "Incompatible types: wanted {want}, got {got}")
+            }
             ErrorKind::NotIterable => "`in` clause of `for` loop did not yield an iterable".fmt(f),
             ErrorKind::NotIndexable => {
                 write!(f, "expression cannot be indexed")
@@ -186,11 +196,11 @@ impl std::fmt::Display for ErrorKind {
             ErrorKind::OobIndex(idx, len) => {
                 write!(f, "Index out of bounds: index was {idx}. but len is {len}")
             }
-            ErrorKind::NotAssignable => {
-                write!(f, "expression is not assignable")
+            ErrorKind::NotPlace => {
+                write!(f, "expression does not refer to a place")
             }
             ErrorKind::NotDefined(value) => {
-                write!(f, "{value} not bound. Did you mean `let {value};`?")
+                write!(f, "{value} not bound.")
             }
             ErrorKind::NotInitialized(value) => {
                 write!(f, "{value} bound, but not initialized")
@@ -208,10 +218,10 @@ impl std::fmt::Display for ErrorKind {
             ErrorKind::PatFailed(pattern) => {
                 write!(f, "Failed to match pattern {pattern}")
             }
-            ErrorKind::MatchNonexhaustive => {
-                write!(f, "Fell through a non-exhaustive match expression!")
+            ErrorKind::MatchNonexhaustive(value) => {
+                write!(f, "Failed to match {value}!")
             }
-            ErrorKind::Panic(s, _depth) => write!(f, "Explicit panic: {s}"),
+            ErrorKind::Panic(s, _depth) => write!(f, "{s}"),
             ErrorKind::BuiltinError(s) => write!(f, "{s}"),
         }
     }

@@ -1,6 +1,10 @@
-//! Lexical and non-lexical scoping for variables
+//! Lexical & non-lexical [scoping](Environment) for variables, and [Backtrace] support
 
-use crate::{builtin::Builtin, constructor::Constructor, modules::ModuleTree};
+use crate::{
+    builtin::Builtin,
+    place::Place,
+    typeinfo::{self, Model, Type},
+};
 
 use super::{
     Callable, Interpret,
@@ -9,25 +13,49 @@ use super::{
     error::{Error, IResult},
     function::Function,
 };
-use cl_ast::{Function as FnDecl, Sym};
+use cl_ast::{Bind as FnDecl, fmt::FmtAdapter, types::Symbol};
+use cl_structures::{intern::interned::Interned, span::Span};
 use std::{
     collections::HashMap,
     fmt::Display,
+    mem::take,
     ops::{Deref, DerefMut},
     rc::Rc,
 };
 
-pub type StackFrame = HashMap<Sym, ConValue>;
+pub type StackFrame = HashMap<Symbol, ConValue>;
 
-pub type StackBinds = HashMap<Sym, usize>;
+pub type StackBinds = HashMap<Symbol, usize>;
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct EnvFrame {
     pub name: Option<&'static str>,
+
+    pub span: Option<Span>,
     /// The length of the array when this stack frame was constructed
     pub base: usize,
     /// The bindings of name to stack position
     pub binds: StackBinds,
+    /// A list of deferred instructions to run on scope exit
+    pub defer: Vec<cl_ast::Expr>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Backtrace<'env> {
+    frames: &'env [EnvFrame],
+}
+
+impl std::fmt::Display for Backtrace<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut count = 0;
+        for EnvFrame { name, span, .. } in self.frames.iter().rev() {
+            if let (Some(name), Some(span)) = (name, span) {
+                writeln!(f, "{count:>4}: {name}")?;
+                count += 1;
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Implements a nested lexical scope
@@ -35,12 +63,14 @@ pub(crate) struct EnvFrame {
 pub struct Environment {
     values: Vec<ConValue>,
     frames: Vec<EnvFrame>,
-    modules: ModuleTree,
+    types: HashMap<Symbol, Type>,
+    impls: Vec<HashMap<Symbol, ConValue>>,
 }
 
 impl Display for Environment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for EnvFrame { name, base: _, binds } in self.frames.iter().rev() {
+        use std::fmt::Write as _;
+        for EnvFrame { name, binds, .. } in self.frames.iter().rev() {
             writeln!(
                 f,
                 "--- {}[{}] ---",
@@ -48,11 +78,14 @@ impl Display for Environment {
                 binds.len(),
             )?;
             let mut binds: Vec<_> = binds.iter().collect();
-            binds.sort_by(|(_, a), (_, b)| a.cmp(b));
+            binds.sort_by_key(|(_, a)| *a);
             for (name, idx) in binds {
-                write!(f, "{idx:4} {name}: ")?;
+                let mut f = f.indent();
+                write!(f, "{idx:4} {:16} ", format!("{name}:"))?;
                 match self.values.get(*idx) {
-                    Some(value) => writeln!(f, "\t{value}"),
+                    Some(ConValue::TypeInfo(t)) => writeln!(f, "type {t}"),
+                    Some(ConValue::Function(v)) => writeln!(f, "\n{v}"),
+                    Some(value) => writeln!(f, "{value}"),
                     None => writeln!(f, "ERROR: {name}'s address blows the stack!"),
                 }?
             }
@@ -64,6 +97,10 @@ impl Display for Environment {
 impl Default for Environment {
     fn default() -> Self {
         let mut this = Self::no_builtins();
+        for (ident, model) in Model::defaults() {
+            let value = this.def_type(ident.into(), model.intern());
+            this.bind(ident, ConValue::TypeInfo(value));
+        }
         this.add_builtins(Builtins).add_builtins(Math);
         this
     }
@@ -78,7 +115,8 @@ impl Environment {
         Self {
             values: Vec::new(),
             frames: vec![EnvFrame::default()],
-            modules: ModuleTree::default(),
+            types: HashMap::new(),
+            impls: Vec::new(),
         }
     }
 
@@ -89,26 +127,25 @@ impl Environment {
 
     /// Calls a function inside the Environment's scope,
     /// and returns the result
-    pub fn call(&mut self, name: Sym, args: &[ConValue]) -> IResult<ConValue> {
+    pub fn call(&mut self, name: Symbol, args: &[ConValue]) -> IResult<ConValue> {
         let function = self.get(name)?;
         function.call(self, args)
     }
 
-    pub fn modules_mut(&mut self) -> &mut ModuleTree {
-        &mut self.modules
-    }
-
-    pub fn modules(&self) -> &ModuleTree {
-        &self.modules
+    /// Defers an expression until the end of scope. The expression must not fail..?
+    pub fn defer(&mut self, expr: cl_ast::Expr) -> Option<()> {
+        let EnvFrame { name: _, span: _, base: _, binds: _, defer } = self.frames.last_mut()?;
+        defer.push(expr);
+        Some(())
     }
 
     /// Binds a value to the given name in the current scope.
-    pub fn bind(&mut self, name: impl Into<Sym>, value: impl Into<ConValue>) {
+    pub fn bind(&mut self, name: impl Into<Symbol>, value: impl Into<ConValue>) {
         self.insert(name.into(), value.into());
     }
 
-    pub fn bind_raw(&mut self, name: Sym, id: usize) -> Option<()> {
-        let EnvFrame { name: _, base: _, binds } = self.frames.last_mut()?;
+    pub fn bind_raw(&mut self, name: Symbol, id: usize) -> Option<()> {
+        let EnvFrame { name: _, span: _, base: _, binds, defer: _ } = self.frames.last_mut()?;
         binds.insert(name, id);
         Some(())
     }
@@ -116,6 +153,10 @@ impl Environment {
     /// Gets all registered globals, bound or unbound.
     pub(crate) fn globals(&self) -> &EnvFrame {
         self.frames.first().unwrap()
+    }
+
+    pub fn backtrace(&self) -> Backtrace<'_> {
+        Backtrace { frames: &self.frames }
     }
 
     /// Adds builtins
@@ -129,38 +170,20 @@ impl Environment {
         }
 
         for builtin in builtins {
-            self.insert(builtin.name(), builtin.into());
+            self.insert(
+                builtin.name().expect("Builtin functions must have names!"),
+                builtin.into(),
+            );
         }
 
         self
     }
 
-    pub fn push_frame(&mut self, name: &'static str, frame: StackFrame) {
-        self.frames.push(EnvFrame {
-            name: Some(name),
-            base: self.values.len(),
-            binds: HashMap::new(),
-        });
-        for (k, v) in frame {
-            self.insert(k, v);
-        }
-    }
-
-    pub fn pop_frame(&mut self) -> Option<(StackFrame, &'static str)> {
-        let mut out = HashMap::new();
-        let EnvFrame { name, base, binds } = self.frames.pop()?;
-        for (k, v) in binds {
-            out.insert(k, self.values.get_mut(v).map(std::mem::take)?);
-        }
-        self.values.truncate(base);
-        Some((out, name.unwrap_or("")))
-    }
-
     /// Enters a nested scope, returning a [`Frame`] stack-guard.
     ///
     /// [`Frame`] implements Deref/DerefMut for [`Environment`].
-    pub fn frame(&mut self, name: &'static str) -> Frame<'_> {
-        Frame::new(self, name)
+    pub fn frame(&mut self, name: &'static str, span: Option<Span>) -> Frame<'_> {
+        Frame::new(self, name, span)
     }
 
     /// Enters a nested scope, assigning the contents of `frame`,
@@ -168,32 +191,24 @@ impl Environment {
     ///
     /// [`Frame`] implements Deref/DerefMut for [`Environment`].
     pub fn with_frame<'e>(&'e mut self, name: &'static str, frame: StackFrame) -> Frame<'e> {
-        let mut scope = self.frame(name);
+        let mut scope = self.frame(name, None);
         for (k, v) in frame {
             scope.insert(k, v);
         }
         scope
     }
 
-    /// Resolves a variable mutably.
-    ///
-    /// Returns a mutable reference to the variable's record, if it exists.
-    pub fn get_mut(&mut self, name: Sym) -> IResult<&mut ConValue> {
-        let at = self.id_of(name)?;
-        self.get_id_mut(at).ok_or(Error::NotDefined(name))
-    }
-
     /// Resolves a variable immutably.
     ///
     /// Returns a reference to the variable's contents, if it is defined and initialized.
-    pub fn get(&self, name: Sym) -> IResult<ConValue> {
+    pub fn get(&self, name: Symbol) -> IResult<ConValue> {
         let id = self.id_of(name)?;
         let res = self.values.get(id);
         Ok(res.ok_or(Error::NotDefined(name))?.clone())
     }
 
-    /// Resolves the index associated with a [Sym]
-    pub fn id_of(&self, name: Sym) -> IResult<usize> {
+    /// Resolves the index associated with a [Symbol]
+    pub fn id_of(&self, name: Symbol) -> IResult<usize> {
         for EnvFrame { binds, .. } in self.frames.iter().rev() {
             if let Some(id) = binds.get(&name).copied() {
                 return Ok(id);
@@ -202,46 +217,30 @@ impl Environment {
         Err(Error::NotDefined(name))
     }
 
+    /// Returns a shared reference to the `id`'s record, if it exists.
     pub fn get_id(&self, id: usize) -> Option<&ConValue> {
         self.values.get(id)
     }
 
+    /// Returns a mutable reference to the `id`'s record, if it exists.
     pub fn get_id_mut(&mut self, id: usize) -> Option<&mut ConValue> {
         self.values.get_mut(id)
     }
 
-    pub fn get_slice(&self, start: usize, len: usize) -> Option<&[ConValue]> {
-        self.values.get(start..start + len)
+    pub fn def_type(&mut self, name: Symbol, ty: Type) -> Type {
+        self.types.insert(name, ty);
+        ty
     }
 
-    pub fn get_slice_mut(&mut self, start: usize, len: usize) -> Option<&mut [ConValue]> {
-        self.values.get_mut(start..start + len)
+    pub fn get_type(&self, name: Symbol) -> Option<Type> {
+        self.types.get(&name).copied()
     }
 
     /// Inserts a new [ConValue] into this [Environment]
-    pub fn insert(&mut self, k: Sym, v: ConValue) {
+    pub fn insert(&mut self, k: Symbol, v: ConValue) {
         if self.bind_raw(k, self.values.len()).is_some() {
             self.values.push(v);
         }
-    }
-
-    /// A convenience function for registering a [FnDecl] as a [Function]
-    pub fn insert_fn(&mut self, decl: &FnDecl) {
-        let FnDecl { name, .. } = decl;
-        let (name, function) = (*name, Rc::new(Function::new(decl)));
-        self.insert(name, ConValue::Function(function.clone()));
-        // Tell the function to lift its upvars now, after it's been declared
-        function.lift_upvars(self);
-    }
-
-    pub fn insert_tup_constructor(&mut self, name: Sym, arity: usize) {
-        let cs = Constructor { arity: arity as _, name };
-        self.insert(name, ConValue::TupleConstructor(cs));
-    }
-
-    /// Gets the current stack top position
-    pub fn pos(&self) -> usize {
-        self.values.len()
     }
 
     /// Allocates a local variable
@@ -249,13 +248,6 @@ impl Environment {
         let adr = self.values.len();
         self.values.push(value);
         Ok(adr)
-    }
-
-    /// Allocates some space on the stack
-    pub fn alloca(&mut self, value: ConValue, len: usize) -> ConValue {
-        let idx = self.values.len();
-        self.values.extend(std::iter::repeat_n(value, len));
-        ConValue::Slice(idx, len)
     }
 }
 
@@ -265,11 +257,13 @@ pub struct Frame<'scope> {
     scope: &'scope mut Environment,
 }
 impl<'scope> Frame<'scope> {
-    fn new(scope: &'scope mut Environment, name: &'static str) -> Self {
+    fn new(scope: &'scope mut Environment, name: &'static str, span: Option<Span>) -> Self {
         scope.frames.push(EnvFrame {
             name: Some(name),
+            span,
             base: scope.values.len(),
             binds: HashMap::new(),
+            defer: vec![],
         });
 
         Self { scope }
@@ -277,17 +271,11 @@ impl<'scope> Frame<'scope> {
 
     pub fn pop_values(mut self) -> Option<StackFrame> {
         let mut out = HashMap::new();
-        let binds = std::mem::take(&mut self.frames.last_mut()?.binds);
+        let binds = take(&mut self.frames.last_mut()?.binds);
         for (k, v) in binds {
-            out.insert(k, self.values.get_mut(v).map(std::mem::take)?);
+            out.insert(k, self.values.get_mut(v).map(take)?);
         }
         Some(out)
-    }
-
-    pub fn into_binds(mut self) -> Option<StackBinds> {
-        let EnvFrame { name: _, base: _, binds } = self.frames.pop()?;
-        std::mem::forget(self);
-        Some(binds)
     }
 }
 impl Deref for Frame<'_> {
@@ -303,8 +291,16 @@ impl DerefMut for Frame<'_> {
 }
 impl Drop for Frame<'_> {
     fn drop(&mut self) {
-        if let Some(frame) = self.frames.pop() {
-            self.values.truncate(frame.base);
+        if let Some(EnvFrame { base, defer, .. }) = self.frames.last_mut() {
+            let (base, deferred) = (*base, take(defer));
+            for defer in deferred.iter().rev() {
+                if let Err(e) = defer.interpret(self) {
+                    println!("Error during scope cleanup: {e}")
+                }
+            }
+
+            self.frames.pop();
+            self.values.truncate(base);
         }
     }
 }

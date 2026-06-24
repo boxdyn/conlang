@@ -1,12 +1,13 @@
 //! A [TypeExpression] is a [syntactic](cl_ast) representation of a [TypeKind], and is used to
 //! construct type bindings in a [Table]'s typing context.
 
-use crate::{handle::Handle, table::Table, type_kind::TypeKind};
-use cl_ast::{PathPart, Sym, Ty, TyArray, TyFn, TyKind, TyPtr, TyRef, TySlice, TyTuple};
+use crate::{consteval::ConstEval, handle::Handle, table::Table, type_kind::TypeKind};
+use cl_ast::{AstNode, AstTypes, At, Expr, Pat, PatOp, types::Symbol};
 
 #[derive(Clone, Debug, PartialEq, Eq)] // TODO: impl Display and Error
 pub enum Error {
-    BadPath { parent: Handle, path: Vec<PathPart> },
+    BadPath { parent: Handle, path: Vec<Symbol> },
+    ConstEval { parent: Handle, eval: Box<At<Expr>> },
 }
 
 impl std::error::Error for Error {}
@@ -18,6 +19,9 @@ impl std::fmt::Display for Error {
                 for part in path {
                     write!(f, "::{part}")?;
                 }
+            }
+            Error::ConstEval { parent, eval } => {
+                write!(f, "Failed to evaluate constant {eval} in {parent}")?;
             }
         }
         Ok(())
@@ -31,36 +35,90 @@ pub trait TypeExpression<Out = Handle> {
     fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Out, Error>;
 }
 
-impl TypeExpression for Ty {
-    fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Handle, Error> {
-        self.kind.evaluate(table, node)
-    }
-}
-
-impl TypeExpression for TyKind {
+impl TypeExpression for Pat {
     fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Handle, Error> {
         match self {
-            TyKind::Never => Ok(table.get_lang_item("never")),
-            TyKind::Infer => Ok(table.inferred_type()),
-            TyKind::Path(p) => p.evaluate(table, node),
-            TyKind::Array(a) => a.evaluate(table, node),
-            TyKind::Slice(s) => s.evaluate(table, node),
-            TyKind::Tuple(t) => t.evaluate(table, node),
-            TyKind::Ref(r) => r.evaluate(table, node),
-            TyKind::Ptr(r) => r.evaluate(table, node),
-            TyKind::Fn(f) => f.evaluate(table, node),
+            Pat::Ignore => Ok(table.inferred_type()),
+            Pat::Never => Ok(table.get_lang_item("never")),
+            Pat::MetId(_) => todo!(),
+            Pat::Name(name) => name.evaluate(table, node),
+            Pat::Value(expr) => expr.0.evaluate(table, node),
+
+            Pat::Op(PatOp::MetaInner | PatOp::MetaOuter, pats) if let [pat] = &pats[..] => {
+                pat.evaluate(table, node)
+            }
+            Pat::Op(PatOp::Pub, pats) if let [pat] = &pats[..] => pat.evaluate(table, node),
+            Pat::Op(PatOp::Mut, pats) if let [pat] = &pats[..] => pat.evaluate(table, node),
+            Pat::Op(PatOp::Ref, pats) if let [pat] = &pats[..] => {
+                let ty = pat.evaluate(table, node)?;
+                Ok(table.anon_type(TypeKind::Ref(ty)))
+            }
+            Pat::Op(PatOp::Ptr, pats) if let [pat] = &pats[..] => {
+                let ty = pat.evaluate(table, node)?;
+                Ok(table.anon_type(TypeKind::Ptr(ty)))
+            }
+            Pat::Op(PatOp::Guard, pats) if let [pat, _g] = &pats[..] => pat.evaluate(table, node),
+            Pat::Op(PatOp::Rest, _pats) => Ok(table.inferred_type()),
+            Pat::Op(PatOp::RangeEx, _pats) => todo!(),
+            Pat::Op(PatOp::RangeIn, _pats) => todo!(),
+            Pat::Op(PatOp::Record, pats) => {
+                let tys = pats.evaluate(table, node)?;
+                todo!("Anonymous record destructuring {tys:?} in {self}")
+            }
+            Pat::Op(PatOp::Tuple, pats) => {
+                let tys = pats.evaluate(table, node)?;
+                Ok(table.anon_type(TypeKind::Tuple(tys)))
+            }
+            Pat::Op(PatOp::Slice, _) => todo!(""),
+            Pat::Op(PatOp::ArRep, pats) if let [pat, rep] = &pats[..] => {
+                let ty = pat.evaluate(table, node)?;
+                let rep = match rep.value() {
+                    Self::Value(at) => at
+                        .const_eval()
+                        .ok_or_else(|| Error::ConstEval { parent: node, eval: at.clone() }),
+                    _ => todo!("{rep} in array-repetition patterns"),
+                }?;
+                Ok(table.anon_type(TypeKind::Array(ty, rep as _)))
+            }
+            Pat::Op(PatOp::Typed, pats) if let [_, pat] = &pats[..] => {
+                Ok(pat.evaluate(table, node)?)
+            }
+            Pat::Op(PatOp::TypePrefixed, pats) => todo!("TypePrefixed {pats:?}"),
+            Pat::Op(PatOp::Generic, pats) if let [pat, ..] = &pats[..] => {
+                Ok(pat.evaluate(table, node)?)
+            }
+            Pat::Op(PatOp::Fn, pats) => todo!("Fn {pats:?}"),
+            Pat::Op(PatOp::Alt, pats) => todo!("Alt {pats:?}"),
+            _ => unreachable!(),
         }
     }
 }
 
-impl TypeExpression for cl_ast::Path {
+impl TypeExpression for cl_ast::Expr {
     fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Handle, Error> {
-        let Self { absolute, parts } = self;
-        parts.evaluate(table, if *absolute { table.root() } else { node })
+        match self {
+            Self::Omitted => Ok(table.anon_type(TypeKind::Tuple(vec![]))),
+            Self::Id(path) => path.evaluate(table, node),
+            Self::MetId(_) => todo!("Metaidentifiers in resolver"),
+            Self::Lit(lit) => todo!("Literals ({lit}) in type expressions!"),
+            Self::Use(item) => todo!("Use-items ({item}) in type expressions!??!"),
+            Self::Bind(bind) => todo!("Bind-items ({bind}) in type expressions!"),
+            Self::Make(make) => todo!("Make-items ({make}) in type expressions!"),
+            Self::Match(mtch) => todo!("Match-exprs ({mtch}) in type expressions!"),
+            Self::Label(labl) => todo!("Label-exprs ({labl}) in type expressions!"),
+            Self::Op(op, ats) => todo!("Op({op}, {ats:?})"),
+        }
     }
 }
 
-impl TypeExpression for [PathPart] {
+impl TypeExpression for cl_ast::types::Path {
+    fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Handle, Error> {
+        let Self { parts } = self;
+        parts.evaluate(table, node)
+    }
+}
+
+impl TypeExpression for [Symbol] {
     fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Handle, Error> {
         table
             .nav(node, self)
@@ -68,68 +126,12 @@ impl TypeExpression for [PathPart] {
     }
 }
 
-impl TypeExpression for Sym {
+impl TypeExpression for Symbol {
     fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Handle, Error> {
-        let path = [PathPart::Ident(*self)];
+        let path = [*self];
         table
             .nav(node, &path)
             .ok_or_else(|| Error::BadPath { parent: node, path: path.to_vec() })
-    }
-}
-
-impl TypeExpression for TyArray {
-    fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Handle, Error> {
-        let Self { ty, count } = self;
-        let kind = TypeKind::Array(ty.evaluate(table, node)?, *count);
-        Ok(table.anon_type(kind))
-    }
-}
-
-impl TypeExpression for TySlice {
-    fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Handle, Error> {
-        let Self { ty } = self;
-        let kind = TypeKind::Slice(ty.evaluate(table, node)?);
-        Ok(table.anon_type(kind))
-    }
-}
-
-impl TypeExpression for TyTuple {
-    fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Handle, Error> {
-        let Self { types } = self;
-        let kind = TypeKind::Tuple(types.evaluate(table, node)?);
-        Ok(table.anon_type(kind))
-    }
-}
-
-impl TypeExpression for TyRef {
-    fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Handle, Error> {
-        let Self { mutable: _, count, to } = self;
-        let mut t = to.evaluate(table, node)?;
-        for _ in 0..*count {
-            let kind = TypeKind::Ref(t);
-            t = table.anon_type(kind)
-        }
-        Ok(t)
-    }
-}
-
-impl TypeExpression for TyPtr {
-    fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Handle, Error> {
-        let Self { to } = self;
-        let mut t = to.evaluate(table, node)?;
-        t = table.anon_type(TypeKind::Ptr(t));
-        Ok(t)
-    }
-}
-
-impl TypeExpression for TyFn {
-    fn evaluate(&self, table: &mut Table, node: Handle) -> Result<Handle, Error> {
-        let Self { args, rety } = self;
-        let kind = TypeKind::FnSig {
-            args: args.evaluate(table, node)?,
-            rety: rety.evaluate(table, node)?,
-        };
-        Ok(table.anon_type(kind))
     }
 }
 
@@ -140,5 +142,11 @@ impl<T: TypeExpression<U>, U> TypeExpression<Vec<U>> for [T] {
             out.push(te.evaluate(table, node)?) // try_collect is unstable
         }
         Ok(out)
+    }
+}
+
+impl<T: TypeExpression<U> + AstNode, U, A: AstTypes> TypeExpression<U> for At<T, A> {
+    fn evaluate(&self, table: &mut Table, node: Handle) -> Result<U, Error> {
+        self.0.evaluate(table, node)
     }
 }

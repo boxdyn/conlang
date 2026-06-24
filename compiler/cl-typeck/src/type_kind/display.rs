@@ -1,8 +1,8 @@
-//! [Display] implementations for [TypeKind], [Adt], and [Intrinsic]
+//! [Display] implementations for [TypeKind], [Adt], and [Primitive]
 
 use super::{Adt, Primitive, TypeKind};
-use crate::format_utils::*;
-use cl_ast::format::FmtAdapter;
+use crate::{format_utils::*, type_kind::Visibility};
+use cl_ast::fmt::FmtAdapter;
 use std::fmt::{self, Display, Write};
 
 impl Display for TypeKind {
@@ -22,11 +22,20 @@ impl Display for TypeKind {
                 separate(", ", || {
                     let def = defs.next()?;
                     Some(move |f: &mut Delimit<_>| write!(f, "#{def}"))
-                })(f.delimit_with("tuple (", ")"))
+                })(f.delimit("tuple (", ")"))
             }
             TypeKind::FnSig { args, rety } => write!(f, "fn (#{args}) -> #{rety}"),
             TypeKind::Module => f.write_str("mod"),
         }
+    }
+}
+
+impl Display for Visibility {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Public => "pub ",
+            Self::Private => "",
+        })
     }
 }
 
@@ -38,21 +47,21 @@ impl Display for Adt {
                 separate(", ", || {
                     let (name, def) = variants.next()?;
                     Some(move |f: &mut Delimit<_>| write!(f, "{name}: #{def}"))
-                })(f.delimit_with("enum {", "}"))
+                })(f.delimit("enum {", "}"))
             }
             Adt::Struct(members) => {
                 let mut members = members.iter();
                 separate(", ", || {
                     let (name, vis, def) = members.next()?;
                     Some(move |f: &mut Delimit<_>| write!(f, "{vis}{name}: #{def}"))
-                })(f.delimit_with("struct {", "}"))
+                })(f.delimit("struct {", "}"))
             }
             Adt::TupleStruct(members) => {
                 let mut members = members.iter();
                 separate(", ", || {
                     let (vis, def) = members.next()?;
                     Some(move |f: &mut Delimit<_>| write!(f, "{vis}#{def}"))
-                })(f.delimit_with("struct (", ")"))
+                })(f.delimit("struct (", ")"))
             }
             Adt::UnitStruct => write!(f, "struct"),
             Adt::Union(variants) => {
@@ -60,7 +69,7 @@ impl Display for Adt {
                 separate(", ", || {
                     let (name, def) = variants.next()?;
                     Some(move |f: &mut Delimit<_>| write!(f, "{name}: #{def}"))
-                })(f.delimit_with("union {", "}"))
+                })(f.delimit("union {", "}"))
             }
         }
     }

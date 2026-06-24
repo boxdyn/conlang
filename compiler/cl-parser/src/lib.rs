@@ -1,18 +1,20 @@
-//! Parses [tokens](cl_token::token) into an [AST](cl_ast)
+//! Houses the Conlang [Parser].
 //!
-//! For the full grammar, see [grammar.ebnf][1]
+//! Conlang uses a pair of mutually recursive Pratt [Parse]rs
+//! to parse its [`Expr`ession][Expr] and [`Pat`tern][Pat] sub-languages.
 //!
-//! [1]: https://github.com/boxdyn/conlang/src/branch/main/grammar.ebnf
-#![warn(clippy::all)]
-#![feature(decl_macro)]
-
-pub use parser::Parser;
-
-use cl_structures::span::*;
-use cl_token::*;
-
-pub mod error;
-
-pub mod parser;
+//! These parsers are implemented in [`expr`] and [`pat`], respectively.
+//!
+//! The [Parser] (or "parser context" if you're pedantic) keeps track of
+//! the last-peeked [Token], the [Span] information,
+//! and whether or not the last-consumed [Token] is allowed to stand in
+//! for a semicolon (`;`) in Conlang's `do` expressions.
+//!
+//! [Expr]: cl_ast::ast::Expr
+//! [Pat]: cl_ast::ast::Pat
+//! [Token]: cl_token::Token
+//! [Span]: struct@cl_structures::span::Span
 
 pub mod inliner;
+mod parser;
+pub use parser::*;

@@ -1,7 +1,7 @@
 use crate::{handle::Handle, table::Table};
 
 pub fn implement(table: &mut Table) -> Vec<Handle> {
-    let pending = std::mem::take(&mut table.impls);
+    let pending = std::mem::take(&mut table.pending_impls);
     let mut errors = vec![];
     for node in pending {
         if let Err(e) = impl_one(table, node) {

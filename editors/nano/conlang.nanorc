@@ -1,0 +1,108 @@
+# Nano configuration for Conlang
+
+syntax "Conlang" "\.cl$"
+comment "//"
+
+# symbols
+## catch undefined symbols
+#color #000,#800 "-|[&=+><@\\!|:,$.`#!;?%/*~]"
+color #000,#800 "[[:graph:]]"
+color normal,#400 "[[:cntrl:]]"
+## unary
+color magenta "&|&&|\*|\+|-|!|@|~"
+## dot
+color lightmagenta "[.?]"
+## binary
+color lightgreen "& |[\|]|\^"
+
+## do
+color #911 ";"
+## assign (part 1)
+color #c33 "="
+## tuple
+color brown ","
+## body, make
+color yellow "[{}]"
+## logical (lower prec, but more specific)
+color lightyellow "&& |\|\||\^\^"
+## compare
+color lime "(==)|(<=)|(<)|(>)|(>=)|(!=)"
+## range
+color green "\.\.=?"
+## shift
+color cyan "<<|>>"
+## factor
+color blue "([+]|-)\s"
+## term
+color #36c "(\*|/|%)\s"
+## assign (part 2)
+color #c33 "([*/%^+\&|-]|<<|>>)="
+## projection
+color #8da "[][]"
+color bold,brown "[()]"
+## misc
+color sand "->|=>|:"
+color bold,#add "::"
+
+
+# attributes
+color slate start="#!\[" end="\]"
+color slate start="#\[" end="\]"
+
+# numbers
+color italic,orange "0(x[0-9A-Fa-f]+|d[0-9]+|o[0-7]+|b[01]+|~[0-9A-Za-z]+)|[0-9]+"
+
+# identifiers
+color italic,lightcyan "\<[a-z_][[:alnum:]_]*\>"
+color white "\<_\>"
+
+# constants
+color bold,cyan "\<[A-Z][A-Z0-9_]+\>"
+
+# function definitions
+color cyan "fn\s+(r')?[a-z_][[:alnum:]_]*\>"
+
+# enums/structs/types/etc.
+color bold,sky "\<[A-Z][a-z0-9][A-Za-z0-9]*\>"
+
+# keyword-types
+color bold,sky "\<([iuf](8|16|32|64|128|size)|u?int|bool|char|str)\>"
+
+# keywords
+color lightmagenta "\<(as|break|const|continue|do|else|enum|false|fn|for|if|impl|in|let|loop|macro|match|mod|mut|pub|return|static|struct|then|true|type|use|while)\>"
+
+# string and character literals, escapes
+#color orange "(\<r)?\"([^"]|\\")*\""
+color orange start="(\<r)?\"" end="([^"]|\\")*\""
+color lime "(\<r)?'([[:alnum:]_]+)\>"
+color lightcyan "\<r'([[:alnum:]_]+)\>"
+color tawny "'(\\.([0-9A-Fa-f]{0,2}|\{[^}]{,6}\})?|[^'])'"
+color orange "\<r'(\\.([0-9A-Fa-f]{0,2}|\{[^}]{,6}\})?|[^'])'"
+
+color lime "\\(u\{[0-9A-Fa-f]*\}|x[0-9A-Fa-f]{2})"
+color lightyellow "\\[ 0abefnrtux'"]"
+color yellow "\\"
+
+# comments
+color green "^#!/.*$"
+color gray "^(\s)*//.*"
+color gray "\s+//\s*.*"
+color gray start="/\*" end="\*/"
+
+color lime "^\s*//[/!].*"
+color bold,brick "^\s*//\?.*"
+
+# comment markers
+color bold,green  "//[/!]?\s*(WIP|TODO|FIXME)(\([^\)]*\))?\:?.*"
+color bold,green  start="/\*+\s*\n?\s*(WIP|TODO|FIXME)(\([^\)]*\))?\:?" end="\*/"
+color bold,orange "(WIP|TODO|FIXME)(\([^\)]*\))?\:?"
+color bold,orange,black "(WIP|TODO|FIXME)(\([^\)]*\))?"
+color bold,slate "//[/!]?\s*(SAFETY|UNSAFE):.*"
+color bold,slate start="/\*+\s*(SAFETY|UNSAFE):" end="\*/"
+icolor bold,crimson "(SAFETY|UNSAFE):"
+color bold,crimson "\<unsafe\>"
+color bold,brightyellow "\<WARNING\>"
+color bold,lightblue "\<NOTE\>"
+
+# trailing spaces
+color ,black "[[:space:]]+$"

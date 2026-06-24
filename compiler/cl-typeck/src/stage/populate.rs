@@ -1,193 +1,163 @@
 //! The [Populator] populates entries in the sym table, including span info
+
 use crate::{
     entry::EntryMut,
-    handle::Handle,
-    source::Source,
     table::{NodeKind, Table},
-    type_kind::TypeKind,
 };
 use cl_ast::{
-    ItemKind, Literal, Meta, MetaKind, Sym,
-    ast_visitor::{Visit, Walk},
+    At, Bind, BindOp, DefaultTypes, Expr, Match, MatchArm, Op, Use,
+    types::Path,
+    visit::{Visit, Walk},
 };
+use cl_structures::list::List;
 
+mod name_finder;
+use name_finder::NameFinder;
+
+mod user;
+use user::User;
+
+/// Populates a [Table] with the modules, imports and bindings described in
+/// a [syntax tree](Walk).
 #[derive(Debug)]
-pub struct Populator<'t, 'a> {
-    inner: EntryMut<'t, 'a>,
-    name: Option<Sym>, // this is a hack to get around the Visitor interface
+pub struct Populator<'t, 'parent> {
+    entry: EntryMut<'t>,
+    meta: List<'parent, &'parent Expr>,
 }
 
-impl<'t, 'a> Populator<'t, 'a> {
-    pub fn new(table: &'t mut Table<'a>) -> Self {
-        Self { inner: table.root_entry_mut(), name: None }
-    }
-    /// Constructs a new Populator with the provided parent Handle
-    pub fn with_id(&mut self, parent: Handle) -> Populator<'_, 'a> {
-        Populator { inner: self.inner.with_id(parent), name: None }
+impl<'t> Populator<'t, '_> {
+    /// Constructs a new [Populator] with the given [Table]
+    pub fn new(table: &'t mut Table) -> Self {
+        Self { entry: table.root_entry_mut(), meta: List::Nil }
     }
 
-    pub fn new_entry(&mut self, kind: NodeKind) -> Populator<'_, 'a> {
-        Populator { inner: self.inner.new_entry(kind), name: None }
+    /// Adds an [outer meta attribute](cl_ast::Op::MetaOuter) to the current [List]
+    pub fn with_meta<'p, 'e: 'p>(&'p mut self, expr: &'e Expr) -> Populator<'p, 'p> {
+        let Self { entry, meta } = self;
+        Populator { entry: entry.with_id(entry.id()), meta: meta.enter(expr) }
     }
 
-    pub fn set_name(&mut self, name: Sym) {
-        self.name = Some(name);
+    /// Creates a [Populator] with an empty [outer meta](cl_ast::Op::MetaOuter) [List]
+    pub fn without_meta(&mut self) -> Populator<'_, '_> {
+        let Self { entry, meta: _ } = self;
+        Populator { entry: entry.with_id(entry.id()), meta: List::Nil }
+    }
+
+    /// Creates a populator at a brand-new entry in the [Table]
+    pub fn new_entry(&mut self, kind: NodeKind) -> Populator<'_, '_> {
+        let entry = self.entry.new_entry(kind);
+        Populator { entry, meta: self.meta }
     }
 }
 
-impl<'a> Visit<'a> for Populator<'_, 'a> {
-    fn visit_item(&mut self, i: &'a cl_ast::Item) {
-        let cl_ast::Item { span, attrs, vis: _, kind } = i;
-        // TODO: this, better, better.
-        let entry_kind = match kind {
-            ItemKind::Alias(_) => NodeKind::Type,
-            ItemKind::Enum(_) => NodeKind::Type,
-            ItemKind::Struct(_) => NodeKind::Type,
+impl Visit<'_, DefaultTypes> for Populator<'_, '_> {
+    type Error = ();
 
-            ItemKind::Const(_) => NodeKind::Const,
-            ItemKind::Static(_) => NodeKind::Static,
-            ItemKind::Function(_) => NodeKind::Function,
+    fn visit_expr(&mut self, expr: &Expr<DefaultTypes>) -> Result<(), Self::Error> {
+        match expr {
+            Expr::Omitted | Expr::Id(_) | Expr::MetId(_) | Expr::Lit(_) => Ok(()),
+            Expr::Use(item) => self.visit_use(item),
+            Expr::Bind(bind) => self.visit_bind(bind),
+            Expr::Make(make) => self.visit_make(make),
+            Expr::Match(mtch) => self.visit_match(mtch),
+            Expr::Label(labl) => self.visit_label(labl),
 
-            ItemKind::Module(_) => NodeKind::Module,
-            ItemKind::Impl(_) => NodeKind::Impl,
-            ItemKind::Use(_) => NodeKind::Use,
-        };
+            // outer meta is collected on the stack, and shared among all scoped items
+            Expr::Op(Op::MetaOuter, exprs) => match exprs.as_slice() {
+                [At(meta, ..), expr] => self.with_meta(meta).visit(expr),
+                _ => unreachable!("MetaOuter is binary"),
+            },
 
-        let mut entry = self.new_entry(entry_kind);
-        entry.inner.set_span(*span);
-        entry.inner.set_meta(&attrs.meta);
-
-        for Meta { name, kind } in &attrs.meta {
-            if let ("lang", MetaKind::Equals(Literal::String(s))) = (name.to_ref(), kind) {
-                if let Ok(prim) = s.parse() {
-                    entry.inner.set_ty(TypeKind::Primitive(prim));
+            // inner meta is immediately appended to the contextually current item
+            Expr::Op(Op::MetaInner, exprs) => match exprs.as_slice() {
+                [At(meta, ..), expr] => {
+                    self.entry.add_meta(meta.clone());
+                    self.visit(expr)
                 }
-                entry.inner.mark_lang_item(Sym::from(s).to_ref());
+                _ => unreachable!("MetaOuter is binary"),
+            },
+            Expr::Op(Op::Const, exprs) => self.visit(exprs),
+            Expr::Op(Op::Static, exprs) => self.visit(exprs),
+            Expr::Op(_, exprs) => self.visit(exprs),
+        }
+    }
+
+    fn visit_bind(&mut self, item: &Bind<DefaultTypes>) -> Result<(), Self::Error> {
+        let Bind(op, _ts, pat, _exprs) = item;
+        let mut scope = self.new_entry(match op {
+            BindOp::Let => NodeKind::Let,
+            BindOp::Fn => NodeKind::Function,
+            BindOp::Mod => NodeKind::Module,
+            BindOp::Impl => NodeKind::Impl,
+            BindOp::Type => NodeKind::Type,
+            BindOp::Struct => NodeKind::Type,
+            BindOp::Enum => NodeKind::Type,
+            BindOp::For => NodeKind::Temporary,
+        });
+
+        let mut outer: Vec<_> = scope.meta.iter().map(|&e| e.clone()).collect();
+        outer.reverse();
+        scope.entry.set_meta(outer);
+
+        item.children(&mut scope.without_meta())?;
+
+        match op {
+            BindOp::Let | BindOp::For => {
+                println!("TODO: {op}nodes bind multiple names: {pat}");
+                return Ok(());
             }
-        }
+            BindOp::Fn | BindOp::Mod => {}
+            BindOp::Impl => {
+                scope.entry.mark_impl_item();
+                scope.entry.add_glob(Path::from("super"));
+                let ty = match scope.entry.evaluate(pat) {
+                    Ok(ty) => ty,
+                    Err(_) => Err(())?,
+                };
 
-        entry.visit_children(i);
-
-        if let (Some(name), child) = (entry.name, entry.inner.id()) {
-            self.inner.add_child(name, child);
-        }
-    }
-
-    fn visit_generics(&mut self, value: &'a cl_ast::Generics) {
-        let cl_ast::Generics { vars } = value;
-        for var in vars {
-            let mut entry = self.inner.new_entry(NodeKind::Type);
-            entry.set_ty(TypeKind::Variable);
-
-            let id = entry.id();
-            self.inner.add_child(*var, id);
-        }
-    }
-
-    fn visit_alias(&mut self, a: &'a cl_ast::Alias) {
-        let cl_ast::Alias { name, from } = a;
-        self.inner.set_source(Source::Alias(a));
-        self.set_name(*name);
-
-        self.visit(from);
-    }
-
-    fn visit_const(&mut self, c: &'a cl_ast::Const) {
-        let cl_ast::Const { name, ty, init } = c;
-        self.inner.set_source(Source::Const(c));
-        self.inner.set_body(init);
-        self.set_name(*name);
-
-        self.visit(ty);
-        self.visit(init);
-    }
-
-    fn visit_static(&mut self, s: &'a cl_ast::Static) {
-        let cl_ast::Static { name, init, .. } = s;
-        self.inner.set_source(Source::Static(s));
-        self.inner.set_body(init);
-        self.set_name(*name);
-
-        s.children(self);
-    }
-
-    fn visit_function(&mut self, f: &'a cl_ast::Function) {
-        self.inner.set_source(Source::Function(f));
-        self.set_name(f.name);
-
-        if let Some(body) = &f.body {
-            self.inner.set_body(body);
-        }
-
-        f.children(self);
-    }
-
-    fn visit_module(&mut self, m: &'a cl_ast::Module) {
-        self.inner.set_source(Source::Module(m));
-        self.set_name(m.name);
-
-        m.children(self);
-    }
-
-    fn visit_struct(&mut self, s: &'a cl_ast::Struct) {
-        self.inner.set_source(Source::Struct(s));
-        self.set_name(s.name);
-
-        s.children(self);
-    }
-
-    fn visit_enum(&mut self, e: &'a cl_ast::Enum) {
-        let cl_ast::Enum { name, gens, variants } = e;
-        self.inner.set_source(Source::Enum(e));
-        self.set_name(*name);
-
-        self.visit(gens);
-        let mut children = Vec::new();
-        for variant in variants.iter() {
-            let mut entry = self.new_entry(NodeKind::Type);
-            variant.visit_in(&mut entry);
-            let child = entry.inner.id();
-            children.push((variant.name, child));
-
-            self.inner.add_child(variant.name, child);
-        }
-        self.inner
-            .set_ty(TypeKind::Adt(crate::type_kind::Adt::Enum(children)));
-    }
-
-    fn visit_variant(&mut self, value: &'a cl_ast::Variant) {
-        let cl_ast::Variant { name, kind, body } = value;
-        self.inner.set_source(Source::Variant(value));
-        self.set_name(*name);
-        self.visit(kind);
-        match (kind, body) {
-            (cl_ast::StructKind::Empty, None) => {
-                self.inner.set_ty(TypeKind::Inferred);
+                scope.entry.set_impl_target(ty);
+                return Ok(());
             }
-            (cl_ast::StructKind::Empty, Some(body)) => {
-                self.inner.set_body(body);
-            }
-            (cl_ast::StructKind::Tuple(_items), None) => {}
-            (cl_ast::StructKind::Struct(_struct_members), None) => {}
-            (_, Some(body)) => panic!("Unexpected body {body} in enum variant `{value}`"),
+            BindOp::Type | BindOp::Struct | BindOp::Enum => println!("TODO: {op}{pat}"),
         }
+
+        if let Some(name) = NameFinder::get(pat) {
+            scope.entry.set_name(name);
+            let id = scope.entry.id();
+            self.entry.add_child(name, id);
+        }
+        Ok(())
     }
 
-    fn visit_impl(&mut self, i: &'a cl_ast::Impl) {
-        let cl_ast::Impl { gens: _, target: _, body } = i;
-        self.inner.set_source(Source::Impl(i));
-        self.inner.mark_impl_item();
+    fn visit_match(&mut self, item: &Match<DefaultTypes>) -> Result<(), Self::Error> {
+        let cl_ast::Match(scrutinee, arms) = item;
+        scrutinee.visit_in(self)?;
 
-        // We don't know if target is generic yet -- that's checked later.
+        for arm in arms {
+            self.new_entry(NodeKind::Scope).visit(arm)?;
+        }
 
-        self.visit(body);
+        Ok(())
     }
 
-    fn visit_use(&mut self, u: &'a cl_ast::Use) {
-        let cl_ast::Use { absolute: _, tree } = u;
-        self.inner.set_source(Source::Use(u));
-        self.inner.mark_use_item();
+    fn visit_matcharm(&mut self, item: &MatchArm<DefaultTypes>) -> Result<(), Self::Error> {
+        let cl_ast::MatchArm(pat, expr) = item;
+        println!("TODO: MatchArm patterns may bind multiple items:\n{pat} => {expr}");
+        Ok(())
+    }
 
-        self.visit(tree);
+    fn visit_use(&mut self, item: &Use<DefaultTypes>) -> Result<(), Self::Error> {
+        let Self { entry: inner, .. } = self;
+        let id = inner.id();
+        let Table { lazy_imports, glob_imports, .. } = inner.inner_mut();
+
+        User::new(
+            List::Nil,
+            lazy_imports.entry(id).or_default(),
+            glob_imports.entry(id).or_default(),
+        )
+        .visit_use(item);
+
+        Ok(())
     }
 }

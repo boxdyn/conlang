@@ -1,7 +1,7 @@
 //! A [TypeKind] is a node in the [Table](crate::table::Table)'s type graph
 
 use crate::handle::Handle;
-use cl_ast::{Sym, Visibility};
+use cl_ast::types::Symbol;
 use std::{fmt::Debug, str::FromStr};
 
 mod display;
@@ -36,14 +36,20 @@ pub enum TypeKind {
     Module,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Visibility {
+    Public,
+    Private,
+}
+
 /// A user-defined Aromatic Data Type
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Adt {
     /// A union-like enum type
-    Enum(Vec<(Sym, Handle)>),
+    Enum(Vec<(Symbol, Handle)>),
 
     /// A structural product type with named members
-    Struct(Vec<(Sym, Visibility, Handle)>),
+    Struct(Vec<(Symbol, Visibility, Handle)>),
     /// A structural product type with unnamed members
     TupleStruct(Vec<(Visibility, Handle)>),
     /// A structural product type of neither named nor unnamed members
@@ -51,7 +57,7 @@ pub enum Adt {
 
     /// A choose your own undefined behavior type
     /// TODO: should unions be a language feature?
-    Union(Vec<(Sym, Handle)>),
+    Union(Vec<(Symbol, Handle)>),
 }
 
 /// The set of compiler-intrinsic types.

@@ -4,13 +4,13 @@ use super::error::InferenceError;
 use crate::{
     entry::Entry,
     handle::Handle,
-    source::Source,
+    // source::Source,
     stage::infer::inference::Inference,
     table::{NodeKind, Table},
     type_expression::TypeExpression,
     type_kind::{Adt, Primitive, TypeKind},
 };
-use cl_ast::Sym;
+use cl_ast::types::Symbol as Sym;
 
 /*
     Types in Conlang:
@@ -33,8 +33,8 @@ use cl_ast::Sym;
 
 type HandleSet<'h> = Option<&'h mut Option<Handle>>;
 
-pub struct InferenceEngine<'table, 'a, 'b, 'r> {
-    pub(super) table: &'table mut Table<'a>,
+pub struct InferenceEngine<'table, 'b, 'r> {
+    pub(super) table: &'table mut Table,
     /// The current working node
     pub(crate) at: Handle,
     /// The current breakset
@@ -43,20 +43,20 @@ pub struct InferenceEngine<'table, 'a, 'b, 'r> {
     pub(crate) rset: HandleSet<'r>,
 }
 
-impl<'table, 'a, 'b, 'r> InferenceEngine<'table, 'a, 'b, 'r> {
+impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
     /// Infers the type of an object by deferring to [`Inference::infer()`]
-    pub fn infer(&mut self, inferrable: &'a impl Inference<'a>) -> Result<Handle, InferenceError> {
+    pub fn infer(&mut self, inferrable: &impl Inference) -> Result<Handle, InferenceError> {
         inferrable.infer(self)
     }
 
     /// Constructs a new [`InferenceEngine`], scoped around a [`Handle`] in a [`Table`].
-    pub fn new(table: &'table mut Table<'a>, at: Handle) -> Self {
+    pub fn new(table: &'table mut Table, at: Handle) -> Self {
         Self { at, table, bset: Default::default(), rset: Default::default() }
     }
 
     /// Constructs an [`InferenceEngine`] that borrows the same table as `self`,
     /// but with a shortened lifetime.
-    pub fn scoped(&mut self) -> InferenceEngine<'_, 'a, '_, '_> {
+    pub fn scoped(&mut self) -> InferenceEngine<'_, '_, '_> {
         InferenceEngine {
             at: self.at,
             table: self.table,
@@ -65,77 +65,68 @@ impl<'table, 'a, 'b, 'r> InferenceEngine<'table, 'a, 'b, 'r> {
         }
     }
 
-    pub fn infer_all(&mut self) -> Vec<(Handle, InferenceError)> {
-        let queue = std::mem::take(&mut self.table.unchecked);
-        let mut res = Vec::new();
-        for handle in queue {
-            let mut eng = self.at(handle);
-            let Some(source) = eng.table.source(handle) else {
-                eprintln!("No source found for {handle}");
-                continue;
-            };
+    // pub fn infer_all(&mut self) -> Vec<(Handle, InferenceError)> {
+    //     let queue = std::mem::take(&mut self.table.unchecked);
+    //     let mut res = Vec::new();
+    //     for handle in queue {
+    //         let mut eng = self.at(handle);
+    //         let Some(source) = eng.table.source(handle) else {
+    //             eprintln!("No source found for {handle}");
+    //             continue;
+    //         };
 
-            println!("Inferring {source}");
+    //         println!("Inferring {source}");
 
-            let ret = match source {
-                Source::Module(v) => v.infer(&mut eng),
-                Source::Alias(v) => v.infer(&mut eng),
-                Source::Enum(v) => v.infer(&mut eng),
-                // Source::Variant(v) => v.infer(&mut eng),
-                Source::Struct(v) => v.infer(&mut eng),
-                Source::Const(v) => v.infer(&mut eng),
-                Source::Static(v) => v.infer(&mut eng),
-                Source::Function(v) => v.infer(&mut eng),
-                Source::Local(v) => v.infer(&mut eng),
-                Source::Impl(v) => v.infer(&mut eng),
-                _ => Ok(eng.empty()),
-            };
+    //         let ret = match source {
+    //             Source::Binding(v) => v.infer(&mut eng),
+    //             Source::Ty(t) => t.infer(&mut eng),
+    //             Source::Use(_) | Source::Root => Ok(eng.unit()),
+    //         };
 
-            match &ret {
-                Ok(handle) => println!("=> {}", eng.entry(*handle)),
-                Err(err @ InferenceError::AnnotationEval(_)) => eprintln!("=> ERROR: {err}"),
-                Err(InferenceError::FieldCount(h, want, got)) => {
-                    eprintln!("=> ERROR: Field count {want} != {got} in {}", eng.entry(*h))
-                }
-                Err(err @ InferenceError::NotFound(_)) => eprintln!("=> ERROR: {err}"),
-                Err(InferenceError::Mismatch(h1, h2)) => eprintln!(
-                    "=> ERROR: Type mismatch {} != {}",
-                    eng.entry(*h1),
-                    eng.entry(*h2),
-                ),
-                Err(InferenceError::Recursive(h1, h2)) => eprintln!(
-                    "=> ERROR: Cycle found in types {}, {}",
-                    eng.entry(*h1),
-                    eng.entry(*h2),
-                ),
-                Err(InferenceError::NoBreak | InferenceError::NoReturn) => {}
-            }
-            println!();
+    //         match &ret {
+    //             Ok(handle) => println!("=> {}", eng.entry(*handle)),
+    //             Err(err @ InferenceError::AnnotationEval(_)) => eprintln!("=> ERROR: {err}"),
+    //             Err(InferenceError::FieldCount(h, want, got)) => {
+    //                 eprintln!("=> ERROR: Field count {want} != {got} in {}", eng.entry(*h))
+    //             }
+    //             Err(InferenceError::Mismatch(h1, h2)) => eprintln!(
+    //                 "=> ERROR: Type mismatch {} != {}",
+    //                 eng.entry(*h1),
+    //                 eng.entry(*h2),
+    //             ),
+    //             Err(InferenceError::Recursive(h1, h2)) => eprintln!(
+    //                 "=> ERROR: Cycle found in types {}, {}",
+    //                 eng.entry(*h1),
+    //                 eng.entry(*h2),
+    //             ),
+    //             Err(InferenceError::NoBreak | InferenceError::NoReturn) => {}
+    //         }
+    //         println!();
 
-            if let Err(err) = ret {
-                res.push((handle, err));
-                eng.table.mark_unchecked(handle);
-            }
-        }
-        res
-    }
+    //         if let Err(err) = ret {
+    //             res.push((handle, err));
+    //             eng.table.mark_unchecked(handle);
+    //         }
+    //     }
+    //     res
+    // }
 
     /// Constructs a new InferenceEngine with the
-    pub fn at(&mut self, at: Handle) -> InferenceEngine<'_, 'a, '_, '_> {
+    pub fn at(&mut self, at: Handle) -> InferenceEngine<'_, '_, '_> {
         InferenceEngine { at, ..self.scoped() }
     }
 
     pub fn open_bset<'ob>(
         &mut self,
         bset: &'ob mut Option<Handle>,
-    ) -> InferenceEngine<'_, 'a, 'ob, '_> {
+    ) -> InferenceEngine<'_, 'ob, '_> {
         InferenceEngine { bset: Some(bset), ..self.scoped() }
     }
 
     pub fn open_rset<'or>(
         &mut self,
         rset: &'or mut Option<Handle>,
-    ) -> InferenceEngine<'_, 'a, '_, 'or> {
+    ) -> InferenceEngine<'_, '_, 'or> {
         InferenceEngine { rset: Some(rset), ..self.scoped() }
     }
 
@@ -162,7 +153,7 @@ impl<'table, 'a, 'b, 'r> InferenceEngine<'table, 'a, 'b, 'r> {
     }
 
     /// Constructs an [Entry] out of a [Handle], for ease of use
-    pub fn entry(&self, of: Handle) -> Entry<'_, 'a> {
+    pub fn entry(&self, of: Handle) -> Entry<'_> {
         self.table.entry(of)
     }
 
@@ -196,12 +187,8 @@ impl<'table, 'a, 'b, 'r> InferenceEngine<'table, 'a, 'b, 'r> {
     }
 
     pub fn get_fn(&self, at: Handle, name: Sym) -> Option<(Handle, Handle)> {
-        use cl_ast::PathPart;
-        if let Some(&TypeKind::FnSig { args, rety }) = self
-            .entry(at)
-            .nav(&[PathPart::Ident(name)])
-            .as_ref()
-            .and_then(Entry::ty)
+        if let Some(&TypeKind::FnSig { args, rety }) =
+            self.entry(at).nav(&[name]).as_ref().and_then(Entry::ty)
         {
             Some((args, rety))
         } else {
@@ -239,7 +226,7 @@ impl<'table, 'a, 'b, 'r> InferenceEngine<'table, 'a, 'b, 'r> {
         self.table.get_lang_item("never")
     }
 
-    pub fn empty(&mut self) -> Handle {
+    pub fn unit(&mut self) -> Handle {
         self.table.anon_type(TypeKind::Tuple(vec![]))
     }
 
@@ -286,7 +273,7 @@ impl<'table, 'a, 'b, 'r> InferenceEngine<'table, 'a, 'b, 'r> {
     }
 
     /// Creates a new locally-scoped InferenceEngine.
-    pub fn block_scope(&mut self) -> InferenceEngine<'_, 'a, '_, '_> {
+    pub fn block_scope(&mut self) -> InferenceEngine<'_, '_, '_> {
         let scope = self.table.new_entry(self.at, NodeKind::Scope);
         self.table.add_child(self.at, "".into(), scope);
         self.at(scope)
@@ -535,7 +522,7 @@ impl<'table, 'a, 'b, 'r> InferenceEngine<'table, 'a, 'b, 'r> {
             (TypeKind::Adt(Adt::Enum(ia)), TypeKind::Adt(Adt::Enum(ib)))
                 if ia.len() == ib.len() =>
             {
-                for ((na, a), (nb, b)) in ia.clone().into_iter().zip(ib.clone().into_iter()) {
+                for ((na, a), (nb, b)) in ia.clone().into_iter().zip(ib.clone()) {
                     if na != nb {
                         return Err(InferenceError::Mismatch(ah, bh));
                     }
@@ -566,8 +553,7 @@ impl<'table, 'a, 'b, 'r> InferenceEngine<'table, 'a, 'b, 'r> {
             (TypeKind::Adt(Adt::Struct(ia)), TypeKind::Adt(Adt::Struct(ib)))
                 if ia.len() == ib.len() =>
             {
-                for ((na, va, a), (nb, vb, b)) in ia.clone().into_iter().zip(ib.clone().into_iter())
-                {
+                for ((na, va, a), (nb, vb, b)) in ia.clone().into_iter().zip(ib.clone()) {
                     if na != nb || va != vb {
                         return Err(InferenceError::Mismatch(ah, bh));
                     }
@@ -578,7 +564,7 @@ impl<'table, 'a, 'b, 'r> InferenceEngine<'table, 'a, 'b, 'r> {
             (TypeKind::Adt(Adt::TupleStruct(ia)), TypeKind::Adt(Adt::TupleStruct(ib)))
                 if ia.len() == ib.len() =>
             {
-                for ((va, a), (vb, b)) in ia.clone().into_iter().zip(ib.clone().into_iter()) {
+                for ((va, a), (vb, b)) in ia.clone().into_iter().zip(ib.clone()) {
                     if va != vb {
                         return Err(InferenceError::Mismatch(ah, bh));
                     }

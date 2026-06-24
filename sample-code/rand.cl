@@ -14,9 +14,7 @@ pub fn lfsr_next() {
 
 /// Returns a pseudorandom byte
 pub fn rand() -> u64 {
-    for _ in 0..8 {
-        lfsr_next()
-    };
+    lfsr_next();
     (state & 0xff) as u64
 }
 

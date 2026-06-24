@@ -1,14 +1,25 @@
 //! Squashes group expressions
-use crate::{ast::*, ast_visitor::fold::*};
+use crate::{ast::*, fold::*};
 
 /// Squashes group expressions
 pub struct SquashGroups;
 
-impl Fold for SquashGroups {
-    fn fold_expr_kind(&mut self, kind: ExprKind) -> ExprKind {
-        match kind {
-            ExprKind::Group(Group { expr }) => self.fold_expr(*expr).kind,
-            _ => or_fold_expr_kind(self, kind),
+impl<A: AstTypes> Fold<A, A> for SquashGroups {
+    type Error = ();
+    impl_default_fold!(A, A);
+
+    fn fold_at_expr(&mut self, expr: At<Expr<A>, A>) -> Result<At<Expr<A>, A>, Self::Error> {
+        let expr = expr.children(self)?;
+
+        let At(Expr::Op(Op::Group, mut args), span) = expr else {
+            return Ok(expr);
+        };
+
+        if args.len() != 1 {
+            // TODO: should this be an error? Should we match on args.pop() instead?
+            return Ok(Expr::Op(Op::Group, args).at(span));
         }
+
+        Ok(args.pop().unwrap())
     }
 }

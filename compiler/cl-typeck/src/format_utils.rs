@@ -1,4 +1,4 @@
-pub use cl_ast::format::*;
+pub use cl_ast::fmt::*;
 use std::{fmt, iter};
 
 /// Separates the items yielded by iterating the provided function

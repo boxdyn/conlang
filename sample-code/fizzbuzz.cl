@@ -1,4 +1,4 @@
-#!/usr/bin/env -S conlang -r false
+#!/usr/bin/env -S conlang main()
 // FizzBuzz, using the unstable variadic-`print` builtin
 
 fn main() {

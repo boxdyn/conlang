@@ -1,4 +1,4 @@
-//! Interners for [strings](string_interner) and arbitrary [types](typed_interner).
+//! Interners for [strings](string_interner) and non-[Drop] [types](dropless_interner).
 //!
 //! An object is [Interned][1] if it is allocated within one of the interners
 //! in this module. [Interned][1] values have referential equality semantics, and
@@ -26,87 +26,106 @@ pub mod interned {
     /// dereference to the wrapped pointers, and as such, may produce
     /// results inconsistent with [PartialEq] or [Eq].
     #[repr(transparent)]
-    pub struct Interned<'a, T: ?Sized> {
-        value: &'a T,
-    }
+    #[expect(private_interfaces)]
+    pub struct Interned<'a, T: ?Sized>(pub &'a T, pub Private);
+
+    pub type Symbol = Interned<'static, str>;
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    struct Private();
 
     impl<'a, T: ?Sized> Interned<'a, T> {
         /// Gets the internal value as a pointer
         pub fn as_ptr(interned: &Self) -> *const T {
-            interned.value
+            interned.0
         }
 
         /// Gets the internal value as a reference with the interner's lifetime
-        pub fn to_ref(&self) -> &'a T {
-            self.value
+        pub fn to_ref(self) -> &'a T {
+            self.0
         }
     }
 
-    impl<T: ?Sized + Debug> Debug for Interned<'_, T> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "~")?;
-            self.value.fmt(f)
-        }
-    }
     impl<'a, T: ?Sized> Interned<'a, T> {
         pub(super) fn new(value: &'a T) -> Self {
-            Self { value }
+            Self(value, Private())
         }
     }
-    impl<T: ?Sized> Deref for Interned<'_, T> {
-        type Target = T;
-        fn deref(&self) -> &Self::Target {
-            self.value
-        }
-    }
+
     impl<T: ?Sized> Copy for Interned<'_, T> {}
+
     impl<T: ?Sized> Clone for Interned<'_, T> {
         fn clone(&self) -> Self {
             *self
         }
     }
-    // TODO: These implementations are subtly incorrect, as they do not line up with `eq`
-    // impl<'a, T: ?Sized + PartialOrd> PartialOrd for Interned<'a, T> {
-    //     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-    //         match self == other {
-    //             true => Some(std::cmp::Ordering::Equal),
-    //             false => self.value.partial_cmp(other.value),
-    //         }
-    //     }
-    // }
-    // impl<'a, T: ?Sized + Ord> Ord for Interned<'a, T> {
-    //     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-    //         match self == other {
-    //             true => std::cmp::Ordering::Equal,
-    //             false => self.value.cmp(other.value),
-    //         }
-    //     }
-    // }
 
-    impl<T: ?Sized> Eq for Interned<'_, T> {}
-    impl<T: ?Sized> PartialEq for Interned<'_, T> {
-        fn eq(&self, other: &Self) -> bool {
-            std::ptr::eq(self.value, other.value)
+    impl<T: ?Sized + Debug> Debug for Interned<'_, T> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("~")?;
+            self.0.fmt(f)
         }
     }
+
+    impl<T: ?Sized> Deref for Interned<'_, T> {
+        type Target = T;
+        fn deref(&self) -> &Self::Target {
+            self.0
+        }
+    }
+
+    impl<T: ?Sized> PartialEq for Interned<'_, T> {
+        fn eq(&self, other: &Self) -> bool {
+            std::ptr::eq(self.0, other.0)
+        }
+    }
+
+    impl<T: ?Sized> Eq for Interned<'_, T> {}
+
+    impl<T: ?Sized + PartialOrd> PartialOrd for Interned<'_, T> {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            self.0.partial_cmp(other.0)
+        }
+    }
+
+    impl<T: ?Sized + Ord> Ord for Interned<'_, T> {
+        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            self.0.cmp(other.0)
+        }
+    }
+
     impl<T: ?Sized> Hash for Interned<'_, T> {
         fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
             Self::as_ptr(self).hash(state)
         }
     }
+
     impl<T: ?Sized + Display> Display for Interned<'_, T> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            self.value.fmt(f)
+            self.0.fmt(f)
         }
     }
 
-    impl<T: AsRef<str>> From<T> for Interned<'static, str> {
-        /// Types which implement [`AsRef<str>`] will be stored in the global [StringInterner]
-        fn from(value: T) -> Self {
-            from_str(value.as_ref())
+    impl<'a> AsRef<str> for Interned<'a, str> {
+        fn as_ref(&self) -> &str {
+            self.0
         }
     }
-    fn from_str(value: &str) -> Interned<'static, str> {
+
+    impl From<&str> for Symbol {
+        /// Types which implement [`AsRef<str>`] will be stored in the global [StringInterner]
+        fn from(value: &str) -> Self {
+            from_str(value)
+        }
+    }
+
+    impl Default for Symbol {
+        fn default() -> Self {
+            from_str("")
+        }
+    }
+
+    fn from_str(value: &str) -> Symbol {
         let global_interner = StringInterner::global();
         global_interner.get_or_insert(value)
     }
@@ -249,34 +268,68 @@ pub mod string_interner {
     }
 }
 
-pub mod typed_interner {
-    //! A [TypedInterner] hands out [Interned] references for arbitrary types.
+pub mod dropless_interner {
+    //! A [DroplessInterner] hands out [Interned] references for arbitrary types.
     //!
     //! Note: It is a *logic error* to modify the returned reference via interior mutability
     //! in a way that changes the values produced by [Eq] and [Hash].
     //!
     //! See the standard library [HashSet] for more details.
+    //!
+    //! ```rust
+    //! use cl_structures::intern::dropless_interner::DroplessInterner;
+    //! use cl_arena::dropless_arena::DroplessArena;
+    //!
+    //! let da = DroplessArena::new();
+    //! let di: DroplessInterner<'_, ()> = DroplessInterner::new(da);
+    //! let unit1 = di.get_or_insert(());
+    //! let unit2 = di.get_or_insert(());
+    //! let unit3 = di.get(&()).unwrap();
+    //! assert_eq!(unit1, unit3);
+    //! assert_eq!(unit2, unit1);
+    //! assert_eq!(unit3, unit2);
+    //! ```
+    //!
+    //! ```rust
+    //! use cl_structures::intern::dropless_interner::DroplessInterner;
+    //! use cl_arena::dropless_arena::DroplessArena;
+    //!
+    //! let da = DroplessArena::new();
+    //! let di: DroplessInterner<'_, [i32; 10]> = DroplessInterner::new(da);
+    //! let arr1 = di.get_or_insert([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    //! let arr2 = di.get_or_insert([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    //! let arr3 = di.get(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).unwrap();
+    //! assert_eq!(arr1, arr3);
+    //! assert_eq!(arr2, arr1);
+    //! assert_eq!(arr3, arr2);
+    //!
+    //! let arr4 = di.get_or_insert([10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);
+    //! assert_ne!(arr1, arr4);
+    //! ```
     use super::interned::Interned;
-    use cl_arena::typed_arena::TypedArena;
+    use cl_arena::dropless_arena::DroplessArena;
     use std::{collections::HashSet, hash::Hash, sync::RwLock};
 
-    /// A [TypedInterner] hands out [Interned] references for arbitrary types.
+    /// A [DroplessInterner] hands out [Interned] references for arbitrary types.
     ///
     /// See the [module-level documentation](self) for more information.
-    pub struct TypedInterner<'a, T: Eq + Hash> {
-        arena: TypedArena<'a, T>,
+    pub struct DroplessInterner<'a, T: Eq + Hash> {
+        arena: DroplessArena<'a>,
         keys: RwLock<HashSet<&'a T>>,
     }
 
-    impl<'a, T: Eq + Hash> Default for TypedInterner<'a, T> {
+    impl<'a, T: Eq + Hash> Default for DroplessInterner<'a, T> {
         fn default() -> Self {
             Self { arena: Default::default(), keys: Default::default() }
         }
     }
 
-    impl<'a, T: Eq + Hash> TypedInterner<'a, T> {
-        /// Creates a new [TypedInterner] backed by the provided [TypedArena]
-        pub fn new(arena: TypedArena<'a, T>) -> Self {
+    impl<'a, T: Eq + Hash> DroplessInterner<'a, T> {
+        /// Creates a new [DroplessInterner] backed by the provided [`DroplessArena`]
+        ///
+        /// # Panics
+        /// Panics if T [needs drop](std::mem::needs_drop)
+        pub fn new(arena: DroplessArena<'a>) -> Self {
             Self { arena, keys: RwLock::new(HashSet::new()) }
         }
 
@@ -294,12 +347,17 @@ pub mod typed_interner {
             Interned::new(match keys.get(&value) {
                 Some(value) => value,
                 None => {
-                    let value = arena.alloc(value);
+                    let value = if std::mem::size_of::<T>() == 0 {
+                        Box::leak(Box::new(value))
+                    } else {
+                        arena.alloc(value)
+                    };
                     keys.insert(value);
                     value
                 }
             })
         }
+
         /// Returns the [Interned] copy of the given value, if one already exists
         ///
         /// # Blocks
@@ -312,8 +370,66 @@ pub mod typed_interner {
 
     /// # Safety
     /// This should be safe because references yielded by
-    /// [get_or_insert](TypedInterner::get_or_insert) are unique, and the function uses
+    /// [get_or_insert](DroplessInterner::get_or_insert) are unique, and the function uses
     /// the [RwLock] around the [HashSet] to ensure mutual exclusion
-    unsafe impl<'a, T: Eq + Hash + Send> Send for TypedInterner<'a, T> where &'a T: Send {}
-    unsafe impl<T: Eq + Hash + Send + Sync> Sync for TypedInterner<'_, T> {}
+    unsafe impl<'a, T: Eq + Hash + Send> Send for DroplessInterner<'a, T> where &'a T: Send {}
+    unsafe impl<T: Eq + Hash + Send + Sync> Sync for DroplessInterner<'_, T> {}
+}
+
+pub mod leaky_interner {
+    //! An "interner" which leaks anything you give it
+    use std::{collections::HashSet, hash::Hash, sync::RwLock};
+
+    use crate::intern::interned::Interned;
+
+    /// An interner which leaks anything you give it using [Box::leak]
+    pub struct LeakyInterner<'a, T: Eq + Hash> {
+        keys: RwLock<HashSet<&'a T>>,
+    }
+
+    impl<'a, T: Eq + Hash> Default for LeakyInterner<'a, T> {
+        fn default() -> Self {
+            Self { keys: Default::default() }
+        }
+    }
+
+    impl<'a, T: Eq + Hash> LeakyInterner<'a, T> {
+        pub fn new() -> Self {
+            Self { keys: RwLock::new(HashSet::new()) }
+        }
+
+        /// Converts the given value into an [Interned] value.
+        ///
+        /// # Blocks
+        /// This function blocks when the interner is held by another thread.
+        pub fn get_or_insert(&'a self, value: T) -> Interned<'a, T> {
+            let Self { keys } = self;
+            let mut keys = keys.write().expect("should not be poisoned");
+
+            Interned::new(match keys.get(&value) {
+                Some(value) => value,
+                None => {
+                    let value = Box::leak(Box::new(value));
+                    keys.insert(value);
+                    value
+                }
+            })
+        }
+
+        /// Returns the [Interned] copy of the given value, if one already exists
+        ///
+        /// # Blocks
+        /// This function blocks when the interner is being written to by another thread.
+        pub fn get(&self, value: &T) -> Option<Interned<'a, T>> {
+            let keys = self.keys.read().expect("should not be poisoned");
+            keys.get(value).copied().map(Interned::new)
+        }
+
+        /// Calls the closure on each previously-interned value
+        pub fn foreach(&self, mut f: impl FnMut(&T)) {
+            for key in self.keys.read().expect("should not be poisoned").iter() {
+                f(key);
+            }
+        }
+    }
 }

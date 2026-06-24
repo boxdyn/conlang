@@ -1,161 +1,151 @@
 (* Conlang Expression Grammar *)
-Start       = File EOI ;
-
-Mutability  = "mut"? ;
-Visibility  = "pub"? ;
 
 
-File        = Item* ;
+Start = SOI Expr? EOI ;
 
+(* Expressions *)
 
-Attrs       = ('#' '[' (Meta ',')* Meta? ']')* ;
-Meta        = Identifier ('=' Literal | '(' (Literal ',')* Literal? ')')? ;
+Expr = InAttr Expr | ExprDo ;
+(* Not pictured: semicolon elision after block exprs *)
+ExprDo = (ExprBody? ';')+ ExprBody? | ExprBody ;
+ExprBody = ExprAssign ;
+ExprAssign = ExprMake (AssignOp ExprMake)* ;
+AssignOp = (
+    '<<=' | '>>=' | '*=' | '/='
+  | '%='  | '+='  | '-=' | '&='
+  | '^='  | '|='  | '='
+);
+(* Hack: grammar is context-sensitive. Parser uses look-behind to disambiguate *)
+ExprMake = !(Path '{') ExprTuple | Path '{' (MakeArm ',')* MakeArm? '}' ;
+MakeArm = Identifier (':' ExprLogical)? ;
 
+ExprTuple = ExprLogical (',' ExprLogical)* ;
+ExprLogical = ExprLogOr ('^^' ExprLogOr)* ;
+ExprLogOr = ExprLogAnd ('||' ExprLogAnd)* ;
+ExprLogAnd = ExprCompare ('&&' ExprCompare)* ;
+ExprCompare = ExprRange (('<=' | '!=' | '==' | '>=' | '<' | '>') ExprRange)* ;
+ExprRange = (
+    ExprBinary? ('..' | '..=') ExprBinary?
+  | ExprBinary
+);
+ExprBinary = ExprShift (('&' | '|' | '^') ExprShift)* ;
+ExprShift = ExprFactor (('<<' | '>>') ExprFactor)? ;
+ExprFactor = ExprTerm (('+' | '-') ExprTerm)* ;
+ExprTerm = ExprCast (('*' | '/' | '%') ExprCast)* ;
+ExprCast = ExprUnary ("as" ExprProject)* ;
+ExprUnary = (
+    ('&' | '&&') ExprUnary      (* Ref, DoubleRef *)
+  | ('!' | '!!') ExprUnary      (* Not, Identity *)
+  | ('-' | '+' | '*') ExprUnary (* Neg, Identity, Deref *)
+  | ExprProject
+);
+(* hack: Pest, which I'm validating this with, doesn't know '..' is better than '.' *)
+ExprProject = ExprExtend (!'..' '.' ExprExtend | '[' Expr? ']')* ;
+ExprExtend = ExprMax ('(' Expr? ')')* ;
 
-Item        = Attrs Visibility ItemKind ;
-ItemKind    = Const    | Static | Module 
-            | Function | Struct | Enum 
-            | Alias    | Impl   | Use ;
+ExprMax = (
+    "do" Expr
+  | ("pub" | "const" | "static") ExprMax
+  | ("loop" | "defer" | "break" | "return") ExprBody
+  | ("if" | "while") ExprLogical ExprBody ("else" ExprBody)?
+  | "continue"
+  | '`' Expr? '`'
+  | '{' Expr? '}'
+  | '(' Expr? ')'
+  | '[' ExprTuple? ']'
+  | '[' ExprTuple (';' ExprTuple)? ']'
+  | "use" Use
+  | '$' Token
+  | '...'
+  | OutAttr ExprMax
+  | InAttr Expr (* FIXME: move this *)
+  | Match
+  | Bind
+  | Literal
+  | Path
+);
 
+Match = "match" ExprTuple '{' (MatchArm ';')* MatchArm? '}' ;
+MatchArm = Pat '=>' ExprBody ;
 
-(* item *)
-Const       = "const" Identifier ':' Ty '=' Expr ';' ;
+Bind = BindLet | BindType | BindStruct | BindEnum | BindFn | BindMod | BindImpl | BindFor ;
+BindLet    = "let"    BoundGeneric? PatTuple ('=' ExprBody   ("else" ExprBody)?)? ;
+BindType   = "type"   BoundGeneric? PatAlt   ('=' ExprBody)? ;
+BindStruct = "struct" BoundGeneric? PatTuple ;
+BindEnum   = "enum"   BoundGeneric? PatTuple ;
+BindFn     = "fn"     BoundGeneric? PatFn    ('='? ExprBody) ;
+BindMod    = "mod"    BoundGeneric? PatMax   ('='? ExprBody) ;
+BindImpl   = "impl"   BoundGeneric? PatFn    ('='? ExprBody) ;
+BindFor    = "for"    PatTuple "in" ExprLogical ExprBody ("else" ExprBody)? ;
 
-Static      = "static" Mutability Identifier ':' Ty '=' Expr ';' ;
+BoundGeneric = '<' (Pat ',')* Pat? '>' ;
 
-Module      = "mod" Identifier ModuleKind ;
-ModuleKind  = '{' Item* '}' | ';' ;
+(* Patterns *)
 
-Function    = "fn" Identifier '(' (Param ',')* Param? ')' ('->' Ty)? (Expr | ';') ;
-Param       = Mutability Identifier ':' Ty ;
+Pat = PatAlt ;
+PatAlt = '|'? PatTuple ('|' PatTuple)* ;
+PatTuple = PatTyped (',' PatTyped)* ;
+PatTyped = Attr? (
+    '{' (PatTyped ',')* PatTyped? '}'
+  | PatFn '{' (PatTyped ',')* PatTyped? '}'
+  | PatFn ':' PatTyped
+  | PatFn
+) PatGuard? ;
+PatGuard = "if" ExprLogical ;
 
-Struct      = "struct" Identifier (StructTuple | StructBody)?;
-StructBody  = '{' (StructMember ',')* StructMember? '}' ;
-StructTuple = TyTuple ;
-StructMember = Visibility Identifier ':' Ty ;
+PatFn = (
+    PatParams
+  | "fn" PatFn
+  | '&' PatFn
+  | '&&' PatFn
+  | PatRange PatGenerics* PatParams? ('->' PatFn)?
+);
+PatGenerics = '<' (PatTyped ',')* PatTyped? '>' ;
+PatParams   = '(' (PatTyped ',')* PatTyped? ')' ;
 
-Enum        = "enum" Identifier '{' (Variant ',')* Variant? '}' ;
-Variant     = Identifier (VarStruct | VarTuple | VarCLike)? ;
-VarStruct   = '{' (StructMember ',')* StructMember? '}' ;
-VarTuple    = TyTuple ;
-VarCLike    = '=' INTEGER ;
+PatRange = (
+    PatMax? '..' PatMax?
+  | PatMax? '..=' PatMax?
+  | PatMax
+);
+PatMax = (
+    '[' PatTuple (';' PatTuple)? ']' (* Slices and Arrays*)
+  | "pub" PatMax                     (* Publicity  *)
+  | "mut" PatMax                     (* Mutability *)
+  | '*' PatMax                       (* Ptr *)
+  | '$' Token                        (* Metaidentifier *)
+  | '!'                              (* Never *)
+  | '_'                              (* Wildcard *)
+  | '$' Token                        (* Metaidentifier *)
+  | Identifier                       (* Binding wildcard *)
+  | PatConst                         (* Constant expression *)
+);
+PatConst = (
+    "const" Expr
+  | '-' Expr
+  | Literal
+  | Path
+);
 
-Alias       = "type" Identifier ('=' Ty)? ';' ;
+(* Other AST nodes *)
 
-Impl        = "impl" Path '{' Item* '}' ;
-(* TODO: Impl Trait for Target*)
+Attr = InAttr | OutAttr ;
+InAttr = '#!' '[' Expr ']' | InDoc;
+OutAttr = '#' '[' Expr ']' | OutDoc;
 
-Use         = "use" '::'? UseTree ';' ;
-UseTree     = '*' | '{' (UseTree ',')* UseTree? '}'
-            | PathPart ('::' UseTree | "as" Identifier)? ;
+Path = '::'? Identifier ('::' Identifier)* ;
 
-(* type *)
-Ty          = Never | Empty | Path | TyArray | TySlice | TyTuple | TyRef | TyFn ;
-Never       = '!' ;
-Empty       = '(' ')' ;
-TyTuple     = '(' (Ty ',')* Ty? ')' ;
-TyArray     = '[' Ty ';' INTEGER ']' ;
-TySlice     = '[' Ty ']' ;
-TyRef       = Amps* Path ;
-Amps        = '&' | '&&' ;
-TyFn        = "fn" TyTuple ('->' Ty)? ;
+Literal = (
+    "true" | "false"
+  | Character
+  | Integer
+  | String
+);
 
-
-(* path *)
-Path        = PathPart ('::' PathPart)*
-            | '::' (PathPart ('::' PathPart)*)? ;
-PathPart    = "super" | "self" | "Self" | Identifier ;
-Identifier  = IDENTIFIER ;
-
-
-(* statement *)
-Stmt        = ';' | (Let | Item | Expr) Semi ;
-Semi        = ';'? ;
-Let         = "let" Mutability Identifier (':' Ty)? ('=' Expr)? ;
-(* TODO: Closure syntax *)
-(* Closure     = "cl" '(' Param* ')' Block ; *)
-
-
-(* literal *)
-Bool        = "true" | "false" ;
-
-
-(* expr *)
-
-Expr        = Assign ;
-
-Assign      = Path (AssignKind  Assign ) | Modify ;
-Modify      = Path (ModifyKind  Assign ) | Compare ;
-
-(* Binary      = Compare | Range | Logic | Bitwise | Shift | Factor | Term ; *)
-Compare     = Range    (CompareOp Range  )* ;
-Range       = Logic    (RangeOp   Logic  )* ;
-Logic       = Bitwise  (LogicOp   Bitwise)* ;
-Bitwise     = Shift    (BitwiseOp Shift  )* ;
-Shift       = Factor   (ShiftOp   Factor )* ;
-Factor      = Term     (FactorOp  Term   )* ;
-Term        = Unary    (TermOp    Unary  )* ;
-
-Unary       = (UnaryKind)* Cast ;
-
-Cast        = Member ("as" Ty)? ;
-
-Member      = Call (Access)* ;
-Access      = '.' (Identifier ('(' Tuple? ')')? | Literal) ;
-
-Call        = Index  ('(' Tuple? ')')* ;
-
-Index       = Primary ('[' Indices ']')* ;
-Indices     = (Expr ',')* Expr? ;
-
-Primary     = Literal | PathLike | Array | ArrayRep | AddrOf | Block  | Group
-            | Loop    | If       | While | For      | Break  | Return | Continue;
-
-Literal     = STRING | CHARACTER | FLOAT | INTEGER | Bool ;
-
-PathLike    = Path | Structor ;
-Structor    = Path ':' '{' (Fielder ',')* Fielder? '}' ;
-Fielder     = Identifier ('=' Expr)? ;
-
-Array       = '[' (Expr ',')* Expr? ']' ;
-ArrayRep    = '[' Expr ';' Expr ']' ;
-
-AddrOf      = Amps Amps* Mutability Expr ;
-
-Block       = '{' Stmt* '}';
-
-Group       = Empty | '(' (Expr | Tuple) ')' ;
-Tuple       = (Expr ',')* Expr? ;
-
-
-Match       = "match" { (MatchArm ',')* MatchArm? } ;
-MatchArm    = Pattern '=>' Expr ;
-Pattern     = Path
-            | Literal
-            | '&' "mut"? Pattern
-            | '(' (Pattern ',')* (Pattern | '..' )? ')'
-            | '[' (Pattern ',')* (Pattern | '..' Identifier?)? ']'
-            | StructPattern
-            ;
-
-Loop        = "loop"  Block ;
-While       = "while" Expr Block Else ;
-If          = "if"    Expr Block Else ;
-For         = "for"   Identifier "in" Expr Block Else ;
-Else        = ("else"  Expr)? ;
-Break       = "break"  Expr ;
-Return      = "return" Expr ;
-Continue    = "continue" ;
-
-AssignKind  =  '=' ;
-ModifyKind  = '+=' | '-=' | '*=' | '/=' | '&=' | '|=' | '^=' |'<<=' |'>>=' ;
-
-CompareOp   =  '<' | '<=' | '==' | '!=' | '>=' | '>' ;
-RangeOp     = '..' | '..=' ;
-LogicOp     = '&&' | '||' | '^^' ;
-BitwiseOp   =  '&' | '|' | '^' ;
-ShiftOp     = '<<' | '>>';
-TermOp      =  '+' | '-' ;
-FactorOp    =  '*' | '/' | '%' ;
-
-UnaryKind   =  '*' | '-' | '!' | '@' | '~' ;
+Use = (
+    '*'                        (* Glob *)
+  | '{' (Use ',')* Use? '}'    (* Tree *)
+  | Identifier '::' Use        (* Path *)
+  | Identifier "as" Identifier (* Alias *)
+  | Identifier                 (* Name *)
+);

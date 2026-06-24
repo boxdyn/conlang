@@ -1,4 +1,4 @@
-#!/usr/bin/env -S conlang -r false
+#!/usr/bin/env -S conlang main()
 //! A simple five-function pn calculator
 
 enum Expr {
@@ -8,17 +8,17 @@ enum Expr {
 
 
 /// executes an expression
-fn execute(expr: Expr) -> f64 {
+fn execute(&expr: Expr) -> f64 {
     match expr {
-        Expr::Atom(value) => value,
-        Expr::Op('*', [lhs, rhs]) => execute(lhs) * execute(rhs),
-        Expr::Op('/', [lhs, rhs]) => execute(lhs) / execute(rhs),
-        Expr::Op('%', [lhs, rhs]) => execute(lhs) % execute(rhs),
-        Expr::Op('+', [lhs, rhs]) => execute(lhs) + execute(rhs),
-        Expr::Op('-', [lhs, rhs]) => execute(lhs) - execute(rhs),
-        Expr::Op('>', [lhs, rhs]) => (execute(lhs) as u64 >> execute(rhs) as u64) as f64,
-        Expr::Op('<', [lhs, rhs]) => (execute(lhs) as u64 << execute(rhs) as u64) as f64,
-        Expr::Op('-', [lhs]) => - execute(lhs),
+        Expr::Atom(value) => value;
+        Expr::Op('*', [lhs, rhs]) => execute(lhs) * execute(rhs);
+        Expr::Op('/', [lhs, rhs]) => execute(lhs) / execute(rhs);
+        Expr::Op('%', [lhs, rhs]) => execute(lhs) % execute(rhs);
+        Expr::Op('+', [lhs, rhs]) => execute(lhs) + execute(rhs);
+        Expr::Op('-', [lhs, rhs]) => execute(lhs) - execute(rhs);
+        Expr::Op('>', [lhs, rhs]) => (execute(lhs) as u64 >> execute(rhs) as u64) as f64;
+        Expr::Op('<', [lhs, rhs]) => (execute(lhs) as u64 << execute(rhs) as u64) as f64;
+        Expr::Op('-', [lhs]) => - execute(lhs);
         other => {
             panic("Unknown operation: " + fmt(other))
         }
@@ -29,10 +29,10 @@ fn execute(expr: Expr) -> f64 {
 /// Pretty-prints an expression
 fn fmt_expr(expr: Expr) -> str {
     match expr {
-        Expr::Atom(value) => fmt(value),
-        Expr::Op(operator, [lhs, rhs]) => fmt('(', fmt_expr(lhs), ' ', operator, ' ', fmt_expr(rhs), ')'),
-        Expr::Op(operator, [rhs]) => fmt(operator, fmt_expr(rhs)),
-        _ => println("Unexpected expr: ", expr),
+        Expr::Atom(value) => fmt(value);
+        Expr::Op(operator, [lhs, rhs]) => fmt('(', fmt_expr(lhs), ' ', operator, ' ', fmt_expr(rhs), ')');
+        Expr::Op(operator, [rhs]) => fmt(operator, fmt_expr(rhs));
+        _ => println("Unexpected expr: ", expr);
     }
 }
 fn print_expr(expr: Expr) {
@@ -41,21 +41,21 @@ fn print_expr(expr: Expr) {
 
 
 /// Parses expressions
-fn parse(line: [char], power: i32) -> (Expr, [char]) {
-    fn map((expr, line): (Expr, [char]), f: fn(Expr) -> Expr) -> (Expr, [char]) {
+fn parse(&line: &[char], power: i32) -> (Expr, [char]) {
+    fn map(&(expr, line): (Expr, [char]), f: fn(Expr) -> Expr) -> (Expr, [char]) {
         (f(expr), line)
     }
 
     line = space(line);
 
-    let (lhs, line) = match line {
-        ['0'..='9', ..] => number(line),
+    let lhs, line = match line {
+        ['0'..='9', ..] => number(line);
         ['(', ..rest] => match parse(rest, Power::None) {
-                (expr, [')', ..rest]) => (expr, rest),
-                (expr, rest) => panic(fmt("Expected ')', got ", expr, ", ", rest)),
-            },
-        [op, ..rest] => parse(rest, pre_bp(op)).map(|lhs| Expr::Op(op, [lhs])),
-        _ => panic("Unexpected end of input"),
+            expr, [')', ..rest] => expr, rest;
+            expr, rest => panic(fmt("Expected ')', got ", expr, ", ", rest));
+        };
+        [op, ..rest] => parse(rest, pre_bp(op)).map(|lhs| Expr::Op(op, [lhs]));
+        other => panic("Unexpected end of input: ", other);
     };
 
     while let [op, ..rest] = space(line) {
@@ -63,23 +63,27 @@ fn parse(line: [char], power: i32) -> (Expr, [char]) {
         if before < power {
             break;
         };
-        (lhs, line) = parse(rest, after).map(|rhs| Expr::Op(op, [lhs, rhs]));
+        let v = parse(rest, after).map(|rhs| Expr::Op(op, [lhs, rhs]));
+        lhs = v.0;
+        line = v.1;
     };
-    (lhs, line)
+    lhs, line
 }
 
-fn number(line: [char]) -> (Expr, [char]) {
+fn number(&line: [char]) -> (Expr, [char]) {
     let value = 0.0;
     while (let [first, ..rest] = line) && (let '0'..='9' = first) {
-        (value, line) = (value * 10.0 + (first as f64 - '0' as f64), rest)
+        value = value * 10.0 + (first as f64 - '0' as f64);
+        line = rest;
+        // (value, line) = (value * 10.0 + (first as f64 - '0' as f64), rest)
     } else (Expr::Atom(value), line)
 }
 
 fn space(line: [char]) -> [char] {
-    match line {
-        [' ', ..rest] => space(rest),
-        ['\n', ..rest] => space(rest),
-        line => line
+    loop match line {
+        [' ', ..rest] => line = rest;
+        ['\n', ..rest] => line = rest;
+        [..] => break line;
     }
 }
 
@@ -93,32 +97,28 @@ enum Power {
 }
 
 fn inf_bp(op: char) -> (i32, i32) {
-    (|x| (2 * x, 2 * x + 1))(
-    match op {
-        '*' => Power::Term,
-        '/' => Power::Term,
-        '%' => Power::Term,
-        '+' => Power::Factor,
-        '-' => Power::Factor,
-        '>' => Power::Shift,
-        '<' => Power::Shift,
-        _ => Power::None,
-    })
+    (|x| 2 * x, 2 * x + 1)(match op {
+        '*' => Power::Term;
+        '/' => Power::Term;
+        '%' => Power::Term;
+        '+' => Power::Factor;
+        '-' => Power::Factor;
+        '>' => Power::Shift;
+        '<' => Power::Shift;
+        _ => Power::None;
+    } as i32)
 }
 
 fn pre_bp(op: char) -> i32 {
-    (|x| 2 * x + 1)(
-    match op {
-        '-' => Power::Unary,
-        _ => panic("Unknown unary operator: " + op),
-    })
+    (|x| 2 * x + 1)(match op {
+        '-' => Power::Unary;
+        _ => panic("Unknown unary operator: " + op);
+    } as i32)
 }
 
-fn main() {
-    loop {
-        let line = get_line("calc >");
-        let (expr, rest) = line.chars().parse(0);
+fn main() loop {
+    let line = get_line("calc > ");
+    let (expr, rest) = line.chars().parse(0);
 
-        println(fmt_expr(expr), " -> ", execute(expr));
-    }
+    println(fmt_expr(expr), " -> ", execute(expr));
 }

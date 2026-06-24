@@ -1,11 +1,10 @@
 //! # Universally useful structures
-//! - [Span](struct@span::Span): Stores a start and end [Loc](struct@span::Loc)
-//! - [Loc](struct@span::Loc): Stores the index in a stream
-//! - [TypedInterner][ti] & [StringInterner][si]: Provies stable, unique allocations
+//! - [Span](struct@span::Span): Stores a start and end position in a named stream
+//! - [DroplessInterner][di] & [StringInterner][si]: Provides stable, unique allocations
 //! - [Stack](stack::Stack): Contiguous collections with constant capacity
 //! - [IndexMap][im]: A map from [map indices][mi] to values
 //!
-//! [ti]: intern::typed_interner::TypedInterner
+//! [di]: intern::dropless_interner::DroplessInterner
 //! [si]: intern::string_interner::StringInterner
 //! [im]: index_map::IndexMap
 //! [mi]: index_map::MapIndex
@@ -19,6 +18,12 @@ pub mod span;
 
 pub mod tree;
 
+pub mod list;
+
 pub mod stack;
 
 pub mod index_map;
+
+pub use cl_arena::dropless_arena;
+
+pub use cl_arena::typed_arena;

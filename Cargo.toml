@@ -13,7 +13,7 @@ resolver = "2"
 
 [workspace.package]
 repository = "https://github.com/boxdyn/conlang"
-version = "0.0.10"
+version = "0.11.0"
 authors = ["John <j@soft.fish>"]
 edition = "2024"
 license = "MIT"
@@ -21,3 +21,21 @@ publish = ["soft-fish"]
 
 [profile.dev]
 opt-level = 1
+
+[package]
+name = "conlang"
+default-run = "conlang"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+# cl-repl = { path = "compiler/cl-repl" }
+# cl-typeck = { path = "compiler/cl-typeck" }
+cl-interpret = { path = "compiler/cl-interpret" }
+cl-structures = { path = "compiler/cl-structures" }
+cl-token = { path = "compiler/cl-token" }
+cl-ast = { path = "compiler/cl-ast" }
+cl-parser = { path = "compiler/cl-parser" }
+cl-lexer = { path = "compiler/cl-lexer" }
+repline = "0"
