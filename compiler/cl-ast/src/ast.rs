@@ -330,7 +330,7 @@ pub struct Label<A: AstTypes = DefaultTypes>(pub A::Symbol, pub At<Expr<A>, A>);
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Bind<A: AstTypes = DefaultTypes>(
     pub BindOp,
-    pub Vec<A::Path>,
+    pub Vec<At<Pat<A>, A>>,
     pub At<Pat<A>, A>,
     pub Vec<At<Expr<A>, A>>,
 );

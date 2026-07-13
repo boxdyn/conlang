@@ -140,7 +140,7 @@ impl<'a, A: AstTypes> Walk<'a, A> for Pat<A> {
 impl<'a, A: AstTypes> Walk<'a, A> for Bind<A> {
     fn children<V: Visit<'a, A> + ?Sized>(&'a self, v: &mut V) -> Result<(), V::Error> {
         let Self(_kind, gens, pat, exprs) = self;
-        gens.iter().try_for_each(|g| v.visit_path(g))?;
+        gens.iter().try_for_each(|g| g.visit_in(v))?;
         pat.visit_in(v)?;
         exprs.visit_in(v)
     }

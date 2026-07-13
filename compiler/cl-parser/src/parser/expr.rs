@@ -533,7 +533,7 @@ impl<'t> Parse<'t> for Bind {
 
         // <T,*>
         let generics = match p.next_if(TKind::Lt)? {
-            Ok(_) => p.list(vec![], (), TKind::Comma, TKind::Gt)?,
+            Ok(_) => p.list(vec![], PPrec::Typed, TKind::Comma, TKind::Gt)?,
             Err(_) => vec![],
         };
 

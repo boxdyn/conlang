@@ -253,7 +253,7 @@ impl<A: AstTypes, B: AstTypes> Foldable<A, B> for Bind<A> {
         Ok(Bind(
             op,
             gens.into_iter()
-                .map(|g| folder.fold_path(g))
+                .map(|g| g.fold_in(folder))
                 .collect::<Result<_, _>>()?,
             pat.fold_in(folder)?,
             exprs.fold_in(folder)?,
