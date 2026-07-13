@@ -1,4 +1,5 @@
 use cl_typeck::{
+    analys::{Scoper, Scopes},
     entry::Entry,
     stage::{
         infer::{engine::InferenceEngine, error::InferenceError, inference::Inference},
@@ -9,7 +10,11 @@ use cl_typeck::{
 };
 
 use cl_ast::{
-    At, Expr, desugar::{type_bubbler::Bubbler, while_else::WhileElseDesugar}, fold::Fold, types::Path, visit::Visit,
+    At, Expr,
+    desugar::{type_bubbler::Bubbler, while_else::WhileElseDesugar},
+    fold::Fold,
+    types::Path,
+    visit::Visit,
 };
 use cl_lexer::Lexer;
 use cl_parser::{Parser, inliner::ModuleInliner};
@@ -121,7 +126,8 @@ fn enter_code(prj: &mut Table) -> Result<(), RlError> {
 
 fn live_desugar() -> Result<(), RlError> {
     read_and(C_RESV, "se> ", "? > ", |line| {
-        let code = Parser::new(Lexer::new("".into(), line)).parse::<At<Expr>>(0)?;
+        let At(code, span) = Parser::new(Lexer::new("".into(), line)).parse::<At<Expr>>(0)?;
+        let code = inline_modules(code, "").at(span);
         println!("Raw, as parsed:\n{C_LISTING}{code}\x1b[0m");
 
         // let code = ConstantFolder.fold_stmt(code);
@@ -129,6 +135,11 @@ fn live_desugar() -> Result<(), RlError> {
 
         // let code = SquashGroups.fold_stmt(code);
         // println!("SquashGroups\n{C_LISTING}{code}\x1b[0m");
+
+        let mut scopes = Scopes::new();
+        let code = Scoper::new(&mut scopes).fold(code).unwrap();
+        println!("Scoper\n{C_LISTING}{code:#?}\x1b[0m");
+        println!("{scopes:#?}");
 
         let code = WhileElseDesugar.fold_at_expr(code).unwrap();
         println!("WhileElseDesugar\n{C_LISTING}{code}\x1b[0m");

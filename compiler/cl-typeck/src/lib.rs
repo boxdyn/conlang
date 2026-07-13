@@ -68,3 +68,5 @@ pub mod stage {
     // TODO: Use the type information stored in the [table]
     pub mod infer;
 }
+
+pub mod analys;
