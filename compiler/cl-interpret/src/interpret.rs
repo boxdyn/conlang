@@ -137,7 +137,13 @@ impl Interpret for (Op, &[At<Expr>]) {
             )),
             (Op::MetaInner, [_, expr]) => expr.interpret(env),
             (Op::MetaOuter, [_, expr]) => expr.interpret(env),
-            (Op::Try, [expr]) => expr.interpret(env),
+            (Op::Try, [expr]) => match expr.interpret(env)? {
+                // TODO: a more principled Try
+                v @ ConValue::TupleStruct(ty, ..) if let "Some" | "Ok" = ty.name() => Ok(v),
+                v @ ConValue::TupleStruct(ty, ..) if let "Err" = ty.name() => Err(Error::Return(v)),
+                v @ ConValue::TypeInfo(ty) if let "None" = ty.name() => Err(Error::Return(v)),
+                other => Ok(other),
+            },
             (Op::Index, [expr, idx]) => expr.interpret(env)?.index(&idx.interpret(env)?, env),
             (Op::Call, [expr, arg]) => {
                 let callee = expr.interpret(env)?;
@@ -471,7 +477,7 @@ impl Interpret for Bind<DefaultTypes> {
                 }))
             }
             (BindOp::Struct, Pat::Name(name), []) => {
-                let typeid = env.def_type(*name, Model::Unit(0).intern());
+                let typeid = env.def_type(*name, Model::Unit(Some(*name), 0).intern());
                 env.bind(*name, ConValue::TypeInfo(typeid));
                 Ok(ConValue::TypeInfo(typeid))
             }
@@ -665,7 +671,7 @@ fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)
         Pat::MetId(_) => todo!("Pat::MetId in struct binding")?,
         Pat::Name(name) => match env.get(*name) {
             Ok(ConValue::TypeInfo(t)) => (Some(*name), t.to_ref().clone()),
-            _ => (Some(*name), Model::Unit(0)),
+            _ => (Some(*name), Model::Unit(Some(*name), 0)),
         },
         Pat::Value(at) => match at.interpret(env)? {
             ConValue::TypeInfo(t) => (None, t.to_ref().clone()),
@@ -699,7 +705,7 @@ fn bind_enum(pat: &Pat, env: &mut Environment) -> IResult<ConValue> {
         for (idx, pat) in pats.iter().enumerate() {
             if let (Some(name), model) = bind_struct(pat.value(), &mut scope)? {
                 let model = match model {
-                    Model::Unit(_) => Model::Unit(idx),
+                    Model::Unit(name, _) => Model::Unit(name, idx),
                     _ => model,
                 };
                 let typeid = scope.def_type(name, model.intern());

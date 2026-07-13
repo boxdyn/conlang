@@ -123,7 +123,7 @@ impl ConValue {
 
     pub fn type_of(&self) -> Type {
         match self {
-            Self::Empty => Model::Unit(0).already_interned(),
+            Self::Empty => Model::Unit(None, 0).already_interned(),
             Self::Int(_) => Model::default_integer(),
             Self::Float(_) => Model::default_float(),
             Self::Bool(_) => Model::Bool.already_interned(),
@@ -153,7 +153,7 @@ impl ConValue {
                     Self::Float(v) => v as _,
                     Self::Bool(v) => v as _,
                     Self::Char(v) => v as _,
-                    Self::TypeInfo(Interned(Model::Unit(d), ..)) => *d as _,
+                    Self::TypeInfo(Interned(Model::Unit(_, d), ..)) => *d as _,
                     _ => return self,
                 };
                 if i == min || i == max {
@@ -170,7 +170,7 @@ impl ConValue {
                     Self::Int(v) => v as _,
                     Self::Bool(v) => v as i32 as _,
                     Self::Char(v) => v as i32 as _,
-                    Self::TypeInfo(Interned(Model::Unit(d), ..)) => *d as _,
+                    Self::TypeInfo(Interned(Model::Unit(_, d), ..)) => *d as _,
                     _ => return self,
                 };
                 ConValue::Float(f)
@@ -182,12 +182,13 @@ impl ConValue {
                     Self::Float(v) => v as _,
                     Self::Bool(v) => v as _,
                     Self::Char(v) => return self,
-                    Self::TypeInfo(Interned(Model::Unit(d), ..)) => *d as _,
+                    Self::TypeInfo(Interned(Model::Unit(_, d), ..)) => *d as _,
                     _ => return self,
                 };
                 ConValue::Char(char::from_u32(c).unwrap_or('�'))
             }
-            Model::Unit(_) => ConValue::Empty,
+            Model::Unit(None, _) => ConValue::Empty,
+            Model::Unit(_, _) => ConValue::TypeInfo(ty.already_interned()),
             Model::Str => ConValue::String(self.to_string()),
             _ => self,
         }

@@ -38,7 +38,7 @@ pub enum Model {
     /// The "never" type (no variants)
     Never,
     /// The unit type (no elements)
-    Unit(usize),
+    Unit(Option<Symbol>, usize),
     /// Reference to a value of [Type]
     Ref(Type),
     /// Slice of a list of [Type]
@@ -64,23 +64,33 @@ impl Display for Model {
             Self::Str => "str".fmt(f),
             Self::Any => "_".fmt(f),
             Self::Never => "!".fmt(f),
-            Self::Unit(_) => "()".fmt(f),
+            Self::Unit(Some(name), _) => name.fmt(f),
+            Self::Unit(None, _) => "()".fmt(f),
             Self::Ref(t) => write!(f, "&{t}"),
             Self::Slice(t) => write!(f, "[{t}]"),
             Self::Tuple(Some(name), items) => {
                 f.delimit(format_args!("{name}("), ")").list(items, ", ")
             }
             Self::Tuple(_name, items) => f.delimit("(", ")").list(items, ", "),
-            Self::Struct(Some(name), items, _exhaustive) => f
-                .delimit(format_args!("{name}{{"), " }")
+            Self::Struct(name, i, ex) if i.is_empty() => {
+                let name = name.map(Interned::to_ref).unwrap_or_default();
+                let ex = if *ex { "" } else { " .. " };
+                write!(f, "{name} {{{ex}}}",)
+            }
+            Self::Struct(Some(name), items, ex) => f
+                .delimit(format_args!("{name} {{"), if *ex { " }" } else { ", .. }" })
                 .list(items.iter().map(|(name, ty)| format!(" {name}: {ty}")), ","),
-            Self::Struct(name, items, _exhaustive) => f
-                .delimit("{", " }")
+            Self::Struct(None, items, exhaust) => f
+                .delimit("{", if *exhaust { " }" } else { ", .. }" })
                 .list(items.iter().map(|(name, ty)| format!(" {name}: {ty}")), ","),
             Self::Enum(name, items) => {
-                let mut f = f.delimit_indented(format_args!("enum {name}{{"), "\n}");
-                for (name, idx) in items {
-                    write!(f, "\n{name}: {idx},")?;
+                let mut f = f.delimit_indented(format_args!("enum {name} {{"), "\n}");
+                for (name, ty) in items {
+                    if (name.to_ref() == ty.name()) {
+                        write!(f, "\n{ty},")?;
+                    } else {
+                        write!(f, "\n{name}: {ty},")?;
+                    }
                 }
                 Ok(())
             }
@@ -137,7 +147,8 @@ impl Model {
             Self::Str => "str",
             Self::Any => "",
             Self::Never => "!",
-            Self::Unit(_) => "unit",
+            Self::Unit(Some(name), _) => name.to_ref(),
+            Self::Unit(None, _) => "unit",
             Self::Ref(interned) => "&...",
             Self::Slice(interned) => "[...]",
             Self::Tuple(Some(name), ..) => name.to_ref(),
@@ -180,7 +191,7 @@ impl Model {
         let any = Model::Any.intern();
         let types = [
             ("_", Model::Any),
-            ("unit", Model::Unit(0)),
+            ("unit", Model::Unit(None, 0)),
             ("bool", Model::Bool),
             ("char", Model::Char),
             ("str", Model::Str),
@@ -223,8 +234,8 @@ impl Model {
             (Model::Bool, "SIZE") => ConValue::Int(size_of::<bool>() as _),
             (Model::Char, "SIZE") => ConValue::Int(size_of::<char>() as _),
             (Model::Never, _) => Err(Error::NotDefined(attr))?,
-            (Model::Unit(_), "SIZE") => ConValue::Int(0),
-            (Model::Unit(_), _) => Err(Error::NotDefined(attr))?,
+            (Model::Unit(_, _), "SIZE") => ConValue::Int(0),
+            (Model::Unit(_, _), _) => Err(Error::NotDefined(attr))?,
             (Model::Tuple(_, items), "ARITY") => ConValue::Int(items.len() as _),
             (Model::Struct(_, items, _), "NAMES") => {
                 ConValue::Array(items.iter().map(|(n, _)| ConValue::Str(*n)).collect())
