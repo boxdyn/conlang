@@ -65,10 +65,18 @@ type Path = Vec<Symbol>;
 pub enum ScopeKind {
     /// An unordered global scope, or the direct child of such scope
     Module,
-    /// An ordered local scope which denotes a
+    /// An ordered local scope which is explicitly opened and closed
     Body,
     /// An ephemeral local scope, which is enclosed by a Body
     Let,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum ScopeTime {
+    Const,
+    Static,
+    #[default]
+    Runtime,
 }
 
 /// Tracks the information necessary to resolve a name
@@ -85,15 +93,20 @@ impl Scopes {
 
     pub fn root_scope(&mut self) -> ScopeIndex {
         if self.scopes.is_empty() {
-            self.add_scope(0, ScopeKind::Module)
+            self.add_scope(0, ScopeKind::Module, ScopeTime::Static)
         } else {
             0
         }
     }
 
-    pub fn add_scope(&mut self, parent: ScopeIndex, kind: ScopeKind) -> ScopeIndex {
+    pub fn add_scope(
+        &mut self,
+        parent: ScopeIndex,
+        kind: ScopeKind,
+        time: ScopeTime,
+    ) -> ScopeIndex {
         let new = self.scopes.len();
-        self.scopes.push(Scope::new(parent, kind));
+        self.scopes.push(Scope::new(parent, kind, time));
         println!("Entered scope {new}: {:?}", self.scopes.last().unwrap());
         if parent != new {
             self.scopes[parent].children.push(new);
@@ -102,10 +115,35 @@ impl Scopes {
     }
 }
 
+impl std::fmt::Display for Scopes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use std::fmt::Write;
+
+        fn pretty(f: &mut dyn Write, scopes: &[Scope], at: usize) -> std::fmt::Result {
+            use cl_ast::fmt::FmtAdapter;
+
+            let Scope { kind, time, parent, children } = &scopes[at];
+            write!(f, "{at}: {time:?} {kind:?}")?;
+            let [children @ .., last] = children.as_slice() else {
+                return Ok(());
+            };
+            for child in children {
+                write!(f, "\n├───")?;
+                pretty(&mut f.indent_with("│   "), scopes, *child)?;
+            }
+            write!(f, "\n╰───")?;
+            pretty(&mut f.indent_with("    "), scopes, *last)
+        }
+        pretty(f, &self.scopes, 0)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Scope {
     /// The kind of scope this is
     kind: ScopeKind,
+    /// When this scope is
+    time: ScopeTime,
     /// The index of this scope's parent
     parent: ScopeIndex,
     /// The indices of this scope's children
@@ -119,10 +157,11 @@ pub struct Scope {
 }
 
 impl Scope {
-    pub fn new(parent: ScopeIndex, kind: ScopeKind) -> Self {
+    pub fn new(parent: ScopeIndex, kind: ScopeKind, time: ScopeTime) -> Self {
         Self {
             parent,
             kind,
+            time,
             children: Default::default(),
             // bindings: Default::default(),
             // imports: Default::default(),
@@ -143,6 +182,18 @@ impl Scope {
     /// Whether this scope is [ScopeKind::Let], and can be discarded.
     pub fn is_let(&self) -> bool {
         self.kind == ScopeKind::Let
+    }
+
+    pub fn is_const(&self) -> bool {
+        self.time == ScopeTime::Const
+    }
+
+    pub fn is_static(&self) -> bool {
+        self.time == ScopeTime::Static
+    }
+
+    pub fn is_runtime(&self) -> bool {
+        self.time == ScopeTime::Runtime
     }
 }
 
@@ -179,9 +230,9 @@ impl<'t> Scoper<'t> {
     }
 
     /// Enters a new scope
-    pub fn enter(&mut self, scope_kind: ScopeKind) -> &mut Self {
+    pub fn enter(&mut self, scope_kind: ScopeKind, scope_time: ScopeTime) -> &mut Self {
         let parent = self.scope_index();
-        let idx = self.table.add_scope(parent, scope_kind);
+        let idx = self.table.add_scope(parent, scope_kind, scope_time);
         self.stack.push(idx);
         self
     }
@@ -229,10 +280,33 @@ impl<'t> Scoper<'t> {
         self
     }
 
-    pub fn block<R>(&mut self, scope_kind: ScopeKind, f: impl FnOnce(&mut Self) -> R) -> R {
-        let out = f(self.enter(scope_kind));
-        self.exit();
+    pub fn superblock<R>(
+        &mut self,
+        kind: ScopeKind,
+        time: ScopeTime,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let out = f(self.enter(kind, time));
+        if kind != ScopeKind::Let {
+            self.exit();
+        }
         out
+    }
+
+    pub fn block<R>(&mut self, kind: ScopeKind, f: impl FnOnce(&mut Self) -> R) -> R {
+        self.superblock(kind, self.get().time, f)
+    }
+
+    pub fn local_block<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        self.superblock(ScopeKind::Body, ScopeTime::Runtime, f)
+    }
+
+    pub fn const_block<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        self.superblock(ScopeKind::Body, ScopeTime::Const, f)
+    }
+
+    pub fn static_block<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        self.superblock(ScopeKind::Body, ScopeTime::Static, f)
     }
 }
 
@@ -281,10 +355,18 @@ impl<'t> fold::Fold<DefaultTypes, ScopedAst> for Scoper<'t> {
         let span = self.fold_annotation(span)?;
         let expr = match expr {
             // Expr::Bind(_) => todo!(),
-            Expr::Op(Op::Block, exprs) if self.get().kind != ScopeKind::Module => self
+            Expr::Op(Op::Block, exprs) if !self.get().is_mod() => self
                 .block(ScopeKind::Body, |block| {
                     Ok(Expr::Op(Op::Block, block.fold(exprs)?))
                 }),
+            Expr::Op(Op::Const, exprs) => Ok(Expr::Op(
+                Op::Const,
+                self.const_block(|block| block.fold(exprs))?,
+            )),
+            Expr::Op(Op::Static, exprs) => Ok(Expr::Op(
+                Op::Static,
+                self.static_block(|block| block.fold(exprs))?,
+            )),
             // Expr::Op(Op::If,)
             // Expr::Op(op, ats) => todo!(),
             other => other.children(self),
@@ -294,11 +376,13 @@ impl<'t> fold::Fold<DefaultTypes, ScopedAst> for Scoper<'t> {
 
     fn fold_bind(&mut self, bind: Bind<DefaultTypes>) -> Result<Bind<ScopedAst>, Self::Error> {
         let Bind(op, gens, pat, exprs) = bind;
-        if let BindOp::Let = op {
+        if op == BindOp::Let && !self.get().is_mod() {
             let exprs = self.fold(exprs)?;
-            self.enter(ScopeKind::Let);
-            let pat = self.fold(pat)?;
-            return Ok(Bind(BindOp::Let, gens, pat, exprs));
+            return self.block(ScopeKind::Let, |scope| {
+                let gens = scope.fold(gens)?;
+                let pat = scope.fold(pat)?;
+                Ok(Bind(BindOp::Let, gens, pat, exprs))
+            });
         }
 
         // let exprs = match exprs.into_array().map(|a| *a) {
@@ -306,36 +390,31 @@ impl<'t> fold::Fold<DefaultTypes, ScopedAst> for Scoper<'t> {
         //     Err(exprs) => exprs.visit_in(self)?,
         // };
 
-        // TODO: clean this up; maybe make Pat less Op-focused.
-        let pat = if let At(Pat::Op(PatOp::TypePrefixed, mut ats), span) = pat {
-            assert_eq!(ats.len(), 2);
-            let ty = self.block(ScopeKind::Module, |block| {
-                ats.pop()
-                    .expect("TypePrefixed should contain 2 patterns")
-                    .fold_in(block)
-            })?;
-            let pfx = (ats.pop())
-                .expect("TypePrefixed should contain 2 patterns")
-                .fold_in(self)?;
-            At(
-                Pat::Op(PatOp::TypePrefixed, vec![pfx, ty]),
-                self.fold_annotation(span)?,
-            )
-        } else {
-            pat.fold_in(self)?
+        let kind = match op {
+            BindOp::Let => ScopeKind::Let,
+            BindOp::For | BindOp::Fn => ScopeKind::Body,
+            _ => ScopeKind::Module,
         };
-        let exprs = if !exprs.is_empty() {
-            self.block(
-                match op {
-                    BindOp::For | BindOp::Fn => ScopeKind::Body,
-                    _ => ScopeKind::Module,
-                },
-                |block| exprs.fold_in(block),
-            )?
-        } else {
-            vec![]
+
+        let time = match (op, self.get().time) {
+            (BindOp::Fn, ScopeTime::Const) => ScopeTime::Const,
+            // non-const functions have ScopeTime::Runtime
+            (BindOp::Fn, _) => ScopeTime::Runtime,
+            // all other things inherit their ScopeTime from parent
+            (_, time) => time,
         };
-        Ok(Bind(op, gens, pat, exprs))
+
+        self.block(kind, |item| {
+            let gens = item.fold(gens)?;
+            let pat = item.fold(pat)?;
+            let exprs = if !exprs.is_empty() {
+                // TODO: `for Pat in Expr Expr else Expr`
+                item.superblock(kind, time, |body| body.fold(exprs))?
+            } else {
+                vec![]
+            };
+            Ok(Bind(op, gens, pat, exprs))
+        })
     }
 
     fn fold_pat(&mut self, pat: Pat<DefaultTypes>) -> Result<Pat<ScopedAst>, Self::Error> {
@@ -344,14 +423,10 @@ impl<'t> fold::Fold<DefaultTypes, ScopedAst> for Scoper<'t> {
             Pat::Op(PatOp::TypePrefixed, mut ats) if !self.get().is_let() => {
                 println!("{ats:?}");
                 assert_eq!(ats.len(), 2);
-                let ty = self.block(ScopeKind::Module, |block| {
-                    ats.pop()
-                        .expect("TypePrefixed should contain 2 patterns")
-                        .fold_in(block)
-                })?;
-                let pfx = (ats.pop())
-                    .expect("TypePrefixed should contain 2 patterns")
-                    .fold_in(self)?;
+                let ty = ats.pop().expect("TypePrefixed should contain 2 patterns");
+                let pfx = ats.pop().expect("TypePrefixed should contain 2 patterns");
+                let pfx = pfx.fold_in(self)?;
+                let ty = self.block(ScopeKind::Let, |block| ty.fold_in(block))?;
                 Ok(Pat::Op(PatOp::TypePrefixed, vec![pfx, ty]))
             }
             _ => pat.children(self),
@@ -373,7 +448,7 @@ impl<'t> fold::Fold<DefaultTypes, ScopedAst> for Scoper<'t> {
         // Each match arm is wrapped in an implicit {block},
         self.block(ScopeKind::Body, |outer| {
             // but binds with an implicit `let`, since that makes `fold_pat` work nicer
-            arm.children(outer.enter(ScopeKind::Let))
+            outer.block(ScopeKind::Let, |inner| arm.children(inner))
         })
     }
 }

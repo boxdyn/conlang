@@ -139,7 +139,8 @@ fn live_desugar() -> Result<(), RlError> {
         let mut scopes = Scopes::new();
         let code = Scoper::new(&mut scopes).fold(code).unwrap();
         println!("Scoper\n{C_LISTING}{code:#?}\x1b[0m");
-        println!("{scopes:#?}");
+
+        println!("Scopes:\n{code}\n{scopes}");
 
         let code = WhileElseDesugar.fold_at_expr(code).unwrap();
         println!("WhileElseDesugar\n{C_LISTING}{code}\x1b[0m");
