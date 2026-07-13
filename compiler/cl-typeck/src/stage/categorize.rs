@@ -4,8 +4,7 @@ use std::str::FromStr;
 
 use crate::{
     entry::EntryMut,
-    handle::Handle,
-    table::{NodeKind, Table},
+    table::{NodeKind, Scope, Table},
     type_expression::{Error as TypeEval, TypeExpression},
     type_kind::{Adt, Primitive, TypeKind},
 };
@@ -17,7 +16,7 @@ use cl_ast::{
 use cl_structures::intern::interned::Interned;
 
 /// Ensures a type entry exists for the provided handle in the table
-pub fn categorize(table: &mut Table, node: Handle) -> CatResult<()> {
+pub fn categorize(table: &mut Table, node: Scope) -> CatResult<()> {
     let Table { metas, lang_items, types, .. } = table;
     if let Some(meta) = metas.get(&node) {
         for meta in meta {
@@ -38,7 +37,7 @@ pub fn categorize(table: &mut Table, node: Handle) -> CatResult<()> {
     Ok(())
 }
 
-fn parent(table: &Table, node: Handle) -> Handle {
+fn parent(table: &Table, node: Scope) -> Scope {
     table.parent(node).copied().unwrap_or(node)
 }
 

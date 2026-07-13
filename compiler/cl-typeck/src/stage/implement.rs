@@ -1,6 +1,6 @@
-use crate::{handle::Handle, table::Table};
+use crate::table::{Scope, Table};
 
-pub fn implement(table: &mut Table) -> Vec<Handle> {
+pub fn implement(table: &mut Table) -> Vec<Scope> {
     let pending = std::mem::take(&mut table.pending_impls);
     let mut errors = vec![];
     for node in pending {
@@ -11,7 +11,7 @@ pub fn implement(table: &mut Table) -> Vec<Handle> {
     errors
 }
 
-pub fn impl_one(table: &mut Table, node: Handle) -> Result<(), Handle> {
+pub fn impl_one(table: &mut Table, node: Scope) -> Result<(), Scope> {
     let Some(target) = table.impl_target(node) else {
         Err(node)?
     };

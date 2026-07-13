@@ -3,12 +3,12 @@
 //! Each syntax structure must describe how to unify its types.
 
 use super::{engine::InferenceEngine, error::InferenceError};
-use crate::{handle::Handle, type_expression::TypeExpression};
+use crate::{table::Scope, type_expression::TypeExpression};
 use cl_ast::{types::Literal, *};
 
 // TODO: "Infer" the types of Items
 
-type IfResult = Result<Handle, InferenceError>;
+type IfResult = Result<Scope, InferenceError>;
 
 pub trait Inference {
     /// Performs type inference
@@ -288,7 +288,7 @@ fn infer_pat_op(op: PatOp, pats: &[At<Pat>], e: &mut InferenceEngine<'_, '_, '_>
 impl Inference for Make {
     fn infer(&self, _e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
         todo!("infer {self}")
-// Look up struct definition in scope
+        // Look up struct definition in scope
         // generalize definition
         // unify members by name?
     }

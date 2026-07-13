@@ -206,7 +206,7 @@ fn infer_expression(prj: &mut Table) -> Result<(), RlError> {
 fn get_by_id(prj: &mut Table) -> Result<(), RlError> {
     use cl_parser::Parse;
     use cl_structures::index_map::MapIndex;
-    use cl_typeck::handle::Handle;
+    use cl_typeck::table::Scope;
     read_and(C_BYID, "id> ", "? > ", |line| {
         if line.trim().is_empty() {
             return Ok(Response::Break);
@@ -220,7 +220,7 @@ fn get_by_id(prj: &mut Table) -> Result<(), RlError> {
             .parse::<cl_ast::types::Path>(())
             .unwrap_or_else(|_| Path::from(""));
 
-        let handle = Handle::from_usize(def_id).to_entry(prj);
+        let handle = Scope::from_usize(def_id).to_entry(prj);
 
         print!("  > {{{C_LISTING}{handle}\x1b[0m}}");
         if !path.parts.is_empty() {

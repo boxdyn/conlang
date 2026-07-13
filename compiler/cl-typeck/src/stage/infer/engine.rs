@@ -3,9 +3,9 @@ use std::collections::HashSet;
 use super::error::InferenceError;
 use crate::{
     entry::Entry,
-    handle::Handle,
     // source::Source,
     stage::infer::inference::Inference,
+    table::Scope,
     table::{NodeKind, Table},
     type_expression::TypeExpression,
     type_kind::{Adt, Primitive, TypeKind},
@@ -31,12 +31,12 @@ use cl_ast::types::Symbol as Sym;
       - for<T, R> type T -> R           // on a per-case basis!
 */
 
-type HandleSet<'h> = Option<&'h mut Option<Handle>>;
+type HandleSet<'h> = Option<&'h mut Option<Scope>>;
 
 pub struct InferenceEngine<'table, 'b, 'r> {
     pub(super) table: &'table mut Table,
     /// The current working node
-    pub(crate) at: Handle,
+    pub(crate) at: Scope,
     /// The current breakset
     pub(crate) bset: HandleSet<'b>,
     /// The current returnset
@@ -45,12 +45,12 @@ pub struct InferenceEngine<'table, 'b, 'r> {
 
 impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
     /// Infers the type of an object by deferring to [`Inference::infer()`]
-    pub fn infer(&mut self, inferrable: &impl Inference) -> Result<Handle, InferenceError> {
+    pub fn infer(&mut self, inferrable: &impl Inference) -> Result<Scope, InferenceError> {
         inferrable.infer(self)
     }
 
     /// Constructs a new [`InferenceEngine`], scoped around a [`Handle`] in a [`Table`].
-    pub fn new(table: &'table mut Table, at: Handle) -> Self {
+    pub fn new(table: &'table mut Table, at: Scope) -> Self {
         Self { at, table, bset: Default::default(), rset: Default::default() }
     }
 
@@ -112,25 +112,19 @@ impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
     // }
 
     /// Constructs a new InferenceEngine with the
-    pub fn at(&mut self, at: Handle) -> InferenceEngine<'_, '_, '_> {
+    pub fn at(&mut self, at: Scope) -> InferenceEngine<'_, '_, '_> {
         InferenceEngine { at, ..self.scoped() }
     }
 
-    pub fn open_bset<'ob>(
-        &mut self,
-        bset: &'ob mut Option<Handle>,
-    ) -> InferenceEngine<'_, 'ob, '_> {
+    pub fn open_bset<'ob>(&mut self, bset: &'ob mut Option<Scope>) -> InferenceEngine<'_, 'ob, '_> {
         InferenceEngine { bset: Some(bset), ..self.scoped() }
     }
 
-    pub fn open_rset<'or>(
-        &mut self,
-        rset: &'or mut Option<Handle>,
-    ) -> InferenceEngine<'_, '_, 'or> {
+    pub fn open_rset<'or>(&mut self, rset: &'or mut Option<Scope>) -> InferenceEngine<'_, '_, 'or> {
         InferenceEngine { rset: Some(rset), ..self.scoped() }
     }
 
-    pub fn bset(&mut self, ty: Handle) -> Result<(), InferenceError> {
+    pub fn bset(&mut self, ty: Scope) -> Result<(), InferenceError> {
         match self.bset.as_mut() {
             Some(&mut &mut Some(bset)) => self.unify(ty, bset),
             Some(none) => {
@@ -141,7 +135,7 @@ impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
         }
     }
 
-    pub fn rset(&mut self, ty: Handle) -> Result<(), InferenceError> {
+    pub fn rset(&mut self, ty: Scope) -> Result<(), InferenceError> {
         match self.rset.as_mut() {
             Some(&mut &mut Some(rset)) => self.unify(ty, rset),
             Some(none) => {
@@ -153,7 +147,7 @@ impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
     }
 
     /// Constructs an [Entry] out of a [Handle], for ease of use
-    pub fn entry(&self, of: Handle) -> Entry<'_> {
+    pub fn entry(&self, of: Scope) -> Entry<'_> {
         self.table.entry(of)
     }
 
@@ -165,28 +159,28 @@ impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
     }
 
     /// Creates a new unbound [type variable](Handle)
-    pub fn new_var(&mut self) -> Handle {
+    pub fn new_var(&mut self) -> Scope {
         self.table.type_variable()
     }
 
-    pub fn new_inferred(&mut self) -> Handle {
+    pub fn new_inferred(&mut self) -> Scope {
         self.table.inferred_type()
     }
 
     /// Creates a variable that is a new instance of another [Type](Handle)
-    pub fn new_inst(&mut self, of: Handle) -> Handle {
+    pub fn new_inst(&mut self, of: Scope) -> Scope {
         self.table.anon_type(TypeKind::Instance(of))
     }
 
     /// Gets the defining usage of a type without collapsing intermediates
-    pub fn def_usage(&self, to: Handle) -> Handle {
+    pub fn def_usage(&self, to: Scope) -> Scope {
         match self.table.entry(to).ty() {
             Some(TypeKind::Instance(id)) => self.def_usage(*id),
             _ => to,
         }
     }
 
-    pub fn get_fn(&self, at: Handle, name: Sym) -> Option<(Handle, Handle)> {
+    pub fn get_fn(&self, at: Scope, name: Sym) -> Option<(Scope, Scope)> {
         if let Some(&TypeKind::FnSig { args, rety }) =
             self.entry(at).nav(&[name]).as_ref().and_then(Entry::ty)
         {
@@ -197,61 +191,61 @@ impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
     }
 
     /// Creates a new type variable representing a tuple
-    pub fn new_tuple(&mut self, tys: Vec<Handle>) -> Handle {
+    pub fn new_tuple(&mut self, tys: Vec<Scope>) -> Scope {
         self.table.anon_type(TypeKind::Tuple(tys))
     }
 
     /// Creates a new type variable representing an array
-    pub fn new_array(&mut self, ty: Handle, size: usize) -> Handle {
+    pub fn new_array(&mut self, ty: Scope, size: usize) -> Scope {
         self.table.anon_type(TypeKind::Array(ty, size))
     }
 
     /// Creates a new type variable representing a slice of contiguous memory
-    pub fn new_slice(&mut self, ty: Handle) -> Handle {
+    pub fn new_slice(&mut self, ty: Scope) -> Scope {
         self.table.anon_type(TypeKind::Slice(ty))
     }
 
     /// Creates a new reference to a type
-    pub fn new_ref(&mut self, to: Handle) -> Handle {
+    pub fn new_ref(&mut self, to: Scope) -> Scope {
         self.table.anon_type(TypeKind::Ref(to))
     }
 
     /// All primitives must be predefined in the standard library.
-    pub fn primitive(&self, name: &'static str) -> Handle {
+    pub fn primitive(&self, name: &'static str) -> Scope {
         // TODO: keep a map of primitives in the table root
         self.table.get_lang_item(name)
     }
 
-    pub fn never(&mut self) -> Handle {
+    pub fn never(&mut self) -> Scope {
         self.table.get_lang_item("never")
     }
 
-    pub fn unit(&mut self) -> Handle {
+    pub fn unit(&mut self) -> Scope {
         self.table.anon_type(TypeKind::Tuple(vec![]))
     }
 
-    pub fn bool(&self) -> Handle {
+    pub fn bool(&self) -> Scope {
         self.primitive("bool")
     }
 
-    pub fn char(&self) -> Handle {
+    pub fn char(&self) -> Scope {
         self.primitive("char")
     }
 
-    pub fn str(&self) -> Handle {
+    pub fn str(&self) -> Scope {
         self.primitive("str")
     }
 
-    pub fn u32(&self) -> Handle {
+    pub fn u32(&self) -> Scope {
         self.primitive("u32")
     }
 
-    pub fn usize(&self) -> Handle {
+    pub fn usize(&self) -> Scope {
         self.primitive("usize")
     }
 
     /// Creates a new inferred-integer literal
-    pub fn integer_literal(&mut self) -> Handle {
+    pub fn integer_literal(&mut self) -> Scope {
         let h = self.table.new_entry(self.at, NodeKind::Temporary);
         self.table
             .set_ty(h, TypeKind::Primitive(Primitive::Integer));
@@ -259,7 +253,7 @@ impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
     }
 
     /// Creates a new inferred-float literal
-    pub fn float_literal(&mut self) -> Handle {
+    pub fn float_literal(&mut self) -> Scope {
         let h = self.table.new_entry(self.at, NodeKind::Temporary);
         self.table.set_ty(h, TypeKind::Primitive(Primitive::Float));
         h
@@ -282,7 +276,7 @@ impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
     /// Sets this type variable `to` be an instance `of` the other
     /// # Panics
     /// Panics if `to` is not a type variable
-    pub fn set_instance(&mut self, to: Handle, of: Handle) {
+    pub fn set_instance(&mut self, to: Scope, of: Scope) {
         let mut e = self.table.entry_mut(to);
         match e.as_ref().ty() {
             Some(TypeKind::Inferred) => {
@@ -300,8 +294,8 @@ impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
     }
 
     /// Checks whether there are any unbound type variables in this type
-    pub fn is_generic(&self, ty: Handle) -> bool {
-        fn is_generic_rec(this: &InferenceEngine, ty: Handle, seen: &mut HashSet<Handle>) -> bool {
+    pub fn is_generic(&self, ty: Scope) -> bool {
+        fn is_generic_rec(this: &InferenceEngine, ty: Scope, seen: &mut HashSet<Scope>) -> bool {
             if !seen.insert(ty) {
                 return false;
             }
@@ -344,7 +338,7 @@ impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
     /// Makes a deep copy of a type expression.
     ///
     /// Bound variables are shared, unbound variables are duplicated.
-    pub fn deep_clone(&mut self, ty: Handle) -> Handle {
+    pub fn deep_clone(&mut self, ty: Scope) -> Scope {
         if !self.is_generic(ty) {
             return ty;
         };
@@ -419,7 +413,7 @@ impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
 
     /// Returns the defining instance of `self`,
     /// collapsing type instances along the way.
-    pub fn prune(&mut self, ty: Handle) -> Handle {
+    pub fn prune(&mut self, ty: Scope) -> Scope {
         if let Some(TypeKind::Instance(new_ty)) = self.table.ty(ty) {
             let new_ty = self.prune(*new_ty);
             self.table.set_ty(ty, TypeKind::Instance(new_ty));
@@ -434,7 +428,7 @@ impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
     /// # Note:
     /// - Since the test uses strict equality, `self` should be pruned prior to testing.
     /// - The test is *not guaranteed to terminate* for recursive types.
-    pub fn occurs_in(&self, this: Handle, other: Handle) -> bool {
+    pub fn occurs_in(&self, this: Scope, other: Scope) -> bool {
         if this == other {
             return true;
         }
@@ -472,7 +466,7 @@ impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
     }
 
     /// Unifies two types
-    pub fn unify(&mut self, this: Handle, other: Handle) -> Result<(), InferenceError> {
+    pub fn unify(&mut self, this: Scope, other: Scope) -> Result<(), InferenceError> {
         let (ah, bh) = (self.prune(this), self.prune(other));
         if ah == bh {
             return Ok(());

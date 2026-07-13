@@ -14,9 +14,8 @@ use cl_ast::{
 };
 
 use crate::{
-    handle::Handle,
     stage::categorize as cat,
-    table::{NodeKind, Table},
+    table::{NodeKind, Scope, Table},
     type_expression::{self as tex, TypeExpression},
     type_kind::TypeKind,
 };
@@ -24,7 +23,7 @@ use crate::{
 mod debug;
 mod display;
 
-impl Handle {
+impl Scope {
     /// Constructs an [Entry] from this handle and a [Table] ref
     pub const fn to_entry<'t>(self, table: &'t Table) -> Entry<'t> {
         Entry { id: self, table }
@@ -38,20 +37,20 @@ impl Handle {
 
 /// An immutable, object-like entry in a [`Table`].
 ///
-/// [`Entry`] wraps a [`Table`] and a [`Handle`], and provides an ergonomic interface
-/// for querying information about the state of the node at that [`Handle`].
+/// [`Entry`] wraps a [`Table`] and a [`Scope`], and provides an ergonomic interface
+/// for querying information about the state of the node at that [`Scope`].
 ///
 /// Its mutable counterpart, [`EntryMut`], provides a similar interface for *modifying*
 /// the state of the [`Table`].
 pub struct Entry<'t> {
     table: &'t Table,
-    id: Handle,
+    id: Scope,
 }
 
 macro_rules! impl_entry_ {
     () => {
-        /// Gets the [Handle] associated with this Entry
-        pub const fn id(&self) -> Handle {
+        /// Gets the [Scope] associated with this Entry
+        pub const fn id(&self) -> Scope {
             self.id
         }
 
@@ -71,7 +70,7 @@ macro_rules! impl_entry_ {
         }
 
         /// Gets the children of this node
-        pub fn children(&self) -> Option<&SymMap<Handle>> {
+        pub fn children(&self) -> Option<&SymMap<Scope>> {
             self.table.children(self.id)
         }
 
@@ -99,14 +98,14 @@ macro_rules! impl_entry_ {
 
 impl<'t> Entry<'t> {
     /// Constructs a new [`Entry`] from shared [`&Table`](Table) and a [`Handle`].
-    pub const fn new(table: &'t Table, id: Handle) -> Self {
+    pub const fn new(table: &'t Table, id: Scope) -> Self {
         Self { table, id }
     }
 
     impl_entry_!();
 
     /// Constructs another [Entry] with the given [Handle]
-    pub const fn with_id(&self, id: Handle) -> Entry<'t> {
+    pub const fn with_id(&self, id: Scope) -> Entry<'t> {
         Self { table: self.table, id }
     }
 
@@ -146,12 +145,12 @@ impl<'t> Entry<'t> {
 #[derive(Debug)]
 pub struct EntryMut<'t> {
     table: &'t mut Table,
-    id: Handle,
+    id: Scope,
 }
 
 impl<'t> EntryMut<'t> {
     /// Constructs a new [`EntryMut`] from a [`&mut Table`](Table) and a [`Handle`].
-    pub fn new(table: &'t mut Table, id: Handle) -> Self {
+    pub fn new(table: &'t mut Table, id: Scope) -> Self {
         Self { table, id }
     }
 
@@ -184,13 +183,19 @@ impl<'t> EntryMut<'t> {
     }
 
     /// Constructs a new Handle with the provided parent [Handle]
-    pub fn with_id(&mut self, parent: Handle) -> EntryMut<'_> {
+    pub fn with_id(&mut self, parent: Scope) -> EntryMut<'_> {
         EntryMut { table: self.table, id: parent }
     }
 
     /// [Navigates](Table::nav) to another [`EntryMut`], reborrowing the table.
     pub fn nav(&mut self, path: &[Sym]) -> Option<EntryMut<'_>> {
         Some(EntryMut { id: self.table.nav(self.id, path)?, table: self.table })
+    }
+
+    /// Gets the [parent](Table::parent) of this [Entry]
+    pub fn parent(&mut self) -> Option<EntryMut<'_>> {
+        let Self { table, id } = self;
+        Some(EntryMut { id: *table.parent(*id)?, table })
     }
 
     /// Constructs a new node with the given [NodeKind], and returns its [EntryMut].
@@ -202,7 +207,7 @@ impl<'t> EntryMut<'t> {
     /// Adds an existing node as a `child` with the given `name`.
     ///
     /// If that name is already taken, its previous [Handle] is returned.
-    pub fn add_child(&mut self, name: Sym, child: Handle) -> Option<Handle> {
+    pub fn add_child(&mut self, name: Sym, child: Scope) -> Option<Scope> {
         self.table.add_child(self.id, name, child)
     }
 
@@ -241,7 +246,7 @@ impl<'t> EntryMut<'t> {
     }
 
     /// Sets the [`impl` target](Table::impl_target) to [`target`](Handle)
-    pub fn set_impl_target(&mut self, target: Handle) -> Option<Handle> {
+    pub fn set_impl_target(&mut self, target: Scope) -> Option<Scope> {
         self.table.set_impl_target(self.id, target)
     }
 

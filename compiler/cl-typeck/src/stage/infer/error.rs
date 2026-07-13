@@ -1,13 +1,13 @@
-use crate::handle::Handle;
+use crate::table::Scope;
 use core::fmt;
 
 /// An error produced during type inference
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InferenceError {
     AnnotationEval(crate::type_expression::Error),
-    FieldCount(Handle, usize, usize),
-    Mismatch(Handle, Handle),
-    Recursive(Handle, Handle),
+    FieldCount(Scope, usize, usize),
+    Mismatch(Scope, Scope),
+    Recursive(Scope, Scope),
     NoBreak,
     NoReturn,
 }

@@ -32,8 +32,6 @@ pub mod consteval;
 
 pub mod table;
 
-pub mod handle;
-
 pub mod entry;
 
 pub mod type_kind;

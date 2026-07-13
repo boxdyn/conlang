@@ -1,6 +1,6 @@
 //! A [TypeKind] is a node in the [Table](crate::table::Table)'s type graph
 
-use crate::handle::Handle;
+use crate::table::Scope;
 use cl_ast::types::Symbol;
 use std::{fmt::Debug, str::FromStr};
 
@@ -15,23 +15,23 @@ pub enum TypeKind {
     /// A type variable, to be monomorphized
     Variable,
     /// An alias for an already-defined type
-    Instance(Handle),
+    Instance(Scope),
     /// A primitive type, built-in to the compiler
     Primitive(Primitive),
     /// A user-defined aromatic data type
     Adt(Adt),
     /// A reference to an already-defined type: &T
-    Ref(Handle),
+    Ref(Scope),
     /// A raw pointer to an already-defined type: &T
-    Ptr(Handle),
+    Ptr(Scope),
     /// A contiguous view of dynamically sized memory
-    Slice(Handle),
+    Slice(Scope),
     /// A contiguous view of statically sized memory
-    Array(Handle, usize),
+    Array(Scope, usize),
     /// A tuple of existing types
-    Tuple(Vec<Handle>),
+    Tuple(Vec<Scope>),
     /// A function which accepts multiple inputs and produces an output
-    FnSig { args: Handle, rety: Handle },
+    FnSig { args: Scope, rety: Scope },
     /// An untyped module
     Module,
 }
@@ -46,18 +46,18 @@ pub enum Visibility {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Adt {
     /// A union-like enum type
-    Enum(Vec<(Symbol, Handle)>),
+    Enum(Vec<(Symbol, Scope)>),
 
     /// A structural product type with named members
-    Struct(Vec<(Symbol, Visibility, Handle)>),
+    Struct(Vec<(Symbol, Visibility, Scope)>),
     /// A structural product type with unnamed members
-    TupleStruct(Vec<(Visibility, Handle)>),
+    TupleStruct(Vec<(Visibility, Scope)>),
     /// A structural product type of neither named nor unnamed members
     UnitStruct,
 
     /// A choose your own undefined behavior type
     /// TODO: should unions be a language feature?
-    Union(Vec<(Symbol, Handle)>),
+    Union(Vec<(Symbol, Scope)>),
 }
 
 /// The set of compiler-intrinsic types.
