@@ -62,8 +62,7 @@ impl TypeExpression for Pat {
             Pat::Op(PatOp::RangeEx, _pats) => todo!(),
             Pat::Op(PatOp::RangeIn, _pats) => todo!(),
             Pat::Op(PatOp::Record, pats) => {
-                let tys = pats.evaluate(table, node)?;
-                todo!("Anonymous record destructuring {tys:?} in {self}")
+                                todo!("Anonymous record destructuring {pats:?} in {self}")
             }
             Pat::Op(PatOp::Tuple, pats) => {
                 let tys = pats.evaluate(table, node)?;
@@ -73,9 +72,10 @@ impl TypeExpression for Pat {
             Pat::Op(PatOp::ArRep, pats) if let [pat, rep] = &pats[..] => {
                 let ty = pat.evaluate(table, node)?;
                 let rep = match rep.value() {
-                    Self::Value(at) => at
+                    Self::Value(expr) => expr
                         .const_eval()
-                        .ok_or_else(|| Error::ConstEval { parent: node, eval: at.clone() }),
+.and_then(|v| v.uint())
+                        .ok_or_else(|| Error::ConstEval { parent: node, eval: expr.clone() }),
                     _ => todo!("{rep} in array-repetition patterns"),
                 }?;
                 Ok(table.anon_type(TypeKind::Array(ty, rep as _)))

@@ -1,45 +1,144 @@
-use std::ops;
+use std::{cmp, ops};
 
 use cl_ast::{AstNode, At, Expr, Op, types::Literal};
 
+#[derive(Clone, Copy, Debug, PartialOrd, Ord, Hash)]
+pub enum Value {
+    Int(i128),
+    UInt(u128),
+    Bool(bool),
+}
+
+impl Value {
+    pub fn int(&self) -> Option<i128> {
+        match self {
+            Self::UInt(i) => Some(*i as i128),
+            Self::Int(i) => Some(*i),
+            _ => None,
+        }
+    }
+    pub fn uint(&self) -> Option<u128> {
+        match self {
+            Self::UInt(i) => Some(*i),
+            Self::Int(i) => Some(*i as u128),
+            _ => None,
+        }
+    }
+    pub fn bool(&self) -> Option<bool> {
+        match self {
+            Self::Int(i) => Some(*i != 0),
+            Self::UInt(i) => Some(*i != 0),
+            Self::Bool(b) => Some(*b),
+        }
+    }
+}
+
+impl From<i128> for Value {
+    fn from(value: i128) -> Self {
+        Self::Int(value)
+    }
+}
+impl From<u128> for Value {
+    fn from(value: u128) -> Self {
+        Self::UInt(value)
+    }
+}
+impl From<bool> for Value {
+    fn from(value: bool) -> Self {
+        Self::Bool(value)
+    }
+}
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Int(v) => v.fmt(f),
+            Value::UInt(v) => v.fmt(f),
+            Value::Bool(v) => v.fmt(f),
+        }
+    }
+}
+impl cmp::PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
+            (Self::Int(_) | Self::UInt(_), _) => self.uint() == other.uint(),
+            _ => false,
+        }
+    }
+}
+impl cmp::Eq for Value {}
+impl ops::Neg for Value {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            Value::Int(v) => Value::Int(-v),
+            Value::UInt(v) => Value::UInt(!v + 1),
+            Value::Bool(v) => Value::Bool(!v),
+        }
+    }
+}
+impl ops::Not for Value {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        match self {
+            Value::Int(v) => Value::Int(!v),
+            Value::UInt(v) => Value::UInt(!v),
+            Value::Bool(v) => Value::Bool(!v),
+        }
+    }
+}
+
 pub trait ConstEval {
-    fn const_eval(&self) -> Option<i128> {
+    fn const_eval(&self) -> Option<Value> {
         None
     }
 }
 
 impl<T: ConstEval + AstNode> ConstEval for At<T> {
-    fn const_eval(&self) -> Option<i128> {
+    fn const_eval(&self) -> Option<Value> {
         self.0.const_eval()
     }
 }
 
-fn const_eval_bin<T: ConstEval>(op: Op, exprs: &[T]) -> Option<i128> {
+fn const_eval_bin<T: ConstEval>(op: Op, exprs: &[T]) -> Option<Value> {
+    use Value::*;
     let [lhs, rhs] = exprs else { return None };
     let (lhs, rhs) = (lhs.const_eval()?, rhs.const_eval()?);
-    match op {
-        Op::Mul => Some(lhs * rhs),
-        Op::Div => Some(lhs / rhs),
-        Op::Rem => Some(lhs % rhs),
-        Op::Add => Some(lhs + rhs),
-        Op::Sub => Some(lhs - rhs),
-        Op::Shl => Some(lhs << rhs as u32),
-        Op::Shr => Some(lhs >> rhs as u32),
-        Op::And => Some(lhs & rhs),
-        Op::Xor => Some(lhs ^ rhs),
-        Op::Or => Some(lhs | rhs),
-        Op::Lt => None,
-        Op::Leq => None,
-        Op::Eq => None,
-        Op::Neq => None,
-        Op::Geq => None,
-        Op::Gt => None,
+    match (op, lhs, rhs) {
+        (Op::Mul, Int(lhs), Int(rhs)) => Some(Int(lhs.wrapping_mul(rhs))),
+        (Op::Mul, UInt(lhs), UInt(rhs)) => Some(UInt(lhs.wrapping_mul(rhs))),
+        (Op::Div, Int(lhs), Int(rhs)) => Some(Int(lhs.wrapping_div(rhs))),
+        (Op::Div, UInt(lhs), UInt(rhs)) => Some(UInt(lhs.wrapping_div(rhs))),
+        (Op::Rem, Int(lhs), Int(rhs)) => Some(Int(lhs.wrapping_rem(rhs))),
+        (Op::Rem, UInt(lhs), UInt(rhs)) => Some(UInt(lhs.wrapping_rem(rhs))),
+        (Op::Add, Int(lhs), Int(rhs)) => Some(Int(lhs.wrapping_add(rhs))),
+        (Op::Add, UInt(lhs), UInt(rhs)) => Some(UInt(lhs.wrapping_add(rhs))),
+        (Op::Sub, Int(lhs), Int(rhs)) => Some(Int(lhs.wrapping_sub(rhs))),
+        (Op::Sub, UInt(lhs), UInt(rhs)) => Some(UInt(lhs.wrapping_sub(rhs))),
+        (Op::Shl, Int(lhs), Int(rhs)) => Some(Int(lhs.wrapping_shl(rhs as u32))),
+        (Op::Shl, UInt(lhs), UInt(rhs)) => Some(UInt(lhs.wrapping_shl(rhs as u32))),
+        (Op::Shr, Int(lhs), Int(rhs)) => Some(Int(lhs.wrapping_shr(rhs as u32))),
+        (Op::Shr, UInt(lhs), UInt(rhs)) => Some(UInt(lhs.wrapping_shr(rhs as u32))),
+        (Op::And, Int(lhs), rhs) => Some(Int(lhs & rhs.int()?)),
+        (Op::And, UInt(lhs), rhs) => Some(UInt(lhs & rhs.uint()?)),
+        (Op::Xor, Int(lhs), rhs) => Some(Int(lhs ^ rhs.int()?)),
+        (Op::Xor, UInt(lhs), rhs) => Some(UInt(lhs ^ rhs.uint()?)),
+        (Op::Or, Int(lhs), rhs) => Some(Int(lhs | rhs.int()?)),
+        (Op::Or, UInt(lhs), rhs) => Some(UInt(lhs | rhs.uint()?)),
+        (Op::Lt, _, _) => None,
+        (Op::Leq, _, _) => None,
+        (Op::Eq, _, _) => Some(Bool(lhs == rhs)),
+        (Op::Neq, _, _) => Some(Bool(lhs != rhs)),
+        (Op::Geq, _, _) => None,
+        (Op::Gt, _, _) => None,
         _ => unreachable!("eval_bin called with enby op {op} ({lhs}, {rhs})"),
     }
 }
 
 impl ConstEval for Expr {
-    fn const_eval(&self) -> Option<i128> {
+    fn const_eval(&self) -> Option<Value> {
         match self {
             Self::Omitted => None,
             Self::Id(_) => todo!("Consteval paths"),
@@ -52,7 +151,7 @@ impl ConstEval for Expr {
             Self::Label(_) => None,
             Self::Op(op, ats) => match op {
                 Op::Do => ats.last().and_then(At::const_eval),
-                Op::As => ats.first().and_then(At::const_eval),
+                Op::As => todo!("Consteval {op}"),
                 Op::Block => ats.first().and_then(At::const_eval),
                 Op::Array => todo!("Consteval {op}"),
                 Op::ArRep => todo!("Consteval {op}"),
@@ -69,7 +168,11 @@ impl ConstEval for Expr {
                 Op::Macro => todo!("Consteval {op}"),
                 Op::Quote => todo!("Consteval {op}"),
                 Op::Loop => todo!("Consteval {op}"),
-                Op::If => todo!("Consteval {op}"),
+                Op::If => match ats.as_slice() {
+                    [cond, pass, _] if cond.const_eval()?.bool()? => pass.const_eval(),
+                    [_, _, fail] => fail.const_eval(),
+                    _ => todo!("ConstEval {op}"),
+                },
                 Op::While => todo!("Consteval {op}"),
                 Op::Defer => todo!("Consteval {op}"),
                 Op::Break => todo!("Consteval {op}"),
@@ -119,11 +222,11 @@ impl ConstEval for Expr {
 }
 
 impl ConstEval for Literal {
-    fn const_eval(&self) -> Option<i128> {
+    fn const_eval(&self) -> Option<Value> {
         match *self {
-            Self::Bool(_) => None,
+            Self::Bool(v) => Some(v.into()),
             Self::Char(_) => None,
-            Self::Int(v, _) => Some(v as _),
+            Self::Int(v, _) => Some(v.into()),
             Self::Str(_) => None,
         }
     }
