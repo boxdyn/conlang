@@ -9,13 +9,7 @@ use cl_typeck::{
     type_expression::TypeExpression,
 };
 
-use cl_ast::{
-    At, Expr,
-    desugar::{type_bubbler::Bubbler, while_else::WhileElseDesugar},
-    fold::Fold,
-    types::Path,
-    visit::Visit,
-};
+use cl_ast::{At, Expr, fold::Fold, types::Path, visit::Visit};
 use cl_lexer::Lexer;
 use cl_parser::{Parser, inliner::ModuleInliner};
 use cl_structures::intern::{leaky_interner::LeakyInterner, string_interner::StringInterner};
@@ -126,9 +120,11 @@ fn enter_code(prj: &mut Table) -> Result<(), RlError> {
 
 fn live_desugar() -> Result<(), RlError> {
     read_and(C_RESV, "se> ", "? > ", |line| {
+        // use cl_ast::desugar::{type_bubbler::Bubbler, while_else::WhileElseDesugar};
+
         let At(code, span) = Parser::new(Lexer::new("".into(), line)).parse::<At<Expr>>(0)?;
         let code = inline_modules(code, "").at(span);
-        println!("Raw, as parsed:\n{C_LISTING}{code}\x1b[0m");
+        // println!("Raw, as parsed:\n{C_LISTING}{code}\x1b[0m");
 
         // let code = ConstantFolder.fold_stmt(code);
         // println!("ConstantFolder\n{C_LISTING}{code}\x1b[0m");
@@ -142,11 +138,11 @@ fn live_desugar() -> Result<(), RlError> {
 
         println!("Scopes:\n{code}\n{scopes}");
 
-        let code = WhileElseDesugar.fold_at_expr(code).unwrap();
-        println!("WhileElseDesugar\n{C_LISTING}{code}\x1b[0m");
+        // let code = WhileElseDesugar.fold_at_expr(code).unwrap();
+        // println!("WhileElseDesugar\n{C_LISTING}{code}\x1b[0m");
 
-        let code = Bubbler(false).fold_at_expr(code).unwrap();
-        println!("Bubbler\n{C_LISTING}{code}\x1b[0m");
+        // let code = Bubbler(false).fold_at_expr(code).unwrap();
+        // println!("Bubbler\n{C_LISTING}{code}\x1b[0m");
 
         // let code = NormalizePaths::new().fold_stmt(code);
         // println!("NormalizePaths\n{C_LISTING}{code}\x1b[0m");
