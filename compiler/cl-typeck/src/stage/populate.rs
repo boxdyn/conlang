@@ -5,11 +5,11 @@ use crate::{
     table::{NodeKind, Table},
 };
 use cl_ast::{
-    At, Bind, BindOp, DefaultTypes, Expr, Match, MatchArm, Op, Use,
+    At, Bind, BindOp, DefaultTypes, Expr, Match, MatchArm, Op, Pat, PatOp, Use,
     types::Path,
     visit::{Visit, Walk},
 };
-use cl_structures::list::List;
+use cl_structures::{intern::interned::Interned, list::List};
 
 mod name_finder;
 use name_finder::NameFinder;
@@ -23,30 +23,47 @@ use user::User;
 pub struct Populator<'t, 'parent> {
     entry: EntryMut<'t>,
     meta: List<'parent, &'parent Expr>,
+    kind: NodeKind,
 }
 
-impl<'t> Populator<'t, '_> {
+impl<'t, 'parent> Populator<'t, 'parent> {
     /// Constructs a new [Populator] with the given [Table]
     pub fn new(table: &'t mut Table) -> Self {
-        Self { entry: table.root_entry_mut(), meta: List::Nil }
+        Self { entry: table.root_entry_mut(), meta: List::Nil, kind: NodeKind::Root }
     }
 
     /// Adds an [outer meta attribute](cl_ast::Op::MetaOuter) to the current [List]
     pub fn with_meta<'p, 'e: 'p>(&'p mut self, expr: &'e Expr) -> Populator<'p, 'p> {
-        let Self { entry, meta } = self;
-        Populator { entry: entry.with_id(entry.id()), meta: meta.enter(expr) }
+        let Self { entry, meta, kind } = self;
+        Populator { entry: entry.with_id(entry.id()), meta: meta.enter(expr), kind: *kind }
     }
 
     /// Creates a [Populator] with an empty [outer meta](cl_ast::Op::MetaOuter) [List]
     pub fn without_meta(&mut self) -> Populator<'_, '_> {
-        let Self { entry, meta: _ } = self;
-        Populator { entry: entry.with_id(entry.id()), meta: List::Nil }
+        let Self { entry, meta: _, kind } = self;
+        Populator { entry: entry.with_id(entry.id()), meta: List::Nil, kind: *kind }
+    }
+
+    pub fn with_kind(
+        &mut self,
+        kind: NodeKind,
+        f: impl FnOnce(&mut Self) -> Result<(), ()>,
+    ) -> Result<(), ()> {
+        let old_kind = self.kind;
+        self.kind = kind;
+        let out = f(self);
+        self.kind = old_kind;
+        out
     }
 
     /// Creates a populator at a brand-new entry in the [Table]
     pub fn new_entry(&mut self, kind: NodeKind) -> Populator<'_, '_> {
-        let entry = self.entry.new_entry(kind);
-        Populator { entry, meta: self.meta }
+        let mut entry = self.entry.new_entry(kind);
+
+        let mut outer: Vec<_> = self.meta.iter().map(|&e| e.clone()).collect();
+        outer.reverse();
+        entry.set_meta(outer);
+        Populator { entry, meta: self.meta, kind }
     }
 }
 
@@ -83,8 +100,9 @@ impl Visit<'_, DefaultTypes> for Populator<'_, '_> {
     }
 
     fn visit_bind(&mut self, item: &Bind<DefaultTypes>) -> Result<(), Self::Error> {
-        let Bind(op, _ts, pat, _exprs) = item;
-        let mut scope = self.new_entry(match op {
+        let Bind(op, _ts, pat, exprs) = item;
+
+        let nodekind = match op {
             BindOp::Let => NodeKind::Let,
             BindOp::Fn => NodeKind::Function,
             BindOp::Mod => NodeKind::Module,
@@ -92,22 +110,38 @@ impl Visit<'_, DefaultTypes> for Populator<'_, '_> {
             BindOp::Type => NodeKind::Type,
             BindOp::Struct => NodeKind::Type,
             BindOp::Enum => NodeKind::Type,
-            BindOp::For => NodeKind::Temporary,
-        });
+            BindOp::For => NodeKind::Scope,
+        };
 
-        let mut outer: Vec<_> = scope.meta.iter().map(|&e| e.clone()).collect();
-        outer.reverse();
-        scope.entry.set_meta(outer);
+        match nodekind {
+            NodeKind::Root | NodeKind::Const | NodeKind::Static => todo!("Root!"),
+            NodeKind::Module | NodeKind::Function => {
+                let mut scope = self.new_entry(nodekind);
+                if let Some(name) = NameFinder::get(pat) {
+                    scope.entry.set_name(name);
+                    let id = scope.entry.id();
 
-        item.children(&mut scope.without_meta())?;
-
-        match op {
-            BindOp::Let | BindOp::For => {
-                println!("TODO: {op}nodes bind multiple names: {pat}");
+                    scope.entry.parent().unwrap().add_child(name, id);
+                    exprs.visit_in(&mut scope.without_meta())?;
+                }
+            }
+            NodeKind::Type | NodeKind::Let => {
+                self.with_kind(nodekind, |scope| {
+                    exprs.visit_in(&mut scope.without_meta())?;
+                    pat.visit_in(scope)
+                })?;
                 return Ok(());
             }
-            BindOp::Fn | BindOp::Mod => {}
-            BindOp::Impl => {
+            NodeKind::Temporary | NodeKind::Scope => {
+                let mut scope = self.new_entry(nodekind);
+                // TODO: proper eval order for For
+                scope.entry.add_glob(Path::from("super"));
+                pat.visit_in(&mut scope)?;
+                exprs.visit_in(&mut scope.without_meta())?;
+            }
+            NodeKind::Impl => {
+                let mut scope = self.new_entry(nodekind);
+
                 scope.entry.mark_impl_item();
                 scope.entry.add_glob(Path::from("super"));
                 let ty = match scope.entry.evaluate(pat) {
@@ -116,17 +150,29 @@ impl Visit<'_, DefaultTypes> for Populator<'_, '_> {
                 };
 
                 scope.entry.set_impl_target(ty);
-                return Ok(());
+                let se = format!("impl {}", pat);
+                scope.entry.set_name(Interned::from(&*se));
+                exprs.visit_in(&mut scope.without_meta())?;
             }
-            BindOp::Type | BindOp::Struct | BindOp::Enum => println!("TODO: {op}{pat}"),
-        }
-
-        if let Some(name) = NameFinder::get(pat) {
-            scope.entry.set_name(name);
-            let id = scope.entry.id();
-            self.entry.add_child(name, id);
+            NodeKind::Use => todo!(),
         }
         Ok(())
+    }
+
+    fn visit_pat(&mut self, item: &'_ cl_ast::Pat<DefaultTypes>) -> Result<(), Self::Error> {
+        match item {
+            Pat::Name(name) => {
+                let mut scope = self.new_entry(self.kind);
+
+                scope.entry.set_name(*name);
+                let id = scope.entry.id();
+                self.entry.add_child(*name, id);
+                Ok(())
+            }
+            // TODO: record patterns, guard-let patterns, etc.
+            Pat::Op(PatOp::Typed, b) if let [n, _ty] = b.as_slice() => n.visit_in(self),
+            other => other.children(self),
+        }
     }
 
     fn visit_match(&mut self, item: &Match<DefaultTypes>) -> Result<(), Self::Error> {
