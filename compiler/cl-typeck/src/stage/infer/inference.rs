@@ -71,7 +71,7 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_, '_>
         (Op::MetaOuter, [_, body]) => body.infer(e),
         (Op::Try, [..]) => todo!("Infer {op}"),
         (Op::Index, [..]) => todo!("Infer {op}"),
-        (Op::Call, [..]) => todo!("Infer {op}"),
+        (Op::Call, [..]) => todo!("Infer {op} (generalize)"),
         (Op::Pub, [expr]) => expr.infer(e),
         (Op::Pub, [..]) => todo!("Infer {op} {exprs:?}"),
         (Op::Const, [..]) => todo!("Infer {op}"),
@@ -260,21 +260,27 @@ impl Inference for Pat {
 fn infer_pat_op(op: PatOp, pats: &[At<Pat>], e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
     match (op, pats) {
         (PatOp::Pub, [body]) => body.infer(e),
-        (PatOp::Mut, [..]) => todo!(),
-        (PatOp::Ref, [..]) => todo!(),
-        (PatOp::Ptr, [..]) => todo!(),
-        (PatOp::Rest, [..]) => todo!(),
-        (PatOp::RangeEx, [..]) => todo!(),
-        (PatOp::RangeIn, [..]) => todo!(),
-        (PatOp::Record, [..]) => todo!(),
-        (PatOp::Tuple, [..]) => todo!(),
-        (PatOp::Slice, [..]) => todo!(),
-        (PatOp::ArRep, [..]) => todo!(),
-        (PatOp::Typed, [..]) => todo!(),
-        (PatOp::TypePrefixed, [..]) => todo!(),
-        (PatOp::Generic, [..]) => todo!(),
-        (PatOp::Fn, [..]) => todo!(),
-        (PatOp::Alt, [..]) => todo!(),
+        (PatOp::Mut, [body]) => body.infer(e),
+        (PatOp::Ref, [body]) => {
+            let r = body.infer(e)?;
+            Ok(e.new_ref(r))
+        }
+        (PatOp::Ptr, [..]) => todo!("Pointers"),
+        (PatOp::Rest, [..]) => todo!("Partial decomposition or start-open range"),
+        (PatOp::RangeEx, [..]) => todo!("Range Exclusive"),
+        (PatOp::RangeIn, [..]) => todo!("Range Inclusive"),
+        (PatOp::Record, [..]) => todo!("Record decomposition"),
+        (PatOp::Tuple, [..]) => todo!("Tuple decomposition"),
+        (PatOp::Slice, [body]) => {
+            let r = body.infer(e)?;
+            Ok(e.new_slice(r))
+        }
+        (PatOp::ArRep, [value, rep]) => todo!("Array Repetition `[{value}; {rep}]`"),
+        (PatOp::Typed, [body, ty]) => todo!("Type Annotation `{body}: {ty}`"),
+        (PatOp::TypePrefixed, [pfx, body]) => todo!("Prefix Annotation {pfx} {body}"),
+        (PatOp::Generic, [name, rest @ ..]) => todo!("Generic usage `{name}<{rest:?}>`"),
+        (PatOp::Fn, [..]) => todo!("Function introduction"),
+        (PatOp::Alt, [..]) => todo!("Alternates"),
         _ => panic!(""),
     }
 }
@@ -282,6 +288,9 @@ fn infer_pat_op(op: PatOp, pats: &[At<Pat>], e: &mut InferenceEngine<'_, '_, '_>
 impl Inference for Make {
     fn infer(&self, _e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
         todo!("infer {self}")
+// Look up struct definition in scope
+        // generalize definition
+        // unify members by name?
     }
 }
 
