@@ -179,6 +179,7 @@ fn infer_expression(prj: &mut Table) -> Result<(), RlError> {
         }
         let mut p = Parser::new(Lexer::new("".into(), line));
         let e: Expr = p.parse(0)?;
+        let e = inline_modules(e, "");
         let mut inf = InferenceEngine::new(prj, prj.root());
         let ty = match interned(e).infer(&mut inf) {
             Ok(ty) => ty,
