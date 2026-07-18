@@ -61,9 +61,10 @@ type Map<T, U> = BTreeMap<T, U>;
 type Set<U> = BTreeSet<U>;
 type Path = Vec<Symbol>;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ScopeKind {
     /// An unordered global scope, or the direct child of such scope
+    #[default]
     Module,
     /// An ordered local scope which is explicitly opened and closed
     Body,
@@ -122,7 +123,7 @@ impl std::fmt::Display for Scopes {
         fn pretty(f: &mut dyn Write, scopes: &[Scope], at: usize) -> std::fmt::Result {
             use cl_ast::fmt::FmtAdapter;
 
-            let Scope { kind, time, parent, children } = &scopes[at];
+            let Scope { kind, time, parent, children, .. } = &scopes[at];
             write!(f, "{at}: {time:?} {kind:?}")?;
             let [children @ .., last] = children.as_slice() else {
                 return Ok(());
@@ -138,7 +139,7 @@ impl std::fmt::Display for Scopes {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Scope {
     /// The kind of scope this is
     kind: ScopeKind,
@@ -149,24 +150,16 @@ pub struct Scope {
     /// The indices of this scope's children
     children: Vec<ScopeIndex>,
     // /// The bound symbols in this scope, if applicable
-    // bindings: Map<Symbol, NameIndex>,
+    bindings: Map<Symbol, NameIndex>,
     // /// The lazy imports in this scope, if applicable
-    // imports: Map<Symbol, Path>,
+    imports: Map<Symbol, Path>,
     // /// the glob-imports in this scope, if applicable
-    // globs: Set<Path>,
+    globs: Set<Path>,
 }
 
 impl Scope {
     pub fn new(parent: ScopeIndex, kind: ScopeKind, time: ScopeTime) -> Self {
-        Self {
-            parent,
-            kind,
-            time,
-            children: Default::default(),
-            // bindings: Default::default(),
-            // imports: Default::default(),
-            // globs: Default::default(),
-        }
+        Self { parent, kind, time, ..Default::default() }
     }
 
     /// Whether this scope is [ScopeKind::Module].
@@ -195,6 +188,30 @@ impl Scope {
     pub fn is_runtime(&self) -> bool {
         self.time == ScopeTime::Runtime
     }
+}
+
+/// Associates each AST node with its surrounding scope
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ScopedSpan {
+    span: Span,
+    scope: ScopeIndex,
+}
+impl std::fmt::Display for ScopedSpan {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.span.fmt(f)?;
+        write!(f, " @ {}", self.scope)
+    }
+}
+
+/// AST with added scope information
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ScopedAst;
+impl AstTypes for ScopedAst {
+    type Annotation = ScopedSpan;
+    type Literal = types::Literal;
+    type MacroId = types::Symbol;
+    type Symbol = types::Symbol;
+    type Path = types::Path;
 }
 
 /// Transforms an AST from one which binds variables
@@ -237,33 +254,33 @@ impl<'t> Scoper<'t> {
         self
     }
 
-    // /// Binds a symbol in the current scope
-    // ///
-    // /// Returns whether the import is unique in the scope
-    // pub fn bind(&mut self, name: Symbol) -> bool {
-    //     let scope = self.scope_index();
-    //     let Scopes { scopes, names } = self.table;
-    //     if scopes[scope].bindings.contains_key(&name) {
-    //         return false;
-    //     }
-    //     let bound = names.len();
-    //     names.push(name);
-    //     scopes[scope].bindings.insert(name, bound).is_some()
-    // }
+    /// Binds a symbol in the current scope
+    ///
+    /// Returns whether the import is unique in the scope
+    pub fn bind(&mut self, name: Symbol) -> bool {
+        let scope = self.scope_index();
+        let Scopes { scopes, names } = self.table;
+        if scopes[scope].bindings.contains_key(&name) {
+            return false;
+        }
+        let bound = names.len();
+        names.push(name);
+        scopes[scope].bindings.insert(name, bound).is_some()
+    }
 
-    // /// Imports a path in the current scope
-    // ///
-    // /// Returns the existing import, if one already existed
-    // pub fn import(&mut self, name: Symbol, path: Path) -> Option<Path> {
-    //     self.get_mut().imports.insert(name, path)
-    // }
+    /// Imports a path in the current scope
+    ///
+    /// Returns the existing import, if one already existed
+    pub fn import(&mut self, name: Symbol, path: Path) -> Option<Path> {
+        self.get_mut().imports.insert(name, path)
+    }
 
-    // /// Glob-imports a path in the current scope
-    // ///
-    // /// Returns whether the import is unique in the scope
-    // pub fn glob(&mut self, path: Path) -> bool {
-    //     self.get_mut().globs.insert(path)
-    // }
+    /// Glob-imports a path in the current scope
+    ///
+    /// Returns whether the import is unique in the scope
+    pub fn glob(&mut self, path: Path) -> bool {
+        self.get_mut().globs.insert(path)
+    }
 
     /// Exits the closest non-[`let`] [Scope].
     ///
@@ -308,30 +325,6 @@ impl<'t> Scoper<'t> {
     pub fn static_block<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         self.superblock(ScopeKind::Body, ScopeTime::Static, f)
     }
-}
-
-/// Associates each AST node with its surrounding scope
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ScopedSpan {
-    span: Span,
-    scope: ScopeIndex,
-}
-impl std::fmt::Display for ScopedSpan {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.span.fmt(f)?;
-        write!(f, " @ {}", self.scope)
-    }
-}
-
-/// AST with added scope information
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ScopedAst;
-impl AstTypes for ScopedAst {
-    type Annotation = ScopedSpan;
-    type Literal = types::Literal;
-    type MacroId = types::Symbol;
-    type Symbol = types::Symbol;
-    type Path = types::Path;
 }
 
 impl<'t> fold::Fold<DefaultTypes, ScopedAst> for Scoper<'t> {
