@@ -41,7 +41,7 @@ fn vformat(stream: &fn(char), format: str, args: (..)) {
             Some('d') => radix_by_chars(stream, arg() as u128, 10);
             Some('x') => radix_by_chars(stream, arg() as u128, 16);
             Some('~') => radix_by_chars(stream, arg() as u128, 36);
-            specifier, args => panic("Can't format ", args, " with ", specifier);
+            specifier => panic("Can't format ", args, " with ", specifier);
         };
         Some(c) => stream(c);
         _ => break;
