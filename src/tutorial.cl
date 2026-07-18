@@ -8,7 +8,7 @@
 /// `let` expressions try to bind variables
 let x = 1, 2, 3;
 /// ...and return `true` if they succeeded!
-if let 1, two, 3 = x {
+if (let 1, two, 3 = x) {
     println(two) // prints "2"
 }
 
@@ -76,7 +76,7 @@ let v = if condition() do_thing(10, 20) else do_not();
 
 
 /// `loop` expressions run the same calculation multiple times:
-loop print(1); // prints infinite `1`s
+// loop print(1); // prints infinite `1`s
 
 /// ...and return the value passed to `break`!
 let v = loop break 10;
