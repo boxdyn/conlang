@@ -3,7 +3,7 @@
 //! Each syntax structure must describe how to unify its types.
 
 use super::{engine::InferenceEngine, error::InferenceError};
-use crate::{table::Scope, type_expression::TypeExpression};
+use crate::{consteval::ConstEval, table::Scope, type_expression::TypeExpression};
 use cl_ast::{types::Literal, *};
 
 // TODO: "Infer" the types of Items
@@ -12,18 +12,18 @@ type IfResult = Result<Scope, InferenceError>;
 
 pub trait Inference {
     /// Performs type inference
-    fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult;
+    fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult;
 }
 
 impl<T: AstNode + Inference, A: AstTypes> Inference for At<T, A> {
-    fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+    fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
         self.0.infer(e)
     }
 }
 
 impl Inference for Expr {
-    fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
-        match self {
+    fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
+        let out = match self {
             Self::Omitted => Ok(e.unit()),
             Self::Id(v) => v
                 .evaluate(e.table, e.at)
@@ -36,11 +36,13 @@ impl Inference for Expr {
             Self::Match(mtch) => mtch.infer(e),
             Self::Label(labl) => labl.infer(e),
             Self::Op(op, exprs) => infer_expr_op(*op, exprs, e),
-        }
+        }?;
+        println!("Inferred {self}: {}", e.entry(out));
+        Ok(out)
     }
 }
 
-fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_>) -> IfResult {
     match (op, exprs) {
         (Op::Do, []) => Ok(e.unit()),
         (Op::Do, [ignored @ .., returned]) => {
@@ -49,8 +51,9 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_, '_>
             }
             returned.infer(e)
         }
-        (Op::As, [..]) => todo!("Infer Expr as Expr"),
+        (Op::As, [expr, ty]) => todo!("Infer {expr} as {ty}"),
         (Op::Macro, [..]) => todo!("Infer {}", op),
+        (Op::Block, []) => Ok(e.unit()),
         (Op::Block, [body]) => body.infer(e),
         (Op::Array, items) => {
             let out = e.new_inferred();
@@ -60,8 +63,16 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_, '_>
             }
             Ok(e.new_array(out, items.len()))
         }
-        (Op::ArRep, [..]) => todo!("Infer {op}"),
-        (Op::Group, [..]) => todo!("Infer {op}"),
+        (Op::ArRep, [value, rep]) => {
+            let Some(size) = rep.const_eval().map(|v| v.uint()).flatten() else {
+                Err(crate::type_expression::Error::ConstEval {
+                    parent: e.at,
+                    eval: Box::new(rep.clone()),
+                })?
+            };
+            todo!("ArRep [{value}; {size}]")
+        }
+        (Op::Group, [value]) => value.infer(e),
         (Op::Tuple, []) => Ok(e.unit()),
         (Op::Tuple, exprs) => exprs
             .iter()
@@ -69,22 +80,33 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_, '_>
             .collect::<Result<Vec<_>, InferenceError>>()
             .map(|tys| e.new_tuple(tys)),
         (Op::MetaOuter, [_, body]) => body.infer(e),
-        (Op::Try, [..]) => todo!("Infer {op}"),
-        (Op::Index, [..]) => todo!("Infer {op}"),
-        (Op::Call, [..]) => todo!("Infer {op} (generalize)"),
-        (Op::Pub, [expr]) => expr.infer(e),
-        (Op::Pub, [..]) => todo!("Infer {op} {exprs:?}"),
-        (Op::Const, [..]) => todo!("Infer {op}"),
-        (Op::Static, [..]) => todo!("Infer {op}"),
-        (Op::Loop, [expr]) => {
-            let mut bset = None;
-            let mut scope = e.open_bset(&mut bset);
-            let body = scope.infer(expr)?;
-            let unit = scope.unit();
-            scope.unify(body, unit)?;
-            Ok(bset.unwrap_or(e.never()))
+        (Op::Try, [lhs]) => todo!("Infer {lhs}{op}"),
+        (Op::Index, [lhs, rhs]) => todo!("Infer {lhs}[{rhs}]"),
+        (Op::Call, [lhs, rhs]) => todo!("Infer {lhs}({rhs}) (generalize)"),
+        (Op::Dot, [lhs, At(Expr::Op(Op::Call, exprs), _)])
+            if let [rhs, args] = exprs.as_slice() =>
+        {
+            // infer lhs
+            // in lhs scope, infer rhs
+            // infer args
+            // if rhs passes self-test, prepend lhs to inferred args
+            // unify with rhs
+            // TODO: how do we distinguish member access from function call?
+            todo!("Dotcall: {lhs}.{rhs}{args} (generalize)")
         }
-        (Op::Loop, [..]) => todo!("Infer {op}"),
+        (Op::Pub | Op::Const | Op::Static, [expr]) => expr.infer(e),
+        (Op::Loop, [expr]) => {
+            fn infer_loop(expr: &At<Expr>, e: &mut InferenceEngine<'_, '_>) -> IfResult {
+                let (bset, mut scope) = e.open_bset("loop");
+                let body = scope.infer(expr)?;
+                let unit = scope.unit();
+                scope.unify(body, unit)?;
+                let never = scope.never();
+                scope.unify(bset, never)?;
+                Ok(bset)
+            }
+            infer_loop(expr, e)
+        }
         (Op::If, [cond, pass, fail @ ..]) => {
             // Open a block scope so the condition doesn't escape
             let pass = {
@@ -111,10 +133,8 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_, '_>
             Ok(pass)
         }
         (Op::While, [cond, pass, fail @ ..]) => {
-            let mut bset = None;
-
             // Open a block scope so the loop condition doesn't escape
-            {
+            let bset = {
                 let mut scope = e.block_scope();
                 // Infer the condition
                 let cond = cond.infer(&mut scope)?;
@@ -124,37 +144,36 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_, '_>
 
                 // Open a breakset for the pass branch
                 {
-                    let mut body_scope = scope.open_bset(&mut bset);
+                    let (bset, mut body_scope) = scope.open_bset("while");
                     // Infer the pass branch
                     let pass = pass.infer(&mut body_scope)?;
                     // Unify the pass branch with Empty
                     let empt = body_scope.unit();
                     body_scope.unify(empt, pass)?;
+                    bset
                 }
-            }
+            };
 
             // Infer the fail branch
             let fail = if let [fail] = fail { fail.infer(e)? } else { e.unit() };
 
             // Unify the fail branch with breakset
-            if let Some(bset) = bset {
-                println!("bset: {}", e.entry(bset));
-                e.unify(bset, fail)?;
-            }
+            println!("bset: {}", e.entry(bset));
+            e.unify(bset, fail)?;
             Ok(fail)
         }
         (Op::Break, [body]) if let Expr::Label(label) = body.value() => {
-            let Label(_label, body) = label.as_ref();
+            let Label(label, body) = label.as_ref();
             let ty = body.infer(e)?;
-            // Unify it with the breakset of the loop
-            e.bset(ty)?;
-            // Return never
+            // // Unify it with the breakset of the loop
+            e.bset(Some(label.to_ref()), ty)?;
+            // // Return never
             Ok(e.never())
         }
         (Op::Break, [body]) => {
             let ty = body.infer(e)?;
             // Unify it with the breakset of the loop
-            e.bset(ty)?;
+            e.bset(None, ty)?;
             // Return never
             Ok(e.never())
         }
@@ -165,34 +184,51 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_, '_>
             // Return never
             Ok(e.never())
         }
-        (Op::Continue, [..]) => Ok(e.never()),
-        (Op::Dot, [..]) => todo!("Infer {op}"),
+        (Op::Continue, []) => Ok(e.never()),
+        (Op::Dot, [lhs, rhs]) => todo!("Infer {lhs}{op}{rhs}"),
         (Op::RangeEx, [..]) => todo!("Infer {op}"),
         (Op::RangeIn, [..]) => todo!("Infer {op}"),
-        (Op::Neg, [..]) => todo!("Infer {op}"),
-        (Op::Not, [..]) => todo!("Infer {op}"),
-        (Op::Identity, [..]) => todo!("Infer {op}"),
-        (Op::Refer, [..]) => todo!("Infer {op}"),
-        (Op::Deref, [..]) => todo!("Infer {op}"),
-        (Op::Mul, [..]) => todo!("Infer {op}"),
-        (Op::Div, [..]) => todo!("Infer {op}"),
-        (Op::Rem, [..]) => todo!("Infer {op}"),
-        (Op::Add, [..]) => todo!("Infer {op}"),
-        (Op::Sub, [..]) => todo!("Infer {op}"),
-        (Op::Shl, [..]) => todo!("Infer {op}"),
-        (Op::Shr, [..]) => todo!("Infer {op}"),
-        (Op::And, [..]) => todo!("Infer {op}"),
-        (Op::Xor, [..]) => todo!("Infer {op}"),
-        (Op::Or, [..]) => todo!("Infer {op}"),
-        (Op::Lt, [..]) => todo!("Infer {op}"),
-        (Op::Leq, [..]) => todo!("Infer {op}"),
-        (Op::Eq, [..]) => todo!("Infer {op}"),
-        (Op::Neq, [..]) => todo!("Infer {op}"),
-        (Op::Geq, [..]) => todo!("Infer {op}"),
-        (Op::Gt, [..]) => todo!("Infer {op}"),
-        (Op::LogAnd, [..]) => todo!("Infer {op}"),
-        (Op::LogXor, [..]) => todo!("Infer {op}"),
-        (Op::LogOr, [..]) => todo!("Infer {op}"),
+        (Op::Neg, [rhs]) => todo!("Infer {op} {rhs}"),
+        (Op::Not, [rhs]) => todo!("Infer {op} {rhs}"),
+        (Op::Identity, [rhs]) => todo!("Infer {op} {rhs}"),
+        (Op::Refer, [rhs]) => todo!("Infer {op} {rhs}"),
+        (Op::Deref, [rhs]) => todo!("Infer {op} {rhs}"),
+        (Op::Mul | Op::Div | Op::Rem | Op::Add | Op::Sub, [lhs, rhs]) => {
+            let lty = lhs.infer(e)?;
+            let rty = rhs.infer(e)?;
+            e.unify(lty, rty)?;
+            return Ok(lty);
+            // TODO: Look up operator overloads!
+        }
+        (Op::Shl | Op::Shr, [lhs, rhs]) => {
+            let lhs = lhs.infer(e)?;
+            let rhs = rhs.infer(e)?;
+            let i32 = e.primitive("i32");
+            e.unify(rhs, i32)?;
+
+            Ok(lhs)
+        }
+        (Op::And | Op::Xor | Op::Or, [lhs, rhs]) => {
+            let lhs = lhs.infer(e)?;
+            let rhs = rhs.infer(e)?;
+            e.unify(lhs, rhs)?;
+
+            Ok(lhs)
+        }
+        (Op::Lt | Op::Leq | Op::Eq | Op::Neq | Op::Geq | Op::Gt, [lhs, rhs]) => {
+            let lhs = lhs.infer(e)?;
+            let rhs = rhs.infer(e)?;
+            e.unify(lhs, rhs)?;
+
+            Ok(e.bool())
+        }
+        (Op::LogAnd | Op::LogXor | Op::LogOr, [lhs, rhs]) => {
+            let lhs = lhs.infer(e)?;
+            let rhs = rhs.infer(e)?;
+            // TODO: clarify truthiness
+            e.unify(lhs, rhs)?;
+            Ok(lhs)
+        }
         (Op::Set, [..]) => todo!("Infer {op}"),
         (Op::MulSet, [..]) => todo!("Infer {op}"),
         (Op::DivSet, [..]) => todo!("Infer {op}"),
@@ -209,7 +245,7 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_, '_>
 }
 
 impl Inference for Literal {
-    fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+    fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
         Ok(match self {
             Self::Bool(_) => e.bool(),
             Self::Char(_) => e.char(),
@@ -220,32 +256,55 @@ impl Inference for Literal {
 }
 
 impl Inference for Label {
-    fn infer(&self, _e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
-        todo!("Turn breakset into a stackly-linked list")
+    fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
+        let Label(label, expr) = self;
+        let (bset, mut scope) = e.open_bset(label.to_ref());
+        let ty = expr.infer(&mut scope)?;
+        e.unify(bset, ty)?;
+        return Ok(bset);
     }
 }
 
 impl Inference for Bind {
-    fn infer(&self, _e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+    fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
         let Bind(op, _gens, pat, exprs) = self;
         match (op, exprs.as_slice()) {
             (BindOp::Let, [bind]) => todo!("Unify {pat} with {bind}, return bool"),
             (BindOp::Let, [bind, fail]) => todo!("Unify {pat} with {bind} and {fail}, return unit"),
-            (BindOp::Type, []) => todo!("Bind opaque type {pat}"),
-            (BindOp::Type, [body]) => todo!("Bind type alias {pat} to {body}"),
-            (BindOp::Fn, [..]) => todo!("Infer {op:?} in {self}"),
-            (BindOp::Mod, [..]) => todo!("Infer {op:?} in {self}"),
-            (BindOp::Impl, [..]) => todo!("Infer {op:?} in {self}"),
-            (BindOp::Struct, [..]) => todo!("Infer {op:?} in {self}"),
-            (BindOp::Enum, [..]) => todo!("Infer {op:?} in {self}"),
-            (BindOp::For, [..]) => todo!("Infer {op:?} in {self}"),
+            (BindOp::Type, []) => Ok(e.by_name(pat)?),
+            (BindOp::Type, [body]) => {
+                println!("Bind names!");
+                let ty = e.by_name(pat)?;
+                let body = body.infer(e)?;
+                e.unify(ty, body)?;
+                Ok(ty)
+            }
+            (BindOp::Fn, [body]) => {
+                let loc = e.by_name(pat)?;
+                e.at(loc).infer(body)
+            }
+            (BindOp::Mod, [body]) => {
+                if let Ok(loc) = e.by_name(pat) {
+                    e.at(loc).infer(body)
+                } else {
+                    e.infer(body)
+                }
+            }
+            (BindOp::Impl, [body]) => {
+                let loc = e.by_name(pat)?;
+                // TODO: Properly scope impl targets
+                e.at(loc).infer(body)
+            }
+            (BindOp::Struct, []) => Ok(e.by_name(pat)?),
+            (BindOp::Enum, []) => Ok(e.by_name(pat)?),
+            (BindOp::For, [iter, pass, fail]) => todo!("Infer for {pat} in {iter} {pass} {fail}"),
             _ => unimplemented!("ICE: malformed Bind expression {self}"),
         }
     }
 }
 
 impl Inference for Pat {
-    fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+    fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
         match self {
             Self::Ignore => Ok(e.new_inferred()),
             Self::Never => Ok(e.never()),
@@ -257,7 +316,7 @@ impl Inference for Pat {
     }
 }
 
-fn infer_pat_op(op: PatOp, pats: &[At<Pat>], e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+fn infer_pat_op(op: PatOp, pats: &[At<Pat>], e: &mut InferenceEngine<'_, '_>) -> IfResult {
     match (op, pats) {
         (PatOp::Pub, [body]) => body.infer(e),
         (PatOp::Mut, [body]) => body.infer(e),
@@ -286,7 +345,7 @@ fn infer_pat_op(op: PatOp, pats: &[At<Pat>], e: &mut InferenceEngine<'_, '_, '_>
 }
 
 impl Inference for Make {
-    fn infer(&self, _e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+    fn infer(&self, _e: &mut InferenceEngine<'_, '_>) -> IfResult {
         todo!("infer {self}")
         // Look up struct definition in scope
         // generalize definition
@@ -295,14 +354,14 @@ impl Inference for Make {
 }
 
 impl Inference for MakeArm {
-    fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+    fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
         let Self(_sym, expr) = self;
         expr.infer(e)
     }
 }
 
 impl Inference for Match {
-    fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+    fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
         let Self(scrutinee, arms) = self;
         // Infer the scrutinee
         let scrutinee = scrutinee.infer(e)?;
@@ -334,7 +393,7 @@ impl Inference for Match {
 // use crate::table::Map;
 
 // impl Inference for Generics {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         // bind names
 //         for name in &self.vars {
 //             let ty = e.new_var();
@@ -345,7 +404,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for Module {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Self { name, file } = self;
 //         let Some(file) = file else {
 //             return Err(InferenceError::NotFound((*name).into()));
@@ -356,7 +415,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for Alias {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Self { name: _, from } = self;
 //         // let this = e.by_name(name)?;
 //         let alias = if let Some(from) = from {
@@ -378,7 +437,7 @@ impl Inference for Match {
 
 // impl Inference for Function {
 //     #[allow(unused)]
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Self { name, gens, sign, bind, body } = self;
 //         // bind name to signature
 //         let node = e.at; // e.by_name(name)?;
@@ -413,7 +472,7 @@ impl Inference for Match {
 //     }
 // }
 // impl Inference for Closure {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Self { arg, body } = self;
 //         let args = arg.infer(e)?;
 
@@ -435,7 +494,7 @@ impl Inference for Match {
 // // there are no bodies
 
 // impl Inference for Enum {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Self { name: _, gens, variants } = self;
 //         let node = e.at; //e.by_name(name)?;
 //         let mut scope = e.at(node);
@@ -451,7 +510,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for Variant {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Self { name, kind: _, body } = self;
 //         let node = e.by_name(name)?;
 
@@ -477,7 +536,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for Struct {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Self { name, gens, kind: _ } = self;
 //         let node = e.by_name(name)?;
 //         let mut e = e.at(node);
@@ -488,7 +547,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for Impl {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Self { gens, target, body } = self;
 //         // TODO: match gens to target gens
 //         gens.infer(e)?;
@@ -500,7 +559,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for Tuple {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Tuple { exprs } = self;
 //         exprs
 //             .iter()
@@ -514,7 +573,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for Structor {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Structor { to, init } = self;
 //         // Evaluate the path in the current context
 //         let to = to.infer(e)?;
@@ -555,7 +614,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for Array {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Array { values } = self;
 //         let out = e.new_inferred();
 //         for value in values {
@@ -567,7 +626,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for ArrayRep {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let ArrayRep { value, repeat } = self;
 //         let ty = value.infer(e)?;
 //         let rep = repeat.infer(e)?;
@@ -583,7 +642,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for AddrOf {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let AddrOf { mutable: _, expr } = self;
 //         // TODO: mut ref
 //         let ty = expr.infer(e)?;
@@ -592,13 +651,13 @@ impl Inference for Match {
 // }
 
 // impl Inference for Quote {
-//     fn infer(&self, _e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, _e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         todo!("Quote: {self}")
 //     }
 // }
 
 // impl Inference for Literal {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let ty = match self {
 //             Literal::Bool(_) => e.bool(),
 //             Literal::Char(_) => e.char(),
@@ -614,14 +673,14 @@ impl Inference for Match {
 // }
 
 // impl Inference for Group {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Group { expr } = self;
 //         expr.infer(e)
 //     }
 // }
 
 // impl Inference for Block {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Block { stmts } = self;
 //         let mut e = e.block_scope();
 //         let empty = e.unit();
@@ -652,7 +711,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for Assign {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Assign { parts } = self;
 //         let (head, tail) = parts.as_ref();
 //         // Infer the tail expression
@@ -667,7 +726,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for Modify {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Modify { kind: _, parts } = self;
 //         let (head, tail) = parts.as_ref();
 //         // Infer the tail expression
@@ -682,7 +741,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for Binary {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         use BinaryKind as Bk;
 //         let Binary { kind, parts } = self;
 //         let (head, tail) = parts.as_ref();
@@ -752,7 +811,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for Unary {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Unary { kind, tail } = self;
 //         match kind {
 //             UnaryKind::Deref => {
@@ -792,7 +851,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for Member {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Member { head, kind } = self;
 //         // Infer the head expression
 //         let head = head.infer(e)?;
@@ -847,7 +906,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for Index {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Index { head, indices } = self;
 //         let usize = e.usize();
 //         // Infer the head expression
@@ -881,7 +940,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for Cast {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Cast { head, ty } = self;
 //         // Infer the head expression
 //         let _head = head.infer(e)?;
@@ -897,14 +956,14 @@ impl Inference for Match {
 // }
 
 // impl Inference for Path {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         e.by_name(self)
 //             .map_err(|_| InferenceError::NotFound(self.clone()))
 //     }
 // }
 
 // impl Inference for Let {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Let { mutable: _, name, ty, init } = self;
 //         let ty = match ty {
 //             Some(ty) => ty
@@ -930,7 +989,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for Match {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let Match { scrutinee, arms } = self;
 //         // Infer the scrutinee
 //         let scrutinee = scrutinee.infer(e)?;
@@ -961,7 +1020,7 @@ impl Inference for Match {
 
 // impl Inference for Pattern {
 //     // TODO: This is the wrong way to typeck pattern matching.
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         match self {
 //             Pattern::Name(name) => {
 //                 // Evaluating a pattern creates and enters a new scope.
@@ -1045,7 +1104,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for While {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let While { cond, pass, fail } = self;
 //         let mut bset = None;
 
@@ -1082,7 +1141,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for If {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let If { cond, pass, fail } = self;
 
 //         // Open a block scope so the condition doesn't escape
@@ -1108,7 +1167,7 @@ impl Inference for Match {
 // }
 
 // impl Inference for For {
-//     fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+//     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
 //         let For { bind, cond, pass, fail } = self;
 //         let mut scope = e.block_scope();
 
@@ -1147,7 +1206,7 @@ impl Inference for Match {
 // }
 
 impl<I: Inference> Inference for Option<I> {
-    fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+    fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
         match self {
             Some(expr) => expr.infer(e),
             None => Ok(e.unit()),
@@ -1155,7 +1214,7 @@ impl<I: Inference> Inference for Option<I> {
     }
 }
 impl<I: Inference> Inference for Box<I> {
-    fn infer(&self, e: &mut InferenceEngine<'_, '_, '_>) -> IfResult {
+    fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
         self.as_ref().infer(e)
     }
 }

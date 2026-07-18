@@ -11,6 +11,7 @@ use crate::{
     type_kind::{Adt, Primitive, TypeKind},
 };
 use cl_ast::types::Symbol as Sym;
+use cl_structures::list::List;
 
 /*
     Types in Conlang:
@@ -31,19 +32,20 @@ use cl_ast::types::Symbol as Sym;
       - for<T, R> type T -> R           // on a per-case basis!
 */
 
-type HandleSet<'h> = Option<&'h mut Option<Scope>>;
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Labelled(&'static str, Scope);
 
-pub struct InferenceEngine<'table, 'b, 'r> {
+pub struct InferenceEngine<'table, 'b> {
     pub(super) table: &'table mut Table,
     /// The current working node
     pub(crate) at: Scope,
     /// The current breakset
-    pub(crate) bset: HandleSet<'b>,
+    pub(crate) bset: List<'b, Labelled>,
     /// The current returnset
-    pub(crate) rset: HandleSet<'r>,
+    pub(crate) rset: Option<Scope>,
 }
 
-impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
+impl<'table, 'b> InferenceEngine<'table, 'b> {
     /// Infers the type of an object by deferring to [`Inference::infer()`]
     pub fn infer(&mut self, inferrable: &impl Inference) -> Result<Scope, InferenceError> {
         inferrable.infer(self)
@@ -56,12 +58,12 @@ impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
 
     /// Constructs an [`InferenceEngine`] that borrows the same table as `self`,
     /// but with a shortened lifetime.
-    pub fn scoped(&mut self) -> InferenceEngine<'_, '_, '_> {
+    pub fn scoped(&mut self) -> InferenceEngine<'_, '_> {
         InferenceEngine {
             at: self.at,
             table: self.table,
-            bset: self.bset.as_deref_mut(),
-            rset: self.rset.as_deref_mut(),
+            bset: self.bset.clone(),
+            rset: self.rset.clone(),
         }
     }
 
@@ -112,37 +114,57 @@ impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
     // }
 
     /// Constructs a new InferenceEngine with the
-    pub fn at(&mut self, at: Scope) -> InferenceEngine<'_, '_, '_> {
+    pub fn at(&mut self, at: Scope) -> InferenceEngine<'_, '_> {
         InferenceEngine { at, ..self.scoped() }
     }
 
-    pub fn open_bset<'ob>(&mut self, bset: &'ob mut Option<Scope>) -> InferenceEngine<'_, 'ob, '_> {
-        InferenceEngine { bset: Some(bset), ..self.scoped() }
+    pub fn open_bset<'q>(&'q mut self, label: &'static str) -> (Scope, InferenceEngine<'q, 'q>) {
+        let bset = self.new_inferred();
+        (
+            bset,
+            InferenceEngine {
+                table: self.table,
+                at: self.at,
+                rset: self.rset,
+                bset: List::Cons(&self.bset, Labelled(label, bset)),
+            },
+        )
     }
 
-    pub fn open_rset<'or>(&mut self, rset: &'or mut Option<Scope>) -> InferenceEngine<'_, '_, 'or> {
-        InferenceEngine { rset: Some(rset), ..self.scoped() }
+    pub fn open_rset<'q>(&'q mut self) -> (Scope, InferenceEngine<'q, 'q>) {
+        let rset = self.new_inferred();
+        (
+            rset,
+            InferenceEngine { table: self.table, at: self.at, bset: List::Nil, rset: Some(rset) },
+        )
     }
 
-    pub fn bset(&mut self, ty: Scope) -> Result<(), InferenceError> {
-        match self.bset.as_mut() {
-            Some(&mut &mut Some(bset)) => self.unify(ty, bset),
-            Some(none) => {
-                let _ = none.insert(ty);
-                Ok(())
+    fn find(list: List<Labelled>, label: &'static str) -> Option<Scope> {
+        match list {
+            List::Cons(_, Labelled(lb, scope)) if lb == label => Some(scope),
+            List::Cons(list, _) => InferenceEngine::find(*list, label),
+            List::Nil => None,
+        }
+    }
+
+    pub fn bset(&mut self, label: Option<&'static str>, ty: Scope) -> Result<(), InferenceError> {
+        match (label, self.bset) {
+            (_, List::Nil) => Err(InferenceError::NoBreak)?,
+            (None, List::Cons(_, Labelled(_, value))) => self.unify(value, ty),
+            (Some(label), list) => {
+                let Some(scope) = InferenceEngine::find(list, label) else {
+                    Err(InferenceError::NoBreak)?
+                };
+
+                self.unify(scope, ty)
             }
-            None => Err(InferenceError::NoBreak),
         }
     }
 
     pub fn rset(&mut self, ty: Scope) -> Result<(), InferenceError> {
-        match self.rset.as_mut() {
-            Some(&mut &mut Some(rset)) => self.unify(ty, rset),
-            Some(none) => {
-                let _ = none.insert(ty);
-                Ok(())
-            }
-            None => Err(InferenceError::NoReturn),
+        match self.rset {
+            None => Err(InferenceError::NoReturn)?,
+            Some(rety) => self.unify(rety, ty),
         }
     }
 
@@ -267,7 +289,7 @@ impl<'table, 'b, 'r> InferenceEngine<'table, 'b, 'r> {
     }
 
     /// Creates a new locally-scoped InferenceEngine.
-    pub fn block_scope(&mut self) -> InferenceEngine<'_, '_, '_> {
+    pub fn block_scope(&mut self) -> InferenceEngine<'_, '_> {
         let scope = self.table.new_entry(self.at, NodeKind::Scope);
         self.table.add_child(self.at, "".into(), scope);
         self.at(scope)
