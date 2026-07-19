@@ -63,21 +63,16 @@ type Path = Vec<Symbol>;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ScopeKind {
-    /// An unordered global scope, or the direct child of such scope
+    /// An unordered outer scope, or the direct child of such scope.
     #[default]
-    Module,
-    /// An ordered local scope which is explicitly opened and closed
-    Body,
-    /// An ephemeral local scope, which is enclosed by a Body
-    Let,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum ScopeTime {
-    Const,
-    Static,
-    #[default]
-    Runtime,
+    Outer,
+    /// An ordered inner scope which is explicitly opened and closed.
+    ///
+    /// These are created in the bodies of [Bind] expressions,
+    /// except for [modules][BindOp::Mod].
+    Inner,
+    /// An ephemeral local scope, which is enclosed by an Inner scope
+    Inherited,
 }
 
 /// Tracks the information necessary to resolve a name
@@ -94,7 +89,7 @@ impl Scopes {
 
     pub fn root_scope(&mut self) -> ScopeIndex {
         if self.scopes.is_empty() {
-            self.add_scope(0, ScopeKind::Module, ScopeTime::Static)
+            self.add_scope(0, ScopeKind::Outer, "root")
         } else {
             0
         }
@@ -104,11 +99,10 @@ impl Scopes {
         &mut self,
         parent: ScopeIndex,
         kind: ScopeKind,
-        time: ScopeTime,
+        from: &'static str,
     ) -> ScopeIndex {
         let new = self.scopes.len();
-        self.scopes.push(Scope::new(parent, kind, time));
-        println!("Entered scope {new}: {:?}", self.scopes.last().unwrap());
+        self.scopes.push(Scope::new(parent, kind, from));
         if parent != new {
             self.scopes[parent].children.push(new);
         }
@@ -123,8 +117,12 @@ impl std::fmt::Display for Scopes {
         fn pretty(f: &mut dyn Write, scopes: &[Scope], at: usize) -> std::fmt::Result {
             use cl_ast::fmt::FmtAdapter;
 
-            let Scope { kind, time, parent, children, .. } = &scopes[at];
-            write!(f, "{at}: {time:?} {kind:?}")?;
+            let Scope { kind, from, parent, children, bindings, .. } = &scopes[at];
+            write!(f, "{at}: {kind:?} ({from})")?;
+            for (name, index) in bindings {
+                let indent = if children.is_empty() { "    " } else { "│   " };
+                write!(&mut f.indent_with(indent), "\n{name}: {index}")?;
+            }
             let [children @ .., last] = children.as_slice() else {
                 return Ok(());
             };
@@ -143,8 +141,7 @@ impl std::fmt::Display for Scopes {
 pub struct Scope {
     /// The kind of scope this is
     kind: ScopeKind,
-    /// When this scope is
-    time: ScopeTime,
+    from: &'static str,
     /// The index of this scope's parent
     parent: ScopeIndex,
     /// The indices of this scope's children
@@ -158,35 +155,13 @@ pub struct Scope {
 }
 
 impl Scope {
-    pub fn new(parent: ScopeIndex, kind: ScopeKind, time: ScopeTime) -> Self {
-        Self { parent, kind, time, ..Default::default() }
+    pub fn new(parent: ScopeIndex, kind: ScopeKind, from: &'static str) -> Self {
+        Self { parent, kind, from, ..Default::default() }
     }
 
-    /// Whether this scope is [ScopeKind::Module].
-    pub fn is_mod(&self) -> bool {
-        self.kind == ScopeKind::Module
-    }
-
-    /// Whether this scope is [ScopeKind::Body].
-    pub fn is_body(&self) -> bool {
-        self.kind == ScopeKind::Body
-    }
-
-    /// Whether this scope is [ScopeKind::Let], and can be discarded.
-    pub fn is_let(&self) -> bool {
-        self.kind == ScopeKind::Let
-    }
-
-    pub fn is_const(&self) -> bool {
-        self.time == ScopeTime::Const
-    }
-
-    pub fn is_static(&self) -> bool {
-        self.time == ScopeTime::Static
-    }
-
-    pub fn is_runtime(&self) -> bool {
-        self.time == ScopeTime::Runtime
+    /// Whether this scope is the [ScopeKind]
+    pub const fn is(&self, kind: ScopeKind) -> bool {
+        self.kind as i32 == kind as i32
     }
 }
 
@@ -214,237 +189,269 @@ impl AstTypes for ScopedAst {
     type Path = types::Path;
 }
 
-/// Transforms an AST from one which binds variables
-/// to one which binds numbers, tracking which scope
-/// each expression exists within
-#[derive(Debug)]
-pub struct Scoper<'t> {
-    table: &'t mut Scopes,
-    stack: Vec<ScopeIndex>,
-}
+mod scoper {
+    //! Calculates Conlang's scoping rules
+    use super::*;
 
-impl<'t> Scoper<'t> {
-    /// Constructs a new Sniper
-    pub fn new(table: &'t mut Scopes) -> Self {
-        Self { stack: vec![table.root_scope()], table }
+    /// Calculates the language's scoping rules
+    /// based on a recursive traversal
+    #[derive(Debug)]
+    pub struct Scoper<'t> {
+        table: &'t mut Scopes,
+        stack: Vec<ScopeIndex>,
     }
 
-    pub fn scope_index(&self) -> ScopeIndex {
-        match self.stack[..] {
-            [] => panic!("Should not exit last scope!"),
-            [.., last] => last,
-        }
-    }
-
-    pub fn get(&self) -> &Scope {
-        let scope = self.scope_index();
-        &self.table.scopes[scope]
-    }
-
-    pub fn get_mut(&mut self) -> &mut Scope {
-        let scope = self.scope_index();
-        &mut self.table.scopes[scope]
-    }
-
-    /// Enters a new scope
-    pub fn enter(&mut self, scope_kind: ScopeKind, scope_time: ScopeTime) -> &mut Self {
-        let parent = self.scope_index();
-        let idx = self.table.add_scope(parent, scope_kind, scope_time);
-        self.stack.push(idx);
-        self
-    }
-
-    /// Binds a symbol in the current scope
-    ///
-    /// Returns whether the import is unique in the scope
-    pub fn bind(&mut self, name: Symbol) -> bool {
-        let scope = self.scope_index();
-        let Scopes { scopes, names } = self.table;
-        if scopes[scope].bindings.contains_key(&name) {
-            return false;
-        }
-        let bound = names.len();
-        names.push(name);
-        scopes[scope].bindings.insert(name, bound).is_some()
-    }
-
-    /// Imports a path in the current scope
-    ///
-    /// Returns the existing import, if one already existed
-    pub fn import(&mut self, name: Symbol, path: Path) -> Option<Path> {
-        self.get_mut().imports.insert(name, path)
-    }
-
-    /// Glob-imports a path in the current scope
-    ///
-    /// Returns whether the import is unique in the scope
-    pub fn glob(&mut self, path: Path) -> bool {
-        self.get_mut().globs.insert(path)
-    }
-
-    /// Exits the closest non-[`let`] [Scope].
-    ///
-    /// [Let][`let`] scopes, which bind [`let`]-bound
-    /// variables, cannot be individually exited, and will
-    /// accumulate until the end of their surrounding scope.
-    ///
-    /// [`let`]: ScopeKind::Let
-    pub fn exit(&mut self) -> &mut Self {
-        while self.get().is_let() {
-            self.stack.pop();
-        }
-        self.stack.pop().expect("exited last scope!");
-        self
-    }
-
-    pub fn superblock<R>(
-        &mut self,
-        kind: ScopeKind,
-        time: ScopeTime,
-        f: impl FnOnce(&mut Self) -> R,
-    ) -> R {
-        let out = f(self.enter(kind, time));
-        if kind != ScopeKind::Let {
-            self.exit();
-        }
-        out
-    }
-
-    pub fn block<R>(&mut self, kind: ScopeKind, f: impl FnOnce(&mut Self) -> R) -> R {
-        self.superblock(kind, self.get().time, f)
-    }
-
-    pub fn local_block<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        self.superblock(ScopeKind::Body, ScopeTime::Runtime, f)
-    }
-
-    pub fn const_block<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        self.superblock(ScopeKind::Body, ScopeTime::Const, f)
-    }
-
-    pub fn static_block<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        self.superblock(ScopeKind::Body, ScopeTime::Static, f)
-    }
-}
-
-impl<'t> fold::Fold<DefaultTypes, ScopedAst> for Scoper<'t> {
-    type Error = ();
-
-    impl_fold! {
-        in Fold<DefaultTypes, ScopedAst>
-        fn fold_annotation(self, span: Annotation) =
-            ScopedSpan { span, scope: self.scope_index() };
-        fn fold_macro_id(self, from: MacroId) = from;
-        fn fold_symbol(self, from: Symbol) = from;
-        fn fold_path(self, from: Path) = from;
-        fn fold_literal(self, from: Literal) = from;
-    }
-
-    fn fold_at_expr(
-        &mut self,
-        expr: At<Expr<DefaultTypes>>,
-    ) -> Result<At<Expr<ScopedAst>, ScopedAst>, ()> {
-        let At(expr, span) = expr;
-        let span = self.fold_annotation(span)?;
-        let expr = match expr {
-            // Expr::Bind(_) => todo!(),
-            Expr::Op(Op::Block, exprs) if !self.get().is_mod() => self
-                .block(ScopeKind::Body, |block| {
-                    Ok(Expr::Op(Op::Block, block.fold(exprs)?))
-                }),
-            Expr::Op(Op::Const, exprs) => Ok(Expr::Op(
-                Op::Const,
-                self.const_block(|block| block.fold(exprs))?,
-            )),
-            Expr::Op(Op::Static, exprs) => Ok(Expr::Op(
-                Op::Static,
-                self.static_block(|block| block.fold(exprs))?,
-            )),
-            // Expr::Op(Op::If,)
-            // Expr::Op(op, ats) => todo!(),
-            other => other.children(self),
-        }?;
-        Ok(At::<_, _>(expr, span))
-    }
-
-    fn fold_bind(&mut self, bind: Bind<DefaultTypes>) -> Result<Bind<ScopedAst>, Self::Error> {
-        let Bind(op, gens, pat, exprs) = bind;
-        if op == BindOp::Let && !self.get().is_mod() {
-            let exprs = self.fold(exprs)?;
-            return self.block(ScopeKind::Let, |scope| {
-                let gens = scope.fold(gens)?;
-                let pat = scope.fold(pat)?;
-                Ok(Bind(BindOp::Let, gens, pat, exprs))
-            });
+    /**
+     * [Scopes] and Names
+     *
+     * Properties of [Scope]:
+     * - contains names
+     * - encloses [Expr]essions and [Pat]terns
+     * - encloses other [Scopes]
+     *
+     * Properties of Name:
+     * - can be const, static, or local
+     * - can be pub or priv
+     * - can be mut or not
+     */
+    impl<'t> Scoper<'t> {
+        /// Constructs a new Sniper
+        pub fn new(table: &'t mut Scopes) -> Self {
+            Self { stack: vec![table.root_scope()], table }
         }
 
-        // let exprs = match exprs.into_array().map(|a| *a) {
-        //     Ok([iter, pass, fail]) => todo!(),
-        //     Err(exprs) => exprs.visit_in(self)?,
-        // };
-
-        let kind = match op {
-            BindOp::Let => ScopeKind::Let,
-            BindOp::For | BindOp::Fn => ScopeKind::Body,
-            _ => ScopeKind::Module,
-        };
-
-        let time = match (op, self.get().time) {
-            (BindOp::Fn, ScopeTime::Const) => ScopeTime::Const,
-            // non-const functions have ScopeTime::Runtime
-            (BindOp::Fn, _) => ScopeTime::Runtime,
-            // all other things inherit their ScopeTime from parent
-            (_, time) => time,
-        };
-
-        self.block(kind, |item| {
-            let gens = item.fold(gens)?;
-            let pat = item.fold(pat)?;
-            let exprs = if !exprs.is_empty() {
-                // TODO: `for Pat in Expr Expr else Expr`
-                item.superblock(kind, time, |body| body.fold(exprs))?
-            } else {
-                vec![]
-            };
-            Ok(Bind(op, gens, pat, exprs))
-        })
-    }
-
-    fn fold_pat(&mut self, pat: Pat<DefaultTypes>) -> Result<Pat<ScopedAst>, Self::Error> {
-        // FIXME: only works at module scope. Need another way to track this.
-        match pat {
-            Pat::Op(PatOp::TypePrefixed, mut ats) if !self.get().is_let() => {
-                println!("{ats:?}");
-                assert_eq!(ats.len(), 2);
-                let ty = ats.pop().expect("TypePrefixed should contain 2 patterns");
-                let pfx = ats.pop().expect("TypePrefixed should contain 2 patterns");
-                let pfx = pfx.fold_in(self)?;
-                let ty = self.block(ScopeKind::Let, |block| ty.fold_in(block))?;
-                Ok(Pat::Op(PatOp::TypePrefixed, vec![pfx, ty]))
+        pub fn scope_index(&self) -> ScopeIndex {
+            match self.stack[..] {
+                [] => panic!("Should not exit last scope!"),
+                [.., last] => last,
             }
-            _ => pat.children(self),
+        }
+
+        pub fn get(&self) -> &Scope {
+            let scope = self.scope_index();
+            &self.table.scopes[scope]
+        }
+
+        pub fn get_mut(&mut self) -> &mut Scope {
+            let scope = self.scope_index();
+            &mut self.table.scopes[scope]
+        }
+
+        /// Enters a new scope
+        pub fn enter(&mut self, scope_kind: ScopeKind, from: &'static str) -> &mut Self {
+            let parent = self.scope_index();
+            let idx = self.table.add_scope(parent, scope_kind, from);
+            self.stack.push(idx);
+            self
+        }
+
+        /// Exits the closest non-[`let`] [Scope].
+        ///
+        /// [Inherited][`let`] scopes, which bind [`let`]-bound
+        /// variables, cannot be individually exited, and will
+        /// accumulate until the end of their surrounding scope.
+        ///
+        /// [`let`]: ScopeKind::Inherited
+        pub fn exit(&mut self) -> &mut Self {
+            use ScopeKind::*;
+            while self.table.scopes[self.stack.pop().expect("enclosing scope")].is(Inherited) {}
+            self
+        }
+
+        /// Binds a symbol in the current scope
+        ///
+        /// Returns whether the symbol is unique in the scope
+        pub fn bind(&mut self, name: Symbol) -> bool {
+            let scope = self.scope_index();
+            let Scopes { scopes, names } = self.table;
+            if scopes[scope].bindings.contains_key(&name) {
+                return false;
+            }
+            let bound = names.len();
+            names.push(name);
+            scopes[scope].bindings.insert(name, bound).is_some()
+        }
+
+        /// Imports a path in the current scope
+        ///
+        /// Returns the existing import, if one already existed
+        pub fn import(&mut self, name: Symbol, path: Path) -> Option<Path> {
+            self.get_mut().imports.insert(name, path)
+        }
+
+        /// Glob-imports a path in the current scope
+        ///
+        /// Returns whether the import is unique in the scope
+        pub fn glob(&mut self, path: Path) -> bool {
+            self.get_mut().globs.insert(path)
+        }
+
+        /// Opens a new "block scope" with the given [ScopeKind]
+        pub fn block<R>(
+            &mut self,
+            kind: ScopeKind,
+            from: &'static str,
+            f: impl FnOnce(&mut Self) -> R,
+        ) -> R {
+            let out = f(self.enter(kind, from));
+            if kind != ScopeKind::Inherited {
+                self.exit();
+            }
+            out
         }
     }
 
-    fn fold_make(&mut self, make: Make<DefaultTypes>) -> Result<Make<ScopedAst>, Self::Error> {
-        self.block(ScopeKind::Body, |block| make.children(block))
-    }
+    impl<'t> fold::Fold<DefaultTypes, ScopedAst> for Scoper<'t> {
+        type Error = ();
 
-    fn fold_match(&mut self, mtch: Match<DefaultTypes>) -> Result<Match<ScopedAst>, Self::Error> {
-        self.block(ScopeKind::Body, |block| mtch.children(block))
-    }
+        impl_fold! {
+            in Fold<DefaultTypes, ScopedAst>
+            fn fold_annotation(self, span: Annotation) =
+                ScopedSpan { span, scope: self.scope_index() };
+            fn fold_macro_id(self, from: MacroId) = from;
+            fn fold_symbol(self, from: Symbol) = from;
+            fn fold_path(self, from: Path) = from;
+            fn fold_literal(self, from: Literal) = from;
+        }
 
-    fn fold_matcharm(
-        &mut self,
-        arm: MatchArm<DefaultTypes>,
-    ) -> Result<MatchArm<ScopedAst>, Self::Error> {
-        // Each match arm is wrapped in an implicit {block},
-        self.block(ScopeKind::Body, |outer| {
-            // but binds with an implicit `let`, since that makes `fold_pat` work nicer
-            outer.block(ScopeKind::Let, |inner| arm.children(inner))
-        })
+        fn fold_at_expr(
+            &mut self,
+            expr: At<Expr<DefaultTypes>>,
+        ) -> Result<At<Expr<ScopedAst>, ScopedAst>, ()> {
+            let At(expr, span) = expr;
+            let span = self.fold_annotation(span)?;
+            let expr = self.fold(expr)?;
+            Ok(At(expr, span))
+        }
+
+        fn fold_expr(&mut self, expr: Expr<DefaultTypes>) -> Result<Expr<ScopedAst>, Self::Error> {
+            match expr {
+                Expr::Op(Op::Block, exprs) if !self.get().is(ScopeKind::Outer) => {
+                    self.block(ScopeKind::Inner, "block", |block| {
+                        Ok(Expr::Op(Op::Block, block.fold(exprs)?))
+                    })
+                }
+                Expr::Op(op @ (Op::Loop | Op::Defer | Op::Break | Op::Return), exprs) => self
+                    .block(ScopeKind::Inner, "control-flow", |block| {
+                        Ok(Expr::Op(op, block.fold(exprs)?))
+                    }),
+                Expr::Op(op @ (Op::If | Op::While), mut exprs) => {
+                    assert_eq!(exprs.len(), 3);
+                    let [cond, pass, fail] = exprs.into_chunks().pop().ok_or(())?;
+                    let (cond, pass) = self.block(ScopeKind::Inner, "if-while", |block| {
+                        let cond = block.fold(cond)?;
+                        let pass = block.fold(pass)?;
+                        Ok((cond, pass))
+                    })?;
+                    let fail = self.block(ScopeKind::Inner, "else", |block| {
+                        let fail = block.fold(fail)?;
+                        Ok(fail)
+                    })?;
+                    Ok(Expr::Op(op, vec![cond, pass, fail]))
+                }
+                other => other.children(self),
+            }
+        }
+
+        fn fold_bind(&mut self, bind: Bind<DefaultTypes>) -> Result<Bind<ScopedAst>, Self::Error> {
+            use ScopeKind::*;
+            let Bind(op, gens, pat, mut exprs) = bind;
+            match op {
+                BindOp::Let => {
+                    let exprs = exprs
+                        .into_iter()
+                        .map(|e| self.block(Inner, "let body", |block| block.fold(e)))
+                        .collect::<Result<_, _>>()?;
+                    let bind = |scope: &mut Scoper| {
+                        let gens = scope.fold(gens)?;
+                        let pat = scope.fold(pat)?;
+                        Ok(Bind(BindOp::Let, gens, pat, exprs))
+                    };
+                    // if outside body, bind in scope
+                    match self.get().kind {
+                        Outer => bind(self),
+                        _ => self.block(Inherited, "let", bind),
+                    }
+                }
+                // TODO: bind function names outside
+                BindOp::Fn => self.block(Outer, "fn", |item| {
+                    let gens = item.fold(gens)?;
+                    let pat = item.fold(pat)?;
+                    let exprs = item.block(Inner, "fn body", |body| body.fold(exprs))?;
+                    Ok(Bind(op, gens, pat, exprs))
+                }),
+                BindOp::Mod => Ok(Bind(
+                    BindOp::Mod,
+                    self.fold(gens)?,
+                    self.fold(pat)?,
+                    self.block(Outer, "mod", |block| block.fold(exprs))?,
+                )),
+                BindOp::Type | BindOp::Struct | BindOp::Enum => {
+                    self.block(Outer, "type", |block| {
+                        let gens = block.fold(gens)?;
+                        let pat = block.fold(pat)?;
+                        let exprs = block.block(Inner, "type body", |block| block.fold(exprs))?;
+                        Ok(Bind(BindOp::Mod, gens, pat, exprs))
+                    })
+                }
+                BindOp::Impl => todo!("Scope `impl`"),
+                BindOp::For => {
+                    assert_eq!(exprs.len(), 3);
+                    let [cond, pass, fail] = exprs.into_chunks().pop().ok_or(())?;
+                    let cond = self.block(Inner, "iter", |block| block.fold(cond))?;
+                    let fail = self.block(Inner, "fail", |block| block.fold(fail))?;
+                    let (gens, pat, pass) = self.block(Inner, "pass", |block| {
+                        Ok((block.fold(gens)?, block.fold(pat)?, block.fold(pass)?))
+                    })?;
+                    let exprs = vec![cond, pass, fail];
+                    Ok(Bind(BindOp::For, gens, pat, exprs))
+                }
+            }
+        }
+
+        fn fold_pat(&mut self, pat: Pat<DefaultTypes>) -> Result<Pat<ScopedAst>, Self::Error> {
+            use ScopeKind::*;
+            // FIXME: This doesn't fully encapsulate scoping semantics
+            match pat {
+                Pat::Name(name) => {
+                    self.bind(name);
+                    Ok(Pat::Name(name))
+                }
+                Pat::Op(PatOp::TypePrefixed, mut ats) if self.get().is(Outer) => {
+                    assert_eq!(ats.len(), 2);
+                    let [pfx, ty] = ats.into_chunks().pop().expect("Gee, bill!");
+                    // let ty = ats.pop().expect("TypePrefixed should contain 2 patterns");
+                    // let pfx = ats.pop().expect("TypePrefixed should contain 2 patterns");
+                    let pfx = pfx.fold_in(self)?;
+                    let ty = self.block(Inherited, "args", |block| ty.fold_in(block))?;
+                    Ok(Pat::Op(PatOp::TypePrefixed, vec![pfx, ty]))
+                }
+                _ => pat.children(self),
+            }
+        }
+
+        fn fold_make(&mut self, make: Make<DefaultTypes>) -> Result<Make<ScopedAst>, Self::Error> {
+            self.block(ScopeKind::Inner, "make", |block| make.children(block))
+        }
+
+        fn fold_match(
+            &mut self,
+            mtch: Match<DefaultTypes>,
+        ) -> Result<Match<ScopedAst>, Self::Error> {
+            // The scrutinee and arms of a match expression exist in a shared scope
+            self.block(ScopeKind::Inner, "match", |block| mtch.children(block))
+        }
+
+        fn fold_matcharm(
+            &mut self,
+            arm: MatchArm<DefaultTypes>,
+        ) -> Result<MatchArm<ScopedAst>, Self::Error> {
+            // Each match arm is wrapped in an implicit {block},
+            self.block(ScopeKind::Inner, "match arm", |block| arm.children(block))
+        }
     }
 }
+pub use scoper::Scoper;
 
 /// AST with name-binding information stripped out
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -457,6 +464,8 @@ impl AstTypes for BoundAst {
     type Path = types::Path;
 }
 
+// TODO: fold ScopedAst => BoundAst
+
 /// AST with name-binding and name-usage information stripped out
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ResolvedAst;
@@ -467,3 +476,5 @@ impl AstTypes for ResolvedAst {
     type Symbol = usize; // index in symbol table
     type Path = usize; // index in symbol table
 }
+
+// TODO: fold BoundAst => ResolvedAst

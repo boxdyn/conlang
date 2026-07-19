@@ -25,6 +25,7 @@
 //! # Order of operations:
 //! For order-of-operations information, see the [stage] module.
 #![warn(clippy::all)]
+#![feature(vec_into_chunks)]
 
 pub(crate) mod format_utils;
 
