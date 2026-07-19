@@ -44,11 +44,7 @@ impl<'t, 'parent> Populator<'t, 'parent> {
         Populator { entry: entry.with_id(entry.id()), meta: List::Nil, kind: *kind }
     }
 
-    pub fn with_kind(
-        &mut self,
-        kind: NodeKind,
-        f: impl FnOnce(&mut Self) -> Result<(), ()>,
-    ) -> Result<(), ()> {
+    pub fn with_kind<T>(&mut self, kind: NodeKind, f: impl FnOnce(&mut Self) -> T) -> T {
         let old_kind = self.kind;
         self.kind = kind;
         let out = f(self);

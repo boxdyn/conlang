@@ -2,7 +2,7 @@ use std::{cmp, ops};
 
 use cl_ast::{AstNode, At, Expr, Op, types::Literal};
 
-#[derive(Clone, Copy, Debug, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialOrd, Ord)]
 pub enum Value {
     Int(i128),
     UInt(u128),

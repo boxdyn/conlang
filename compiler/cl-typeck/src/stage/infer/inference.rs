@@ -64,7 +64,7 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_>) ->
             Ok(e.new_array(out, items.len()))
         }
         (Op::ArRep, [value, rep]) => {
-            let Some(size) = rep.const_eval().map(|v| v.uint()).flatten() else {
+            let Some(size) = rep.const_eval().and_then(|v| v.uint()) else {
                 Err(crate::type_expression::Error::ConstEval {
                     parent: e.at,
                     eval: Box::new(rep.clone()),
@@ -197,7 +197,7 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_>) ->
             let lty = lhs.infer(e)?;
             let rty = rhs.infer(e)?;
             e.unify(lty, rty)?;
-            return Ok(lty);
+            Ok(lty)
             // TODO: Look up operator overloads!
         }
         (Op::Shl | Op::Shr, [lhs, rhs]) => {
@@ -261,7 +261,7 @@ impl Inference for Label {
         let (bset, mut scope) = e.open_bset(label.to_ref());
         let ty = expr.infer(&mut scope)?;
         e.unify(bset, ty)?;
-        return Ok(bset);
+        Ok(bset)
     }
 }
 

@@ -59,12 +59,7 @@ impl<'table, 'b> InferenceEngine<'table, 'b> {
     /// Constructs an [`InferenceEngine`] that borrows the same table as `self`,
     /// but with a shortened lifetime.
     pub fn scoped(&mut self) -> InferenceEngine<'_, '_> {
-        InferenceEngine {
-            at: self.at,
-            table: self.table,
-            bset: self.bset.clone(),
-            rset: self.rset.clone(),
-        }
+        InferenceEngine { at: self.at, table: self.table, bset: self.bset, rset: self.rset }
     }
 
     // pub fn infer_all(&mut self) -> Vec<(Handle, InferenceError)> {
