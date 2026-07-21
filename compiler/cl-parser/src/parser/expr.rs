@@ -8,12 +8,15 @@ use cl_ast::{
 use cl_token::{Lexeme, TKind, Token};
 
 /// Organizes the precedence hierarchy for syntactic elements
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+// Safety invariant: Prec variants are C-like and contiguous
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
 pub enum Prec {
     Min,
     /// The Semicolon Operator gets its own precedence level
     Do,
     /// The body of a function, conditional, etc.
+    #[default]
     Body,
     /// An assignment
     Assign,
@@ -53,6 +56,15 @@ impl Prec {
 
     pub const fn value(self) -> usize {
         self as usize * 2
+    }
+
+    const fn from_value(value: usize) -> Self {
+        match (value / 2) as u8 {
+            v if v <= Prec::Min as _ => Prec::Min,
+            v if v >= Prec::Max as _ => Prec::Max,
+            // SAFETY: Prec is a C-like enum with contiguous values from Prec::Min to Prec::Max
+            v => unsafe { std::mem::transmute(v) },
+        }
     }
 
     pub const fn prev(self) -> usize {
@@ -128,7 +140,7 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
         | TKind::Let
         | TKind::Type
         | TKind::Struct
-        | TKind::Enum => (Ps::Bind, Prec::Max),
+        | TKind::Enum => (Ps::Bind, Prec::Body),
 
         TKind::Loop => (Ps::Op(Op::Loop), Prec::Body),
         TKind::If => (Ps::Op(Op::If), Prec::Body),
@@ -244,7 +256,7 @@ impl<'t> Parse<'t> for Expr {
                 }
                 Ps::Lit => Expr::Lit(p.parse(())?),
                 Ps::Use => Expr::Use(p.consume().parse(())?),
-                Ps::Bind => Expr::Bind(p.parse(())?),
+                Ps::Bind => Expr::Bind(p.parse(Prec::from_value(level))?),
                 Ps::For => parse_for(p, ())?,
                 Ps::Match => Expr::Match(p.parse(())?),
                 Ps::Label => Expr::Label(p.parse(prec.next())?),
@@ -503,20 +515,20 @@ fn parse_for(p: &mut Parser<'_>, _level: ()) -> PResult<Expr> {
     ))))
 }
 
-/// Returns the [BindOp], [pattern precedence](PPrec), [arrow TKind](TKind), [body precedence](Prec),
-/// and [else precedence](Prec), (if applicable,) which controls the parsing of Bind expressions.
+/// Returns the [BindOp], [pattern precedence](PPrec), [arrow TKind](TKind), [body presence](bool),
+/// and [else presence](bool), which control the parsing of Bind expressions.
 #[rustfmt::skip]
 #[allow(clippy::type_complexity)]
-fn from_bind(p: &mut Parser<'_>) -> PResult<(BindOp, PPrec, Option<TKind>, Option<Prec>, Option<Prec>)> {
+fn from_bind(p: &mut Parser<'_>) -> PResult<(BindOp, PPrec, Option<TKind>, bool, bool)> {
     let bk = match p.peek()?.kind {
-        // Token            Operator        Pat prec      Body Token             Body prec            Else prec
-        TKind::Let =>    (BindOp::Let,    PPrec::Tuple, Some(TKind::Eq),       Some(Prec::Body),   Some(Prec::Body)),
-        TKind::Type =>   (BindOp::Type,   PPrec::Alt,   Some(TKind::Eq),       Some(Prec::Body),   None),
-        TKind::Struct => (BindOp::Struct, PPrec::Tuple, None,                  None,               None),
-        TKind::Enum =>   (BindOp::Enum,   PPrec::Tuple, None,                  None,               None),
-        TKind::Fn =>     (BindOp::Fn,     PPrec::Fn,    None,                  Some(Prec::Body),   None),
-        TKind::Mod =>    (BindOp::Mod,    PPrec::Max,   None,                  Some(Prec::Body),   None),
-        TKind::Impl =>   (BindOp::Impl,   PPrec::Fn,    None,                  Some(Prec::Body),   None),
+        // Token            Operator        Pat prec      Body Token          Has Body    Has Else
+        TKind::Let =>    (BindOp::Let,    PPrec::Tuple, Some(TKind::Eq),    true,       true),
+        TKind::Type =>   (BindOp::Type,   PPrec::Alt,   Some(TKind::Eq),    true,       false),
+        TKind::Struct => (BindOp::Struct, PPrec::Tuple, None,               false,      false),
+        TKind::Enum =>   (BindOp::Enum,   PPrec::Tuple, None,               false,      false),
+        TKind::Fn =>     (BindOp::Fn,     PPrec::Fn,    None,               true,       false),
+        TKind::Mod =>    (BindOp::Mod,    PPrec::Max,   None,               true,       false),
+        TKind::Impl =>   (BindOp::Impl,   PPrec::Fn,    None,               true,       false),
         other => return Err(ParseError::NotBind(other, p.span()))
     };
 
@@ -525,11 +537,18 @@ fn from_bind(p: &mut Parser<'_>) -> PResult<(BindOp, PPrec, Option<TKind>, Optio
 }
 
 impl<'t> Parse<'t> for Bind {
-    type Prec = ();
+    type Prec = Prec;
 
-    fn parse(p: &mut Parser<'t>, _level: Self::Prec) -> PResult<Self> {
+    fn parse(p: &mut Parser<'t>, level: Self::Prec) -> PResult<Self> {
+        // HACK: parsing Bind expressions from Logical to Compare results in Prec::Compare
+        // due to ambiguity in `if let _ = Compare && Compare`
+        let level = match level {
+            _ if (Prec::Logical..=Prec::Compare).contains(&level) => Prec::Compare,
+            _ => Prec::Body,
+        };
+
         // let
-        let (bind, patp, equals, bodyp, failp) = from_bind(p)?;
+        let (bind, patp, equals, has_body, has_else) = from_bind(p)?;
 
         // <T,*>
         let generics = match p.next_if(TKind::Lt)? {
@@ -540,7 +559,7 @@ impl<'t> Parse<'t> for Bind {
         // Pat
         let pat = p.parse(patp)?;
 
-        let Some(bodyp) = bodyp else {
+        let (true, bodyp) = (has_body, level) else {
             return Ok(Self(bind, generics, pat, vec![]));
         };
 
@@ -557,7 +576,7 @@ impl<'t> Parse<'t> for Bind {
         // `=` Expr
         let body = p.parse(bodyp.value())?;
 
-        let Some(failp) = failp else {
+        let (true, failp) = (has_else, level) else {
             return Ok(Self(bind, generics, pat, vec![body]));
         };
 
