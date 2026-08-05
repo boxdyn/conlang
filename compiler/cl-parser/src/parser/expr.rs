@@ -63,7 +63,7 @@ impl Prec {
             v if v <= Prec::Min as _ => Prec::Min,
             v if v >= Prec::Max as _ => Prec::Max,
             // SAFETY: Prec is a C-like enum with contiguous values from Prec::Min to Prec::Max
-            v => unsafe { std::mem::transmute(v) },
+            v => unsafe { std::mem::transmute::<u8, Prec>(v) },
         }
     }
 
