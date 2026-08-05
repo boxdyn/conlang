@@ -18,13 +18,17 @@ fn radix_by_chars(stream: &fn(char), n: i128, radix: i64) {
     }
 }
 
+fn format_bool(stream: &fn(char), arg: bool) = {
+    for c in if arg "true" else "false" stream(c);
+}
+
 /// Base formatting functionality: outputs a formatted char sequence,
 /// one at a time, to the `stream`.
 fn vformat(stream: &fn(char), format: str, args: (..)) {
     let buf = format.chars();
-    fn take() = if (let [chr, ..rest] = buf) Some(buf = rest; chr) else None;
+    fn take() = if let [chr, ..rest] = buf Some(buf = rest; chr) else None;
     fn arg() {
-        let (arg, ..rest) = args else panic("Not enough args for ", format);
+        let arg, ..rest = args else panic("Not enough args for ", format);
         args = rest;
         arg
     }
@@ -41,6 +45,7 @@ fn vformat(stream: &fn(char), format: str, args: (..)) {
             Some('d') => radix_by_chars(stream, arg() as u128, 10);
             Some('x') => radix_by_chars(stream, arg() as u128, 16);
             Some('~') => radix_by_chars(stream, arg() as u128, 36);
+            Some('B') => format_bool(stream, arg() as bool);
             specifier => panic("Can't format ", args, " with ", specifier);
         };
         Some(c) => stream(c);
