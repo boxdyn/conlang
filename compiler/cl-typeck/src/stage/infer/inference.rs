@@ -70,7 +70,8 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_>) ->
                     eval: Box::new(rep.clone()),
                 })?
             };
-            todo!("ArRep [{value}; {size}]")
+            let ty = value.infer(e)?;
+            Ok(e.new_array(ty, size as _))
         }
         (Op::Group, [value]) => value.infer(e),
         (Op::Tuple, []) => Ok(e.unit()),
@@ -79,7 +80,7 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_>) ->
             .map(|expr| expr.infer(e))
             .collect::<Result<Vec<_>, InferenceError>>()
             .map(|tys| e.new_tuple(tys)),
-        (Op::MetaOuter, [_, body]) => body.infer(e),
+        (Op::MetaInner | Op::MetaOuter, [_, body]) => body.infer(e),
         (Op::Try, [lhs]) => todo!("Infer {lhs}{op}"),
         (Op::Index, [lhs, rhs]) => todo!("Infer {lhs}[{rhs}]"),
         (Op::Call, [lhs, rhs]) => todo!("Infer {lhs}({rhs}) (generalize)"),
@@ -188,11 +189,14 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_>) ->
         (Op::Dot, [lhs, rhs]) => todo!("Infer {lhs}{op}{rhs}"),
         (Op::RangeEx, [..]) => todo!("Infer {op}"),
         (Op::RangeIn, [..]) => todo!("Infer {op}"),
-        (Op::Neg, [rhs]) => todo!("Infer {op} {rhs}"),
-        (Op::Not, [rhs]) => todo!("Infer {op} {rhs}"),
-        (Op::Identity, [rhs]) => todo!("Infer {op} {rhs}"),
-        (Op::Refer, [rhs]) => todo!("Infer {op} {rhs}"),
-        (Op::Deref, [rhs]) => todo!("Infer {op} {rhs}"),
+        (Op::Neg, [rhs]) => todo!("Infer {op}{rhs}"),
+        (Op::Not, [rhs]) => todo!("Infer {op}{rhs}"),
+        (Op::Identity, [rhs]) => rhs.infer(e),
+        (Op::Refer, [rhs]) => {
+            let ty = rhs.infer(e)?;
+            Ok(e.new_ref(ty))
+        }
+        (Op::Deref, [rhs]) => todo!("Infer {op}{rhs}"),
         (Op::Mul | Op::Div | Op::Rem | Op::Add | Op::Sub, [lhs, rhs]) => {
             let lty = lhs.infer(e)?;
             let rty = rhs.infer(e)?;
@@ -229,17 +233,24 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_>) ->
             e.unify(lhs, rhs)?;
             Ok(lhs)
         }
-        (Op::Set, [..]) => todo!("Infer {op}"),
-        (Op::MulSet, [..]) => todo!("Infer {op}"),
-        (Op::DivSet, [..]) => todo!("Infer {op}"),
-        (Op::RemSet, [..]) => todo!("Infer {op}"),
-        (Op::AddSet, [..]) => todo!("Infer {op}"),
-        (Op::SubSet, [..]) => todo!("Infer {op}"),
-        (Op::ShlSet, [..]) => todo!("Infer {op}"),
-        (Op::ShrSet, [..]) => todo!("Infer {op}"),
-        (Op::AndSet, [..]) => todo!("Infer {op}"),
-        (Op::XorSet, [..]) => todo!("Infer {op}"),
-        (Op::OrSet, [..]) => todo!("Infer {op}"),
+        (Op::Set, [lhs, rhs]) => {
+            let lhs = lhs.infer(e)?;
+            let rhs = rhs.infer(e)?;
+            e.unify(lhs, rhs)?;
+            Ok(e.unit()) // TODO: decide semantics of assignment
+        }
+
+        // TODO: Look up operator overloads!
+        (Op::MulSet, [lhs, rhs]) => todo!("Infer {lhs}{op}{rhs}"),
+        (Op::DivSet, [lhs, rhs]) => todo!("Infer {lhs}{op}{rhs}"),
+        (Op::RemSet, [lhs, rhs]) => todo!("Infer {lhs}{op}{rhs}"),
+        (Op::AddSet, [lhs, rhs]) => todo!("Infer {lhs}{op}{rhs}"),
+        (Op::SubSet, [lhs, rhs]) => todo!("Infer {lhs}{op}{rhs}"),
+        (Op::ShlSet, [lhs, rhs]) => todo!("Infer {lhs}{op}{rhs}"),
+        (Op::ShrSet, [lhs, rhs]) => todo!("Infer {lhs}{op}{rhs}"),
+        (Op::AndSet, [lhs, rhs]) => todo!("Infer {lhs}{op}{rhs}"),
+        (Op::XorSet, [lhs, rhs]) => todo!("Infer {lhs}{op}{rhs}"),
+        (Op::OrSet, [lhs, rhs]) => todo!("Infer {lhs}{op}{rhs}"),
         (op, exprs) => unimplemented!("ICE: malformed expression {op:?} {exprs:?}"),
     }
 }
@@ -269,8 +280,22 @@ impl Inference for Bind {
     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
         let Bind(op, _gens, pat, exprs) = self;
         match (op, exprs.as_slice()) {
-            (BindOp::Let, [bind]) => todo!("Unify {pat} with {bind}, return bool"),
-            (BindOp::Let, [bind, fail]) => todo!("Unify {pat} with {bind} and {fail}, return unit"),
+            (BindOp::Let, [bind]) => {
+                //todo!("Unify {pat} with {bind}, return bool"),
+                let bind = bind.infer(e)?;
+                let pat = e.by_name(pat)?;
+                e.unify(pat, bind)?;
+                Ok(e.bool())
+            }
+            (BindOp::Let, [bind, fail]) => {
+                //todo!("Unify {pat} with {bind} and {fail}, return unit"),'
+                let bind = bind.infer(e)?;
+                let fail = fail.infer(e)?;
+                let pat = e.by_name(pat)?;
+                e.unify(pat, bind)?;
+                e.unify(pat, fail)?;
+                Ok(e.unit())
+            }
             (BindOp::Type, []) => Ok(e.by_name(pat)?),
             (BindOp::Type, [body]) => {
                 println!("Bind names!");
@@ -308,8 +333,8 @@ impl Inference for Pat {
         match self {
             Self::Ignore => Ok(e.new_inferred()),
             Self::Never => Ok(e.never()),
-            Self::MetId(_) => todo!(),
-            Self::Name(_) => todo!(),
+            Self::MetId(_) => todo!("Macro identifiers in the type checker??!"),
+            Self::Name(name) => Ok(e.by_name(name)?),
             Self::Value(body) => body.infer(e),
             Self::Op(op, pats) => infer_pat_op(*op, pats, e),
         }
@@ -324,12 +349,18 @@ fn infer_pat_op(op: PatOp, pats: &[At<Pat>], e: &mut InferenceEngine<'_, '_>) ->
             let r = body.infer(e)?;
             Ok(e.new_ref(r))
         }
-        (PatOp::Ptr, [..]) => todo!("Pointers"),
+        (PatOp::Ptr, [..]) => todo!("Pointer decomposition"),
         (PatOp::Rest, [..]) => todo!("Partial decomposition or start-open range"),
         (PatOp::RangeEx, [..]) => todo!("Range Exclusive"),
         (PatOp::RangeIn, [..]) => todo!("Range Inclusive"),
         (PatOp::Record, [..]) => todo!("Record decomposition"),
-        (PatOp::Tuple, [..]) => todo!("Tuple decomposition"),
+        (PatOp::Tuple, args) => {
+            let args = args
+                .iter()
+                .map(|arg| arg.infer(e))
+                .collect::<Result<_, _>>()?;
+            Ok(e.new_tuple(args))
+        }
         (PatOp::Slice, [body]) => {
             let r = body.infer(e)?;
             Ok(e.new_slice(r))
@@ -345,8 +376,14 @@ fn infer_pat_op(op: PatOp, pats: &[At<Pat>], e: &mut InferenceEngine<'_, '_>) ->
 }
 
 impl Inference for Make {
-    fn infer(&self, _e: &mut InferenceEngine<'_, '_>) -> IfResult {
-        todo!("infer {self}")
+    fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
+        let Self(ty, arms) = self;
+        // todo!("infer {self}")
+        let ty = ty.infer(e)?;
+        for arm in arms {
+            e.at(ty).infer(arm)?;
+        }
+        Ok(ty)
         // Look up struct definition in scope
         // generalize definition
         // unify members by name?
@@ -355,8 +392,12 @@ impl Inference for Make {
 
 impl Inference for MakeArm {
     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
-        let Self(_sym, expr) = self;
-        expr.infer(e)
+        let Self(sym, expr) = self;
+        let ty = e.by_name(sym)?;
+        let ty = e.deep_clone(ty);
+        let expr = expr.infer(e)?;
+        e.unify(ty, expr)?;
+        Ok(e.unit())
     }
 }
 

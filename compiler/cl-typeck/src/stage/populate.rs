@@ -183,8 +183,8 @@ impl Visit<'_, DefaultTypes> for Populator<'_, '_> {
     }
 
     fn visit_matcharm(&mut self, item: &MatchArm<DefaultTypes>) -> Result<(), Self::Error> {
-        let cl_ast::MatchArm(pat, expr) = item;
-        println!("TODO: MatchArm patterns may bind multiple items:\n{pat} => {expr}");
+        let cl_ast::MatchArm(At(pat, span), expr) = item;
+        println!("TODO: MatchArm patterns may bind multiple items:\n{span:?}: {pat} => {expr}");
         Ok(())
     }
 
