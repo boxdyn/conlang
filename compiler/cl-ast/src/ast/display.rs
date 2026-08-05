@@ -230,6 +230,15 @@ impl<A: AstTypes> Display for Use<A> {
 impl<A: AstTypes> Display for Bind<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self(op, gens, pat, exprs) = self;
+
+        // Lambda/0 syntax
+        if let (BindOp::Fn, At(Pat::Op(PatOp::Fn, pats), _)) = (op, pat)
+            && let [At(Pat::Op(PatOp::Tuple, args), _), rety] = &pats[..]
+        {
+            f.delimit("|", fmt!("|-> {rety} ")).list(args, ", ")?;
+            return f.list(exprs, "");
+        }
+
         op.fmt(f)?;
         if !gens.is_empty() {
             f.delimit("<", "> ").list(gens, ", ")?;
