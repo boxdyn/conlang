@@ -20,7 +20,7 @@ impl fmt::Display for Entry<'_> {
             match ty {
                 TypeKind::Inferred => write!(f, "<_{}>", self.id),
                 TypeKind::Variable => write!(f, "<?{}>", self.id),
-                TypeKind::Instance(id) => write!(f, "{}", self.with_id(*id)),
+                TypeKind::Instance(id) => write!(f, "{}<>", self.with_id(*id)),
                 TypeKind::Primitive(kind) => write!(f, "{kind}"),
                 TypeKind::Adt(adt) => write_adt(adt, self, f),
                 &TypeKind::Ref(id) => {
@@ -61,7 +61,7 @@ impl fmt::Display for Entry<'_> {
                 | NodeKind::Const
                 | NodeKind::Static
                 | NodeKind::Temporary
-                | NodeKind::Let => write!(f, "WARNING: NO TYPE ASSIGNED FOR {}", self.id),
+                | NodeKind::Let => write!(f, "{kind} {} (untyped)", self.id),
                 _ => write!(f, "{kind}"),
             }
         }

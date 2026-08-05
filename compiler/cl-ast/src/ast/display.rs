@@ -330,6 +330,10 @@ impl<A: AstTypes> Display for Pat<A> {
             Self::Value(literal) => literal.fmt(f),
             Self::MetId(name) => write!(f, "`{name}"),
             Self::Name(name) => name.fmt(f),
+            Self::Op(PatOp::Record, pats) if pats.is_empty() => "{}".fmt(f),
+            Self::Op(PatOp::Record, pats) if pats.len() <= 5 => {
+                f.delimit("{ ", " }").list(pats, ", ")
+            }
             Self::Op(PatOp::Record, pats) => f
                 .delimit_indented("{", "}")
                 .list_wrap("\n", pats, ",\n", ",\n"),
@@ -357,7 +361,7 @@ impl<A: AstTypes> Display for Pat<A> {
             Self::Op(op, pats) => match &pats[..] {
                 [] => op.fmt(f),
                 [rest] => write!(f, "{op}{rest}"),
-                _ => f.delimit("(", ")").list(pats, op),
+                _ => f.list(pats, op),
             },
         }
     }
