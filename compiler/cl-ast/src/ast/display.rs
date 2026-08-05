@@ -287,7 +287,14 @@ impl Display for BindOp {
 impl<A: AstTypes> Display for Make<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self(expr, make_arms) = self;
-        f.delimit(fmt!("({expr} {{"), "})").list(make_arms, ", ")
+        expr.fmt(f)?;
+        match make_arms.len() {
+            0 => "{}".fmt(f),
+            1..=5 => f.delimit("{ ", " }").list(make_arms, ", "),
+            _ => f
+                .delimit_indented("{", "}")
+                .list_wrap("\n", make_arms, ",\n", ",\n"),
+        }
     }
 }
 
