@@ -57,11 +57,9 @@ impl fmt::Display for Entry<'_> {
             }
         } else {
             match kind {
-                NodeKind::Type
-                | NodeKind::Const
-                | NodeKind::Static
-                | NodeKind::Temporary
-                | NodeKind::Let => write!(f, "{kind} {} (untyped)", self.id),
+                NodeKind::Type | NodeKind::Temporary | NodeKind::Let => {
+                    write!(f, "{kind} {} (untyped)", self.id)
+                }
                 _ => write!(f, "{kind}"),
             }
         }

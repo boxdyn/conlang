@@ -110,7 +110,7 @@ impl Visit<'_, DefaultTypes> for Populator<'_, '_> {
         };
 
         match nodekind {
-            NodeKind::Root | NodeKind::Const | NodeKind::Static => todo!("Root!"),
+            NodeKind::Root => todo!("Root!"),
             NodeKind::Module | NodeKind::Function => {
                 let mut scope = self.new_entry(nodekind);
                 if let Some(name) = NameFinder::get(pat) {
@@ -150,7 +150,7 @@ impl Visit<'_, DefaultTypes> for Populator<'_, '_> {
                 scope.entry.set_name(Interned::from(&*se));
                 exprs.visit_in(&mut scope.without_meta())?;
             }
-            NodeKind::Use => todo!(),
+            NodeKind::Use => unreachable!(),
         }
         Ok(())
     }
