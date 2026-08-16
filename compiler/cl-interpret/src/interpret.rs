@@ -327,9 +327,26 @@ impl Interpret for (Op, &[At<Expr>]) {
 
             // Assignment operators
             (Op::Set, [target, value]) => {
-                let place = Place::new(target.value(), env)?;
                 let value = value.interpret(env)?;
-                *(place.get_mut(env)?) = value;
+                match (target.value(), value) {
+                    // TODO: Expand "place patterns"
+                    (Expr::Op(Op::Tuple, places), ConValue::Tuple(values)) => {
+                        for (target, value) in places.iter().zip(values) {
+                            let place = Place::new(target.value(), env)?;
+                            *(place.get_mut(env)?) = value;
+                        }
+                    }
+                    (Expr::Op(Op::Array, places), ConValue::Array(values)) => {
+                        for (target, value) in places.iter().zip(values) {
+                            let place = Place::new(target.value(), env)?;
+                            *(place.get_mut(env)?) = value;
+                        }
+                    }
+                    (_, value) => {
+                        let place = Place::new(target.value(), env)?;
+                        *(place.get_mut(env)?) = value;
+                    }
+                }
                 Ok(ConValue::Empty)
             }
             (Op::MulSet, [target, value]) => {
