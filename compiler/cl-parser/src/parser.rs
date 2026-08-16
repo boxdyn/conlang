@@ -115,6 +115,7 @@ impl<'t> Parser<'t> {
         self.take().map(|tok| tok.lexeme)
     }
 
+    /// Consumes and returns the next [`Token`]
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> PResult<Token> {
         self.peek().no_eof()?;
@@ -201,10 +202,10 @@ impl<'t> Parser<'t> {
         Ok(out)
     }
 
-    /// Ensures the next [Token]'s [TKind] is `next`
-    pub fn expect(&mut self, next: TKind) -> PResult<&mut Self> {
-        self.next_if(next)?
-            .map_err(|tk| ParseError::Expected(next, tk, self.span()))?;
+    /// Ensures the next [Token]'s [TKind] is `next`, consuming it.
+    pub fn expect(&mut self, expected: TKind) -> PResult<&mut Self> {
+        self.next_if(expected)?
+            .map_err(|tk| ParseError::Expected(expected, tk, self.span()))?;
         Ok(self)
     }
 
@@ -229,6 +230,40 @@ impl<'t> Parser<'t> {
             }
         };
         Ok(Token { lexeme, kind, span })
+    }
+
+    /// Peeks the next [`Token`], splitting and returning its [`TKind`]. Returns
+    /// [`ParseError::FromLexer`] on lexer error.
+    pub fn split_peek(&mut self) -> PResult<TKind> {
+        let next_tok = self.peek()?;
+        match next_tok.kind.split() {
+            Ok((first, _)) => Ok(first),
+            Err(first) => Ok(first),
+        }
+    }
+    /// Consumes and returns the next [`Token`] if it matches the `expected` [`TKind`]
+    pub fn split_next_if(&mut self, expected: TKind) -> PResult<Result<Token, TKind>> {
+        match self.split_peek() {
+            Ok(kind) if kind == expected => self.split().map(Ok),
+            Ok(kind) => Ok(Err(kind)),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Consumes the next split token without returning it.
+    pub fn split_consume(&mut self) -> &mut Self {
+        if self.next_tok.as_ref().is_some_and(|tok| tok.is_ok()) {
+            let _ = self.split();
+        }
+        self
+    }
+
+    /// Ensures the next [Token]'s [split TKind][TKind::split] is `next`,
+    /// consuming it.
+    pub fn split_expect(&mut self, expected: TKind) -> PResult<&mut Self> {
+        self.split_next_if(expected)?
+            .map_err(|tk| ParseError::Expected(expected, tk, self.span()))?;
+        Ok(self)
     }
 }
 

@@ -278,7 +278,7 @@ impl Inference for Label {
 
 impl Inference for Bind {
     fn infer(&self, e: &mut InferenceEngine<'_, '_>) -> IfResult {
-        let Bind(op, _gens, pat, exprs) = self;
+        let Bind(op, pat, exprs) = self;
         match (op, exprs.as_slice()) {
             (BindOp::Let, [bind]) => {
                 //todo!("Unify {pat} with {bind}, return bool"),
@@ -368,7 +368,7 @@ fn infer_pat_op(op: PatOp, pats: &[At<Pat>], e: &mut InferenceEngine<'_, '_>) ->
         (PatOp::ArRep, [value, rep]) => todo!("Array Repetition `[{value}; {rep}]`"),
         (PatOp::Typed, [body, ty]) => todo!("Type Annotation `{body}: {ty}`"),
         (PatOp::TypePrefixed, [pfx, body]) => todo!("Prefix Annotation {pfx} {body}"),
-        (PatOp::Generic, [name, rest @ ..]) => todo!("Generic usage `{name}<{rest:?}>`"),
+        (PatOp::PostfixGeneric, [name, rest @ ..]) => todo!("Generic usage `{name}<{rest:?}>`"),
         (PatOp::Fn, [..]) => todo!("Function introduction"),
         (PatOp::Alt, [..]) => todo!("Alternates"),
         _ => panic!(""),

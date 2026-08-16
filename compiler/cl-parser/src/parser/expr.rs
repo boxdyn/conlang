@@ -274,7 +274,6 @@ impl<'t> Parse<'t> for Expr {
 
                     Expr::Bind(Box::new(Bind(
                         BindOp::Fn,
-                        vec![],
                         Pat::Op(PatOp::Fn, vec![args, rety]).at(span.merge(p.span())),
                         vec![p.parse(prec.next())?],
                     )))
@@ -509,7 +508,6 @@ fn parse_for(p: &mut Parser<'_>, _level: ()) -> PResult<Expr> {
 
     Ok(Expr::Bind(Box::new(Bind(
         BindOp::For,
-        vec![],
         pat,
         vec![iter, pass, fail],
     ))))
@@ -550,23 +548,17 @@ impl<'t> Parse<'t> for Bind {
         // let
         let (bind, patp, equals, has_body, has_else) = from_bind(p)?;
 
-        // <T,*>
-        let generics = match p.next_if(TKind::Lt)? {
-            Ok(_) => p.list(vec![], PPrec::Typed, TKind::Comma, TKind::Gt)?,
-            Err(_) => vec![],
-        };
-
         // Pat
         let pat = p.parse(patp)?;
 
         let (true, bodyp) = (has_body, level) else {
-            return Ok(Self(bind, generics, pat, vec![]));
+            return Ok(Self(bind, pat, vec![]));
         };
 
         // `=>` for match, `=` for `let`, `type`
         if let Some(equals) = equals {
             if p.next_if(equals).allow_eof()?.is_none_or(|v| v.is_err()) {
-                return Ok(Self(bind, generics, pat, vec![]));
+                return Ok(Self(bind, pat, vec![]));
             }
         } else {
             // Allow prefix `=`? for the rest of them
@@ -577,7 +569,7 @@ impl<'t> Parse<'t> for Bind {
         let body = p.parse(bodyp.value())?;
 
         let (true, failp) = (has_else, level) else {
-            return Ok(Self(bind, generics, pat, vec![body]));
+            return Ok(Self(bind, pat, vec![body]));
         };
 
         // `else` Expr
@@ -585,12 +577,12 @@ impl<'t> Parse<'t> for Bind {
             .allow_eof()?
             .is_none_or(|v| v.is_err())
         {
-            return Ok(Self(bind, generics, pat, vec![body]));
+            return Ok(Self(bind, pat, vec![body]));
         }
 
         let fail = p.parse(failp.value())?;
 
-        Ok(Self(bind, generics, pat, vec![body, fail]))
+        Ok(Self(bind, pat, vec![body, fail]))
     }
 }
 

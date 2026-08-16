@@ -407,7 +407,7 @@ impl Interpret for Label<DefaultTypes> {
 
 impl Interpret for Bind<DefaultTypes> {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
-        let Bind(op, _generics, pat, exprs) = self;
+        let Bind(op, pat, exprs) = self;
         match (op, pat.value(), exprs.as_slice()) {
             (BindOp::Let, _, []) => cl_todo!("let {pat}"),
             (BindOp::Let, _, [scrutinee]) => {
@@ -661,7 +661,7 @@ fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)
                 (None, model) => Ok((None, model)),
                 (Some(name), model) => todo!("Typeprefixed {name} :: {model:?}"),
             },
-            (PatOp::Generic, [first, ..]) => bind_struct(first.value(), env),
+            (PatOp::PostfixGeneric, [first, ..]) => bind_struct(first.value(), env),
             _ => todo!("{op:?} ({pats:?})"),
         }
     }
@@ -686,21 +686,25 @@ fn bind_enum(pat: &Pat, env: &mut Environment) -> IResult<ConValue> {
         .name()
         .ok_or_else(|| Error::PatFailed(Box::new(pat.clone())))?;
     let mut variants = vec![];
-    if let Pat::Op(PatOp::TypePrefixed, pats) = pat
-        && let [prefix, pats] = &pats[..]
-        && let Pat::Op(PatOp::Record, pats) = pats.value()
+    if let Pat::Op(PatOp::TypePrefixed, _) = pat
+        && let Pat::Op(PatOp::Record, pats) = pat.inner()
     {
         let mut scope = env.frame(name.to_ref(), Default::default());
-        if let Pat::Op(PatOp::Generic, gens) = prefix.value()
-            && let [prefix, vars @ ..] = gens.as_slice()
-        {
-            for var in vars {
-                let Some(name) = var.value().name() else {
-                    continue;
-                };
+        match pat.generics() {
+            Some(Pat::Op(PatOp::Tuple, vars)) => {
+                for var in vars {
+                    let Some(name) = var.value().name() else {
+                        continue;
+                    };
+                    let t = Model::Any.intern();
+                    scope.bind(name, ConValue::TypeInfo(t));
+                }
+            }
+            Some(var) if let Some(name) = var.name() => {
                 let t = Model::Any.intern();
                 scope.bind(name, ConValue::TypeInfo(t));
             }
+            _ => {}
         }
         for (idx, pat) in pats.iter().enumerate() {
             if let (Some(name), model) = bind_struct(pat.value(), &mut scope)? {
@@ -713,7 +717,7 @@ fn bind_enum(pat: &Pat, env: &mut Environment) -> IResult<ConValue> {
             }
         }
     } else {
-        todo!("Bind other enum: {pat}")?
+        todo!("Bind other enum: {pat:?}")?
     };
 
     let typeid = env.def_type(
@@ -940,8 +944,10 @@ impl Match for (PatOp, &[At<Pat>]) {
                 _ => pat.matches(value, in_env),
             },
             (PatOp::TypePrefixed, _) => todo!("TypePrefixed {self:?}"),
-            (PatOp::Generic, [pat, _subs @ ..]) => pat.matches(value, in_env),
-            (PatOp::Generic, _) => todo!(),
+            (PatOp::PostfixGeneric, [pat, _subs @ ..]) => pat.matches(value, in_env),
+            (PatOp::PostfixGeneric, _) => todo!(),
+            (PatOp::PrefixGeneric, [_subs @ .., pat]) => pat.matches(value, in_env),
+            (PatOp::PrefixGeneric, _) => todo!(),
             (PatOp::Fn, [args, _]) => args.matches(value, in_env),
             (PatOp::Fn, _) => todo!(),
             (PatOp::Guard, [pat, At(Pat::Value(cond), ..)]) => {

@@ -101,6 +101,7 @@ fn from_prefix(token: &Token) -> PResult<(Prefix, Prec)> {
         TKind::LCurly => (Prefix::Op(PatOp::Record), Prec::Typed),
         TKind::LParen => (Prefix::Op(PatOp::Tuple), Prec::Fn),
         TKind::LBrack => (Prefix::Array, Prec::Max),
+        TKind::Lt | TKind::LtLt => (Prefix::Op(PatOp::PrefixGeneric), Prec::Fn),
         kind => Err(ParseError::NotPrefix(kind, token.span))?,
     })
 }
@@ -119,7 +120,7 @@ fn from_infix(token: &Token) -> Option<(PatOp, Prec)> {
         TKind::LCurly => (PatOp::TypePrefixed, Prec::Typed),
         TKind::LBrack => (PatOp::TypePrefixed, Prec::Fn),
         TKind::LParen => (PatOp::TypePrefixed, Prec::Fn),
-        TKind::Lt => (PatOp::Generic, Prec::Fn),
+        TKind::Lt | TKind::LtLt => (PatOp::PostfixGeneric, Prec::Fn),
         _ => None?,
     })
 }
@@ -177,12 +178,17 @@ impl<'t> Parse<'t> for Pat {
                         p.consume()
                             .expect(TKind::LBrack)?
                             .opt(ExPrec::MIN, TKind::RBrack)?
-                            .unwrap_or_else(|| Expr::Op(Op::Tuple, vec![]).at(span)),
+                            .unwrap_or_else(|| Expr::Omitted.at(span)),
                     ))
                     .at(span),
                     p.parse(prec)?,
                 ],
             ),
+            Prefix::Op(op @ PatOp::PrefixGeneric) => {
+                let prefix = p.split_consume().parse(Prec::Tuple)?;
+                let suffix = p.split_expect(TKind::Gt)?.parse(prec)?;
+                Pat::Op(op, vec![prefix, suffix])
+            }
             Prefix::Op(op) => Pat::Op(op, vec![p.consume().parse(prec)?]),
             Prefix::Split(op) => {
                 p.split()?;
@@ -211,15 +217,11 @@ impl<'t> Parse<'t> for Pat {
                     let cond = Pat::Value(Box::new(At(cond, cspan))).at(cspan);
                     Pat::Op(op, vec![head.at(span), cond])
                 }
-                PatOp::Generic => Pat::Op(
-                    PatOp::Generic,
-                    p.consume().list(
-                        vec![head.at(span)],
-                        Prec::Typed,
-                        TKind::Comma,
-                        kind.flip(),
-                    )?,
-                ),
+                PatOp::PostfixGeneric => {
+                    let ty = p.split_consume().parse(Prec::Tuple)?;
+                    p.split_expect(TKind::Gt)?;
+                    Pat::Op(op, vec![head.at(span), ty])
+                }
                 PatOp::TypePrefixed => match prefix_level(&head, level, tok) {
                     Some(_prec) => add_typeprefix(p, head.at(span), prec)?,
                     _ => break,
@@ -240,7 +242,9 @@ impl<'t> Parse<'t> for Pat {
 fn prefix_level(pat: &Pat, level: Prec, tok: &Token) -> Option<Prec> {
     let (_, prec) = from_prefix(tok).ok()?;
     match pat {
-        Pat::Name(_) | Pat::Value(_) | Pat::Op(PatOp::Generic, _) if level <= prec => Some(prec),
+        Pat::Name(_) | Pat::Value(_) | Pat::Op(PatOp::PostfixGeneric, _) if level <= prec => {
+            Some(prec)
+        }
         _ => None,
     }
 }

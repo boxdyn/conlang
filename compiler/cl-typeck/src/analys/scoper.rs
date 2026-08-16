@@ -199,7 +199,7 @@ impl<'t> fold::Fold<DefaultTypes, ScopedAst> for Scoper<'t> {
 
     fn fold_bind(&mut self, bind: Bind<DefaultTypes>) -> Result<Bind<ScopedAst>, Self::Error> {
         use ScopeKind::*;
-        let Bind(op, gens, pat, mut exprs) = bind;
+        let Bind(op, pat, mut exprs) = bind;
         match op {
             BindOp::Let => {
                 let exprs = exprs
@@ -207,9 +207,8 @@ impl<'t> fold::Fold<DefaultTypes, ScopedAst> for Scoper<'t> {
                     .map(|e| self.block(Inner, "let body", |block| block.fold(e)))
                     .collect::<Result<_, _>>()?;
                 let bind = |scope: &mut Scoper| {
-                    let gens = scope.fold(gens)?;
                     let pat = scope.fold(pat)?;
-                    Ok(Bind(BindOp::Let, gens, pat, exprs))
+                    Ok(Bind(BindOp::Let, pat, exprs))
                 };
                 // if outside body, bind in scope
                 match self.get().kind {
@@ -219,36 +218,29 @@ impl<'t> fold::Fold<DefaultTypes, ScopedAst> for Scoper<'t> {
             }
             // TODO: bind function names outside
             BindOp::Fn => self.block(Outer, "fn", |item| {
-                let gens = item.fold(gens)?;
                 let pat = item.fold(pat)?;
                 let exprs = item.block(Inner, "fn body", |body| body.fold(exprs))?;
-                Ok(Bind(op, gens, pat, exprs))
+                Ok(Bind(op, pat, exprs))
             }),
             BindOp::Mod => Ok(Bind(
                 BindOp::Mod,
-                self.fold(gens)?,
                 self.fold(pat)?,
                 self.block(Outer, "mod", |block| block.fold(exprs))?,
             )),
             BindOp::Enum => {
                 let pat = Binder::new(self, BinderState::OutsideEnum).fold(pat)?;
-                let (gens, exprs) = self.block(Inner, "enum body?", |block| {
-                    Ok((block.fold(gens)?, block.fold(exprs)?))
-                })?;
-                Ok(Bind(BindOp::Enum, gens, pat, exprs))
+                let exprs = self.block(Inner, "enum body?", |block| Ok(block.fold(exprs)?))?;
+                Ok(Bind(BindOp::Enum, pat, exprs))
             }
             BindOp::Struct => {
                 let pat = Binder::new(self, BinderState::OutsideStruct).fold(pat)?;
-                let (gens, exprs) = self.block(Inner, "enum body?", |block| {
-                    Ok((block.fold(gens)?, block.fold(exprs)?))
-                })?;
-                Ok(Bind(BindOp::Enum, gens, pat, exprs))
+                let exprs = self.block(Inner, "enum body?", |block| Ok(block.fold(exprs)?))?;
+                Ok(Bind(BindOp::Enum, pat, exprs))
             }
             op @ (BindOp::Type) => self.block(Outer, "type", |block| {
-                let gens = block.fold(gens)?;
                 let pat = block.fold(pat)?;
                 let exprs = block.block(Inner, "type body", |block| block.fold(exprs))?;
-                Ok(Bind(op, gens, pat, exprs))
+                Ok(Bind(op, pat, exprs))
             }),
             BindOp::Impl => todo!("Scope `impl`"),
             BindOp::For => {
@@ -256,11 +248,11 @@ impl<'t> fold::Fold<DefaultTypes, ScopedAst> for Scoper<'t> {
                 let [cond, pass, fail] = exprs.into_chunks().pop().ok_or(())?;
                 let cond = self.block(Inner, "iter", |block| block.fold(cond))?;
                 let fail = self.block(Inner, "fail", |block| block.fold(fail))?;
-                let (gens, pat, pass) = self.block(Inner, "pass", |block| {
-                    Ok((block.fold(gens)?, block.fold(pat)?, block.fold(pass)?))
+                let (pat, pass) = self.block(Inner, "pass", |block| {
+                    Ok((block.fold(pat)?, block.fold(pass)?))
                 })?;
                 let exprs = vec![cond, pass, fail];
-                Ok(Bind(BindOp::For, gens, pat, exprs))
+                Ok(Bind(BindOp::For, pat, exprs))
             }
         }
     }

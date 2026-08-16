@@ -28,7 +28,7 @@ pub struct Function {
 impl Function {
     pub fn new(decl: &Bind) -> Self {
         // let upvars = collect_upvars(decl, env);
-        if let Bind(BindOp::Fn, _, pat, exprs) = decl
+        if let Bind(BindOp::Fn, pat, exprs) = decl
             && let [body] = exprs.as_slice()
         {
             Self { decl: (pat.clone(), body.clone()).into(), upvars: Default::default() }

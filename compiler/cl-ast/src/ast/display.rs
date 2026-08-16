@@ -64,9 +64,8 @@ impl<A: AstTypes> std::fmt::Debug for Pat<A> {
 
 impl<A: AstTypes> std::fmt::Debug for Bind<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self(op, generics, pat, exprs) = self;
+        let Self(op, pat, exprs) = self;
         f.debug_tuple(&format!("Bind::{op:?}"))
-            .field(generics)
             .field(pat)
             .field(exprs)
             .finish()
@@ -229,21 +228,17 @@ impl<A: AstTypes> Display for Use<A> {
 
 impl<A: AstTypes> Display for Bind<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self(op, gens, pat, exprs) = self;
+        let Self(op, pat, exprs) = self;
 
         // Lambda/0 syntax
         if let (BindOp::Fn, At(Pat::Op(PatOp::Fn, pats), _)) = (op, pat)
             && let [At(Pat::Op(PatOp::Tuple, args), _), rety] = &pats[..]
         {
-            f.delimit("|", fmt!("|-> {rety} ")).list(args, ", ")?;
+            f.delimit("|", fmt!("| -> {rety} ")).list(args, ", ")?;
             return f.list(exprs, "");
         }
 
         op.fmt(f)?;
-        if !gens.is_empty() {
-            f.delimit("<", "> ").list(gens, ", ")?;
-        }
-
         match (op, exprs.as_slice()) {
             (_, [At(Expr::Omitted, _)]) => write!(f, "{pat}"),
             (BindOp::Fn | BindOp::Mod | BindOp::Impl, [At(Expr::Op(Op::Block, _), _)]) => {
@@ -354,7 +349,11 @@ impl<A: AstTypes> Display for Pat<A> {
                 pats => f.list(pats, op),
             },
             Self::Op(op @ PatOp::Alt, pats) => f.list(pats, op),
-            Self::Op(op @ PatOp::Generic, pats) => match &pats[..] {
+            Self::Op(op @ PatOp::PrefixGeneric, pats) => match &pats[..] {
+                [] => op.fmt(f),
+                [first, rest @ ..] => f.delimit(fmt!("<{first}>"), "").list(rest, ",? "),
+            },
+            Self::Op(op @ PatOp::PostfixGeneric, pats) => match &pats[..] {
                 [] => op.fmt(f),
                 [first, rest @ ..] => f.delimit(fmt!("{first}<"), ">").list(rest, ", "),
             },
@@ -393,7 +392,8 @@ impl Display for PatOp {
             Self::Slice => ", ",
             Self::ArRep => "; ",
             Self::Typed => ": ",
-            Self::Generic => "T<>",
+            Self::PostfixGeneric => "T<>",
+            Self::PrefixGeneric => "<>T",
             Self::TypePrefixed => "T()",
             Self::Fn => " -> ",
             Self::Guard => " if ",

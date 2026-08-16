@@ -75,15 +75,14 @@ impl<M: Match<A> + AstNode, A: AstTypes> Match<A> for At<M, A> {
 
 impl<A: AstTypes> Match<A> for Bind<A> {
     fn recurse(sub: &mut Subst<A>, pat: &Self, expr: &Self) -> bool {
-        let (Self(pat_kind, _, pat_pat, pat_expr), Self(expr_kind, _, expr_pat, expr_expr)) =
-            (pat, expr);
+        let (Self(pat_kind, pat_pat, pat_expr), Self(expr_kind, expr_pat, expr_expr)) = (pat, expr);
         pat_kind == expr_kind
             && Match::recurse(sub, pat_pat, expr_pat)
             && Match::recurse(sub, pat_expr, expr_expr)
     }
 
     fn apply(&mut self, sub: &Subst<A>) {
-        let Self(_, _, pat, expr) = self;
+        let Self(_, pat, expr) = self;
         pat.apply(sub);
         expr.apply(sub);
     }

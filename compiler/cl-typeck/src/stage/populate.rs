@@ -96,7 +96,7 @@ impl Visit<'_, DefaultTypes> for Populator<'_, '_> {
     }
 
     fn visit_bind(&mut self, item: &Bind<DefaultTypes>) -> Result<(), Self::Error> {
-        let Bind(op, _ts, pat, exprs) = item;
+        let Bind(op, pat, exprs) = item;
 
         let nodekind = match op {
             BindOp::Let => NodeKind::Let,

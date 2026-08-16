@@ -249,15 +249,8 @@ impl<A: AstTypes, B: AstTypes> Foldable<A, B> for Bind<A> {
     }
 
     fn children<F: Fold<A, B> + ?Sized>(self, folder: &mut F) -> Result<Self::Out, F::Error> {
-        let Self(op, gens, pat, exprs) = self;
-        Ok(Bind(
-            op,
-            gens.into_iter()
-                .map(|g| g.fold_in(folder))
-                .collect::<Result<_, _>>()?,
-            pat.fold_in(folder)?,
-            exprs.fold_in(folder)?,
-        ))
+        let Self(op, pat, exprs) = self;
+        Ok(Bind(op, pat.fold_in(folder)?, exprs.fold_in(folder)?))
     }
 }
 

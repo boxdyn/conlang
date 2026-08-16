@@ -254,12 +254,28 @@ fn resolve_all(table: &mut Table) -> Result<(), Box<dyn Error>> {
 
 fn infer_all(table: &mut Table) -> Result<(), Box<dyn Error>> {
     let mut ie = InferenceEngine::new(table, table.root());
-    let mut results = vec![];
     EXPR_INTERNER
         .get_or_init(Default::default)
         .foreach(|expr| match ie.infer(expr) {
             Ok(v) => println!("{expr}: {}", ie.entry(v)),
-            Err(e) => results.push(e),
+            Err(e) => match e {
+                InferenceError::AnnotationEval(error) => println!("{expr}: eval {error}"),
+                InferenceError::FieldCount(t, a, b) => {
+                    println!("{expr}: miscount {} {a} != {b}", ie.entry(t))
+                }
+                InferenceError::Mismatch(t1, t2) => {
+                    println!("{expr}: {} != {}", ie.entry(t1), ie.entry(t2))
+                }
+                InferenceError::Recursive(t1, t2) => {
+                    println!(
+                        "{expr}: recursive type {} in {}",
+                        ie.entry(t1),
+                        ie.entry(t2),
+                    )
+                }
+                InferenceError::NoBreak => println!("Break outside of breakset!"),
+                InferenceError::NoReturn => println!("Return outside of returnset!"),
+            },
         });
 
     println!("...Inferred!");

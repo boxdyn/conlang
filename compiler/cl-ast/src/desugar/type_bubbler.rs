@@ -82,7 +82,7 @@ pub fn bubble_types<A: AstTypes>(
                 Some(Pat::Op(op, vec![ty, take(rep)]).at(span)),
             )
         }
-        (PatOp::Generic, [pat, ..]) => {
+        (PatOp::PostfixGeneric, [pat, ..]) => {
             let (pat, ty) = bubble_types(take(pat), in_enum);
             pats[0] = ty.unwrap_or(Pat::Ignore.at(pat.1));
             (pat, Some(Pat::Op(op, pats).at(span)))

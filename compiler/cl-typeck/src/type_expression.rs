@@ -88,12 +88,15 @@ impl TypeExpression for Pat {
                 Ok(pat.evaluate(table, node)?)
             }
             Pat::Op(PatOp::TypePrefixed, pats) => todo!("TypePrefixed {pats:?}"),
-            Pat::Op(PatOp::Generic, pats) if let [pat, ..] = &pats[..] => {
+            Pat::Op(PatOp::PostfixGeneric, pats) if let [pat, ..] = &pats[..] => {
+                Ok(pat.evaluate(table, node)?)
+            }
+            Pat::Op(PatOp::PrefixGeneric, pats) if let [.., pat] = &pats[..] => {
                 Ok(pat.evaluate(table, node)?)
             }
             Pat::Op(PatOp::Fn, pats) => todo!("Fn {pats:?}"),
             Pat::Op(PatOp::Alt, pats) => todo!("Alt {pats:?}"),
-            _ => unreachable!(),
+            other => unreachable!("{other:#?}"),
         }
     }
 }

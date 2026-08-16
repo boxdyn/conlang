@@ -99,7 +99,7 @@ impl Fold<DefaultTypes> for ModuleInliner {
 
     /// Traverses down the module tree, entering ever nested directories
     fn fold_bind(&mut self, bind: Bind<DefaultTypes>) -> Result<Bind<DefaultTypes>, Self::Error> {
-        let Bind(BindOp::Mod, ts, pat, exprs) = bind else {
+        let Bind(BindOp::Mod, pat, exprs) = bind else {
             return bind.children(self);
         };
 
@@ -120,9 +120,9 @@ impl Fold<DefaultTypes> for ModuleInliner {
                     .as_str()
                     .into();
                 let expr = Expr::Op(Op::Block, vec![out.at(span)]).at(span);
-                return Ok(Bind(BindOp::Mod, ts, Pat::Name(sym).at(span), vec![expr]));
+                return Ok(Bind(BindOp::Mod, Pat::Name(sym).at(span), vec![expr]));
             }
-            _ => return Ok(Bind(BindOp::Mod, ts, pat, exprs)),
+            _ => return Ok(Bind(BindOp::Mod, pat, exprs)),
         };
 
         self.path.push(name.0); // cd ./name
@@ -130,9 +130,9 @@ impl Fold<DefaultTypes> for ModuleInliner {
             && let Some(Ok(At(out, span))) = self.inline_file()
         {
             let expr = Expr::Op(Op::Block, vec![out.at(span)]).at(span);
-            Ok(Bind(BindOp::Mod, ts, pat, vec![expr]))
+            Ok(Bind(BindOp::Mod, pat, vec![expr]))
         } else {
-            Bind(BindOp::Mod, ts, pat, exprs).children(self)
+            Bind(BindOp::Mod, pat, exprs).children(self)
         };
 
         self.path.pop(); // cd ..

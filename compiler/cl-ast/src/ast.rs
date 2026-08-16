@@ -39,10 +39,10 @@ pub trait AstTypes: Clone + std::fmt::Debug + PartialEq + Eq + Hash {
 pub struct At<T: AstNode, A: AstTypes = DefaultTypes>(pub T, pub A::Annotation);
 
 impl<T: AstNode, A: AstTypes> At<T, A> {
-    pub fn value(&self) -> &T {
+    pub const fn value(&self) -> &T {
         &self.0
     }
-    pub fn a(&self) -> &A::Annotation {
+    pub const fn a(&self) -> &A::Annotation {
         &self.1
     }
     pub fn map<U: AstNode>(self, f: impl FnOnce(T) -> U) -> At<U, A> {
@@ -328,12 +328,7 @@ pub struct Label<A: AstTypes = DefaultTypes>(pub A::Symbol, pub At<Expr<A>, A>);
 /// for    Pat in Expr Expr (else Expr)?
 /// ```
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct Bind<A: AstTypes = DefaultTypes>(
-    pub BindOp,
-    pub Vec<At<Pat<A>, A>>,
-    pub At<Pat<A>, A>,
-    pub Vec<At<Expr<A>, A>>,
-);
+pub struct Bind<A: AstTypes = DefaultTypes>(pub BindOp, pub At<Pat<A>, A>, pub Vec<At<Expr<A>, A>>);
 
 /// The binding operation used by a [Bind].
 ///
@@ -406,13 +401,15 @@ pub enum PatOp {
     Slice,
     /// Matches a constant-size slice with repeating elements
     ArRep,
-    /// Matches a type annotation or struct member
+    /// Matches a struct member or types a value: `x: T`
     Typed,
-    /// Matches a prefix-type-annotated structure
+    /// Types a prefix-annotated structure `T(..)`, `R{..}`
     TypePrefixed,
-    /// Matches a generic specialization annotation
-    Generic,
-    /// Changes the binding mode to "function-body"
+    /// Types a prefix generic annotation `<T>U`
+    PrefixGeneric,
+    /// Types a postfix generic annotation `T<U>`
+    PostfixGeneric,
+    /// Types a function signature
     Fn,
     /// Matches a guard pattern (`Pat if Expr`)
     Guard,
@@ -432,6 +429,39 @@ impl<A: AstTypes> Pat<A> {
             _ => Self::Op(PatOp::Tuple, vec![self.at(annotation)]),
         }
     }
+
+    /// Gets the closest non-[PostfixGeneric], [PrefixGeneric], or [TypePrefixed] [Pat]
+    ///
+    /// [TypePrefixed]: PatOp::TypePrefixed
+    /// [PrefixGeneric]: PatOp::PrefixGeneric
+    /// [PostfixGeneric]: PatOp::PostfixGeneric
+    pub fn inner(&self) -> &Self {
+        match self {
+            Pat::Op(PatOp::PostfixGeneric | PatOp::PrefixGeneric | PatOp::TypePrefixed, ats)
+                if let [.., last] = &ats[..] =>
+            {
+                last.value().inner()
+            }
+            _ => self,
+        }
+    }
+
+    /// Gets the "generics" pattern for a [PostfixGeneric], [PrefixGeneric], or [TypePrefixed] [Pat]
+    ///
+    /// [TypePrefixed]: PatOp::TypePrefixed
+    /// [PrefixGeneric]: PatOp::PrefixGeneric
+    /// [PostfixGeneric]: PatOp::PostfixGeneric
+    pub fn generics(&self) -> Option<&Self> {
+        Some(match self {
+            Pat::Op(PatOp::PrefixGeneric, ats) if let [first, ..] = &ats[..] => first.value(),
+            Pat::Op(PatOp::PostfixGeneric, ats) if let [.., last] = &ats[..] => last.value(),
+            Pat::Op(PatOp::TypePrefixed, ats) if let [.., last] = &ats[..] => {
+                last.value().generics()?
+            }
+            _ => None?,
+        })
+    }
+
     /// Returns the single, unambiguous name bound by this pattern, if there is one.
     ///
     /// Else, returns [None].
@@ -443,7 +473,7 @@ impl<A: AstTypes> Pat<A> {
                 | PatOp::Typed
                 | PatOp::Pub
                 | PatOp::Mut
-                | PatOp::Generic
+                | PatOp::PostfixGeneric
                 | PatOp::Guard,
                 pats,
             ) if let [At(pat, _), ..] = &pats[..] => pat.name(),
