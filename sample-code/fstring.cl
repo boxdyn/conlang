@@ -16,10 +16,7 @@ fn f(__fmt: &str) -> &str {
                 __depth -= 1;
                 if __depth <= 0 {
                     __out = fmt(__out, __label, eval(__expr));
-                    __expr = "";
-                    __label = "";
-                    // TODO: pattern-style destructuring
-                    // (__expr, __label) = ("", "");
+                    __expr, __label = "", "";
                     continue
                 }
             }

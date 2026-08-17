@@ -8,7 +8,7 @@
 /// `let` expressions try to bind variables
 let x = 1, 2, 3;
 /// ...and return `true` if they succeeded!
-if (let 1, two, 3 = x) {
+if let 1, two, 3 = x {
     println(two) // prints "2"
 }
 
