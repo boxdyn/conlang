@@ -67,6 +67,7 @@ pub enum Prefix {
     Id,
     Array,
     Constant,
+    Parens,
     Op(PatOp),
     Split(PatOp),
 }
@@ -99,7 +100,7 @@ fn from_prefix(token: &Token) -> PResult<(Prefix, Prec)> {
         TKind::DotDot => (Prefix::Op(PatOp::Rest), Prec::Max),
         TKind::DotDotEq => (Prefix::Op(PatOp::RangeIn), Prec::Max),
         TKind::LCurly => (Prefix::Op(PatOp::Record), Prec::Typed),
-        TKind::LParen => (Prefix::Op(PatOp::Tuple), Prec::Fn),
+        TKind::LParen => (Prefix::Parens, Prec::Fn),
         TKind::LBrack => (Prefix::Array, Prec::Max),
         TKind::Lt | TKind::LtLt => (Prefix::Op(PatOp::PrefixGeneric), Prec::Fn),
         kind => Err(ParseError::NotPrefix(kind, token.span))?,
@@ -147,6 +148,12 @@ impl<'t> Parse<'t> for Pat {
                     _ => Pat::Value(Box::new(At(Expr::Id(path), span))),
                 }
             }
+            Prefix::Parens => match p.consume().opt(Prec::Min, kind.flip())? {
+                // TODO: this sometimes strips parens where parens are necessary.
+                Some(At(pat @ Pat::Op(PatOp::Alt | PatOp::Tuple, _), _)) => pat,
+                Some(At(other, span)) => Pat::Op(PatOp::Tuple, vec![other.at(span)]),
+                None => Pat::Op(PatOp::Tuple, vec![]),
+            },
             Prefix::Op(op @ (PatOp::Record | PatOp::Tuple)) => Pat::Op(
                 op,
                 p.consume()
