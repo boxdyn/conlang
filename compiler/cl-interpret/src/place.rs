@@ -150,7 +150,7 @@ impl Place {
                     let len = values.len();
                     values.get_mut(idx).ok_or(Error::OobIndex(idx, len))?
                 }
-                (place, Projection::DotIdx(_)) => todo!()?,
+                (place, Projection::DotIdx(idx)) => todo!("{place}.{idx}")?,
                 (value, place) => Err(Error::Panic(format!(
                     "Failed to match {value} against {place:?}"
                 )))?,
@@ -173,6 +173,10 @@ impl Place {
                     let len = arr.len();
                     let idx = if from_end { len - idx } else { idx };
                     arr.get(idx).ok_or(Error::OobIndex(idx, len))?
+                }
+                (ConValue::Slice(place, start, len), &Projection::Index(idx, from_end)) => {
+                    let idx = if from_end { len - idx } else { idx };
+                    place.clone().index(start + idx, false).get(env)?
                 }
                 (place, Projection::Index(_, _)) => todo!("Index {self}")?,
                 (ConValue::Struct(_, values), Projection::DotSym(sym)) => {

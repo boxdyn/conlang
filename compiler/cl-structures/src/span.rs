@@ -36,6 +36,23 @@ impl Span {
         }
         Span { path: self.path, head: self.head.min(other.head), tail: self.tail.max(other.tail) }
     }
+
+    pub fn to_line_col(self, text: &str) -> ((u32, u32), (u32, u32)) {
+        fn to_line_col(idx: usize, text: &str) -> (u32, u32) {
+            let (mut line, mut col) = (1, 1);
+            for c in text[0..idx].bytes() {
+                (line, col) = match c {
+                    b'\n' => (line + 1, 1),
+                    _ => (line, col + 1),
+                }
+            }
+            (line, col)
+        }
+        (
+            to_line_col(self.head as _, text),
+            to_line_col(self.tail as _, text),
+        )
+    }
 }
 
 impl From<Span> for Range<usize> {

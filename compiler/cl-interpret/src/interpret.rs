@@ -139,7 +139,9 @@ impl Interpret for (Op, &[At<Expr>]) {
             (Op::MetaOuter, [_, expr]) => expr.interpret(env),
             (Op::Try, [expr]) => match expr.interpret(env)? {
                 // TODO: a more principled Try
-                v @ ConValue::TupleStruct(ty, ..) if let "Some" | "Ok" = ty.name() => Ok(v),
+                ConValue::TupleStruct(ty, mut vs) if let "Some" | "Ok" = ty.name() => {
+                    Ok(vs[0].take())
+                }
                 v @ ConValue::TupleStruct(ty, ..) if let "Err" = ty.name() => Err(Error::Return(v)),
                 v @ ConValue::TypeInfo(ty) if let "None" = ty.name() => Err(Error::Return(v)),
                 other => Ok(other),

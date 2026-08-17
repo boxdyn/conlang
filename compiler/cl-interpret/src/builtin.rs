@@ -249,6 +249,13 @@ pub const Builtins: &[Builtin] = &builtins![
         })
     }
 
+    fn slice(ConValue::Ref(index), ConValue::Int(start), ConValue::Int(end)) {
+        match (start, end) {
+            (0.., 0..) if start <= end => Ok(ConValue::Slice(index.clone(), *start as _, (end - start) as _)),
+            _ => Err(Error::BuiltinError(format_args!("Bad index: {index}[{start}, {end}]")))
+        }
+    }
+
     fn push(ConValue::Ref(index), item) @env{
         let mut index = index.get_mut(env)?;
         while let ConValue::Ref(r) = index {

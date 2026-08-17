@@ -12,7 +12,7 @@ pub type IResult<T> = Result<T, Error>;
 #[derive(Clone, Debug)]
 pub struct Error {
     pub kind: ErrorKind,
-    pub(super) span: Option<Span>,
+    pub span: Option<Span>,
 }
 
 impl Error {

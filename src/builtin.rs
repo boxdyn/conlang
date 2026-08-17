@@ -10,6 +10,11 @@ use std::{
     io::{Write, stdout},
 };
 
+/// The Conlang interpreter preamble
+///
+///  ```rust,ignore
+#[doc = include_str!("preamble.cl")]
+/// ```
 const PREAMBLE: &str = include_str!("preamble.cl");
 
 pub fn get_env() -> Environment {

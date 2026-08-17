@@ -33,6 +33,26 @@ pub enum ParseError {
     NotPostfix(TKind, Span),
 }
 
+impl ParseError {
+    pub fn span(&self) -> Span {
+        match self {
+            ParseError::EOF(span)
+            | ParseError::UnexpectedEOF(span)
+            | ParseError::ExpectedEOF(_, span)
+            | ParseError::FromLexer(LexError { pos: span, res: _ })
+            | ParseError::Expected(_, _, span)
+            | ParseError::NotLiteral(_, span)
+            | ParseError::NotUse(_, span)
+            | ParseError::NotPattern(_, _, span)
+            | ParseError::NotBind(_, span)
+            | ParseError::NotPrefix(_, span)
+            | ParseError::NotInfix(_, span)
+            | ParseError::NotPostfix(_, span) => *span,
+        }
+    }
+}
+
+
 pub use ParseError::EOF;
 
 impl Error for ParseError {}

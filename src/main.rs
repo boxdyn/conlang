@@ -111,7 +111,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if interactive {
         banner();
-        read_and_mut(color, begin, "  > ", |rl, line| match line.trim_end() {
+        read_and_mut(color, begin, "    ", |rl, line| match line.trim_end() {
             "" => Ok(Response::Continue),
             "exit" => Ok(Response::Break),
             "help" => {
@@ -303,13 +303,22 @@ fn run<'env: 't, 't>(
     document: &'t str,
     verbose: Verbosity,
 ) -> Result<(), Box<dyn Error>> {
+    use cl_interpret::error::Error;
     let mut parser = Parser::new(Lexer::new("<run>".into(), document));
     for idx in 0..6 {
         let color_tag = (idx + 5) % 6 + 31;
-        let Some(code) = parser.parse::<At<Expr>>(0).allow_eof()? else {
-            break;
+        let code = match parser.parse::<At<Expr>>(0).allow_eof() {
+            Ok(Some(code)) => code,
+            Err(e) => {
+                pretty_error(e.span(), document, e);
+                break;
+            }
+            _ => break,
         };
         match (inline_modules(code).interpret(env), verbose) {
+            (Err(Error { span: Some(span), kind }), _) => {
+                pretty_error(span, document, kind);
+            }
             (Err(error), _) => {
                 println!("\x1b[31m{error}");
             }
@@ -375,11 +384,29 @@ where
             println!("{}: {err}", path.display());
         }
         for (path, err) in parse_errs {
-            println!("{}: {err}", path.display());
+            match std::fs::read_to_string(&path) {
+                Ok(text) => pretty_error(err.span(), &text, err),
+                Err(_) => println!("{}: {err}", path.display()),
+            }
         }
     }
 
     At(expr, span)
+}
+
+fn pretty_error(span: Span, text: &str, error: impl std::fmt::Display) {
+    let Span { path, .. } = span;
+    match std::fs::read_to_string(path.0) {
+        Ok(text) => {
+            let ((line, col), _) = span.to_line_col(&text);
+            println!("{path}:{line}:{col}: {error}");
+        }
+        Err(_) if text.len() >= span.tail as _ => {
+            let ((line, col), _) = span.to_line_col(text);
+            println!("{path}:{line}:{col}: {error}");
+        }
+        Err(_) => println!("{error}"),
+    }
 }
 
 /// How much information to show about results
