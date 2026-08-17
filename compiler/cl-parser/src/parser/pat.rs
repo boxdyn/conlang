@@ -12,6 +12,7 @@ use cl_token::{TKind, Token};
 /// Lower (toward [Prec::Min]) precedence levels can contain
 /// all higher (toward [Prec::Max]) precedence levels.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
 pub enum Prec {
     /// The lowest precedence
     #[default]
@@ -30,28 +31,20 @@ pub enum Prec {
     Max,
 }
 
-macro_rules! intify {
-    ($enum:ident($value:path) = $min:ident, $max: ident, $($variant:ident),*$(,)?) => {
-        #[expect(non_upper_case_globals)] {
-        const $min: u32 = $enum::$min as _;
-        const $max: u32 = $enum::$max as _;
-        $(const $variant: u32 = $enum::$variant as _;)*
-        match $value {
-            ..=$min => $enum::$min,
-            $($variant => $enum::$variant,)*
-            $max.. => $enum::$max,
-        }
-    }};
-}
-
 impl Prec {
-    pub const fn from_int(value: u32) -> Self {
-        intify! {Prec(value) = Min, Max, Alt, Tuple, Typed, Fn, Range}
+    pub const fn from_int(value: u8) -> Self {
+        const MIN: u8 = Prec::Min as _;
+        const MAX: u8 = Prec::Max as _;
+        match value as u8 {
+            // SAFETY: Prec is a C-like enum with contiguous values from MIN to MAX
+            MIN..MAX => unsafe { std::mem::transmute::<u8, Self>(value as u8) },
+            MAX.. => Self::Max,
+        }
     }
 
     /// Returns the level of precedence higher than this one
     pub const fn next(self) -> Self {
-        Self::from_int(self as u32 + 1)
+        Self::from_int(self as u8 + 1)
     }
 }
 
