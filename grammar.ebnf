@@ -69,16 +69,14 @@ Match = "match" ExprTuple '{' (MatchArm ';')* MatchArm? '}' ;
 MatchArm = Pat '=>' ExprBody ;
 
 Bind = BindLet | BindType | BindStruct | BindEnum | BindFn | BindMod | BindImpl | BindFor ;
-BindLet    = "let"    BoundGeneric? PatTuple ('=' ExprBody   ("else" ExprBody)?)? ;
-BindType   = "type"   BoundGeneric? PatAlt   ('=' ExprBody)? ;
-BindStruct = "struct" BoundGeneric? PatTuple ;
-BindEnum   = "enum"   BoundGeneric? PatTuple ;
-BindFn     = "fn"     BoundGeneric? PatFn    ('='? ExprBody) ;
-BindMod    = "mod"    BoundGeneric? PatMax   ('='? ExprBody) ;
-BindImpl   = "impl"   BoundGeneric? PatFn    ('='? ExprBody) ;
+BindLet    = "let"    PatTuple ('=' ExprBody   ("else" ExprBody)?)? ;
+BindType   = "type"   PatAlt   ('=' ExprBody)? ;
+BindStruct = "struct" PatTuple ;
+BindEnum   = "enum"   PatTuple ;
+BindFn     = "fn"     PatFn    ('='? ExprBody) ;
+BindMod    = "mod"    PatMax   ('='? ExprBody) ;
+BindImpl   = "impl"   PatFn    ('='? ExprBody) ;
 BindFor    = "for"    PatTuple "in" ExprLogical ExprBody ("else" ExprBody)? ;
-
-BoundGeneric = '<' (Pat ',')* Pat? '>' ;
 
 (* Patterns *)
 
@@ -98,10 +96,11 @@ PatFn = (
   | "fn" PatFn
   | '&' PatFn
   | '&&' PatFn
+  | PatGenerics PatFn
   | PatRange PatGenerics* PatParams? ('->' PatFn)?
 );
-PatGenerics = '<' (PatTyped ',')* PatTyped? '>' ;
-PatParams   = '(' (PatTyped ',')* PatTyped? ')' ;
+PatGenerics = '<' PatTuple? '>' ;
+PatParams   = '(' PatTuple? ')' ;
 
 PatRange = (
     PatMax? '..' PatMax?
@@ -116,7 +115,6 @@ PatMax = (
   | '$' Token                        (* Metaidentifier *)
   | '!'                              (* Never *)
   | '_'                              (* Wildcard *)
-  | '$' Token                        (* Metaidentifier *)
   | Identifier                       (* Binding wildcard *)
   | PatConst                         (* Constant expression *)
 );
