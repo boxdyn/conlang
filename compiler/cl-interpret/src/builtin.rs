@@ -480,4 +480,13 @@ pub const Math: &[Builtin] = &builtins![
             other => Err(error_format!("Cannot convert {other} from float to bits")),
         }
     }
+
+    /// Twiddles bits into floats, or vice versa
+    fn float(bits) @env {
+        match bits.dereference_in(env)? {
+            &ConValue::Float(f) => Ok(ConValue::Int(f.to_bits() as _)),
+            &ConValue::Int(i) => Ok(ConValue::Float(f64::from_bits(i as u64))),
+            other => Err(error_format!("Cannot convert {other} to/from float/bits")),
+        }
+    }
 ];

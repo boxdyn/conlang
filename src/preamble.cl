@@ -3,27 +3,50 @@
 
 pub mod builtin_preamble {
     //! Conlang functions which are loaded into the default REPL
-    //! 
+    //!
     //! Contains generally-useful functions which don't require
     //! special functionality that the Conlang interpreter
     //! doesn't yet have.
-    
+
     enum Option<T> { Some(T), None }
     enum Result<T, E> { Ok(T), Err(E) }
     let Some, None, Ok, Err = {
         Option::Some, Option::None, Result::Ok, Result::Err
     } // TODO: implement `use`
 
+    // TODO: accurate floating point number parsing
+    const (
+        /// The half-circle constant
+        let PI = f64_from_bits(0x400921fb54442d18);
+        /// The golden ratio
+        let PHI = f64_from_bits(0x3ff9e3779b97f4a8);
+        /// A really small number
+        let SMOL = f64_from_bits(0x0010000000000000);
+        /// A really big number
+        let LORG = f64_from_bits(0x7fefffffffffffff);
+        /// The most big number
+        let INF = f64_from_bits(0x7ff0000000000000);
+    );
+
+    pub fn f64_sign(n: f64) = f64_to_bits(n) >> 63;
+    pub fn exponent(n: f64) = (f64_to_bits(n) >> 52 & 0x7ff) - 1023;
+    pub fn significand(n: f64) = f64_to_bits(n) & (1 << 52) - 1;
+    pub fn f64_from(sign: i64, exp: i64, significand: i64) = f64_from_bits(
+        (sign & 1) << 63 | (exp + 1023 & 0x7ff) << 52 | (significand & (1 << 52) - 1)
+    );
+
     pub fn max<T: Cmp>(a: T, b: T) -> T = if a < b b else a;
     pub fn min<T: Cmp>(a: T, b: T) -> T = if a > b b else a;
     pub fn sqrt(mut n: f64) -> f64 {
-        const let EPSILON: f64 = 8.8541878188 / 1000000000000.0;
+        // const let EPSILON: f64 = 8.8541878188 / 1000000000000.0;
+        const let EPSILON = SMOL * 0x100000.0;
         if n < 0.0 return f64::NaN; // TODO: re-uppercase
         if n == 0.0 return 0.0;
         let z = n;
         loop {
             let adj = (z * z - n) / (2.0 * z);
             z -= adj;
+            println(adj);
             if (if adj >= 0.0 adj else -adj) < EPSILON break z;
         }
     }
