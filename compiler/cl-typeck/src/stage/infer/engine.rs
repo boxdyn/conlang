@@ -296,6 +296,7 @@ impl<'table, 'b> InferenceEngine<'table, 'b> {
     pub fn set_instance(&mut self, to: Scope, of: Scope) {
         let mut e = self.table.entry_mut(to);
         match e.as_ref().ty() {
+            None => e.set_ty(TypeKind::Instance(of)),
             Some(TypeKind::Inferred) => {
                 if let Some(ty) = self.table.ty(of) {
                     self.table.set_ty(to, ty.clone());
@@ -485,12 +486,23 @@ impl<'table, 'b> InferenceEngine<'table, 'b> {
     /// Unifies two types
     pub fn unify(&mut self, this: Scope, other: Scope) -> Result<(), InferenceError> {
         let (ah, bh) = (self.prune(this), self.prune(other));
+        println!(
+            "unify({}, {})",
+            ah.to_entry(self.table),
+            bh.to_entry(self.table)
+        );
         if ah == bh {
             return Ok(());
         }
         let (a, b) = (self.table.entry(ah), self.table.entry(bh));
-        let (Some(a), Some(b)) = (a.ty(), b.ty()) else {
-            return Err(InferenceError::Mismatch(ah, bh));
+        let (a, b) = match (a.ty(), b.ty()) {
+            (Some(a), Some(b)) => (a, b),
+            (Some(_), None) => {
+                self.set_instance(bh, ah);
+                return Ok(());
+            }
+            (None, Some(_)) => return self.unify(bh, ah),
+            _ => return Err(InferenceError::Mismatch(ah, bh)),
         };
 
         match (a, b) {
