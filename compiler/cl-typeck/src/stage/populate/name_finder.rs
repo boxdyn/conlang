@@ -3,7 +3,6 @@ use cl_ast::{
     types::Symbol,
     visit::{Visit, Walk},
 };
-use std::convert::Infallible;
 
 /// Finds the first name mentioned anywhere in a syntax tree
 #[derive(Clone, Debug, Default)]
@@ -24,7 +23,7 @@ impl NameFinder {
 }
 
 impl<'a> Visit<'a, DefaultTypes> for NameFinder {
-    type Error = Infallible;
+    type Error = !;
 
     fn visit_symbol(&mut self, name: &'a Symbol) -> Result<(), Self::Error> {
         if self.name.is_none() {
