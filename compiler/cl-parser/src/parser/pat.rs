@@ -35,9 +35,9 @@ impl Prec {
     pub const fn from_int(value: u8) -> Self {
         const MIN: u8 = Prec::Min as _;
         const MAX: u8 = Prec::Max as _;
-        match value as u8 {
+        match value {
             // SAFETY: Prec is a C-like enum with contiguous values from MIN to MAX
-            MIN..MAX => unsafe { std::mem::transmute::<u8, Self>(value as u8) },
+            MIN..MAX => unsafe { std::mem::transmute::<u8, Self>(value) },
             MAX.. => Self::Max,
         }
     }

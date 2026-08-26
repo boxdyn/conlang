@@ -229,12 +229,12 @@ impl<'t> fold::Fold<DefaultTypes, ScopedAst> for Scoper<'t> {
             )),
             BindOp::Enum => {
                 let pat = Binder::new(self, BinderState::OutsideEnum).fold(pat)?;
-                let exprs = self.block(Inner, "enum body?", |block| Ok(block.fold(exprs)?))?;
+                let exprs = self.block(Inner, "enum body?", |block| block.fold(exprs))?;
                 Ok(Bind(BindOp::Enum, pat, exprs))
             }
             BindOp::Struct => {
                 let pat = Binder::new(self, BinderState::OutsideStruct).fold(pat)?;
-                let exprs = self.block(Inner, "enum body?", |block| Ok(block.fold(exprs)?))?;
+                let exprs = self.block(Inner, "enum body?", |block| block.fold(exprs))?;
                 Ok(Bind(BindOp::Enum, pat, exprs))
             }
             op @ (BindOp::Type) => self.block(Outer, "type", |block| {
