@@ -41,7 +41,7 @@ pub mod builtin_preamble {
         if n < 0.0 return f64::NaN; // TODO: re-uppercase
         if n == 0.0 return 0.0;
         let z, err = n, f64::INF;
-        while let adj = (z * z - n) / (2.0 * z) && adj < err {
+        while let adj = (z * z - n) / (2.0 * z) && exponent(adj) != exponent(err) {
             z -= adj;
             err = adj;
         }
