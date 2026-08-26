@@ -38,17 +38,14 @@ pub mod builtin_preamble {
     pub fn max<T: Cmp>(a: T, b: T) -> T = if a < b b else a;
     pub fn min<T: Cmp>(a: T, b: T) -> T = if a > b b else a;
     pub fn sqrt(mut n: f64) -> f64 {
-        // const let EPSILON: f64 = 8.8541878188 / 1000000000000.0;
-        const let EPSILON = SMOL * 0x100000.0;
         if n < 0.0 return f64::NaN; // TODO: re-uppercase
         if n == 0.0 return 0.0;
-        let z = n;
-        loop {
-            let adj = (z * z - n) / (2.0 * z);
+        let z, err = n, f64::INF;
+        while let adj = (z * z - n) / (2.0 * z) && adj < err {
             z -= adj;
-            println(adj);
-            if (if adj >= 0.0 adj else -adj) < EPSILON break z;
+            err = adj;
         }
+        z
     }
 
     pub fn as_digit(n: u32) -> char = match n {
