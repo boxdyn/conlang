@@ -1,9 +1,9 @@
-#!/usr/bin/env -S conlang parfrepl() 
+#!/usr/bin/env -S conlang repl(|v| sqrt(parf(v)))
 
-fn parfrepl() -> ! {
-    loop print(" = ", match get_line(" +> ") {
+fn repl(f: (str) -> str) -> ! {
+    loop print("out: ", match get_line(" in: ") {
         const "clear\n" => "\x1b[H\x1b[2J\x1b[3J";
-        line => parf(line) as str + "\n";
+        line => f(line) as str + "\n";
     });
 }
 
@@ -25,11 +25,11 @@ fn parf(string: str) {
         State::Int, '.' => state = State::Dec;
         State::Int, 'e' => state = State::Exp;
 
-        State::Dec, '0'..='9' if int < 1 << 120 => {
+        State::Dec, '0'..='9' if frac < 1 << 120 => {
             frac = frac * 10 + c as i128 - 0x30;
             frac_scale *= 10.0;
         }
-        State::Dec, '0'..='9' => frac_scale *= 10.0;
+        State::Dec, '0'..='9' => {};
         State::Dec, 'e' => state = State::Exp;
 
         State::Exp, '-' => power_sign = -1.0;
@@ -39,7 +39,7 @@ fn parf(string: str) {
 
     let scale = fold(0..power, 1.0, |v, _| v * 10.0);
     if power_sign < 0.0 scale = 1.0 / scale;
-    sign * scale * (int as f64 * int_scale + frac as f64 * (1.0 / frac_scale))
+    sign * scale * (int as f64 * int_scale + frac as f64 / frac_scale)
 }
 
 fn fold<T, U>(&iter: _, init: T, f: fn(T, U) -> T) -> T {
