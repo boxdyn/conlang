@@ -167,7 +167,7 @@ impl<'t> Lexer<'t> {
             (Integer, _) => return self.digits::<10>(),
             (Identifier, Some('\'')) => return self.character(true),
             (Identifier, Some('#' | '"')) => todo!("Raw strings!"),
-            (Identifier, Some(_)) => return self.identifier(),
+            (Identifier, Some(c)) if is_xid_continue(c) => return self.identifier(),
             (Amp, Some('&')) => AmpAmp,
             (Amp, Some('=')) => AmpEq,
             (Bang, Some('!')) => BangBang,
