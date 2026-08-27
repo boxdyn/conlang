@@ -1,23 +1,26 @@
-#!/usr/bin/env -S conlang repl(|v| sqrt(parf(v)))
+#!/usr/bin/env -S conlang repl(|v| parf(v))
 
-fn repl(f: (str) -> str) -> ! {
+fn repl(f: (str) -> str) {
     loop print("out: ", match get_line(" in: ") {
-        const "clear\n" => "\x1b[H\x1b[2J\x1b[3J";
+        "clear\n" => "\x1b[H\x1b[2J\x1b[3J";
+        "exit\n" => break;
         line => f(line) as str + "\n";
     });
 }
 
 /// A really really terrible float parser
 /// TODO: arbitrary precision arithmetic
-fn parf(string: str) {
-    let mut sign = 1.0;                   // Sign
-    let mut (int, int_scale) = 0, 1.0;    // Integer component
-    let mut (frac, frac_scale) = 0, 1.0;  // Fractional component
-    let mut (power_sign, power) = 1.0, 0;  // Exponent
+fn parf(string: str) -> f64 {
+    let sign = 1.0;                   // Sign
+    let (int, int_scale) = 0, 1.0;    // Integer component
+    let (frac, frac_scale) = 0, 1.0;  // Fractional component
+    let (power_sign, power) = 1.0, 0; // Exponent
 
     enum State { Int, Dec, Exp };
     let state = State::Int;
     for c in string match state, c {
+        // Float ::= Int? ('.' Dec)? ('e' Exp)?
+        // Int ::= '-'? ('0'..='9')*
         State::Int, '-' => sign *= -1.0;
         State::Int, '0'..='9' if int < 1 << 120 => 
             int = int * 10 + c as i128 - 0x30;
@@ -25,6 +28,7 @@ fn parf(string: str) {
         State::Int, '.' => state = State::Dec;
         State::Int, 'e' => state = State::Exp;
 
+        // Dec ::= ('0'..='9')*
         State::Dec, '0'..='9' if frac < 1 << 120 => {
             frac = frac * 10 + c as i128 - 0x30;
             frac_scale *= 10.0;
@@ -32,13 +36,16 @@ fn parf(string: str) {
         State::Dec, '0'..='9' => {};
         State::Dec, 'e' => state = State::Exp;
 
+        // Exp ::= '-'? ('0'..='9')* 
         State::Exp, '-' => power_sign = -1.0;
         State::Exp, '0'..='9' => power = power * 10 + c as i128 - 0x30;
         _ => {}
     }
 
+    // We have no pow() function, so emulate it w/ fold
     let scale = fold(0..power, 1.0, |v, _| v * 10.0);
     if power_sign < 0.0 scale = 1.0 / scale;
+    // assemble the float
     sign * scale * (int as f64 * int_scale + frac as f64 / frac_scale)
 }
 
