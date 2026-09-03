@@ -1,6 +1,6 @@
 //! Separates [Patterns](Pat) into their Value and Type components.
 
-use std::mem::replace;
+use std::{convert::Infallible, mem::replace};
 
 use crate::{
     AstTypes, At, Bind, BindOp, Pat, PatOp,
@@ -114,7 +114,7 @@ pub fn bubble_types<A: AstTypes>(
 pub struct Bubbler(pub bool);
 
 impl<A: AstTypes> Fold<A, A> for Bubbler {
-    type Error = !;
+    type Error = Infallible;
     impl_default_fold!(A, A);
 
     fn fold_at_pat(&mut self, pat: At<Pat<A>, A>) -> Result<At<Pat<A>, A>, Self::Error> {

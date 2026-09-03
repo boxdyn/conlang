@@ -8,7 +8,10 @@ use cl_ast::{
 };
 use cl_lexer::Lexer;
 use cl_structures::span::Span;
-use std::path::{Path, PathBuf};
+use std::{
+    convert::Infallible,
+    path::{Path, PathBuf},
+};
 
 pub type IoErrs = Vec<(PathBuf, std::io::Error)>;
 pub type ParseErrs = Vec<(PathBuf, ParseError)>;
@@ -92,7 +95,7 @@ impl ModuleInliner {
 }
 
 impl Fold<DefaultTypes> for ModuleInliner {
-    type Error = !;
+    type Error = Infallible;
 
     /// Traverses down the module tree, entering ever nested directories
     fn fold_bind(&mut self, bind: Bind<DefaultTypes>) -> Result<Bind<DefaultTypes>, Self::Error> {
@@ -158,7 +161,7 @@ impl Fold<DefaultTypes> for ModuleInliner {
 }
 
 impl ModuleInliner {
-    fn inline_file(&mut self) -> Option<Result<At<Expr>, !>> {
+    fn inline_file(&mut self) -> Option<Result<At<Expr>, Infallible>> {
         // cd path/mod.cl
         let path = self.main_path();
         let used_path = if path.exists() {
@@ -184,7 +187,7 @@ impl ModuleInliner {
     }
 
     /// Inlines a file at the given `path`,
-    fn inline_file_at(&mut self, path: &str) -> Option<Result<At<Expr>, !>> {
+    fn inline_file_at(&mut self, path: &str) -> Option<Result<At<Expr>, Infallible>> {
         let mut full_path = self.path.clone();
         full_path.push(path);
         let file = match std::fs::read_to_string(&full_path) {
