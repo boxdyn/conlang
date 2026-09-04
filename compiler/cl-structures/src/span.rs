@@ -29,6 +29,16 @@ pub const fn Span(path: Symbol, head: u32, tail: u32) -> Span {
 }
 
 impl Span {
+    /// Gets the length (in bytes) of `self`
+    pub fn len(self) -> usize {
+        (self.tail - self.head) as usize
+    }
+
+    /// Returns whether the Span has [len()](Span::len) 0
+    pub fn is_empty(self) -> bool {
+        self.tail == self.head
+    }
+
     /// Computes the [struct@Span] containing both `self` and `other`
     pub fn merge(self, other: Span) -> Span {
         if !(self.path.is_empty() || other.path.is_empty()) {
@@ -37,6 +47,12 @@ impl Span {
         Span { path: self.path, head: self.head.min(other.head), tail: self.tail.max(other.tail) }
     }
 
+    /// Converts this Span to line-column form.
+    ///
+    /// The result is meaningless if this Span wasn't constructed from `text`.
+    ///
+    /// # May Panic
+    /// If `text` does not have UTF-8 character boundaries at [Span::head] and [Span::tail].
     pub fn to_line_col(self, text: &str) -> ((u32, u32), (u32, u32)) {
         fn to_line_col(idx: usize, text: &str) -> (u32, u32) {
             let (mut line, mut col) = (1, 1);

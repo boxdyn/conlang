@@ -219,7 +219,14 @@ impl Interpret for (Op, &[At<Expr>]) {
                     cl_todo!("Interpret non-call {args:?}")?
                 };
                 let scrutinee = Place::new_or_temporary(scrutinee.value(), env)?;
-                let function = callee.interpret(env)?;
+
+                let ty = scrutinee.get(env)?.type_of();
+                let function = match callee.value() {
+                    Expr::Id(Path { parts }) if let &[name] = &parts[..] => {
+                        env.get_impl(ty, name).or_else(|_| callee.interpret(env))?
+                    }
+                    _ => callee.interpret(env)?,
+                };
                 let args = args.interpret(env)?;
                 match args {
                     ConValue::Unit => function.call(env, &[ConValue::Ref(scrutinee)]),
@@ -236,9 +243,11 @@ impl Interpret for (Op, &[At<Expr>]) {
                 Op::Dot,
                 [
                     At(Expr::Lit(Literal::Int(whole, _)), _),
-                    At(Expr::Lit(Literal::Int(frac, _)), _),
+                    At(Expr::Lit(Literal::Int(frac, _)), span),
                 ],
-            ) => Ok(ConValue::Float(format!("{whole}.{frac}").parse().unwrap())),
+            ) => Ok(ConValue::Float(
+                format!("{whole}.{frac:00$}", span.len()).parse().unwrap(),
+            )),
             (Op::Dot, [scrutinee, At(Expr::Lit(Literal::Int(idx, _)), _)]) => {
                 let place = Place::new_or_temporary(scrutinee.value(), env)?;
                 Ok(ConValue::Ref(place.dot_idx(*idx as _)))

@@ -89,7 +89,23 @@ pub macro builtin(
 
 /// Constructs an array of [Builtin]s from pseudo-function definitions.
 ///
-/// Unlike [builtin], functions defined in this way can be mutually recursive.
+/// Functions defined in this way can be mutually recursive.
+///
+/// ```rust
+/// # use cl_interpret::{builtin::builtins, convalue::ConValue};
+/// let my_builtins = builtins! {
+///     /// Use the `@env` suffix to bind the environment!
+///     /// (needed for recursive calls)
+///     fn my_builtin(ConValue::Bool(b), rest @ ..) @env {
+///         // This is all Rust code!
+///         eprintln!("my_builtin({b}, ..)");
+///         match rest {
+///             [] => Ok(ConValue::Unit),
+///             _ => my_builtin(env, rest), // Can be called as a normal function!
+///         }
+///     }
+/// };
+/// ```
 pub macro builtins($(
     $(#[$($meta:tt)*])*
     fn $name:ident ($($args:tt)*) $(@$env:tt)? $body:block
@@ -450,6 +466,14 @@ pub const Math: &[Builtin] = &builtins![
     fn __f64_tan(float) @env { Ok(get_float(env, float)?.tan()) }
     /// Computes the square root of a number
     fn __f64_sqrt(float) @env { Ok(get_float(env, float)?.sqrt()) }
+    /// Raises a number to an integer power
+    fn __f64_powi(float, int) @env {
+        Ok(get_float(env, float)?.powi(get_int(env, int, "i32")? as _))
+    }
+    /// Raises a number to a floating-point power
+    fn __f64_powf(float, power) @env {
+        Ok(get_float(env, float)?.powf(get_float(env, power)? as _))
+    }
     /// Parses a string as f64
     fn __f64_parse(str) @env {
         get_str(env, str)?
