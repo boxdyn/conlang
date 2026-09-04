@@ -81,10 +81,10 @@ impl Display for Environment {
             binds.sort_by_key(|(_, a)| *a);
             for (name, idx) in binds {
                 let mut f = f.indent();
-                write!(f, "{idx:4} {:16} ", format!("{name}:"))?;
+                write!(f, "{idx:4} {name}:\n")?;
                 match self.values.get(*idx) {
                     Some(ConValue::TypeInfo(t)) => writeln!(f, "type {t}"),
-                    Some(ConValue::Function(v)) => writeln!(f, "\n{v}"),
+                    Some(ConValue::Function(v)) => writeln!(f, "fn {}", v.decl().0),
                     Some(value) => writeln!(f, "{value}"),
                     None => writeln!(f, "ERROR: {name}'s address blows the stack!"),
                 }?
