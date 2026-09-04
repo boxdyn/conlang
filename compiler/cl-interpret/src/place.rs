@@ -103,24 +103,16 @@ impl Place {
         self.with(Projection::DotSym(sym.into()))
     }
 
-    pub fn get_mut<'v, 'e: 'v>(&self, env: &'e mut Environment) -> IResult<&'v mut ConValue> {
+    pub fn get_mut<'e>(&self, env: &'e mut Environment) -> IResult<&'e mut ConValue> {
         let Self { place, projections } = self;
-        let env = env as *mut Environment;
-
-        let mut place = unsafe { &mut *env }
-            .get_id_mut(*place)
-            .ok_or(Error::StackOob(*place as _))?;
+        let mut place = env.get_id_mut(*place).ok_or(Error::StackOob(*place as _))?;
 
         for projection in projections {
             place = match (place, projection) {
-                // SAFETY: fuck it, we ball. Polonius would totally have our back here
-                (ConValue::Ref(place), Projection::Deref) => {
-                    place.get_mut(unsafe { &mut *(env) })?
+                (ConValue::Ref(place), Projection::Deref) => place.clone().get_mut(env)?,
+                (ConValue::Ref(place), projection) => {
+                    place.clone().with(*projection).get_mut(env)?
                 }
-                (ConValue::Ref(place), projection) => place
-                    .clone()
-                    .with(*projection)
-                    .get_mut(unsafe { &mut *env })?,
                 (value, Projection::Deref) => value,
                 (ConValue::Array(arr), &Projection::Index(idx, from_end)) => {
                     let len = arr.len();
@@ -131,11 +123,7 @@ impl Place {
                     if *start + idx >= *len {
                         Err(Error::OobIndex(idx, *len))?
                     };
-                    // SAFETY: see above
-                    place
-                        .clone()
-                        .index(idx, from_end)
-                        .get_mut(unsafe { &mut *env })?
+                    place.clone().index(idx, from_end).get_mut(env)?
                 }
                 (place, Projection::Index(_, _)) => Err(Error::NotIndexable())?,
                 (ConValue::Struct(_, values), Projection::DotSym(sym)) => {

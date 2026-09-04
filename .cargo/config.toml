@@ -1,0 +1,3 @@
+[build]
+# in case you're running rustc stable with suspicious env vars
+rustflags = ["-Zpolonius=next"]
