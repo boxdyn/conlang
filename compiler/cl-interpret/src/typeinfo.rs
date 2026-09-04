@@ -229,14 +229,15 @@ impl Model {
             (&Model::Integer { min, .. }, "MIN") => ConValue::Int(min),
             (&Model::Integer { max, .. }, "MAX") => ConValue::Int(max),
             (&Model::Float { size }, "SIZE") => ConValue::Int(size as _),
-            (&Model::Float { .. }, "INF") => ConValue::Float(f64::INFINITY),
-            (&Model::Float { .. }, "NAN" | "NaN") => ConValue::Float(f64::NAN),
             (Model::Bool, "SIZE") => ConValue::Int(size_of::<bool>() as _),
             (Model::Char, "SIZE") => ConValue::Int(size_of::<char>() as _),
             (Model::Never, _) => Err(Error::NotDefined(attr))?,
             (Model::Unit(_, _), "SIZE") => ConValue::Int(0),
             (Model::Unit(_, _), _) => Err(Error::NotDefined(attr))?,
             (Model::Tuple(_, items), "ARITY") => ConValue::Int(items.len() as _),
+            (Model::Tuple(_, items), "TYPES") => ConValue::Tuple(
+                Vec::from_iter(items.iter().copied().map(ConValue::TypeInfo)).into_boxed_slice(),
+            ),
             (Model::Struct(_, items, _), "NAMES") => {
                 ConValue::Array(items.iter().map(|(n, _)| ConValue::Str(*n)).collect())
             }

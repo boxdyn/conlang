@@ -327,11 +327,24 @@ pub const Builtins: &[Builtin] = &builtins![
         }
     }
 
-    fn dump_symbols() {
+    /// Dumps all interned Symbols
+    fn symbols() {
         println!("{}", cl_structures::intern::string_interner::StringInterner::global());
-        Ok(ConValue::Empty)
+        Ok(ConValue::Unit)
     }
 
+    /// Gets the underlying `mod` for type `ty`
+    fn module(ty) @env {
+        let ConValue::TypeInfo(ty) = ty.dereference_in(env)? else {
+            return Err(Error::TypeError("type", ty.type_of()))
+        };
+        let Some(impls) = env.impls.get(ty) else {
+            return Ok(ConValue::Module(Default::default()));
+        };
+        Ok(ConValue::Module(Box::new(impls.clone())))
+    }
+
+    /// Executes the provided `lambda` with `args`, and halts stack unwinding
     fn catch_panic(lambda, args @ ..) @env {
         match lambda.call(env, args) {
             Err(Error { kind: ErrorKind::Panic(e, ..), ..}) => {
@@ -418,19 +431,32 @@ pub const Math: &[Builtin] = &builtins![
         Ok(tail.dereference_in(env)?.clone())
     }
 
-    fn f64_to_bits(float) @env {
-        match float.dereference_in(env)? {
-            &ConValue::Float(f) => Ok(ConValue::Int(f.to_bits() as _)),
-            other => Err(error_format!("Cannot convert {other} from float to bits")),
-        }
+    /// Transmutes `float` into [u64]
+    fn __f64_to_bits(float) @env {
+        Ok(ConValue::Int(get_float(env, float)?.to_bits() as _))
     }
 
-    fn f64_from_bits(bits) @env {
-        match bits.dereference_in(env)? {
-            &ConValue::Int(i) => Ok(ConValue::Float(f64::from_bits(i as u64))),
-            other => Err(error_format!("Cannot convert {other} from float to bits")),
-        }
+    /// Transmutes `bits` into [f64]
+    fn __f64_from_bits(bits) @env {
+        Ok(ConValue::Float(f64::from_bits(get_int(env, bits, "u64")? as u64)))
     }
+
+    // float intrinsics
+    /// Computes the sine of a number
+    fn __f64_sin(float) @env { Ok(get_float(env, float)?.sin()) }
+    /// Computes the cosine of a number
+    fn __f64_cos(float) @env { Ok(get_float(env, float)?.cos()) }
+    /// Computes the tangent of a number
+    fn __f64_tan(float) @env { Ok(get_float(env, float)?.tan()) }
+    /// Computes the square root of a number
+    fn __f64_sqrt(float) @env { Ok(get_float(env, float)?.sqrt()) }
+    /// Parses a string as f64
+    fn __f64_parse(str) @env {
+        get_str(env, str)?
+            .parse::<f64>()
+            .map_err(|e| error_format!("{e}"))
+    }
+
 
     /// Twiddles bits into floats, or vice versa
     fn float(bits) @env {
@@ -441,3 +467,25 @@ pub const Math: &[Builtin] = &builtins![
         }
     }
 ];
+
+fn get_float(env: &mut Environment, value: &ConValue) -> IResult<f64> {
+    let &ConValue::Float(f) = value.dereference_in(env)? else {
+        return Err(Error::TypeError("f64", value.type_of()));
+    };
+    Ok(f)
+}
+
+fn get_int(env: &mut Environment, value: &ConValue, ty: &'static str) -> IResult<i128> {
+    let &ConValue::Int(v) = value.dereference_in(env)? else {
+        return Err(Error::TypeError(ty, value.type_of()));
+    };
+    Ok(v)
+}
+
+fn get_str<'e>(env: &'e mut Environment, value: &'e ConValue) -> IResult<&'e str> {
+    Ok(match value.dereference_in(env)? {
+        ConValue::Str(s) => s.to_ref(),
+        ConValue::String(s) => s.as_ref(),
+        _ => Err(Error::TypeError("str", value.type_of()))?,
+    })
+}

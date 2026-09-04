@@ -64,7 +64,7 @@ pub struct Environment {
     values: Vec<ConValue>,
     frames: Vec<EnvFrame>,
     types: HashMap<Symbol, Type>,
-    impls: Vec<HashMap<Symbol, ConValue>>,
+    pub(crate) impls: HashMap<typeinfo::Type, HashMap<Symbol, ConValue>>,
 }
 
 impl Display for Environment {
@@ -116,7 +116,7 @@ impl Environment {
             values: Vec::new(),
             frames: vec![EnvFrame::default()],
             types: HashMap::new(),
-            impls: Vec::new(),
+            impls: HashMap::new(),
         }
     }
 
@@ -148,6 +148,15 @@ impl Environment {
         let EnvFrame { name: _, span: _, base: _, binds, defer: _ } = self.frames.last_mut()?;
         binds.insert(name, id);
         Some(())
+    }
+
+    pub fn implement(&mut self, ty: Type, name: Symbol, value: ConValue) -> Option<ConValue> {
+        self.impls.entry(ty).or_default().insert(name, value)
+    }
+
+    pub fn get_impl(&self, ty: Type, name: Symbol) -> IResult<ConValue> {
+        let res = self.impls.get(&ty).and_then(|map| map.get(&name));
+        Ok(res.ok_or(Error::NotDefined(name))?.clone())
     }
 
     /// Gets all registered globals, bound or unbound.

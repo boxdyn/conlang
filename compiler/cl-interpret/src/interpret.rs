@@ -477,14 +477,32 @@ impl Interpret for Bind<DefaultTypes> {
                 }
                 Ok(ConValue::Function(func))
             }
-            (BindOp::Mod, _, [At(Expr::Op(Op::Block, exprs), ..)]) => {
-                let [body] = exprs.as_slice() else {
-                    todo!("{exprs:?}")?
-                };
+            (BindOp::Mod, _, [At(Expr::Op(Op::Block, exprs), ..)])
+                if let [body] = exprs.as_slice() =>
+            {
                 body.interpret(env)
             }
             (BindOp::Mod, _, [body]) => body.interpret(env),
-            (BindOp::Impl, _, [body]) => cl_todo!("impl {pat} {body}"),
+            (BindOp::Impl, &Pat::Name(name), [At(Expr::Op(Op::Block, exprs), ..)])
+                if exprs.is_empty() =>
+            {
+                Ok(ConValue::Unit)
+            }
+            (BindOp::Impl, &Pat::Name(name), [At(Expr::Op(Op::Block, exprs), ..)])
+                if let [body] = exprs.as_slice()
+                    && let ConValue::TypeInfo(ty) = env.get(name)? =>
+            {
+                let mut scope = env.frame(name.to_ref(), Some(pat.1));
+                let out = body.interpret(&mut scope);
+                if out.is_ok()
+                    && let Some(values) = scope.pop_values()
+                {
+                    for (name, value) in values {
+                        env.implement(ty, name, value);
+                    }
+                }
+                out
+            }
             (BindOp::Struct, pat, []) => {
                 let (name, model) = bind_struct(pat, env)?;
                 Ok(ConValue::TypeInfo(if let Some(name) = name {
@@ -568,12 +586,13 @@ impl Interpret for Path {
             &[name] => env.get(name),
             [first, names @ ..] => {
                 let mut value = env.get(*first)?;
-                for name in names {
+                for &name in names {
                     value = match value {
                         ConValue::Module(values) => {
-                            values.get(name).cloned().ok_or(Error::NotDefined(*name))?
+                            values.get(&name).cloned().ok_or(Error::NotDefined(name))?
                         }
-                        ConValue::TypeInfo(ty) => ty.getattr(*name)?,
+                        ConValue::TypeInfo(ty) if let Ok(attr) = ty.getattr(name) => attr,
+                        ConValue::TypeInfo(ty) => env.get_impl(ty, name)?,
                         _ => todo!("{self}")?,
                     };
                 }
