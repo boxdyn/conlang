@@ -12,8 +12,8 @@ fn repl(f: (str) -> str) {
 /// TODO: arbitrary precision arithmetic
 fn parf(string: str) -> f64 {
     let sign = 1.0;                   // Sign
-    let (int, int_scale) = 0, 1.0;    // Integer component
-    let (frac, frac_scale) = 0, 1.0;  // Fractional component
+    let (int, int_scale) = 0, 0;      // Integer component
+    let (frac, frac_scale) = 0, 0;    // Fractional component
     let (power_sign, power) = 1.0, 0; // Exponent
 
     enum State { Int, Dec, Exp };
@@ -24,14 +24,14 @@ fn parf(string: str) -> f64 {
         State::Int, '-' => sign *= -1.0;
         State::Int, '0'..='9' if int < 1 << 120 => 
             int = int * 10 + c as i128 - 0x30;
-        State::Int, '0'..='9' => int_scale *= 10.0;
+        State::Int, '0'..='9' => int_scale += 1;
         State::Int, '.' => state = State::Dec;
         State::Int, 'e' => state = State::Exp;
 
         // Dec ::= ('0'..='9')*
         State::Dec, '0'..='9' if frac < 1 << 120 => {
             frac = frac * 10 + c as i128 - 0x30;
-            frac_scale *= 10.0;
+            frac_scale += 1;
         }
         State::Dec, '0'..='9' => {};
         State::Dec, 'e' => state = State::Exp;
@@ -42,11 +42,12 @@ fn parf(string: str) -> f64 {
         _ => {}
     }
 
-    // We have no pow() function, so emulate it w/ fold
-    let scale = fold(0..power, 1.0, |v, _| v * 10.0);
-    if power_sign < 0.0 scale = 1.0 / scale;
+    let scale = 10.0.powf(power as f64 * power_sign);
     // assemble the float
-    sign * scale * (int as f64 * int_scale + frac as f64 / frac_scale)
+    sign * scale * (
+        int as f64 * 10.0.powf(int_scale as f64)
+        + frac as f64 / 10.0.powf(frac_scale as f64)
+    )
 }
 
 fn fold<T, U>(&iter: _, init: T, f: fn(T, U) -> T) -> T {
