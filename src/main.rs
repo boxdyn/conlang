@@ -322,7 +322,7 @@ fn run<'env: 't, 't>(
             (Err(error), _) => {
                 println!("\x1b[31m{error}");
             }
-            (Ok(ConValue::Empty), Verbosity::Pretty) => {}
+            (Ok(ConValue::Unit), Verbosity::Pretty) => {}
             (Ok(value), Verbosity::Pretty) => {
                 println!("\x1b[{color_tag}m{value}");
             }

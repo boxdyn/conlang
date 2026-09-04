@@ -73,7 +73,7 @@ impl super::Callable for Builtin {
 ///         // This is all Rust code!
 ///         eprintln!("my_builtin({b}, ..)");
 ///         match rest {
-///             [] => Ok(ConValue::Empty),
+///             [] => Ok(ConValue::Unit),
 ///             _ => my_builtin(env, rest), // Can be called as a normal function!
 ///         }
 ///     }
@@ -83,6 +83,26 @@ pub macro builtin(
     $(#[doc = $($docs:tt)*])*
     fn $name:ident ($($arg:pat),*$(,)?) $(@$env:tt)? $body:block
 ) {{
+    builtin_body!($(#[$($meta)*])* fn $name ($($args)*) $(@$env)? $body);
+    builtin_define!($(#[$($meta)*])* fn $name ($($args)*) $(@$env)? $body)
+}}
+
+/// Constructs an array of [Builtin]s from pseudo-function definitions.
+///
+/// Unlike [builtin], functions defined in this way can be mutually recursive.
+pub macro builtins($(
+    $(#[$($meta:tt)*])*
+    fn $name:ident ($($args:tt)*) $(@$env:tt)? $body:block
+)*) {{
+    $(builtin_body!($(#[$($meta)*])* fn $name ($($args)*) $(@$env)? $body);)*
+    [$(builtin_define!($(#[$($meta)*])* fn $name ($($args)*) $(@$env)? $body)),*]
+}}
+
+/// Constructs the Rust-native function portion of a [builtin] (or [builtins])
+macro builtin_body(
+    $(#[doc = $($docs:tt)*])*
+    fn $name:ident ($($arg:pat),*$(,)?) $(@$env:tt)? $body:block
+) {
     $(#[doc = $($docs)*])*
     fn $name(_env: &mut Environment, _args: &[ConValue]) -> IResult<ConValue> {
         // Set up the builtin! environment
@@ -97,6 +117,13 @@ pub macro builtin(
         };
         $body.map(Into::into)
     }
+}
+
+/// Constructs the [Builtin] object portion of a [builtin] (or [builtins])
+macro builtin_define(
+    $(#[doc = $($docs:tt)*])*
+    fn $name:ident ($($arg:pat),*$(,)?) $(@$env:tt)? $body:block
+) {
     Builtin {
         name: stringify!($name),
         desc: concat![
@@ -105,14 +132,6 @@ pub macro builtin(
         ],
         func: &$name,
     }
-}}
-
-/// Constructs an array of [Builtin]s from pseudo-function definitions
-pub macro builtins($(
-    $(#[$($meta:tt)*])*
-    fn $name:ident ($($args:tt)*) $(@$env:tt)? $body:block
-)*) {
-    [$(builtin!($(#[$($meta)*])* fn $name ($($args)*) $(@$env)? $body)),*]
 }
 
 /// Creates an [Error::BuiltinError] using interpolation of runtime expressions.
@@ -176,6 +195,8 @@ pub const Builtins: &[Builtin] = &builtins![
         Ok(())
     }
 
+    /// Binds an arbitrary string `name` to the given `value`,
+    /// bypassing identifiers entirely.
     fn bind(ConValue::Str(name), value) @env {
         env.bind(*name, value.clone());
         Ok(())
@@ -186,6 +207,7 @@ pub const Builtins: &[Builtin] = &builtins![
         Ok(ConValue::Ref(Place::from_index(*index as _)))
     }
 
+    /// Panics, with a message created by formatting `args` (as if by `fmt`)
     fn panic(args @ ..) @env {
         use std::fmt::Write;
         let mut stdout = stdout().lock();
@@ -239,7 +261,7 @@ pub const Builtins: &[Builtin] = &builtins![
     /// Returns the length of the input list as a [ConValue::Int]
     fn len(list) @env {
         Ok(match list.dereference_in(env)? {
-            ConValue::Empty => 0,
+            ConValue::Unit => 0,
             ConValue::Str(s) => s.chars().count() as _,
             ConValue::String(s) => s.chars().count() as _,
             &ConValue::Slice(_, start, end) => end as i128 - start as i128,
@@ -256,8 +278,9 @@ pub const Builtins: &[Builtin] = &builtins![
         }
     }
 
-    fn push(ConValue::Ref(index), item) @env{
-        let mut index = index.get_mut(env)?;
+    /// Pushes an `item` onto the top of an array (by reference)
+    fn push(ConValue::Ref(array), item) @env{
+        let mut index = array.get_mut(env)?;
         while let ConValue::Ref(r) = index {
             index = r.clone().get_mut(env)?;
         }
@@ -269,22 +292,24 @@ pub const Builtins: &[Builtin] = &builtins![
         items.push(item.clone());
         *v = items.into_boxed_slice();
 
-        Ok(ConValue::Empty)
+        Ok(ConValue::Unit)
     }
 
-    fn pop(ConValue::Ref(index)) @env {
-        let v = match index.get_mut(env)? {
+    /// Pops an item off the top of an array (by reference)
+    fn pop(ConValue::Ref(array)) @env {
+        let v = match array.get_mut(env)? {
             ConValue::Array(v) => v,
             other => Err(Error::TypeError("An array", other.type_of()))?,
         };
 
         let mut items = std::mem::take(v).into_vec();
-        let out = items.pop().unwrap_or(ConValue::Empty);
+        let out = items.pop().unwrap_or(ConValue::Unit);
         *v = items.into_boxed_slice();
 
         Ok(out)
     }
 
+    /// Converts `string` into an array of chars
     fn chars(string) @env {
         Ok(match string.dereference_in(env)? {
             ConValue::Str(s) => ConValue::Array(s.chars().map(Into::into).collect()),
@@ -296,7 +321,7 @@ pub const Builtins: &[Builtin] = &builtins![
     /// Invokes a function with the given arguments
     fn invoke(function, args) @env {
         match args {
-            ConValue::Empty => function.call(env, &[]),
+            ConValue::Unit => function.call(env, &[]),
             ConValue::Array(args) | ConValue::Tuple(args) => function.call(env, args),
             _ => function.call(env, std::slice::from_ref(args)),
         }
@@ -325,113 +350,39 @@ pub const Builtins: &[Builtin] = &builtins![
 
 pub const Math: &[Builtin] = &builtins![
     /// Multiplication `a * b`
-    fn mul(lhs, rhs) {
-        Ok(match (lhs, rhs) {
-            (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
-            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a * b),
-            _ => Err(Error::TypeError("type implements Mul", lhs.type_of()))?,
-        })
-    }
+    fn mul(lhs, rhs) { lhs.clone() * rhs.clone() }
 
     /// Division `a / b`
-    fn div(lhs, rhs) {
-        Ok(match (lhs, rhs){
-            (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
-            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a / b),
-            _ => Err(Error::TypeError("type implements Div", lhs.type_of()))?,
-        })
-    }
+    fn div(lhs, rhs) { lhs.clone() / rhs.clone() }
 
     /// Remainder `a % b`
-    fn rem(lhs, rhs) {
-        Ok(match (lhs, rhs) {
-            (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
-            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a % b),
-            _ => Err(Error::TypeError("type implements Rem", lhs.type_of()))?,
-        })
-    }
+    fn rem(lhs, rhs) { lhs.clone() % rhs.clone() }
 
     /// Addition `a + b`
-    fn add(lhs, rhs) {
-        Ok(match (lhs, rhs) {
-            (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
-            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a + b),
-            (ConValue::Str(a), ConValue::Str(b)) => (a.to_string() + b).into(),
-            (ConValue::Str(a), ConValue::String(b)) => (a.to_string() + b).into(),
-            (ConValue::String(a), ConValue::Str(b)) => (a.to_string() + b).into(),
-            (ConValue::String(a), ConValue::String(b)) => (a.to_string() + b).into(),
-            (ConValue::Str(s), ConValue::Char(c)) => { let mut s = s.to_string(); s.push(*c); s.into() }
-            (ConValue::String(s), ConValue::Char(c)) => { let mut s = s.to_string(); s.push(*c); s.into() }
-            (ConValue::Char(a), ConValue::Char(b)) => {
-                ConValue::String([a, b].into_iter().collect())
-            }
-            _ => Err(Error::TypeError("type implements Add", lhs.type_of()))?,
-        })
-    }
+    fn add(lhs, rhs) { lhs.clone() + rhs.clone() }
 
     /// Subtraction `a - b`
-    fn sub(lhs, rhs) {
-        Ok(match (lhs, rhs) {
-            (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
-            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a - b),
-            _ => Err(Error::TypeError("type implements Sub", lhs.type_of()))?,
-        })
-    }
+    fn sub(lhs, rhs) { lhs.clone() - rhs.clone() }
 
     /// Shift Left `a << b`
-    fn shl(lhs, rhs) {
-        Ok(match (lhs, rhs) {
-            (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
-            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a << b),
-            (ConValue::Int(a), b) => Err(Error::TypeError("int", b.type_of()))?,
-            _ => Err(Error::TypeError("type implements Shl", lhs.type_of()))?,
-        })
-    }
+    fn shl(lhs, rhs) { lhs.clone() << rhs.clone() }
 
     /// Shift Right `a >> b`
-    fn shr(lhs, rhs) {
-        Ok(match (lhs, rhs) {
-            (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
-            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a >> b),
-            (ConValue::Int(a), b) => Err(Error::TypeError("int", b.type_of()))?,
-            _ => Err(Error::TypeError("type implements Shr", lhs.type_of()))?,
-        })
-    }
+    fn shr(lhs, rhs) { lhs.clone() >> rhs.clone() }
 
     /// Bitwise And `a & b`
-    fn and(lhs, rhs) {
-        Ok(match (lhs, rhs) {
-            (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
-            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a & b),
-            (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a & b),
-            _ => Err(Error::TypeError("type implements BitAnd", lhs.type_of()))?,
-        })
-    }
+    fn and(lhs, rhs) { lhs.clone() & rhs.clone() }
 
     /// Bitwise Or `a | b`
-    fn or(lhs, rhs) {
-        Ok(match (lhs, rhs) {
-            (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
-            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a | b),
-            (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a | b),
-            _ => Err(Error::TypeError("type implements BitOr", lhs.type_of()))?,
-        })
-    }
+    fn or(lhs, rhs) { lhs.clone() | rhs.clone() }
 
     /// Bitwise Exclusive Or `a ^ b`
-    fn xor(lhs, rhs) {
-        Ok(match (lhs, rhs) {
-            (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
-            (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a ^ b),
-            (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a ^ b),
-            _ => Err(Error::TypeError("type implements BitXor", lhs.type_of()))?,
-        })
-    }
+    fn xor(lhs, rhs) { lhs.clone() ^ rhs.clone() }
 
     /// Negates the ConValue
     fn neg(tail) {
         Ok(match tail {
-            ConValue::Empty => ConValue::Empty,
+            ConValue::Unit => ConValue::Unit,
             ConValue::Int(v) => ConValue::Int(-v),
             ConValue::Float(v) => ConValue::Float(-v),
             _ => Err(Error::TypeError("type implements Neg", tail.type_of()))?,
@@ -441,7 +392,7 @@ pub const Math: &[Builtin] = &builtins![
     /// Inverts the ConValue
     fn not(tail) {
         Ok(match tail {
-            ConValue::Empty => ConValue::Empty,
+            ConValue::Unit => ConValue::Unit,
             ConValue::Int(v) => ConValue::Int(!v),
             ConValue::Bool(v) => ConValue::Bool(!v),
             _ => Err(Error::TypeError("type implements Not", tail.type_of()))?,

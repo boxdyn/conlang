@@ -46,7 +46,7 @@ type Integer = i128;
 pub enum ConValue {
     /// The empty/unit `()` type
     #[default]
-    Empty,
+    Unit,
     /// An integer
     Int(Integer),
     /// A floating point number
@@ -100,7 +100,7 @@ impl ConValue {
 
     pub fn is_cheap_to_copy(&self) -> bool {
         match self {
-            Self::Empty
+            Self::Unit
             | Self::Int(_)
             | Self::Float(_)
             | Self::Bool(_)
@@ -123,7 +123,7 @@ impl ConValue {
 
     pub fn type_of(&self) -> Type {
         match self {
-            Self::Empty => Model::Unit(None, 0).already_interned(),
+            Self::Unit => Model::Unit(None, 0).already_interned(),
             Self::Int(_) => Model::default_integer(),
             Self::Float(_) => Model::default_float(),
             Self::Bool(_) => Model::Bool.already_interned(),
@@ -187,7 +187,7 @@ impl ConValue {
                 };
                 ConValue::Char(char::from_u32(c).unwrap_or('�'))
             }
-            Model::Unit(None, _) => ConValue::Empty,
+            Model::Unit(None, _) => ConValue::Unit,
             Model::Unit(_, _) => ConValue::TypeInfo(ty.already_interned()),
             Model::Str => ConValue::String(self.to_string()),
             _ => self,
@@ -309,7 +309,7 @@ impl ConValue {
     pub fn compare(&self, other: &Self) -> IResult<isize> {
         use std::cmp::Ord;
         Ok(match (self, other) {
-            (Self::Empty, Self::Empty) => 0,
+            (Self::Unit, Self::Unit) => 0,
             (Self::Int(a), Self::Int(b)) => a.cmp(b) as _,
             (Self::Float(a), Self::Float(b)) => {
                 a.partial_cmp(b).unwrap_or_else(|| a.total_cmp(b)) as _
@@ -376,13 +376,13 @@ from! {
 }
 impl From<()> for ConValue {
     fn from(_: ()) -> Self {
-        Self::Empty
+        Self::Unit
     }
 }
 impl From<&[ConValue]> for ConValue {
     fn from(value: &[ConValue]) -> Self {
         match value {
-            [] => Self::Empty,
+            [] => Self::Unit,
             [value] => value.clone(),
             _ => Self::Tuple(value.into()),
         }
@@ -401,7 +401,7 @@ macro ops($($trait:ty: $fn:ident = [$($match:tt)*])*) {
 }
 ops! {
     Add: add = [
-        (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
+        (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_add(b)),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a + b),
         (ConValue::Str(a), ConValue::Str(b)) => (a.to_string() + &*b).into(),
@@ -416,25 +416,25 @@ ops! {
         (a, b) => Err(Error::TypeError(a.type_of(), b.type_of()))?
     ]
     BitAnd: bitand = [
-        (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
+        (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a & b),
         (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a & b),
         (a, b) => Err(Error::TypeError(a.type_of(), b.type_of()))?
     ]
     BitOr: bitor = [
-        (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
+        (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a | b),
         (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a | b),
         (a, b) => Err(Error::TypeError(a.type_of(), b.type_of()))?
     ]
     BitXor: bitxor = [
-        (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
+        (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a ^ b),
         (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a ^ b),
         (a, b) => Err(Error::TypeError(a.type_of(), b.type_of()))?
     ]
     Div: div = [
-        (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
+        (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.checked_div(b).unwrap_or_else(|| {
             eprintln!("Warning: Divide by zero in {a} / {b}"); a
         })),
@@ -442,13 +442,13 @@ ops! {
         (a, b) => Err(Error::TypeError(a.type_of(), b.type_of()))?
     ]
     Mul: mul = [
-        (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
+        (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_mul(b)),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a * b),
         (a, b) => Err(Error::TypeError(a.type_of(), b.type_of()))?
     ]
     Rem: rem = [
-        (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
+        (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.checked_rem(b).unwrap_or_else(|| {
             println!("Warning: Divide by zero in {a} % {b}"); a
         })),
@@ -456,19 +456,19 @@ ops! {
         (a, b) => Err(Error::TypeError(a.type_of(), b.type_of()))?
     ]
     Shl: shl = [
-        (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
+        (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_shl(b as _)),
         (a, ConValue::Int(_)) => Err(Error::TypeError("type implements Shl", a.type_of()))?,
         (_, b) => Err(Error::TypeError("int", b.type_of()))?
     ]
     Shr: shr = [
-        (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
+        (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_shr(b as _)),
         (a, ConValue::Int(_)) => Err(Error::TypeError("type implements Shr", a.type_of()))?,
         (_, b) => Err(Error::TypeError("int", b.type_of()))?
     ]
     Sub: sub = [
-        (ConValue::Empty, ConValue::Empty) => ConValue::Empty,
+        (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_sub(b)),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a - b),
         (a, b) => Err(Error::TypeError(a.type_of(), b.type_of()))?
@@ -477,7 +477,7 @@ ops! {
 impl std::fmt::Display for ConValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConValue::Empty => "Empty".fmt(f),
+            ConValue::Unit => "Unit".fmt(f),
             ConValue::Int(v) => v.fmt(f),
             ConValue::Float(v) => v.fmt(f),
             ConValue::Bool(v) => v.fmt(f),
@@ -502,8 +502,10 @@ impl std::fmt::Display for ConValue {
             }
             ConValue::Module(module) => {
                 use std::fmt::Write;
-                let mut f = f.delimit("{", "\n}");
-                for (k, v) in module.iter() {
+                let mut f = f.delimit_indented("mod {", "\n}");
+                let mut items = module.iter().collect::<Vec<_>>();
+                items.sort_by_key(|i| i.0);
+                for (k, v) in items {
                     write!(f, "\n{k}: {v},")?;
                 }
                 Ok(())

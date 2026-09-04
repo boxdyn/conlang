@@ -76,7 +76,7 @@ pub fn mode_run(ctx: &mut ctx::Context, line: &str) -> Result<Response, Box<dyn 
 
     print!("{}", ansi::OUTPUT);
     match ctx.run(&code) {
-        Ok(ConValue::Empty) => print!("{}", ansi::RESET),
+        Ok(ConValue::Unit) => print!("{}", ansi::RESET),
         Ok(v) => println!("{}{v}", ansi::RESET),
         Err(e) => println!("{}! > {e}{}", ansi::RED, ansi::RESET),
     }

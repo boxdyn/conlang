@@ -39,7 +39,7 @@ pub fn get_env() -> Environment {
             let mut stdout = stdout().lock();
             let _ = write!(stdout, "{c}");
             let _ = stdout.flush();
-            Ok(ConValue::Empty)
+            Ok(ConValue::Unit)
         }
 
         /// Gets a line of input from stdin
@@ -52,7 +52,7 @@ pub fn get_env() -> Environment {
             match repline::Repline::new("", prompt, "").read() {
                 Ok(line) => Ok(ConValue::String(line)),
                 Err(repline::Error::CtrlD(line)) => Ok(ConValue::String(line)),
-                Err(repline::Error::CtrlC(_)) => Err(Error::Break(ConValue::Empty)),
+                Err(repline::Error::CtrlC(_)) => Err(Error::Break(ConValue::Unit)),
                 Err(e) => Ok(ConValue::String(e.to_string())),
             }
         }

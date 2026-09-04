@@ -40,15 +40,15 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
         fn import(path) @env {
             use cl_interpret::error::Error;
             match path {
-                ConValue::Str(path) => load_file(env, &**path).or(Ok(ConValue::Empty)),
-                ConValue::String(path) => load_file(env, &**path).or(Ok(ConValue::Empty)),
+                ConValue::Str(path) => load_file(env, &**path).or(Ok(ConValue::Unit)),
+                ConValue::String(path) => load_file(env, &**path).or(Ok(ConValue::Unit)),
                 _ => Err(Error::TypeError("string", path.type_of()))
             }
         }
 
         fn putchar(ConValue::Char(c)) {
             print!("{c}");
-            Ok(ConValue::Empty)
+            Ok(ConValue::Unit)
         }
 
         /// Gets a line of input from stdin
@@ -62,7 +62,7 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
             match repline::Repline::new("", prompt, "").read() {
                 Ok(line) => Ok(ConValue::String(line)),
                 Err(repline::Error::CtrlD(line)) => Ok(ConValue::String(line)),
-                Err(repline::Error::CtrlC(_)) => Err(cl_interpret::error::Error::Break(ConValue::Empty)),
+                Err(repline::Error::CtrlC(_)) => Err(cl_interpret::error::Error::Break(ConValue::Unit)),
                 Err(e) => Ok(ConValue::String(e.to_string())),
             }
         }
@@ -131,7 +131,7 @@ fn load_file(env: &mut Environment, path: impl AsRef<Path>) -> Result<ConValue, 
         Ok(v) => Ok(v),
         Err(e) => {
             eprintln!("{e}");
-            Ok(ConValue::Empty)
+            Ok(ConValue::Unit)
         }
     }
 }
@@ -158,7 +158,7 @@ fn run_code(path: &str, code: &str, env: &mut Environment) -> Result<(), Box<dyn
     code.interpret(env)?;
     if env.get("main".into()).is_ok() {
         match env.call("main".into(), &[]) {
-            Ok(ConValue::Empty) => {}
+            Ok(ConValue::Unit) => {}
             Ok(ret) => println!("{ret}"),
             Err(e) => println!("Error: {e}"),
         }

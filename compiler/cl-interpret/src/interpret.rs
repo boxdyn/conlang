@@ -65,7 +65,7 @@ impl<T: AstNode + Interpret> Interpret for At<T> {
 impl Interpret for Expr<DefaultTypes> {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         match self {
-            Self::Omitted => Ok(ConValue::Empty),
+            Self::Omitted => Ok(ConValue::Unit),
             Self::Id(path) => path.interpret(env),
             Self::MetId(_) => cl_todo!("Meta-identifiers are not allowed here"),
             Self::Lit(Literal::Bool(v)) => Ok(ConValue::Bool(*v)),
@@ -75,7 +75,7 @@ impl Interpret for Expr<DefaultTypes> {
             Self::Use(_) => {
                 #[rustfmt::skip]
                 println!("TODO: Use `{self}` (at {}:{}:{})", file!(), line!(), column!());
-                Ok(ConValue::Empty)
+                Ok(ConValue::Unit)
             }
             Self::Bind(bind) => bind.interpret(env),
             Self::Make(make) => make.interpret(env),
@@ -97,7 +97,7 @@ impl Interpret for Expr<DefaultTypes> {
 impl Interpret for (Op, &[At<Expr>]) {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         match self {
-            (Op::Do, []) => Ok(ConValue::Empty),
+            (Op::Do, []) => Ok(ConValue::Unit),
             (Op::Do, [ats @ .., ret]) => {
                 for at in ats {
                     at.0.interpret(env)?;
@@ -109,7 +109,7 @@ impl Interpret for (Op, &[At<Expr>]) {
                 other => Err(Error::TypeError("type", other.type_of())),
             },
             (Op::As, [value, ty]) => cl_todo!("{value} as {ty} operator"),
-            (Op::Block, []) => Ok(ConValue::Empty),
+            (Op::Block, []) => Ok(ConValue::Unit),
             (Op::Block, [expr]) => expr.interpret(&mut env.frame("block", None)),
             (Op::Array, []) => Ok(ConValue::Array(Box::new([]))),
             (Op::Array, exprs) => Ok(ConValue::Array(
@@ -128,7 +128,7 @@ impl Interpret for (Op, &[At<Expr>]) {
                 }
             }
             (Op::Group, [expr]) => expr.interpret(env),
-            (Op::Tuple, []) => Ok(ConValue::Empty),
+            (Op::Tuple, []) => Ok(ConValue::Unit),
             (Op::Tuple, exprs) => Ok(ConValue::Tuple(
                 exprs
                     .iter()
@@ -150,7 +150,7 @@ impl Interpret for (Op, &[At<Expr>]) {
             (Op::Call, [expr, arg]) => {
                 let callee = expr.interpret(env)?;
                 match arg.interpret(env)? {
-                    ConValue::Empty => callee.call(env, &[]),
+                    ConValue::Unit => callee.call(env, &[]),
                     ConValue::Tuple(args) => callee.call(env, &args),
                     arg => callee.call(env, slice::from_ref(&arg)),
                 }
@@ -201,7 +201,7 @@ impl Interpret for (Op, &[At<Expr>]) {
             }
             (Op::Defer, [expr]) => {
                 env.defer(expr.value().clone());
-                Ok(ConValue::Empty)
+                Ok(ConValue::Unit)
             }
             #[allow(irrefutable_let_patterns)] // tfw no deref patterns
             (Op::Break, [expr]) => match expr.value() {
@@ -222,7 +222,7 @@ impl Interpret for (Op, &[At<Expr>]) {
                 let function = callee.interpret(env)?;
                 let args = args.interpret(env)?;
                 match args {
-                    ConValue::Empty => function.call(env, &[ConValue::Ref(scrutinee)]),
+                    ConValue::Unit => function.call(env, &[ConValue::Ref(scrutinee)]),
                     ConValue::Tuple(args) => function.call(
                         env,
                         &iter::once(ConValue::Ref(scrutinee))
@@ -349,67 +349,67 @@ impl Interpret for (Op, &[At<Expr>]) {
                         *(place.get_mut(env)?) = value;
                     }
                 }
-                Ok(ConValue::Empty)
+                Ok(ConValue::Unit)
             }
             (Op::MulSet, [target, value]) => {
                 let place = Place::new(target.value(), env)?;
                 let value = value.interpret(env)?;
                 place.get_mut(env)?.mul_assign(value)?;
-                Ok(ConValue::Empty)
+                Ok(ConValue::Unit)
             }
             (Op::DivSet, [target, value]) => {
                 let place = Place::new(target.value(), env)?;
                 let value = value.interpret(env)?;
                 place.get_mut(env)?.div_assign(value)?;
-                Ok(ConValue::Empty)
+                Ok(ConValue::Unit)
             }
             (Op::RemSet, [target, value]) => {
                 let place = Place::new(target.value(), env)?;
                 let value = value.interpret(env)?;
                 place.get_mut(env)?.rem_assign(value)?;
-                Ok(ConValue::Empty)
+                Ok(ConValue::Unit)
             }
             (Op::AddSet, [target, value]) => {
                 let place = Place::new(target.value(), env)?;
                 let value = value.interpret(env)?;
                 place.get_mut(env)?.add_assign(value)?;
-                Ok(ConValue::Empty)
+                Ok(ConValue::Unit)
             }
             (Op::SubSet, [target, value]) => {
                 let place = Place::new(target.value(), env)?;
                 let value = value.interpret(env)?;
                 place.get_mut(env)?.sub_assign(value)?;
-                Ok(ConValue::Empty)
+                Ok(ConValue::Unit)
             }
             (Op::ShlSet, [target, value]) => {
                 let place = Place::new(target.value(), env)?;
                 let value = value.interpret(env)?;
                 place.get_mut(env)?.shl_assign(value)?;
-                Ok(ConValue::Empty)
+                Ok(ConValue::Unit)
             }
             (Op::ShrSet, [target, value]) => {
                 let place = Place::new(target.value(), env)?;
                 let value = value.interpret(env)?;
                 place.get_mut(env)?.shr_assign(value)?;
-                Ok(ConValue::Empty)
+                Ok(ConValue::Unit)
             }
             (Op::AndSet, [target, value]) => {
                 let place = Place::new(target.value(), env)?;
                 let value = value.interpret(env)?;
                 place.get_mut(env)?.bitand_assign(value)?;
-                Ok(ConValue::Empty)
+                Ok(ConValue::Unit)
             }
             (Op::XorSet, [target, value]) => {
                 let place = Place::new(target.value(), env)?;
                 let value = value.interpret(env)?;
                 place.get_mut(env)?.bitxor_assign(value)?;
-                Ok(ConValue::Empty)
+                Ok(ConValue::Unit)
             }
             (Op::OrSet, [target, value]) => {
                 let place = Place::new(target.value(), env)?;
                 let mut value = value.interpret(env)?;
                 place.get_mut(env)?.bitor_assign(value)?;
-                Ok(ConValue::Empty)
+                Ok(ConValue::Unit)
             }
             (op, exprs) => cl_unimplemented!("Evaluate {op:?} {exprs:#?}"),
         }
@@ -457,7 +457,7 @@ impl Interpret for Bind<DefaultTypes> {
                     for (name, value) in bind {
                         env.bind(name, value);
                     }
-                    return Ok(ConValue::Empty);
+                    return Ok(ConValue::Unit);
                 }
 
                 bind.clear();
@@ -466,7 +466,7 @@ impl Interpret for Bind<DefaultTypes> {
                     env.bind(name, value);
                 }
 
-                Ok(ConValue::Empty)
+                Ok(ConValue::Unit)
             }
             (BindOp::Type, _, []) => cl_todo!("type {pat}"),
             (BindOp::Type, _, [body]) => cl_todo!("type {pat} = {body}"),
@@ -786,7 +786,7 @@ impl Interpret for cl_ast::ast::Match<DefaultTypes> {
                 return expr.interpret(&mut env.with_frame("match-arm", bind));
             }
         }
-        Err(Error::MatchNonexhaustive(ConValue::Empty))
+        Err(Error::MatchNonexhaustive(ConValue::Unit))
     }
 }
 
@@ -913,7 +913,7 @@ impl Match for (PatOp, &[At<Pat>]) {
             (PatOp::RangeIn, pats) => todo!("Range patterns: {pats:?}"),
             (PatOp::Record, pats) => match_pat_for_struct(pats, value, in_env),
             (PatOp::Tuple, pats) => match value {
-                ConValue::Empty if pats.is_empty() => Ok(()),
+                ConValue::Unit if pats.is_empty() => Ok(()),
                 ConValue::Tuple(values) => (SliceMode::Tuple, *pats).matches(values, in_env),
                 _ => todo!("Match {pats:?} against {value}"),
             },
@@ -1052,7 +1052,7 @@ impl Match<Box<[ConValue]>> for (SliceMode, &[At<Pat>]) {
         let mut pats = pats.iter().peekable();
         while !matches!(pats.peek(), None | Some(At(Pat::Op(PatOp::Rest, _), ..))) {
             let (Some(pat), Some(value)) = (pats.next(), values.next()) else {
-                Err(Error::MatchNonexhaustive(ConValue::Empty))?
+                Err(Error::MatchNonexhaustive(ConValue::Unit))?
             };
             pat.matches(value, in_env)?;
         }
@@ -1061,7 +1061,7 @@ impl Match<Box<[ConValue]>> for (SliceMode, &[At<Pat>]) {
         let mut pats = pats.rev().peekable();
         while !matches!(pats.peek(), None | Some(At(Pat::Op(PatOp::Rest, _), ..))) {
             let (Some(pat), Some(value)) = (pats.next(), values.next()) else {
-                Err(Error::MatchNonexhaustive(ConValue::Empty))?
+                Err(Error::MatchNonexhaustive(ConValue::Unit))?
             };
             pat.matches(value, in_env)?;
         }
