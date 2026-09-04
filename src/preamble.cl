@@ -21,6 +21,7 @@ impl f64 {
     /// Alias for the `f64_from_bits` builtin
     let from_bits: (u64) -> f64 = __f64_from_bits;
     let parse: (str) -> f64 = __f64_parse;
+    let sqrt: (f64) -> f64 = __f64_sqrt;
     let sin: (f64) -> f64 = __f64_sin;
     let cos: (f64) -> f64 = __f64_cos;
     let tan: (f64) -> f64 = __f64_tan;
