@@ -336,23 +336,6 @@ impl<A: AstTypes, B: AstTypes> Foldable<A, B> for At<Pat<A>, A> {
 //  GENERIC IMPLEMENTATIONS ON COLLECTIONS  //
 //////////////////////////////////////////////
 
-// Maps the value in the box across `f()` without deallocating
-// fn box_try_map<T, E>(boxed: Box<T>, f: impl FnOnce(T) -> Result<T, E>) -> Result<Box<T>, E> {
-//     // TODO: replace with Box::take when it stabilizes.
-//     let rawbox = Box::into_raw(boxed);
-
-//     // Safety: `rawbox` came from a Box, so it is aligned and initialized.
-//     //     To prevent further reuse and deallocate on failure, rawbox is
-//     //     shadowed by a Box<MaybeUninit<T>>.
-//     // Safety: MaybeUninit<T> has the same size and alignment as T.
-//     let (value, rawbox) = (unsafe { rawbox.read() }, unsafe {
-//         Box::from_raw(rawbox.cast::<MaybeUninit<T>>())
-//     });
-
-//     // rawbox is reinitialized with f(value)
-//     Ok(Box::write(rawbox, f(value)?))
-// }
-
 impl<T, A, B> Foldable<A, B> for Box<T>
 where
     T: Foldable<A, B>,
@@ -362,13 +345,11 @@ where
     type Out = Box<T::Out>;
 
     fn fold_in<F: Fold<A, B> + ?Sized>(self, folder: &mut F) -> Result<Self::Out, F::Error> {
-        let value = *self;
-        Ok(Box::new(value.fold_in(folder)?))
+        Box::try_map(self, |value| value.fold_in(folder))
     }
 
     fn children<F: Fold<A, B> + ?Sized>(self, folder: &mut F) -> Result<Self::Out, F::Error> {
-        let value = *self;
-        Ok(Box::new(value.children(folder)?))
+        Box::try_map(self, |value| value.children(folder))
     }
 }
 
@@ -389,16 +370,10 @@ impl<T: Foldable<A, B>, A: AstTypes, B: AstTypes> Foldable<A, B> for Option<T> {
     type Out = Option<T::Out>;
 
     fn fold_in<F: Fold<A, B> + ?Sized>(self, folder: &mut F) -> Result<Self::Out, F::Error> {
-        Ok(match self {
-            Self::Some(value) => Some(value.fold_in(folder)?),
-            Self::None => None,
-        })
+        self.map(|value| value.fold_in(folder)).transpose()
     }
 
     fn children<F: Fold<A, B> + ?Sized>(self, folder: &mut F) -> Result<Self::Out, F::Error> {
-        Ok(match self {
-            Self::Some(value) => Some(value.children(folder)?),
-            Self::None => None,
-        })
+        self.map(|value| value.children(folder)).transpose()
     }
 }
