@@ -8,10 +8,58 @@
 // Note: module inlining is NOT performed for this file.
 
 enum Option<T> { Some(T), None }
+use Option::{Some, None}
+impl Option {
+    fn is_some(&self) -> bool {
+        match self {
+            Some(_) => true;
+            None() => false;
+        }
+    }
+    fn is_none(&self: &Self) -> bool {
+        let Some(_) = self
+    }
+    fn map<U>(&self: Self, f: fn(T) -> U) -> Option<U> {
+        match self {
+            Some(value) => Some(f(value));
+            None() => None();
+        }
+    }
+    fn and_then<U>(&self: Self, f: fn(T) -> Option<U>) -> Option<U> {
+        f(self?)
+    }
+};
+
 enum Result<T, E> { Ok(T), Err(E) }
-let Some, None, Ok, Err = {
-    Option::Some, Option::None, Result::Ok, Result::Err
-} // TODO: implement `use`
+use Result::{Ok, Err};
+impl Result {
+    fn is_ok(self: &Self) -> bool {
+        match *self {
+            Ok(_) => true;
+            Err(_) => false;
+        }
+    }
+    fn is_err(self: &Self) -> bool {
+        match *self {
+            Ok(_) => false;
+            Err(_) => true;
+        }
+    }
+    /// Maps the value inside the Result::Ok, leaving errors alone.
+    fn map<U>(self: &Self, f: fn(T) -> U) -> Result<U, E> {
+        match *self {
+            Ok(t) => Ok(f(t));
+            Err(e) => Err(e);
+        }
+    }
+    /// Maps the value inside the Result::Err, leaving values alone.
+    fn map_err<F>(self: &Self, f: fn(E) -> F) -> Result<T, F> {
+        match *self {
+            Ok(t) => Ok(t);
+            Err(e) => Err(f(e));
+        }
+    }
+};
 
 // TODO: accurate floating point number parsing
 
@@ -59,6 +107,8 @@ mod _ {
                     impl ty { bind(key, value) }
         }
     }
+    unstable_metaprogramming::enum_impl(Option);
+    unstable_metaprogramming::enum_impl(Result);
     unstable_metaprogramming::spread(f64, [f32]);
     unstable_metaprogramming::spread(i128, [
         i8, i16, i32, i64,       isize,
