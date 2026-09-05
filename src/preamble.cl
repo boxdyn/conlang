@@ -16,30 +16,18 @@ let Some, None, Ok, Err = {
 // TODO: accurate floating point number parsing
 
 impl f64 {
-    /// Alias for the `f64_to_bits` builtin
-    let to_bits: (f64) -> u64 = __f64_to_bits;
-    /// Alias for the `f64_from_bits` builtin
-    let from_bits: (u64) -> f64 = __f64_from_bits;
-    let parse: (str) -> f64 = __f64_parse;
-    let sqrt: (f64) -> f64 = __f64_sqrt;
-    let powi: (f64, i32) -> f64 = __f64_powi;
-    let powf: (f64, f64) -> f64 = __f64_powf;
-    let sin: (f64) -> f64 = __f64_sin;
-    let cos: (f64) -> f64 = __f64_cos;
-    let tan: (f64) -> f64 = __f64_tan;
-
     /// The half-circle constant
-    let PI = from_bits(0x400921fb54442d18);
+    let PI = f64::from_bits(0x400921fb54442d18);
     /// The golden ratio
-    let PHI = from_bits(0x3ff9e3779b97f4a8);
+    let PHI = f64::from_bits(0x3ff9e3779b97f4a8);
     /// A really small number
-    let SMOL = from_bits(0x0010000000000000);
+    let SMOL = f64::from_bits(0x0010000000000000);
     /// A really big number
-    let LORG = from_bits(0x7fefffffffffffff);
+    let LORG = f64::from_bits(0x7fefffffffffffff);
     /// The most big number
-    let INF = from_bits(0x7ff0000000000000);
+    let INF = f64::from_bits(0x7ff0000000000000);
     /// The most insidious number
-    let NaN = from_bits(0x7ff8000000000000);
+    let NaN = f64::from_bits(0x7ff8000000000000);
     /// Alias for the most insidious number
     let NAN = NaN;
 
@@ -55,6 +43,28 @@ impl f64 {
     );
 }
 
+
+mod _ {
+    struct unstable_metaprogramming;
+    impl unstable_metaprogramming {
+        // TODO: give enums a parental relation
+        const fn enum_impl(Enum) {
+            for Variant in Enum::VARIANTS
+                for key, value in Enum.module().mod_into_binds()
+                    impl Variant { let Self = Enum; bind(key, value) }
+        }
+        const fn spread(Type, types: [_]) {
+            for ty in types
+                for key, value in Type.module().mod_into_binds()
+                    impl ty { bind(key, value) }
+        }
+    }
+    unstable_metaprogramming::spread(f64, [f32]);
+    unstable_metaprogramming::spread(i128, [
+        i8, i16, i32, i64,       isize,
+        u8, u16, u32, u64, u128, usize,
+    ]);
+}
 /// Returns the larger of `a` and `b`
 pub fn max<T: Cmp>(a: T, b: T) -> T = if a < b b else a;
 

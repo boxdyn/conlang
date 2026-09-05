@@ -591,23 +591,19 @@ impl Interpret for Bind<DefaultTypes> {
 impl Interpret for Use {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         fn use_ty(tree: &Use, ty: Type, env: &mut Environment) -> IResult<()> {
-            fn resolve(ty: Type, name: Sym, env: &mut Environment) -> IResult<ConValue> {
-                env.get_impl(ty, name).or_else(|_| ty.getattr(name))
-            }
-
             match tree {
                 Use::Glob => todo!("{tree} in {ty}"),
                 &Use::Name(name) => {
-                    let value = resolve(ty, name, env)?;
+                    let value = env.get_impl(ty, name)?;
                     env.bind(name, value);
                     Ok(())
                 }
                 &Use::Alias(from, to) => {
-                    let value = resolve(ty, from, env)?;
+                    let value = env.get_impl(ty, from)?;
                     env.bind(to, value);
                     Ok(())
                 }
-                Use::Path(name, tree) => match resolve(ty, *name, env)?.dereference_in(env)? {
+                Use::Path(name, tree) => match env.get_impl(ty, *name)?.dereference_in(env)? {
                     &ConValue::TypeInfo(ty) => use_ty(tree, ty, env),
                     #[expect(deprecated)]
                     ConValue::Module(md) => use_mod(tree, &md.clone(), env),
@@ -688,8 +684,7 @@ impl Interpret for Path {
                         ConValue::Module(values) => {
                             values.get(&name).cloned().ok_or(Error::NotDefined(name))?
                         }
-                        ConValue::TypeInfo(ty) if let Ok(attr) = env.get_impl(ty, name) => attr,
-                        ConValue::TypeInfo(ty) => ty.getattr(name)?,
+                        ConValue::TypeInfo(ty) => env.get_impl(ty, name)?,
                         _ => todo!("{self}: {value}")?,
                     };
                 }

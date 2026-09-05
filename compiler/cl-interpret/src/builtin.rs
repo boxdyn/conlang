@@ -501,41 +501,6 @@ pub const Math: &[Builtin] = &builtins![
         Ok(tail.dereference_in(env)?.clone())
     }
 
-    /// Transmutes `float` into [u64]
-    fn __f64_to_bits(float) @env {
-        Ok(ConValue::Int(get_float(env, float)?.to_bits() as _))
-    }
-
-    /// Transmutes `bits` into [f64]
-    fn __f64_from_bits(bits) @env {
-        Ok(ConValue::Float(f64::from_bits(get_int(env, bits, "u64")? as u64)))
-    }
-
-    // float intrinsics
-    /// Computes the sine of a number
-    fn __f64_sin(float) @env { Ok(get_float(env, float)?.sin()) }
-    /// Computes the cosine of a number
-    fn __f64_cos(float) @env { Ok(get_float(env, float)?.cos()) }
-    /// Computes the tangent of a number
-    fn __f64_tan(float) @env { Ok(get_float(env, float)?.tan()) }
-    /// Computes the square root of a number
-    fn __f64_sqrt(float) @env { Ok(get_float(env, float)?.sqrt()) }
-    /// Raises a number to an integer power
-    fn __f64_powi(float, int) @env {
-        Ok(get_float(env, float)?.powi(get_int(env, int, "i32")? as _))
-    }
-    /// Raises a number to a floating-point power
-    fn __f64_powf(float, power) @env {
-        Ok(get_float(env, float)?.powf(get_float(env, power)? as _))
-    }
-    /// Parses a string as f64
-    fn __f64_parse(str) @env {
-        get_str(env, str)?
-            .parse::<f64>()
-            .map_err(|e| error_format!("{e}"))
-    }
-
-
     /// Twiddles bits into floats, or vice versa
     fn float(bits) @env {
         match bits.dereference_in(env)? {
@@ -552,6 +517,106 @@ pub const Math: &[Builtin] = &builtins![
             .map_err(|e| error_format!("{e}"))
     }
 ];
+
+pub const IntIntrinsics: &[Builtin] = &builtins! {
+    /// Computes `int` to the `power`th power
+    fn pow(int, power) @env {
+        Ok(get_int(env, int, "i128")?.wrapping_pow(get_int(env, power, "i128")? as _))
+    }
+    /// Computes the square root if `int`
+    fn isqrt(int) @env {
+        Ok(get_int(env, int, "i128")?.isqrt())
+    }
+    /// Counts the number of one-bits in `int`
+    fn count_ones(int) @env {
+        Ok(get_int(env, int, "i128")?.count_ones() as i128)
+    }
+    /// Counts the number of zero-bits in `int`
+    fn count_zeros(int) @env {
+        Ok(get_int(env, int, "i128")?.count_zeros() as i128)
+    }
+    /// Counts the number of leading zeroes in `int`
+    fn leading_zeros(int) @env {
+        Ok(get_int(env, int, "i128")?.leading_zeros() as i128)
+    }
+    /// Counts the number of trailing zeroes in `int`
+    fn trailing_zeros(int) @env {
+        Ok(get_int(env, int, "i128")?.trailing_zeros() as i128)
+    }
+    /// Swaps the bytes of `int` (as i128)
+    fn swap_bytes(int) @env {
+        Ok(get_int(env, int, "i128")?.swap_bytes() as i128)
+    }
+    /// Reverses the bits of `int` (as i128)
+    fn reverse_bits(int) @env {
+        Ok(get_int(env, int, "i128")?.reverse_bits() as i128)
+    }
+    /// Reverses the bits of `int` (as i128)
+    fn abs(int) @env {
+        Ok(get_int(env, int, "i128")?.wrapping_abs() as i128)
+    }
+    /// Returns the absolute difference between `int` and `other`
+    fn abs_diff(int, other) @env {
+        let other = get_int(env, other, "i128")?;
+        Ok(get_int(env, int, "i128")?.abs_diff(other) as i128)
+    }
+    fn ilog(int, base) @env {
+        let base = get_int(env, base, "i128")?;
+        Ok(
+            get_int(env, int, "i128")?
+                .checked_ilog(base)
+                .ok_or_else(|| error_format!("Invalid base: {base}"))? as i128
+        )
+    }
+    /// Transmutes `bits` into [f64]
+    fn f64_bits(bits) @env {
+        Ok(f64::from_bits(get_int(env, bits, "u64")? as u64))
+    }
+    fn parse(str, radix) @env {
+        let radix = get_int(env, radix, "u32")?;
+        let 2..=36 = radix else {
+            Err(Error::OobIndex(radix as _, 32))?
+        };
+        i128::from_str_radix(get_str(env, str)?, radix as _)
+            .map_err(|e| error_format!("{e}"))
+    }
+};
+
+pub const FloatIntrinsics: &[Builtin] = &builtins![
+    /// Transmutes `float` into [u64]
+    fn to_bits(float) @env {
+        Ok(ConValue::Int(get_float(env, float)?.to_bits() as _))
+    }
+    /// Transmutes `bits` into [f64]
+    fn from_bits(bits) @env {
+        Ok(f64::from_bits(get_int(env, bits, "u64")? as u64))
+    }
+    // float intrinsics
+    /// Computes the sine of a number
+    fn sin(float) @env { Ok(get_float(env, float)?.sin()) }
+    /// Computes the cosine of a number
+    fn cos(float) @env { Ok(get_float(env, float)?.cos()) }
+    /// Computes the tangent of a number
+    fn tan(float) @env { Ok(get_float(env, float)?.tan()) }
+    /// Computes the square root of a number
+    fn sqrt(float) @env { Ok(get_float(env, float)?.sqrt()) }
+    /// Raises a number to an integer power
+    fn powi(float, int) @env {
+        Ok(get_float(env, float)?.powi(get_int(env, int, "i32")? as _))
+    }
+    /// Raises a number to a floating-point power
+    fn powf(float, power) @env {
+        Ok(get_float(env, float)?.powf(get_float(env, power)? as _))
+    }
+    /// Parses a string as f64
+    fn parse(str) @env {
+        get_str(env, str)?
+            .parse::<f64>()
+            .map_err(|e| error_format!("{e}"))
+    }
+];
+
+// TODO: BoolIntrinsics, StringIntrinsics, ArrayIntrinsics, TupleIntrinsics
 
 fn get_float(env: &mut Environment, value: &ConValue) -> IResult<f64> {
     let &ConValue::Float(f) = value.dereference_in(env)? else {

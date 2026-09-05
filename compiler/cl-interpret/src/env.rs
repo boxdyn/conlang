@@ -1,17 +1,13 @@
 //! Lexical & non-lexical [scoping](Environment) for variables, and [Backtrace] support
 
-use crate::{
-    builtin::Builtin,
-    place::Place,
-    typeinfo::{self, Model, Type},
-};
-
 use super::{
     Callable, Interpret,
-    builtin::{Builtins, Math},
+    builtin::*,
     convalue::ConValue,
     error::{Error, IResult},
     function::Function,
+    place::Place,
+    typeinfo::{self, Model, Type},
 };
 use cl_ast::{Bind as FnDecl, fmt::FmtAdapter, types::Symbol};
 use cl_structures::{intern::interned::Interned, span::Span};
@@ -101,7 +97,10 @@ impl Default for Environment {
             let value = this.def_type(ident.into(), model.intern());
             this.bind(ident, ConValue::TypeInfo(value));
         }
-        this.add_builtins(Builtins).add_builtins(Math);
+        this.add_builtins(Builtins)
+            .add_builtins(Math)
+            .add_intrinsics(Model::default_float(), FloatIntrinsics)
+            .add_intrinsics(Model::default_integer(), IntIntrinsics);
         this
     }
 }
@@ -173,8 +172,10 @@ impl Environment {
     }
 
     pub fn get_impl(&self, ty: Type, name: Symbol) -> IResult<ConValue> {
-        let res = self.impls.get(&ty).and_then(|map| map.get(name.to_ref()));
-        Ok(res.ok_or(Error::NotDefined(name))?.clone())
+        match self.impls.get(&ty).and_then(|map| map.get(name.to_ref())) {
+            Some(value) => Ok(value.clone()),
+            _ => ty.getattr(name),
+        }
     }
 
     /// Gets all registered globals, bound or unbound.
@@ -203,6 +204,13 @@ impl Environment {
             );
         }
 
+        self
+    }
+
+    pub fn add_intrinsics(&mut self, ty: Type, builtins: &'static [Builtin]) -> &mut Self {
+        for builtin in builtins {
+            self.implement(ty, builtin.name, builtin.into());
+        }
         self
     }
 
