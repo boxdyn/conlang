@@ -137,10 +137,10 @@ impl ConValue {
             Self::Tuple(vs) => Model::Tuple(None, vs.iter().map(Self::type_of).collect()).intern(),
             Self::Struct(ty, _) => *ty,
             Self::TupleStruct(ty, _) => *ty,
-            Self::Module(_) => todo!("type_of({self})"),
-            Self::Quote(_) => todo!("type_of({self})"),
-            Self::Function(_) => todo!("type_of({self})"),
-            Self::Builtin(_) => todo!("type_of({self})"),
+            Self::Module(_) => Model::Any.already_interned(),
+            Self::Quote(_) => Model::Any.already_interned(),
+            Self::Function(_) => Model::Function.already_interned(),
+            Self::Builtin(_) => Model::Function.already_interned(),
             Self::TypeInfo(ty) => *ty,
         }
     }
@@ -373,6 +373,7 @@ from! {
     Function => ConValue::Function,
     Vec<ConValue> => ConValue::Tuple,
     &'static Builtin => ConValue::Builtin,
+    Type => ConValue::TypeInfo,
 }
 impl From<()> for ConValue {
     fn from(_: ()) -> Self {
@@ -493,7 +494,10 @@ impl std::fmt::Display for ConValue {
                 .list(tuple, ", "),
             ConValue::Struct(id, map) => {
                 use std::fmt::Write;
-                write!(f, "{} ", id.name())?;
+                match id.name() {
+                    "" => {}
+                    name => write!(f, "{name} ")?,
+                }
                 let mut f = f.delimit_indented("{", "\n}");
                 for (k, v) in map.iter() {
                     write!(f, "\n{k}: {v},")?;
@@ -506,7 +510,8 @@ impl std::fmt::Display for ConValue {
                 let mut items = module.iter().collect::<Vec<_>>();
                 items.sort_by_key(|i| i.0);
                 for (k, v) in items {
-                    write!(f, "\n{k}: {v},")?;
+                    writeln!(f);
+                    write!(f.indent(), "{k}: {v},")?;
                 }
                 Ok(())
             }

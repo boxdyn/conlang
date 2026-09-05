@@ -357,7 +357,59 @@ pub const Builtins: &[Builtin] = &builtins![
         let Some(impls) = env.impls.get(ty) else {
             return Ok(ConValue::Module(Default::default()));
         };
-        Ok(ConValue::Module(Box::new(impls.clone())))
+        Ok(ConValue::Module(Box::new(
+            impls.iter().map(|(&k, v)| (k.into(), v.clone())).collect()
+        )))
+    }
+
+    fn mod_into_binds(module) @env {
+        let ConValue::Module(m) = module.dereference_in(env)? else {
+            return Err(Error::TypeError("mod", module.type_of()))
+        };
+
+        Ok(ConValue::Array(
+            m.iter()
+                .map(|(&k, v)| ConValue::Tuple([ConValue::Str(k), v.clone()].into()))
+                .collect()
+        ))
+    }
+
+    /// Gets the underlying `mod` for type `ty`
+    fn captures(func) @env {
+        let ConValue::Function(func) = func.dereference_in(env)? else {
+            return Err(Error::TypeError("fn", func.type_of()))
+        };
+        Ok(ConValue::Array(
+            func.captures()
+                .iter()
+                .copied()
+                .map(ConValue::Str)
+                .collect()
+        ))
+    }
+
+    /// Gets the underlying `mod` for type `ty`
+    fn upvars(func) @env {
+        let ConValue::Function(func) = func.dereference_in(env)? else {
+            return Err(Error::TypeError("fn", func.type_of()))
+        };
+
+        for (name, idx) in func.upvars().borrow().0.iter() {
+
+        }
+        Ok(ConValue::Module(
+            Box::new(func.upvars()
+            .borrow()
+            .0
+            .iter()
+            .map(|(&name, &idx)| {
+                (
+                    name,
+                    env.get_id(idx).cloned().unwrap_or_default()
+                )
+            })
+            .collect())
+        ))
     }
 
     /// Executes the provided `lambda` with `args`, and halts stack unwinding
@@ -429,7 +481,9 @@ pub const Math: &[Builtin] = &builtins![
     }
 
     /// Compares two values
-    fn cmp(head, tail) {
+    fn cmp(head, tail) @env {
+        let head = head.dereference_in(env)?;
+        let tail = tail.dereference_in(env)?;
         Ok(ConValue::Int(match (head, tail) {
             (ConValue::Int(a), ConValue::Int(b)) => a.cmp(b) as _,
             (ConValue::Bool(a), ConValue::Bool(b)) => a.cmp(b) as _,
@@ -489,6 +543,13 @@ pub const Math: &[Builtin] = &builtins![
             &ConValue::Int(i) => Ok(ConValue::Float(f64::from_bits(i as u64))),
             other => Err(error_format!("Cannot convert {other} to/from float/bits")),
         }
+    }
+
+    fn get_time_micros() @env {
+        std::time::SystemTime::now()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .map(|dur| ConValue::Int(dur.as_micros() as _))
+            .map_err(|e| error_format!("{e}"))
     }
 ];
 

@@ -64,7 +64,7 @@ pub struct Environment {
     values: Vec<ConValue>,
     frames: Vec<EnvFrame>,
     types: HashMap<Symbol, Type>,
-    pub(crate) impls: HashMap<typeinfo::Type, HashMap<Symbol, ConValue>>,
+    pub(crate) impls: HashMap<typeinfo::Type, HashMap<&'static str, ConValue>>,
 }
 
 impl Display for Environment {
@@ -84,7 +84,7 @@ impl Display for Environment {
                 writeln!(f, "{idx:4} {name}:")?;
                 match self.values.get(*idx) {
                     Some(ConValue::TypeInfo(t)) => writeln!(f, "type {t}"),
-                    Some(ConValue::Function(v)) => writeln!(f, "fn {}", v.decl().0),
+                    Some(ConValue::Function(v)) => writeln!(f, "fn {}", v.pat()),
                     Some(value) => writeln!(f, "{value}"),
                     None => writeln!(f, "ERROR: {name}'s address blows the stack!"),
                 }?
@@ -120,6 +120,20 @@ impl Environment {
         }
     }
 
+    /// The depth of the stack, in stack frames
+    pub fn frame_depth(&self) -> usize {
+        self.frames.len()
+    }
+
+    pub fn stack_depth(&self) -> usize {
+        self.values.len()
+    }
+
+    /// Gets a particular stack frame by index
+    pub(crate) fn get_frame(&self, index: usize) -> Option<&EnvFrame> {
+        self.frames.get(index)
+    }
+
     /// Reflexively evaluates a node
     pub fn eval(&mut self, node: &impl Interpret) -> IResult<ConValue> {
         node.interpret(self)
@@ -150,12 +164,16 @@ impl Environment {
         Some(())
     }
 
-    pub fn implement(&mut self, ty: Type, name: Symbol, value: ConValue) -> Option<ConValue> {
-        self.impls.entry(ty).or_default().insert(name, value)
+    pub fn implement(&mut self, ty: Type, name: &'static str, value: ConValue) -> &mut ConValue {
+        self.impls
+            .entry(ty)
+            .or_default()
+            .entry(name)
+            .or_insert(value)
     }
 
     pub fn get_impl(&self, ty: Type, name: Symbol) -> IResult<ConValue> {
-        let res = self.impls.get(&ty).and_then(|map| map.get(&name));
+        let res = self.impls.get(&ty).and_then(|map| map.get(name.to_ref()));
         Ok(res.ok_or(Error::NotDefined(name))?.clone())
     }
 
@@ -203,6 +221,22 @@ impl Environment {
         let mut scope = self.frame(name, None);
         for (k, v) in frame {
             scope.insert(k, v);
+        }
+        scope
+    }
+
+    /// Enters a nested scope, assigning the contents of `frame`,
+    /// and returning a [`Frame`] stack-guard.
+    ///
+    /// [`Frame`] implements Deref/DerefMut for [`Environment`].
+    pub fn with_raw_frame<'e>(
+        &'e mut self,
+        name: &'static str,
+        frame: &HashMap<Symbol, usize>,
+    ) -> Frame<'e> {
+        let mut scope = self.frame(name, None);
+        for (&k, &v) in frame {
+            scope.bind_raw(k, v);
         }
         scope
     }

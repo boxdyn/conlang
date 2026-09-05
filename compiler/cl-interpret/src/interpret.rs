@@ -72,11 +72,7 @@ impl Interpret for Expr<DefaultTypes> {
             Self::Lit(Literal::Char(v)) => Ok(ConValue::Char(*v)),
             Self::Lit(Literal::Int(v, _)) => Ok(ConValue::Int(*v as _)),
             Self::Lit(Literal::Str(v)) => Ok(ConValue::Str(v.as_str().into())),
-            Self::Use(_) => {
-                #[rustfmt::skip]
-                println!("TODO: Use `{self}` (at {}:{}:{})", file!(), line!(), column!());
-                Ok(ConValue::Unit)
-            }
+            Self::Use(tree) => tree.interpret(env),
             Self::Bind(bind) => bind.interpret(env),
             Self::Make(make) => make.interpret(env),
             Self::Match(mtch) => mtch.interpret(env),
@@ -484,6 +480,7 @@ impl Interpret for Bind<DefaultTypes> {
                 if let Some(name) = func.name() {
                     env.bind(name, ConValue::Function(func.clone()))
                 }
+                func.lift_upvars(env);
                 Ok(ConValue::Function(func))
             }
             (BindOp::Mod, _, [At(Expr::Op(Op::Block, exprs), ..)])
@@ -493,24 +490,26 @@ impl Interpret for Bind<DefaultTypes> {
             }
             (BindOp::Mod, _, [body]) => body.interpret(env),
             (BindOp::Impl, &Pat::Name(name), [At(Expr::Op(Op::Block, exprs), ..)])
-                if exprs.is_empty() =>
+                if exprs.is_empty()
+                    && let ConValue::TypeInfo(ty) = env.get(name)? =>
             {
-                Ok(ConValue::Unit)
+                Ok(ConValue::TypeInfo(ty))
             }
             (BindOp::Impl, &Pat::Name(name), [At(Expr::Op(Op::Block, exprs), ..)])
                 if let [body] = exprs.as_slice()
                     && let ConValue::TypeInfo(ty) = env.get(name)? =>
             {
                 let mut scope = env.frame(name.to_ref(), Some(pat.1));
+                scope.bind("Self", ty);
                 let out = body.interpret(&mut scope);
                 if out.is_ok()
                     && let Some(values) = scope.pop_values()
                 {
                     for (name, value) in values {
-                        env.implement(ty, name, value);
+                        env.implement(ty, name.0, value);
                     }
                 }
-                out
+                out.map(|_| ConValue::TypeInfo(ty))
             }
             (BindOp::Struct, pat, []) => {
                 let (name, model) = bind_struct(pat, env)?;
@@ -589,6 +588,95 @@ impl Interpret for Bind<DefaultTypes> {
     }
 }
 
+impl Interpret for Use {
+    fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
+        fn use_ty(tree: &Use, ty: Type, env: &mut Environment) -> IResult<()> {
+            fn resolve(ty: Type, name: Sym, env: &mut Environment) -> IResult<ConValue> {
+                env.get_impl(ty, name).or_else(|_| ty.getattr(name))
+            }
+
+            match tree {
+                Use::Glob => todo!("{tree} in {ty}"),
+                &Use::Name(name) => {
+                    let value = resolve(ty, name, env)?;
+                    env.bind(name, value);
+                    Ok(())
+                }
+                &Use::Alias(from, to) => {
+                    let value = resolve(ty, from, env)?;
+                    env.bind(to, value);
+                    Ok(())
+                }
+                Use::Path(name, tree) => match resolve(ty, *name, env)?.dereference_in(env)? {
+                    &ConValue::TypeInfo(ty) => use_ty(tree, ty, env),
+                    #[expect(deprecated)]
+                    ConValue::Module(md) => use_mod(tree, &md.clone(), env),
+                    other => Err(Error::TypeError("type", other.type_of())),
+                },
+                Use::Tree(uses) => {
+                    for branch in uses {
+                        use_ty(branch, ty, env)?;
+                    }
+                    Ok(())
+                }
+            }
+        }
+
+        #[deprecated]
+        fn use_mod(tree: &Use, map: &HashMap<Sym, ConValue>, env: &mut Environment) -> IResult<()> {
+            match tree {
+                Use::Glob => todo!("{tree} in {map:?}"),
+                &Use::Name(name) => {
+                    let value = map.get(&name).ok_or(Error::NotDefined(name))?.clone();
+                    env.bind(name, value);
+                    Ok(())
+                }
+                &Use::Alias(from, to) => {
+                    let value = map.get(&from).ok_or(Error::NotDefined(from))?.clone();
+                    env.bind(to, value);
+                    Ok(())
+                }
+                Use::Path(name, tree) => match map
+                    .get(name)
+                    .ok_or(Error::NotDefined(*name))?
+                    .dereference_in(env)?
+                {
+                    &ConValue::TypeInfo(ty) => use_ty(tree, ty, env),
+                    ConValue::Module(md) => use_mod(tree, &md.clone(), env),
+                    other => Err(Error::TypeError("type", other.type_of())),
+                },
+                Use::Tree(uses) => {
+                    for branch in uses {
+                        use_mod(branch, map, env)?;
+                    }
+                    Ok(())
+                }
+            }
+        }
+
+        match self {
+            Use::Glob => {} // glob in top level imports nothing
+            &Use::Name(name) => drop(env.id_of(name)?),
+            &Use::Alias(from, to) => {
+                let id = env.id_of(from)?;
+                env.bind_raw(to, id);
+            }
+            Use::Path(name, tree) => match env.get(*name)?.dereference_in(env)? {
+                &ConValue::TypeInfo(ty) => use_ty(tree, ty, env),
+                #[expect(deprecated)]
+                ConValue::Module(md) => use_mod(tree, &md.clone(), env),
+                other => Err(Error::TypeError("type", other.type_of())),
+            }?,
+            Use::Tree(trees) => {
+                for tree in trees {
+                    tree.interpret(env)?;
+                }
+            }
+        }
+        Ok(ConValue::Unit)
+    }
+}
+
 impl Interpret for Path {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         match self.parts.as_slice() {
@@ -600,9 +688,9 @@ impl Interpret for Path {
                         ConValue::Module(values) => {
                             values.get(&name).cloned().ok_or(Error::NotDefined(name))?
                         }
-                        ConValue::TypeInfo(ty) if let Ok(attr) = ty.getattr(name) => attr,
-                        ConValue::TypeInfo(ty) => env.get_impl(ty, name)?,
-                        _ => todo!("{self}")?,
+                        ConValue::TypeInfo(ty) if let Ok(attr) = env.get_impl(ty, name) => attr,
+                        ConValue::TypeInfo(ty) => ty.getattr(name)?,
+                        _ => todo!("{self}: {value}")?,
                     };
                 }
                 Ok(value)

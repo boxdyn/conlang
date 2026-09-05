@@ -49,6 +49,8 @@ pub enum Model {
     Struct(Option<Symbol>, Box<[(Symbol, Type)]>, bool),
     /// The variants of an enumeration
     Enum(Symbol, Box<[(Symbol, Type)]>),
+    /// An arbitrary function (TODO: encode signature)
+    Function,
 }
 
 impl Display for Model {
@@ -93,6 +95,9 @@ impl Display for Model {
                     }
                 }
                 Ok(())
+            }
+            Self::Function => {
+                write!(f, "fn()")
             }
         }
     }
@@ -191,6 +196,7 @@ impl Model {
         let any = Model::Any.intern();
         let types = [
             ("_", Model::Any),
+            ("fn", Model::Function),
             ("unit", Model::Unit(None, 0)),
             ("bool", Model::Bool),
             ("char", Model::Char),
@@ -256,6 +262,10 @@ impl Model {
                 .iter()
                 .find_map(|&(name, ty)| (name == attr).then_some(ConValue::TypeInfo(ty)))
                 .ok_or(Error::NotDefined(attr))?,
+            (Model::Enum(_, items), "VARIANTS") => {
+                ConValue::Array(items.iter().map(|v| v.1).map(ConValue::TypeInfo).collect())
+            }
+            (Model::Enum(_, items), "COUNT") => ConValue::Int(items.len() as _),
             (Model::Enum(_, items), _) => items
                 .iter()
                 .find_map(|&(name, ty)| (name == attr).then_some(ConValue::TypeInfo(ty)))

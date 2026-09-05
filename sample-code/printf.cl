@@ -12,8 +12,8 @@ fn radix_by_chars(stream: &fn(char), n: i128, radix: i64) {
 
     if radix < 2 panic("Invalid base: ", radix);
     match n {
-        0 => stream("0");
-        ..0 => (stream("-"); recurse(stream, -n, radix));
+        0 => stream('0');
+        ..0 => (stream('-'); recurse(stream, -n, radix));
         _ => recurse(stream, n, radix);
     }
 }
@@ -46,6 +46,7 @@ fn vformat(stream: &fn(char), format: str, args: (..)) {
             Some('x') => radix_by_chars(stream, arg() as u128, 16);
             Some('~') => radix_by_chars(stream, arg() as u128, 36);
             Some('B') => format_bool(stream, arg() as bool);
+            Some('D') => arg().display(stream);
             specifier => panic("Can't format ", args, " with ", specifier);
         };
         Some(c) => stream(c);
