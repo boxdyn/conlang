@@ -374,6 +374,11 @@ pub const Builtins: &[Builtin] = &builtins![
         ))
     }
 
+    fn type_of(value) @env {
+        let value = value.dereference_in(env)?;
+        Ok(value.type_of())
+    }
+
     /// Gets the underlying `mod` for type `ty`
     fn captures(func) @env {
         let ConValue::Function(func) = func.dereference_in(env)? else {
@@ -615,6 +620,8 @@ pub const FloatIntrinsics: &[Builtin] = &builtins![
             .map_err(|e| error_format!("{e}"))
     }
 ];
+
+pub const CharIntrinsics: &[Builtin] = &builtins![];
 
 // TODO: BoolIntrinsics, StringIntrinsics, ArrayIntrinsics, TupleIntrinsics
 
