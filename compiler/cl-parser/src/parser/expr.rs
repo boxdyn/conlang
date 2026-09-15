@@ -176,7 +176,7 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
 
 /// Tries to map the incoming [Token] to an infix [expression operator](Op)
 /// and its [precedence level](Prec)
-const fn from_infix(token: &Token) -> PResult<(Ps, Prec)> {
+const fn from_infix(token: &Token, can_do: bool) -> PResult<(Ps, Prec)> {
     Ok(match token.kind {
         TKind::Semi => (Ps::Op(Op::Do), Prec::Do), // the inspiration
         TKind::In => (Ps::Op(Op::Do), Prec::Do),
@@ -218,12 +218,15 @@ const fn from_infix(token: &Token) -> PResult<(Ps, Prec)> {
 
         TKind::Question => (Ps::Op(Op::Try), Prec::Unary),
         TKind::Dot => (Ps::Op(Op::Dot), Prec::Project),
+        // If we can elide a `;`, `(...)`/`[...]` is ambiguous, so disallow it
+        TKind::LBrack | TKind::LParen if can_do => (Ps::ImplicitDo, Prec::Do),
         TKind::LBrack => (Ps::Op(Op::Index), Prec::Project),
         TKind::LParen => (Ps::Op(Op::Call), Prec::Extend),
 
         TKind::RParen | TKind::RBrack | TKind::RCurly | TKind::Grave => (Ps::End, Prec::Max),
         TKind::As => (Ps::Op(Op::As), Prec::Unary),
-        _ => (Ps::ImplicitDo, Prec::Do),
+        _ if can_do => (Ps::ImplicitDo, Prec::Do),
+        _ => return Err(ParseError::NotInfix(token.kind, token.span)),
     })
 }
 
@@ -337,8 +340,9 @@ impl<'t> Parse<'t> for Expr {
             };
 
             // Infix and Postfix
-            while let Ok(Some(tok @ &Token { kind, .. })) = p.peek().allow_eof()
-                && let Ok((op, prec)) = from_infix(tok)
+            while let can_do = p.can_do
+                && let Ok(Some(tok @ &Token { kind, .. })) = p.peek().allow_eof()
+                && let Ok((op, prec)) = from_infix(tok, can_do)
                 && level <= prec.prev()
                 && op != Ps::End
             {
@@ -354,8 +358,7 @@ impl<'t> Parse<'t> for Expr {
                     }
                     Ps::Make => break,
                     // As is ImplicitDo (semicolon elision)
-                    Ps::ImplicitDo if p.can_do => head.and_do(span, p.parse(prec.next())?),
-                    Ps::ImplicitDo => break,
+                    Ps::ImplicitDo => head.and_do(span, p.parse(prec.next())?),
                     // Allow `;` at end of file
                     Ps::Op(Op::Do) => head.and_do(
                         span,
@@ -364,8 +367,6 @@ impl<'t> Parse<'t> for Expr {
                             None => At(Expr::Omitted, p.span()),
                         },
                     ),
-                    // If we can elide a `;`, `(...)`/`[...]` is ambiguous, so disallow it
-                    Ps::Op(Op::Call | Op::Index) if p.can_do => break,
                     Ps::Op(Op::Index) => Expr::Op(
                         Op::Index,
                         p.consume()
