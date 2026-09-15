@@ -100,7 +100,11 @@ impl Default for Environment {
         this.add_builtins(Builtins)
             .add_builtins(Math)
             .add_intrinsics(Model::default_float(), FloatIntrinsics)
-            .add_intrinsics(Model::default_integer(), IntIntrinsics);
+            .add_intrinsics(Model::default_integer(), IntIntrinsics)
+            .add_intrinsics(
+                Model::Slice(Model::Any.already_interned()).intern(),
+                ArrayIntrinsics,
+            );
         this
     }
 }
@@ -172,10 +176,18 @@ impl Environment {
     }
 
     pub fn get_impl(&self, ty: Type, name: Symbol) -> IResult<ConValue> {
-        match self.impls.get(&ty).and_then(|map| map.get(name.to_ref())) {
-            Some(value) => Ok(value.clone()),
-            _ => ty.getattr(name),
+        if let Some(value) = self.impls.get(&ty).and_then(|map| map.get(name.to_ref())) {
+            return Ok(value.clone());
         }
+
+        if let Some(parent) = ty.parent()
+            && parent != ty
+            && let Ok(value) = self.get_impl(parent, name)
+        {
+            return Ok(value);
+        }
+
+        ty.getattr(name)
     }
 
     /// Gets all registered globals, bound or unbound.

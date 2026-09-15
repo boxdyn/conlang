@@ -123,7 +123,7 @@ impl ConValue {
 
     pub fn type_of(&self) -> Type {
         match self {
-            Self::Unit => Model::Unit(None, 0).already_interned(),
+            Self::Unit => Model::Unit(None, None, 0).already_interned(),
             Self::Int(_) => Model::default_integer(),
             Self::Float(_) => Model::default_float(),
             Self::Bool(_) => Model::Bool.already_interned(),
@@ -134,7 +134,9 @@ impl ConValue {
             Self::Slice(place, _, _) => Model::Slice(Model::Any.already_interned()).intern(),
             Self::Array(arr) if !arr.is_empty() => Model::Slice(arr[0].type_of()).intern(),
             Self::Array(_) => Model::Slice(Model::Any.already_interned()).intern(),
-            Self::Tuple(vs) => Model::Tuple(None, vs.iter().map(Self::type_of).collect()).intern(),
+            Self::Tuple(vs) => {
+                Model::Tuple(None, None, vs.iter().map(Self::type_of).collect()).intern()
+            }
             Self::Struct(ty, _) => *ty,
             Self::TupleStruct(ty, _) => *ty,
             Self::Module(_) => Model::Any.already_interned(),
@@ -153,7 +155,7 @@ impl ConValue {
                     Self::Float(v) => v as _,
                     Self::Bool(v) => v as _,
                     Self::Char(v) => v as _,
-                    Self::TypeInfo(Interned(Model::Unit(_, d), ..)) => *d as _,
+                    Self::TypeInfo(Interned(Model::Unit(_, _, d), ..)) => *d as _,
                     _ => return self,
                 };
                 if i == min || i == max {
@@ -170,7 +172,7 @@ impl ConValue {
                     Self::Int(v) => v as _,
                     Self::Bool(v) => v as i32 as _,
                     Self::Char(v) => v as i32 as _,
-                    Self::TypeInfo(Interned(Model::Unit(_, d), ..)) => *d as _,
+                    Self::TypeInfo(Interned(Model::Unit(_, _, d), ..)) => *d as _,
                     _ => return self,
                 };
                 ConValue::Float(f)
@@ -182,13 +184,13 @@ impl ConValue {
                     Self::Float(v) => v as _,
                     Self::Bool(v) => v as _,
                     Self::Char(v) => return self,
-                    Self::TypeInfo(Interned(Model::Unit(_, d), ..)) => *d as _,
+                    Self::TypeInfo(Interned(Model::Unit(_, _, d), ..)) => *d as _,
                     _ => return self,
                 };
                 ConValue::Char(char::from_u32(c).unwrap_or('�'))
             }
-            Model::Unit(None, _) => ConValue::Unit,
-            Model::Unit(_, _) => ConValue::TypeInfo(ty.already_interned()),
+            Model::Unit(None, _, _) => ConValue::Unit,
+            Model::Unit(_, _, _) => ConValue::TypeInfo(ty.already_interned()),
             Model::Str => ConValue::String(self.to_string()),
             _ => self,
         }

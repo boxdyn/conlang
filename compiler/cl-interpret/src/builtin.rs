@@ -351,7 +351,8 @@ pub const Builtins: &[Builtin] = &builtins![
 
     /// Gets the underlying `mod` for type `ty`
     fn module(ty) @env {
-        let ConValue::TypeInfo(ty) = ty.dereference_in(env)? else {
+        let ty = ty.dereference_in(env)?;
+        let ConValue::TypeInfo(ty) = ty else {
             return Err(Error::TypeError("type", ty.type_of()))
         };
         let Some(impls) = env.impls.get(ty) else {
@@ -375,8 +376,7 @@ pub const Builtins: &[Builtin] = &builtins![
     }
 
     fn type_of(value) @env {
-        let value = value.dereference_in(env)?;
-        Ok(value.type_of())
+        Ok(value.dereference_in(env)?.type_of())
     }
 
     /// Gets the underlying `mod` for type `ty`
@@ -624,6 +624,23 @@ pub const FloatIntrinsics: &[Builtin] = &builtins![
 pub const CharIntrinsics: &[Builtin] = &builtins![];
 
 // TODO: BoolIntrinsics, StringIntrinsics, ArrayIntrinsics, TupleIntrinsics
+
+pub const ArrayIntrinsics: &[Builtin] = &builtins! {
+    /// Returns the length of the input list as a [ConValue::Int]
+    fn len(list) @env {
+        Ok(match list.dereference_in(env)? {
+            ConValue::Array(arr) => arr.len() as i128,
+            other => Err(Error::TypeError("[_]", other.type_of()))?,
+        })
+    }
+
+    fn slice(ConValue::Ref(index), ConValue::Int(start), ConValue::Int(end)) {
+        match (start, end) {
+            (0.., 0..) if start <= end => Ok(ConValue::Slice(index.clone(), *start as _, (end - start) as _)),
+            _ => Err(Error::BuiltinError(format_args!("Bad index: {index}[{start}, {end}]")))
+        }
+    }
+};
 
 fn get_float(env: &mut Environment, value: &ConValue) -> IResult<f64> {
     let &ConValue::Float(f) = value.dereference_in(env)? else {

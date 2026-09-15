@@ -38,17 +38,17 @@ pub enum Model {
     /// The "never" type (no variants)
     Never,
     /// The unit type (no elements)
-    Unit(Option<Symbol>, usize),
+    Unit(Option<Symbol>, Option<Type>, usize),
+    /// The elements of a tuple
+    Tuple(Option<Symbol>, Option<Type>, Box<[Type]>),
+    /// The elements of a struct, and whether they are exhaustive
+    Struct(Option<Symbol>, Option<Type>, Box<[(Symbol, Type)]>, bool),
+    /// The variants of an enumeration
+    Enum(Symbol, Box<[(Symbol, Type)]>),
     /// Reference to a value of [Type]
     Ref(Type),
     /// Slice of a list of [Type]
     Slice(Type),
-    /// The elements of a tuple
-    Tuple(Option<Symbol>, Box<[Type]>),
-    /// The elements of a struct, and whether they are exhaustive
-    Struct(Option<Symbol>, Box<[(Symbol, Type)]>, bool),
-    /// The variants of an enumeration
-    Enum(Symbol, Box<[(Symbol, Type)]>),
     /// An arbitrary function (TODO: encode signature)
     Function,
 }
@@ -66,23 +66,21 @@ impl Display for Model {
             Self::Str => "str".fmt(f),
             Self::Any => "_".fmt(f),
             Self::Never => "!".fmt(f),
-            Self::Unit(Some(name), _) => name.fmt(f),
-            Self::Unit(None, _) => "()".fmt(f),
-            Self::Ref(t) => write!(f, "&{t}"),
-            Self::Slice(t) => write!(f, "[{t}]"),
-            Self::Tuple(Some(name), items) => {
+            Self::Unit(Some(name), _, _) => name.fmt(f),
+            Self::Unit(None, _, _) => "()".fmt(f),
+            Self::Tuple(Some(name), _, items) => {
                 f.delimit(format_args!("{name}("), ")").list(items, ", ")
             }
-            Self::Tuple(_name, items) => f.delimit("(", ")").list(items, ", "),
-            Self::Struct(name, i, ex) if i.is_empty() => {
+            Self::Tuple(_name, _, items) => f.delimit("(", ")").list(items, ", "),
+            Self::Struct(name, _, i, ex) if i.is_empty() => {
                 let name = name.map(Interned::to_ref).unwrap_or_default();
                 let ex = if *ex { "" } else { " .. " };
                 write!(f, "{name} {{{ex}}}",)
             }
-            Self::Struct(Some(name), items, ex) => f
+            Self::Struct(Some(name), _, items, ex) => f
                 .delimit(format_args!("{name} {{"), if *ex { " }" } else { ", .. }" })
                 .list(items.iter().map(|(name, ty)| format!(" {name}: {ty}")), ","),
-            Self::Struct(None, items, exhaust) => f
+            Self::Struct(None, _, items, exhaust) => f
                 .delimit("{", if *exhaust { " }" } else { ", .. }" })
                 .list(items.iter().map(|(name, ty)| format!(" {name}: {ty}")), ","),
             Self::Enum(name, items) => {
@@ -96,6 +94,8 @@ impl Display for Model {
                 }
                 Ok(())
             }
+            Self::Ref(t) => write!(f, "&{t}"),
+            Self::Slice(t) => write!(f, "[{t}]"),
             Self::Function => {
                 write!(f, "fn()")
             }
@@ -124,8 +124,8 @@ impl Model {
 
     pub fn with_name(self, name: Symbol) -> Self {
         match self {
-            Self::Tuple(_, items) => Self::Tuple(Some(name), items),
-            Self::Struct(_, items, e) => Self::Struct(Some(name), items, e),
+            Self::Tuple(_, parent, items) => Self::Tuple(Some(name), parent, items),
+            Self::Struct(_, parent, items, e) => Self::Struct(Some(name), parent, items, e),
             Self::Enum(_, items) => Self::Enum(name, items),
             _ => self,
         }
@@ -152,24 +152,57 @@ impl Model {
             Self::Str => "str",
             Self::Any => "",
             Self::Never => "!",
-            Self::Unit(Some(name), _) => name.to_ref(),
-            Self::Unit(None, _) => "unit",
-            Self::Ref(interned) => "&...",
-            Self::Slice(interned) => "[...]",
+            Self::Unit(Some(name), ..) => name.to_ref(),
+            Self::Unit(None, ..) => "unit",
             Self::Tuple(Some(name), ..) => name.to_ref(),
             Self::Struct(Some(name), ..) => name.to_ref(),
             Self::Enum(name, _items) => name.to_ref(),
+            Self::Ref(interned) => "&...",
+            Self::Slice(interned) => "[...]",
+            Self::Function => "",
             _ => "",
+        }
+    }
+
+    pub fn parent(&self) -> Option<Type> {
+        match self {
+            Model::Integer { .. } => {
+                let default_integer = Self::default_integer();
+                (default_integer.to_ref() != self).then_some(default_integer)
+            }
+            Model::Float { .. } => {
+                let default_float = Self::default_float();
+                (default_float.to_ref() != self).then_some(default_float)
+            }
+            Model::Bool => None,
+            Model::Char => None,
+            Model::Str => None,
+            Model::Any => None,
+            Model::Never => None,
+            Model::Unit(_, Some(parent), _) => Some(*parent),
+            Model::Unit(_, None, _) => None,
+            Model::Tuple(_, Some(parent), _) => Some(*parent),
+            Model::Tuple(_, None, _) => None,
+            Model::Struct(_, Some(parent), _, _) => Some(*parent),
+            Model::Struct(_, None, _, _) => None,
+            Model::Enum(_, items) => None,
+            Model::Ref(Interned(Model::Any, ..)) => None,
+            Model::Ref(_) => Some(Model::Ref(Model::Any.already_interned()).intern()),
+            Model::Slice(Interned(Model::Any, ..)) => None,
+            Model::Slice(_) => Some(Model::Slice(Model::Any.already_interned()).intern()),
+            Model::Function => None,
         }
     }
 
     pub fn make_tuple(&self, values: Box<[ConValue]>) -> IResult<ConValue> {
         match self {
             Model::Any => Ok(ConValue::TupleStruct(self.already_interned(), values)),
-            Model::Tuple(_, typeids) if typeids.len() != values.len() => {
+            Model::Tuple(_, _, typeids) if typeids.len() != values.len() => {
                 Err(Error::ArgNumber(typeids.len(), values.len()))
             }
-            Model::Tuple(_, typeids) => Ok(ConValue::TupleStruct(self.already_interned(), values)),
+            Model::Tuple(_, _, typeids) => {
+                Ok(ConValue::TupleStruct(self.already_interned(), values))
+            }
             _ => Err(Error::NotCallable(ConValue::TypeInfo(
                 self.already_interned(),
             ))),
@@ -179,7 +212,7 @@ impl Model {
     pub fn make_struct(&self, mut values: HashMap<Symbol, ConValue>) -> IResult<ConValue> {
         let mut members = HashMap::new();
         match self {
-            Model::Struct(_, model, true) => {
+            Model::Struct(_, _, model, true) => {
                 for (key, _id) in model {
                     let value = values.get_mut(key).ok_or(Error::NotInitialized(*key))?;
                     members.insert(*key, value.take());
@@ -197,7 +230,7 @@ impl Model {
         let types = [
             ("_", Model::Any),
             ("fn", Model::Function),
-            ("unit", Model::Unit(None, 0)),
+            ("unit", Model::Unit(None, None, 0)),
             ("bool", Model::Bool),
             ("char", Model::Char),
             ("str", Model::Str),
@@ -218,10 +251,10 @@ impl Model {
             ("u128", make_int!(u128, false)),
             ("usize", make_int!(usize, false)),
             ("uint", make_int!(usize, false)),
-            ("RangeExc", Model::Tuple(Some("RangeExc".into()), [any, any].into())),
-            ("RangeInc", Model::Tuple(Some("RangeInc".into()), [any, any].into())),
-            ("RangeTo", Model::Tuple(Some("RangeTo".into()), [any].into())),
-            ("RangeToInc", Model::Tuple(Some("RangeToInc".into()), [any].into())),
+            ("RangeExc", Model::Tuple(Some("RangeExc".into()), None, [any, any].into())),
+            ("RangeInc", Model::Tuple(Some("RangeInc".into()), None, [any, any].into())),
+            ("RangeTo", Model::Tuple(Some("RangeTo".into()), None, [any].into())),
+            ("RangeToInc", Model::Tuple(Some("RangeToInc".into()), None, [any].into())),
         ];
         types.into()
     }
@@ -238,19 +271,19 @@ impl Model {
             (Model::Bool, "SIZE") => ConValue::Int(size_of::<bool>() as _),
             (Model::Char, "SIZE") => ConValue::Int(size_of::<char>() as _),
             (Model::Never, _) => Err(Error::NotDefined(attr))?,
-            (Model::Unit(_, _), "SIZE") => ConValue::Int(0),
-            (Model::Unit(_, _), _) => Err(Error::NotDefined(attr))?,
-            (Model::Tuple(_, items), "ARITY") => ConValue::Int(items.len() as _),
-            (Model::Tuple(_, items), "TYPES") => ConValue::Tuple(
+            (Model::Unit(_, _, _), "SIZE") => ConValue::Int(0),
+            (Model::Unit(_, _, _), _) => Err(Error::NotDefined(attr))?,
+            (Model::Tuple(_, _, items), "ARITY") => ConValue::Int(items.len() as _),
+            (Model::Tuple(_, _, items), "TYPES") => ConValue::Tuple(
                 Vec::from_iter(items.iter().copied().map(ConValue::TypeInfo)).into_boxed_slice(),
             ),
-            (Model::Struct(_, items, _), "NAMES") => {
+            (Model::Struct(_, _, items, _), "NAMES") => {
                 ConValue::Array(items.iter().map(|(n, _)| ConValue::Str(*n)).collect())
             }
-            (Model::Struct(_, items, _), "TYPES") => {
+            (Model::Struct(_, _, items, _), "TYPES") => {
                 ConValue::Array(items.iter().map(|(_, t)| ConValue::TypeInfo(*t)).collect())
             }
-            (Model::Struct(_, items, _), "MEMBERS") => ConValue::Array(
+            (Model::Struct(_, _, items, _), "MEMBERS") => ConValue::Array(
                 items
                     .iter()
                     .map(|(n, t)| {
@@ -258,7 +291,7 @@ impl Model {
                     })
                     .collect(),
             ),
-            (Model::Struct(_, items, exhaustive), _) => items
+            (Model::Struct(_, _, items, exhaustive), _) => items
                 .iter()
                 .find_map(|&(name, ty)| (name == attr).then_some(ConValue::TypeInfo(ty)))
                 .ok_or(Error::NotDefined(attr))?,
@@ -270,6 +303,7 @@ impl Model {
                 .iter()
                 .find_map(|&(name, ty)| (name == attr).then_some(ConValue::TypeInfo(ty)))
                 .ok_or(Error::NotDefined(attr))?,
+            (model, "super") if let Some(ty) = model.parent() => ConValue::TypeInfo(ty),
             (model, _) => Err(Error::NotDefined(attr))?,
         })
     }
