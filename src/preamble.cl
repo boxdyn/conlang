@@ -7,8 +7,8 @@
 
 // Note: module inlining is NOT performed for this file.
 
-enum Option<T> { Some(T), None }
-use Option::{Some, None}
+enum Option<T> { Some(T), None };
+use Option::{Some, None};
 impl Option {
     fn is_some(&self) -> bool {
         match self {
@@ -28,9 +28,9 @@ impl Option {
     fn and_then<U>(&self: Self, f: fn(T) -> Option<U>) -> Option<U> {
         f(self?)
     }
-};
+}
 
-enum Result<T, E> { Ok(T), Err(E) }
+enum Result<T, E> { Ok(T), Err(E) };
 use Result::{Ok, Err};
 impl Result {
     fn is_ok(self: &Self) -> bool {
@@ -59,7 +59,7 @@ impl Result {
             Err(e) => Err(f(e));
         }
     }
-};
+}
 
 // TODO: accurate floating point number parsing
 
@@ -106,6 +106,12 @@ mod _ {
                 for key, value in Type.module().mod_into_binds()
                     impl ty { bind(key, value) }
         }
+        const fn iterator(T: Type, next: fn(&T) -> Option<_>) impl T {
+            let next = next;
+            fn into_iter(&self) -> T = self;
+            fn foreach(self, f: fn(_))
+                while let Some(value) = (*self).next() f(value);
+        }
     }
     unstable_metaprogramming::enum_impl(Option);
     unstable_metaprogramming::enum_impl(Result);
@@ -115,6 +121,64 @@ mod _ {
         u8, u16, u32, u64, u128, usize,
     ]);
 }
+
+impl RangeInc {
+    struct InclusiveIter(usize, usize);
+    unstable_metaprogramming::iterator(InclusiveIter, {
+        fn next(self: &RangeInc::InclusiveIter) = if self.0 > self.1 None else {
+            let out = self.0;
+            self.0 += 1;
+            Some(out)
+        }
+    });
+    
+    fn into_iter(&RangeInc(start, end)) = RangeInc::InclusiveIter(start, end);
+}
+impl RangeExc {
+    struct ExclusiveIter(usize, usize);
+    unstable_metaprogramming::iterator(ExclusiveIter, {
+        fn next(self: &RangeExc::ExclusiveIter) = if self.0 >= self.1 None else {
+            let out = self.0;
+            self.0 += 1;
+            Some(out)
+        }
+    });
+    fn into_iter(&RangeExc(start, end)) = RangeExc::ExclusiveIter(start, end);
+}
+
+// TODO: type Array = [_];
+let Array = [].type_of();
+impl Array {
+    /// An iterator over an array's contents
+    struct ArrayIter(Array, RangeExc);
+    unstable_metaprogramming::iterator(ArrayIter, {
+        fn next(self: &Array::ArrayIter) match self.1.next() {
+            Some(index) => Some(self.0[index]);
+            None => None;
+        }
+    });
+
+    /// Constructs an iterator over this array's contents
+    fn into_iter(self: &Array) = Array::ArrayIter(self, (0..self.len()).into_iter());
+
+    /// Computes the cartesian product of `selves` and `others`
+    fn cartesian<T>(selves: &[T], others: &[T]) -> [[T; 2]] {
+        let out = [];
+        for &t in selves
+            for &u in others
+                out.push([t, u]);
+        out
+    }
+
+    /// Computes the cartesian product of `values` with itself.
+    fn grid<T>(&values: [T]) -> [[T; 2]] = values.cartesian(values);
+
+    /// Gets the index of the first value which matches the predicate
+    fn find<T>(values: &[T], f: (&T) -> bool) =
+        for idx in 0..values.len() {if f(values[idx]) break Some(idx) } else None;
+}
+
+
 /// Returns the larger of `a` and `b`
 pub fn max<T: Cmp>(a: T, b: T) -> T = if a < b b else a;
 
