@@ -257,7 +257,7 @@ where
 {
     let mut parser = Parser::new(Lexer::new("<parse>".into(), document));
     for idx in 0..6 {
-        let color_tag = if idx == 0 { 96 } else { (idx + 4) % 6 + 31 };
+        let color_tag = (idx + 5) % 6 + 31;
         match (
             parser
                 .parse::<At<T, _>>(T::Prec::default())
