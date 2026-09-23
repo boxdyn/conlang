@@ -230,6 +230,15 @@ impl Array {
     }
 }
 
+// TODO: Remove this when name resolution isn't fake
+unstable_metaprogramming::enum_impl(Option);
+unstable_metaprogramming::enum_impl(Result);
+unstable_metaprogramming::spread(f64, [f32]);
+unstable_metaprogramming::spread(i128, [
+    i8, i16, i32, i64,       isize,
+    u8, u16, u32, u64, u128, usize,
+]);
+
 
 /// Returns the larger of `a` and `b`
 pub fn max<T: Cmp>(a: T, b: T) -> T = if a < b b else a;
@@ -307,15 +316,6 @@ pub fn bin(n: u128) {
     }
     out
 }
-
-// TODO: Remove this when name resolution isn't fake
-unstable_metaprogramming::enum_impl(Option);
-unstable_metaprogramming::enum_impl(Result);
-unstable_metaprogramming::spread(f64, [f32]);
-unstable_metaprogramming::spread(i128, [
-    i8, i16, i32, i64,       isize,
-    u8, u16, u32, u64, u128, usize,
-]);
 
 /// Returns a shark
 pub fn shark() = '\u{1f988}';
