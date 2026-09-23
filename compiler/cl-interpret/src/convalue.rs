@@ -277,24 +277,22 @@ impl Callable for ConValue {
         }
     }
     fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
-        match self {
+        let out = match self {
             Self::Function(func) => func.call(env, args),
             Self::Builtin(func) => func.call(env, args),
-            Self::Module(m) => {
-                if let Some(func) = m.get(&"call".into()) {
-                    func.call(env, args)
-                } else {
-                    Err(Error::NotCallable(self.clone()))
-                }
+            Self::Struct(..) | Self::TupleStruct(..) => {
+                let id = env.stack_alloc(self.clone())?;
+                Place::from_index(id).call(env, args)
             }
-            Self::Ref(ptr) => {
-                // Move onto stack, and call
-                let func = ptr.get(env)?.clone();
-                func.call(env, args)
-            }
+            Self::Module(m) => match m.get(&"call".into()) {
+                Some(func) => func.call(env, args),
+                None => Err(Error::NotCallable(self.clone())),
+            },
+            Self::Ref(ptr) => ptr.call(env, args),
             Self::TypeInfo(idx) => idx.call(env, args),
             _ => Err(Error::NotCallable(self.clone())),
-        }
+        }?;
+        Ok(out)
     }
 }
 

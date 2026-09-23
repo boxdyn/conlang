@@ -1,5 +1,6 @@
 //! [Place]-expressions in the interpreter
 use crate::{
+    Callable,
     convalue::ConValue,
     env::Environment,
     error::{Error, ErrorKind, IResult},
@@ -23,6 +24,28 @@ pub enum Projection {
     Index(usize, bool),
     DotSym(Symbol),
     DotIdx(usize),
+}
+
+impl Callable for Place {
+    fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
+        match self.get(env)? {
+            ConValue::Struct(ty, _) | ConValue::TupleStruct(ty, _) => {
+                let func = env.get_impl(*ty, "call".into())?;
+                let mut self_args = vec![ConValue::Ref(self.clone())];
+                self_args.extend_from_slice(args);
+                func.call(env, &self_args)
+            }
+            module @ ConValue::Module(m) => match m.get(&"call".into()) {
+                Some(func) => func.clone().call(env, args),
+                None => Err(Error::NotCallable(module.clone())),
+            },
+            other => other.clone().call(env, args),
+        }
+    }
+
+    fn name(&self) -> Option<Symbol> {
+        None
+    }
 }
 
 impl Place {
@@ -150,13 +173,14 @@ impl Place {
 
     pub fn get<'e>(&self, env: &'e Environment) -> IResult<&'e ConValue> {
         let Self { place, projections } = self;
-
-        let mut place = env.get_id(*place).ok_or(Error::StackOob(*place as _))?;
+        let mut value = env.get_id(*place).ok_or(Error::StackOob(*place as _))?;
 
         for projection in projections {
-            place = match (place, projection) {
+            value = match (value, projection) {
                 (ConValue::Ref(place), Projection::Deref) => place.get(env)?,
-                (ConValue::Ref(place), projection) => place.clone().with(*projection).get(env)?,
+                (ConValue::Ref(next), projection) if next.place != *place => {
+                    next.clone().with(*projection).get(env)?
+                }
                 (ConValue::Array(arr), &Projection::Index(idx, from_end)) => {
                     let len = arr.len();
                     let idx = if from_end { len - idx } else { idx };
@@ -182,7 +206,7 @@ impl Place {
             }
         }
 
-        Ok(place)
+        Ok(value)
     }
 }
 
@@ -200,15 +224,15 @@ impl Display for Place {
                     "*".fmt(f)?;
                     format_inner(place, first, f)
                 }
-                [Projection::Index(idx, from_end), rest @ ..] => {
+                [rest @ .., Projection::Index(idx, from_end)] => {
                     format_inner(place, rest, f)?;
                     write!(f, "[{}{idx}]", if *from_end { "-" } else { "" })
                 }
-                [Projection::DotIdx(idx), rest @ ..] => {
+                [rest @ .., Projection::DotIdx(idx)] => {
                     format_inner(place, rest, f)?;
                     write!(f, ".{idx}")
                 }
-                [Projection::DotSym(idx), rest @ ..] => {
+                [rest @ .., Projection::DotSym(idx)] => {
                     format_inner(place, rest, f)?;
                     write!(f, ".{idx}")
                 }

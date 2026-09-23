@@ -106,7 +106,7 @@ impl Interpret for (Op, &[At<Expr>]) {
             },
             (Op::As, [value, ty]) => cl_todo!("{value} as {ty} operator"),
             (Op::Block, []) => Ok(ConValue::Unit),
-            (Op::Block, [expr]) => expr.interpret(&mut env.frame("block", None)),
+            (Op::Block, [expr]) => expr.interpret(&mut env.frame("block", Some(expr.1))),
             (Op::Array, []) => Ok(ConValue::Array(Box::new([]))),
             (Op::Array, exprs) => Ok(ConValue::Array(
                 exprs
@@ -144,7 +144,9 @@ impl Interpret for (Op, &[At<Expr>]) {
             },
             (Op::Index, [expr, idx]) => expr.interpret(env)?.index(&idx.interpret(env)?, env),
             (Op::Call, [expr, arg]) => {
-                let callee = expr.interpret(env)?;
+                let callee = Place::new(expr.value(), env)
+                    .map(ConValue::Ref)
+                    .or_else(|_| expr.interpret(env))?;
                 match arg.interpret(env)? {
                     ConValue::Unit => callee.call(env, &[]),
                     ConValue::Tuple(args) => callee.call(env, &args),
@@ -215,7 +217,6 @@ impl Interpret for (Op, &[At<Expr>]) {
                     cl_todo!("Interpret non-call {args:?}")?
                 };
                 let scrutinee = Place::new_or_temporary(scrutinee.value(), env)?;
-
                 let ty = scrutinee.get(env)?.type_of();
                 let function = match callee.value() {
                     Expr::Id(Path { parts }) if let &[name] = &parts[..] => {
@@ -262,34 +263,36 @@ impl Interpret for (Op, &[At<Expr>]) {
 
             // Range operators
             (Op::RangeEx, [lhs, rhs]) => Ok(ConValue::TupleStruct(
-                env.get_type("RangeExc".into())
-                    .ok_or_else(|| Error::NotDefined("RangeExc".into()))?,
+                env.get_type_or_err("RangeExc".into())?,
                 Box::new([lhs.interpret(env)?, rhs.interpret(env)?]),
             )),
             (Op::RangeIn, [lhs, rhs]) => Ok(ConValue::TupleStruct(
-                env.get_type("RangeInc".into())
-                    .ok_or_else(|| Error::NotDefined("RangeInc".into()))?,
+                env.get_type_or_err("RangeInc".into())?,
                 Box::new([lhs.interpret(env)?, rhs.interpret(env)?]),
             )),
             (Op::RangeEx, [rhs]) => Ok(ConValue::TupleStruct(
-                env.get_type("RangeTo".into())
-                    .ok_or_else(|| Error::NotDefined("RangeTo".into()))?,
+                env.get_type_or_err("RangeTo".into())?,
                 Box::new([rhs.interpret(env)?]),
             )),
             (Op::RangeIn, [rhs]) => Ok(ConValue::TupleStruct(
-                env.get_type("RangeToInc".into())
-                    .ok_or_else(|| Error::NotDefined("RangeToInc".into()))?,
+                env.get_type_or_err("RangeToInc".into())?,
                 Box::new([rhs.interpret(env)?]),
             )),
 
             // Unary operators
             (Op::Neg, [expr]) => {
                 let value = expr.interpret(env)?;
-                env.get("neg".into())?.call(env, &[value])
+                let name = "neg".into();
+                env.get_impl(value.type_of(), name)
+                    .or_else(|_| env.get(name))?
+                    .call(env, &[value])
             }
             (Op::Not, [expr]) => {
                 let value = expr.interpret(env)?;
-                env.get("not".into())?.call(env, &[value]) // why is this a builtin
+                let name = "not".into();
+                env.get_impl(value.type_of(), name)
+                    .or_else(|_| env.get(name))?
+                    .call(env, &[value])
             }
             (Op::Identity, [expr]) => expr.interpret(env),
 
@@ -489,17 +492,24 @@ impl Interpret for Bind<DefaultTypes> {
                 body.interpret(env)
             }
             (BindOp::Mod, _, [body]) => body.interpret(env),
-            (BindOp::Impl, ty_pat, [At(Expr::Op(Op::Block, exprs), ..)])
-                if exprs.is_empty()
-                    && let (_, model) = bind_struct(ty_pat, env)? =>
-            {
-                let ty = model.intern();
-                Ok(ConValue::TypeInfo(ty))
-            }
+            // Unwrap block-scopes
             (BindOp::Impl, ty_pat, [At(Expr::Op(Op::Block, exprs), ..)])
                 if let [body] = exprs.as_slice()
                     && let (_, model) = bind_struct(ty_pat, env)? =>
             {
+                let ty = model.intern();
+                let mut scope = env.frame(ty.name(), Some(pat.1));
+                scope.bind("Self", ty);
+                body.interpret(&mut scope)?;
+                if let Some(values) = scope.pop_values() {
+                    for (name, value) in values {
+                        env.implement(ty, name.0, value);
+                    }
+                }
+                Ok(ConValue::TypeInfo(ty))
+            }
+            (BindOp::Impl, ty_pat, [body]) => {
+                let (_, model) = bind_struct(ty_pat, env)?;
                 let ty = model.intern();
                 let mut scope = env.frame(ty.name(), Some(pat.1));
                 scope.bind("Self", ty);
@@ -652,7 +662,10 @@ impl Interpret for Use {
 
         match self {
             Use::Glob => {} // glob in top level imports nothing
-            &Use::Name(name) => drop(env.id_of(name)?),
+            &Use::Name(name) => {
+                let id = env.id_of(name)?;
+                env.bind_raw(name, id);
+            }
             &Use::Alias(from, to) => {
                 let id = env.id_of(from)?;
                 env.bind_raw(to, id);
