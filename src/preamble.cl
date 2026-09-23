@@ -97,7 +97,11 @@ impl Iterator<T> {
     /// Implements the Iterator interface for a type
     const fn _derive(T: Type, next: fn(&T) -> Option<_>) impl T use {
         next,
-        Iterator::{ into_iter, foreach, inspect, map, filter, filter_map }
+        Iterator::{
+            into_iter,
+            foreach, any_of, all_of, first_where,
+            inspect, map, filter, filter_map,
+        }
     };
 
     // Required methods:
@@ -109,6 +113,22 @@ impl Iterator<T> {
     /// Consumes the Iterator, calling `f` on each item
     fn foreach(self, f: fn(T) -> ())
         while let Some(value) = (*self).next() f(value);
+
+    fn any_of(self, f: fn(T) -> bool)
+        while let Some(value) = (*self).next() {
+            if f(value) break true
+        } else false;
+    
+    fn all_of(self, f: fn(T) -> bool)
+        while let Some(value) = (*self).next() {
+            if !f(value) break false
+        } else true;
+
+    fn first_where(self, f: fn(&T) -> bool) -> Option<T> {
+        while let Some(value) = (*self).next() {
+            if f(&value) break Some(value)
+        } else None
+    }
 
     struct Inspect<T>(&Iterator<T>, fn(&T));
     fn inspect(self, f: fn(&T)) -> Inspect<T> =
@@ -206,6 +226,7 @@ impl Array {
 
     /// Constructs an iterator over this array's contents
     fn into_iter(self: &Array) = Array::ArrayIter(self, (0..self.len()).into_iter());
+    let iter = into_iter;
 
     /// Computes the cartesian product of `selves` and `others`
     fn cartesian<T>(selves: &[T], others: &[T]) -> [[T; 2]] {
@@ -216,6 +237,15 @@ impl Array {
         out
     }
 
+    /// The wrong way to sort a million 32-bit integers
+    fn sort<T>(self: &[T]) -> &[T] {
+        for i in 0..(*self).len()
+            for j in i + 1..(*self).len()
+                if self[i] > self[j]
+                    self[i], self[j] = self[j], self[i];
+        self
+    }
+
     /// Computes the cartesian product of `values` with itself.
     fn grid<T>(&values: [T]) -> [[T; 2]] = values.cartesian(values);
 
@@ -223,9 +253,25 @@ impl Array {
     fn find<T>(values: &[T], f: (&T) -> bool) =
         for idx in 0..values.len() {if f(values[idx]) break Some(idx) } else None;
 
-    fn collect<T>(iter: &Iterator<T>) -> Self {
+    /// Collects values from `iter` into a buffer
+    fn collect<T>(iter: &IntoIterator<T>) -> [T] {
         let out = [];
-        while let Some(value) = (*iter).next() out.push(value);
+        let iter = (*iter).into_iter();
+        while let Some(value) = iter.next() out.push(value);
+        out
+    }
+    
+    /// Returns a list of unique elements in `values`.
+    ///
+    /// Has `O(n^2)` time complexity.
+    fn unique<T>(iter: &IntoIterator<T>) -> [T] {
+        let iter = (*iter).into_iter();
+        let out = [];
+        while let Some(value) = iter.next() {
+            for item in out {
+                if value == item break;
+            } else out.push(value)
+        }
         out
     }
 }
