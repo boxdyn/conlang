@@ -151,22 +151,22 @@ impl Iterator<T> {
 }
 
 Iterator::_derive(Iterator::Inspect, {
-    fn (self: &Iterator::Inspect) = match (*self.0).next() {
+    fn next(self: &Iterator::Inspect) = match (*self.0).next() {
         Some(value) => Some((self.1)(&value); value);
         _ => None;
     }
 });
 Iterator::_derive(Iterator::Map, {
-    fn (self: &Iterator::Map) = Some((self.1)((*self.0).next()?))
+    fn next(self: &Iterator::Map) = Some((self.1)((*self.0).next()?))
 });
 Iterator::_derive(Iterator::Filter, {
-    fn (self: &Iterator::Filter) = loop {
+    fn next(self: &Iterator::Filter) = loop {
         let Some(value) = (*self.0).next() else break None;
         if (self.1)(value) break Some(value);
     }
 });
 Iterator::_derive(Iterator::FilterMap, {
-    fn (self: &Iterator::FilterMap) = while let Some(value) = (*self.0).next() {
+    fn next(self: &Iterator::FilterMap) = while let Some(value) = (*self.0).next() {
         if let Some(value) = (self.1)(value) break Some(value);
     } else None
 });
