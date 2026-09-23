@@ -108,18 +108,21 @@ pub macro builtin(
 /// ```
 pub macro builtins($(
     $(#[$($meta:tt)*])*
-    fn $name:ident ($($args:tt)*) $(@$env:tt)? $body:block
+    fn $name:ident ($($args:tt)*) $(@$env:tt)? $(-> $rety:ty)? $body:block
 )*) {{
-    $(builtin_body!($(#[$($meta)*])* fn $name ($($args)*) $(@$env)? $body);)*
-    [$(builtin_define!($(#[$($meta)*])* fn $name ($($args)*) $(@$env)? $body)),*]
+    $(builtin_body!($(#[$($meta)*])* fn $name ($($args)*) $(@$env)? $(-> $rety)? $body);)*
+    [$(builtin_define!($(#[$($meta)*])* fn $name ($($args)*) $(@$env)? $(-> $rety)? $body)),*]
 }}
 
 /// Constructs the Rust-native function portion of a [builtin] (or [builtins])
 macro builtin_body(
     $(#[doc = $($docs:tt)*])*
-    fn $name:ident ($($arg:pat),*$(,)?) $(@$env:tt)? $body:block
+    fn $name:ident ($($arg:pat),*$(,)?) $(@$env:tt)? $(-> $rety:ty)? $body:block
 ) {
     $(#[doc = $($docs)*])*
+    /// ```conlang
+    #[doc = stringify!(builtin fn $name($($arg),*) $(-> $rety)?)]
+    /// ```
     fn $name(_env: &mut Environment, _args: &[ConValue]) -> IResult<ConValue> {
         // Set up the builtin! environment
         $(#[allow(unused)]let $env = _env;)?
@@ -138,13 +141,13 @@ macro builtin_body(
 /// Constructs the [Builtin] object portion of a [builtin] (or [builtins])
 macro builtin_define(
     $(#[doc = $($docs:tt)*])*
-    fn $name:ident ($($arg:pat),*$(,)?) $(@$env:tt)? $body:block
+    fn $name:ident ($($arg:pat),*$(,)?) $(@$env:tt)? $(-> $rety:ty)? $body:block
 ) {
     Builtin {
         name: stringify!($name),
         desc: concat![
             $("///", $($docs,)* "\n",)*
-            stringify!(builtin fn $name($($arg),*))
+            stringify!(builtin fn $name($($arg),*) $(-> $rety)?)
         ],
         func: &$name,
     }
@@ -158,15 +161,12 @@ pub macro error_format ($($t:tt)*) {
 
 pub const Builtins: &[Builtin] = &builtins![
     /// Unstable variadic format function
-    fn fmt(args @ ..) @env {
+    fn fmt(args @ ..) @env -> str {
         use std::fmt::Write;
         let mut out = String::new();
 
-        for mut arg in args.iter() {
-            while let ConValue::Ref(r) = arg {
-                arg = r.get(env)?;
-            }
-            if let Err(e) = write!(out, "{arg}") {
+        for arg in args.iter() {
+            if let Err(e) = write!(out, "{}", arg.dereference_in(env)?) {
                 eprintln!("{e}");
             }
         }
@@ -176,11 +176,8 @@ pub const Builtins: &[Builtin] = &builtins![
     /// Prints the arguments in-order, with no separators
     fn print(args @ ..) @env {
         let mut out = stdout().lock();
-        for mut arg in args.iter() {
-            while let ConValue::Ref(r) = arg {
-                arg = r.get(env)?;
-            }
-            write!(out, "{arg}").ok();
+        for arg in args.iter() {
+            write!(out, "{}", arg.dereference_in(env)?).ok();
         }
         Ok(())
     }
@@ -188,19 +185,16 @@ pub const Builtins: &[Builtin] = &builtins![
     /// Prints the arguments in-order, followed by a newline
     fn println(args @ ..) @env {
         let mut out = stdout().lock();
-        for mut arg in args.iter() {
-            while let ConValue::Ref(r) = arg {
-                arg = r.get(env)?;
-            }
-            write!(out, "{arg}").ok();
+        for arg in args.iter() {
+            write!(out, "{}", arg.dereference_in(env)?).ok();
         }
         writeln!(out).ok();
         Ok(())
     }
 
     /// Debug-prints the argument, returning a copy
-    fn dbg(arg) {
-        println!("{arg:?}");
+    fn dbg(arg) @env -> arg {
+        println!("{:?}", arg.dereference_in(env)?);
         Ok(arg.clone())
     }
 
@@ -213,18 +207,19 @@ pub const Builtins: &[Builtin] = &builtins![
 
     /// Binds an arbitrary string `name` to the given `value`,
     /// bypassing identifiers entirely.
-    fn bind(ConValue::Str(name), value) @env {
-        env.bind(*name, value.clone());
+    fn bind(name, value) @env {
+        let name = Symbol::from(get_str(env, name)?);
+        env.bind(name, value.clone());
         Ok(())
     }
 
     /// Constructs a reference from a raw integer
-    fn raw_ref(ConValue::Int(index)) {
+    fn raw_ref(ConValue::Int(index)) -> &_ {
         Ok(ConValue::Ref(Place::from_index(*index as _)))
     }
 
     /// Panics, with a message created by formatting `args` (as if by `fmt`)
-    fn panic(args @ ..) @env {
+    fn panic(args @ ..) @env -> ! {
         use std::fmt::Write;
         let mut stdout = stdout().lock();
         let mut out = String::from("Explicit panic: ");
@@ -236,7 +231,7 @@ pub const Builtins: &[Builtin] = &builtins![
         Ok(())
     }
 
-    fn todo(args @ ..) @env {
+    fn todo(args @ ..) @env -> ! {
         use std::fmt::Write;
         let mut stdout = stdout().lock();
         let mut out = String::from("Not yet implemented: ");
@@ -275,7 +270,7 @@ pub const Builtins: &[Builtin] = &builtins![
     }
 
     /// Returns the length of the input list as a [ConValue::Int]
-    fn len(list) @env {
+    fn len(list) @env -> i128 {
         Ok(match list.dereference_in(env)? {
             ConValue::Unit => 0,
             ConValue::Str(s) => s.chars().count() as _,
@@ -287,46 +282,15 @@ pub const Builtins: &[Builtin] = &builtins![
         })
     }
 
-    fn slice(ConValue::Ref(index), ConValue::Int(start), ConValue::Int(end)) {
+    fn slice(ConValue::Ref(index), ConValue::Int(start), ConValue::Int(end)) -> [_] {
         match (start, end) {
             (0.., 0..) if start <= end => Ok(ConValue::Slice(index.clone(), *start as _, (end - start) as _)),
             _ => Err(Error::BuiltinError(format_args!("Bad index: {index}[{start}, {end}]")))
         }
     }
 
-    /// Pushes an `item` onto the top of an array (by reference)
-    fn push(ConValue::Ref(array), item) @env{
-        let mut index = array.get_mut(env)?;
-        while let ConValue::Ref(r) = index {
-            index = r.clone().get_mut(env)?;
-        }
-        let ConValue::Array(v) = index else {
-            Err(Error::TypeError("An array", index.type_of()))?
-        };
-
-        let mut items = std::mem::take(v).into_vec();
-        items.push(item.clone());
-        *v = items.into_boxed_slice();
-
-        Ok(ConValue::Unit)
-    }
-
-    /// Pops an item off the top of an array (by reference)
-    fn pop(ConValue::Ref(array)) @env {
-        let v = match array.get_mut(env)? {
-            ConValue::Array(v) => v,
-            other => Err(Error::TypeError("An array", other.type_of()))?,
-        };
-
-        let mut items = std::mem::take(v).into_vec();
-        let out = items.pop().unwrap_or(ConValue::Unit);
-        *v = items.into_boxed_slice();
-
-        Ok(out)
-    }
-
     /// Converts `string` into an array of chars
-    fn chars(string) @env {
+    fn chars(string) @env -> [char] {
         Ok(match string.dereference_in(env)? {
             ConValue::Str(s) => ConValue::Array(s.chars().map(Into::into).collect()),
             ConValue::String(s) => ConValue::Array(s.chars().map(Into::into).collect()),
@@ -335,7 +299,7 @@ pub const Builtins: &[Builtin] = &builtins![
     }
 
     /// Invokes a function with the given arguments
-    fn invoke(function, args) @env {
+    fn invoke(function, args) @env -> R {
         match args {
             ConValue::Unit => function.call(env, &[]),
             ConValue::Array(args) | ConValue::Tuple(args) => function.call(env, args),
@@ -350,12 +314,13 @@ pub const Builtins: &[Builtin] = &builtins![
     }
 
     /// Gets the underlying `mod` for type `ty`
-    fn module(ty) @env {
+    fn module(ty) @env -> Module {
         let ty = ty.dereference_in(env)?;
-        let ConValue::TypeInfo(ty) = ty else {
-            return Err(Error::TypeError("type", ty.type_of()))
+        let ty = match ty {
+            ConValue::TypeInfo(ty) => *ty,
+            other => other.type_of(),
         };
-        let Some(impls) = env.impls.get(ty) else {
+        let Some(impls) = env.impls.get(&ty) else {
             return Ok(ConValue::Module(Default::default()));
         };
         Ok(ConValue::Module(Box::new(
@@ -363,7 +328,7 @@ pub const Builtins: &[Builtin] = &builtins![
         )))
     }
 
-    fn mod_into_binds(module) @env {
+    fn mod_into_binds(module) @env -> [(str, _)] {
         let ConValue::Module(m) = module.dereference_in(env)? else {
             return Err(Error::TypeError("mod", module.type_of()))
         };
@@ -375,12 +340,12 @@ pub const Builtins: &[Builtin] = &builtins![
         ))
     }
 
-    fn type_of(value) @env {
+    fn type_of(value) @env -> Type {
         Ok(value.dereference_in(env)?.type_of())
     }
 
     /// Gets the underlying `mod` for type `ty`
-    fn captures(func) @env {
+    fn captures(func) @env -> [str] {
         let ConValue::Function(func) = func.dereference_in(env)? else {
             return Err(Error::TypeError("fn", func.type_of()))
         };
@@ -394,42 +359,32 @@ pub const Builtins: &[Builtin] = &builtins![
     }
 
     /// Gets the underlying `mod` for type `ty`
-    fn upvars(func) @env {
+    fn upvars(func) @env -> Module {
         let ConValue::Function(func) = func.dereference_in(env)? else {
             return Err(Error::TypeError("fn", func.type_of()))
         };
-
-        for (name, idx) in func.upvars().borrow().0.iter() {
-
-        }
-        Ok(ConValue::Module(
-            Box::new(func.upvars()
-            .borrow()
-            .0
-            .iter()
-            .map(|(&name, &idx)| {
-                (
-                    name,
-                    env.get_id(idx).cloned().unwrap_or_default()
-                )
-            })
-            .collect())
-        ))
+        Ok(ConValue::Module(Box::new(
+            func.upvars().borrow().0.iter().map(|(&name, &idx)| {
+                (name, env.get_id(idx).cloned().unwrap_or_default())
+            }).collect()
+        )))
     }
 
     /// Executes the provided `lambda` with `args`, and halts stack unwinding
-    fn catch_panic(lambda, args @ ..) @env {
-        match lambda.call(env, args) {
+    fn catch_panic(lambda, args @ ..) @env -> Result<_, _> {
+        let out = match lambda.call(env, args) {
             Err(Error { kind: ErrorKind::Panic(e, ..), ..}) => {
                 println!("Caught panic!");
-                Ok(ConValue::String(e))
+                Err(ConValue::String(e))
             },
-            other => other,
-        }
+            other => Ok(other?),
+        };
+
+        env.to_convalue_result(out)
     }
 
     /// Returns a shark
-    fn shark() {
+    fn shark() -> char {
         Ok('\u{1f988}')
     }
 ];
@@ -502,20 +457,11 @@ pub const Math: &[Builtin] = &builtins![
     }
 
     /// Does the opposite of `&`
-    fn deref(tail) @env {
+    fn deref(tail) @env -> _ {
         Ok(tail.dereference_in(env)?.clone())
     }
 
-    /// Twiddles bits into floats, or vice versa
-    fn float(bits) @env {
-        match bits.dereference_in(env)? {
-            &ConValue::Float(f) => Ok(ConValue::Int(f.to_bits() as _)),
-            &ConValue::Int(i) => Ok(ConValue::Float(f64::from_bits(i as u64))),
-            other => Err(error_format!("Cannot convert {other} to/from float/bits")),
-        }
-    }
-
-    fn get_time_micros() @env {
+    fn get_time_micros() @env -> i128 {
         std::time::SystemTime::now()
             .duration_since(std::time::SystemTime::UNIX_EPOCH)
             .map(|dur| ConValue::Int(dur.as_micros() as _))
@@ -525,47 +471,48 @@ pub const Math: &[Builtin] = &builtins![
 
 pub const IntIntrinsics: &[Builtin] = &builtins! {
     /// Computes `int` to the `power`th power
-    fn pow(int, power) @env {
+    fn pow(int, power) @env -> i128 {
         Ok(get_int(env, int, "i128")?.wrapping_pow(get_int(env, power, "i128")? as _))
     }
-    /// Computes the square root if `int`
-    fn isqrt(int) @env {
+    /// Computes the square root of `int`
+    fn isqrt(int) @env -> i128 {
         Ok(get_int(env, int, "i128")?.isqrt())
     }
     /// Counts the number of one-bits in `int`
-    fn count_ones(int) @env {
+    fn count_ones(int) @env -> i128 {
         Ok(get_int(env, int, "i128")?.count_ones() as i128)
     }
     /// Counts the number of zero-bits in `int`
-    fn count_zeros(int) @env {
+    fn count_zeros(int) @env -> i128 {
         Ok(get_int(env, int, "i128")?.count_zeros() as i128)
     }
     /// Counts the number of leading zeroes in `int`
-    fn leading_zeros(int) @env {
+    fn leading_zeros(int) @env -> i128 {
         Ok(get_int(env, int, "i128")?.leading_zeros() as i128)
     }
     /// Counts the number of trailing zeroes in `int`
-    fn trailing_zeros(int) @env {
+    fn trailing_zeros(int) @env -> i128 {
         Ok(get_int(env, int, "i128")?.trailing_zeros() as i128)
     }
     /// Swaps the bytes of `int` (as i128)
-    fn swap_bytes(int) @env {
+    fn swap_bytes(int) @env -> i128 {
         Ok(get_int(env, int, "i128")?.swap_bytes() as i128)
     }
     /// Reverses the bits of `int` (as i128)
-    fn reverse_bits(int) @env {
+    fn reverse_bits(int) @env -> i128 {
         Ok(get_int(env, int, "i128")?.reverse_bits() as i128)
     }
     /// Reverses the bits of `int` (as i128)
-    fn abs(int) @env {
+    fn abs(int) @env -> i128 {
         Ok(get_int(env, int, "i128")?.wrapping_abs() as i128)
     }
     /// Returns the absolute difference between `int` and `other`
-    fn abs_diff(int, other) @env {
+    fn abs_diff(int, other) @env -> i128 {
         let other = get_int(env, other, "i128")?;
         Ok(get_int(env, int, "i128")?.abs_diff(other) as i128)
     }
-    fn ilog(int, base) @env {
+    /// Returns the logarithm of `int` with respect to `base`, rounded down
+    fn ilog(int, base) @env -> i128 {
         let base = get_int(env, base, "i128")?;
         Ok(
             get_int(env, int, "i128")?
@@ -574,10 +521,10 @@ pub const IntIntrinsics: &[Builtin] = &builtins! {
         )
     }
     /// Transmutes `bits` into [f64]
-    fn f64_bits(bits) @env {
+    fn f64_bits(bits) @env -> f64 {
         Ok(f64::from_bits(get_int(env, bits, "u64")? as u64))
     }
-    fn parse(str, radix) @env {
+    fn parse(str, radix) @env -> i128 {
         let radix = get_int(env, radix, "u32")?;
         let 2..=36 = radix else {
             Err(Error::OobIndex(radix as _, 32))?
@@ -589,32 +536,40 @@ pub const IntIntrinsics: &[Builtin] = &builtins! {
 
 pub const FloatIntrinsics: &[Builtin] = &builtins![
     /// Transmutes `float` into [u64]
-    fn to_bits(float) @env {
+    fn to_bits(float) @env -> u64 {
         Ok(ConValue::Int(get_float(env, float)?.to_bits() as _))
     }
     /// Transmutes `bits` into [f64]
-    fn from_bits(bits) @env {
+    fn from_bits(bits) @env -> f64 {
         Ok(f64::from_bits(get_int(env, bits, "u64")? as u64))
     }
     // float intrinsics
     /// Computes the sine of a number
-    fn sin(float) @env { Ok(get_float(env, float)?.sin()) }
+    fn sin(float) @env -> f64 { Ok(get_float(env, float)?.sin()) }
     /// Computes the cosine of a number
-    fn cos(float) @env { Ok(get_float(env, float)?.cos()) }
+    fn cos(float) @env -> f64 { Ok(get_float(env, float)?.cos()) }
     /// Computes the tangent of a number
-    fn tan(float) @env { Ok(get_float(env, float)?.tan()) }
+    fn tan(float) @env -> f64 { Ok(get_float(env, float)?.tan()) }
     /// Computes the square root of a number
-    fn sqrt(float) @env { Ok(get_float(env, float)?.sqrt()) }
+    fn sqrt(float) @env -> f64 { Ok(get_float(env, float)?.sqrt()) }
     /// Raises a number to an integer power
-    fn powi(float, int) @env {
+    fn powi(float, int) @env -> f64 {
         Ok(get_float(env, float)?.powi(get_int(env, int, "i32")? as _))
     }
     /// Raises a number to a floating-point power
-    fn powf(float, power) @env {
+    fn powf(float, power) @env -> f64 {
         Ok(get_float(env, float)?.powf(get_float(env, power)? as _))
     }
+    /// Returns the logarithm of `float` with respect to `base`
+    fn log(float, base) @env -> f64 {
+        Ok(match get_float(env, base)? {
+            2.0 => get_float(env, float)?.log2(),
+            10.0 => get_float(env, float)?.log10(),
+            base => get_float(env, float)?.log(base),
+        })
+    }
     /// Parses a string as f64
-    fn parse(str) @env {
+    fn parse(str) @env -> f64 {
         get_str(env, str)?
             .parse::<f64>()
             .map_err(|e| error_format!("{e}"))
@@ -627,17 +582,37 @@ pub const CharIntrinsics: &[Builtin] = &builtins![];
 
 pub const ArrayIntrinsics: &[Builtin] = &builtins! {
     /// Returns the length of the input list as a [ConValue::Int]
-    fn len(list) @env {
-        Ok(match list.dereference_in(env)? {
+    fn len(array) @env -> i128 {
+        Ok(match array.dereference_in(env)? {
             ConValue::Array(arr) => arr.len() as i128,
             other => Err(Error::TypeError("[_]", other.type_of()))?,
         })
     }
 
-    fn slice(ConValue::Ref(index), ConValue::Int(start), ConValue::Int(end)) {
+    /// Pushes an `item` onto the top of an array (by reference)
+    fn push(array_by_ref, item) @env {
+        let mut array = get_array_by_ref(env, array_by_ref)?;
+        let mut items = std::mem::take(array).into_vec();
+        items.push(item.clone());
+        *array = items.into_boxed_slice();
+
+        Ok(ConValue::Unit)
+    }
+
+    /// Pops an item off the top of an array (by reference)
+    fn pop(array_by_ref) @env -> Option<_> {
+        let mut array = get_array_by_ref(env, array_by_ref)?;
+        let mut items = std::mem::take(array).into_vec();
+        let out = items.pop();
+        *array = items.into_boxed_slice();
+
+        env.to_convalue_option(out)
+    }
+
+    fn slice(ConValue::Ref(index), ConValue::Int(start), ConValue::Int(end)) -> [_] {
         match (start, end) {
             (0.., 0..) if start <= end => Ok(ConValue::Slice(index.clone(), *start as _, (end - start) as _)),
-            _ => Err(Error::BuiltinError(format_args!("Bad index: {index}[{start}, {end}]")))
+            _ => Err(error_format!("Bad index: {index}[{start}, {end}]"))
         }
     }
 };
@@ -662,4 +637,21 @@ fn get_str<'e>(env: &'e mut Environment, value: &'e ConValue) -> IResult<&'e str
         ConValue::String(s) => s.as_ref(),
         _ => Err(Error::TypeError("str", value.type_of()))?,
     })
+}
+
+fn get_array_by_ref<'e>(
+    env: &'e mut Environment,
+    value: &ConValue,
+) -> IResult<&'e mut Box<[ConValue]>> {
+    let ConValue::Ref(array) = value else {
+        Err(Error::TypeError("&[_]", value.type_of()))?
+    };
+    let mut array = array.get_mut(env)?;
+    while let ConValue::Ref(r) = array {
+        array = r.clone().get_mut(env)?;
+    }
+    match array {
+        ConValue::Array(array) => Ok(array),
+        _ => Err(Error::TypeError("[_]", array.type_of()))?,
+    }
 }

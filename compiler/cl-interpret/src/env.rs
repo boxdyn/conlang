@@ -299,6 +299,32 @@ impl Environment {
         self.types.get(&name).copied()
     }
 
+    pub fn get_type_or_err(&self, name: Symbol) -> IResult<Type> {
+        self.get_type(name).ok_or(Error::NotDefined(name))
+    }
+
+    /// Converts an [Option<ConValue>] into a [ConValue] representing an [Option]
+    pub fn to_convalue_option(&self, opt: Option<ConValue>) -> IResult<ConValue> {
+        match opt {
+            Some(value) => self
+                .get_type_or_err("Some".into())?
+                .make_tuple(Box::new([value])),
+            None => Ok(ConValue::TypeInfo(self.get_type_or_err("None".into())?)),
+        }
+    }
+
+    /// Converts a [Result<ConValue, ConValue>] into a [ConValue] representing an [Result]
+    pub fn to_convalue_result(&self, opt: Result<ConValue, ConValue>) -> IResult<ConValue> {
+        match opt {
+            Ok(value) => self
+                .get_type_or_err("Ok".into())?
+                .make_tuple(Box::new([value])),
+            Err(value) => self
+                .get_type_or_err("Err".into())?
+                .make_tuple(Box::new([value])),
+        }
+    }
+
     /// Inserts a new [ConValue] into this [Environment]
     pub fn insert(&mut self, k: Symbol, v: ConValue) {
         if self.bind_raw(k, self.values.len()).is_some() {
