@@ -1,4 +1,4 @@
-use crate::inline_modules;
+use crate::{inline_modules, pretty_error};
 use cl_ast::{At, Expr};
 use cl_interpret::{
     builtin::builtins, convalue::ConValue, env::Environment, error::Error, interpret::Interpret,
@@ -81,9 +81,13 @@ pub fn get_env() -> Environment {
             fs::write(path, data).map_err(Error::BuiltinError)
         }
     });
-
-    if let Ok(code) = Parser::new(Lexer::new("preamble.cl".into(), PREAMBLE)).parse::<At<Expr>>(0) {
-        code.interpret(&mut env).expect("PREAMBLE should not fail");
-    }
+    match Parser::new(Lexer::new("preamble.cl".into(), PREAMBLE)).parse::<At<Expr>>(0) {
+        Ok(code) => match code.interpret(&mut env) {
+            Ok(_) => {}
+            Err(Error { kind, span: Some(span) }) => pretty_error(span, PREAMBLE, kind),
+            Err(e) => println!("{e}"),
+        },
+        Err(e) => pretty_error(e.span(), PREAMBLE, e),
+    };
     env
 }
