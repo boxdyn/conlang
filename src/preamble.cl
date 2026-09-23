@@ -91,6 +91,65 @@ impl f64 {
     );
 }
 
+/// TODO: real interfaces
+struct Iterator<T>;
+impl Iterator<T> {
+    /// Implements the Iterator interface for a type
+    const fn _derive(T: Type, next: fn(&T) -> Option<_>) impl T use {
+        next,
+        Iterator::{ into_iter, foreach, inspect, map, filter, filter_map }
+    };
+
+    // Required methods:
+    /// Produces the next item, or `None`
+    fn next(self: &Self) -> Option<T>;
+    /// Produces an Iterator instance from `self`
+    fn into_iter(&self) -> Iterator<T> = self;
+
+    /// Consumes the Iterator, calling `f` on each item
+    fn foreach(self, f: fn(T) -> ())
+        while let Some(value) = (*self).next() f(value);
+
+    struct Inspect<T>(&Iterator<T>, fn(&T));
+    fn inspect(self, f: fn(&T)) -> Inspect<T> =
+        Iterator::Inspect(self, f);
+
+    /// An Iterator which maps values in T to values in U
+    struct Map<T, U>(&Iterator<T>, fn(T) -> U);
+    fn map<U>(self, f: fn(T) -> U) -> Map<T, U> =
+        Iterator::Map(self, f);
+
+    /// An Iterator which skips values deemed false by the given predicate
+    struct Filter<T>(&Iterator<T>, fn(T) -> bool);
+    fn filter(self, f: fn(T) -> bool) -> Filter<T> =
+        Iterator::Filter(self, f);
+
+    /// An Iterator which both filters and maps values according to a predicate
+    struct FilterMap<T, U>(&Iterator<T>, fn(T) -> Option<U>);
+    fn filter_map(self, f: fn(T) -> Option<U>) -> FilterMap<T, U> =
+        Iterator::FilterMap(self, f);
+}
+
+Iterator::_derive(Iterator::Inspect, {
+    fn (self: &Iterator::Inspect) = match (*self.0).next() {
+        Some(value) => Some((self.1)(&value); value);
+        _ => None;
+    }
+});
+Iterator::_derive(Iterator::Map, {
+    fn (self: &Iterator::Map) = Some((self.1)((*self.0).next()?))
+});
+Iterator::_derive(Iterator::Filter, {
+    fn (self: &Iterator::Filter) = loop {
+        let Some(value) = (*self.0).next() else break None;
+        if (self.1)(value) break Some(value);
+    }
+});
+Iterator::_derive(Iterator::FilterMap, {
+    fn (self: &Iterator::FilterMap) = while let Some(value) = (*self.0).next() {
+        if let Some(value) = (self.1)(value) break Some(value);
+    } else None
+});
 
 mod _ {
     struct unstable_metaprogramming;
@@ -106,25 +165,12 @@ mod _ {
                 for key, value in Type.module().mod_into_binds()
                     impl ty { bind(key, value) }
         }
-        const fn iterator(T: Type, next: fn(&T) -> Option<_>) impl T {
-            let next = next;
-            fn into_iter(&self) -> T = self;
-            fn foreach(self, f: fn(_))
-                while let Some(value) = (*self).next() f(value);
-        }
     }
-    unstable_metaprogramming::enum_impl(Option);
-    unstable_metaprogramming::enum_impl(Result);
-    unstable_metaprogramming::spread(f64, [f32]);
-    unstable_metaprogramming::spread(i128, [
-        i8, i16, i32, i64,       isize,
-        u8, u16, u32, u64, u128, usize,
-    ]);
 }
 
 impl RangeInc {
     struct InclusiveIter(usize, usize);
-    unstable_metaprogramming::iterator(InclusiveIter, {
+    Iterator::_derive(InclusiveIter, {
         fn next(self: &RangeInc::InclusiveIter) = if self.0 > self.1 None else {
             let out = self.0;
             self.0 += 1;
@@ -136,7 +182,7 @@ impl RangeInc {
 }
 impl RangeExc {
     struct ExclusiveIter(usize, usize);
-    unstable_metaprogramming::iterator(ExclusiveIter, {
+    Iterator::_derive(ExclusiveIter, {
         fn next(self: &RangeExc::ExclusiveIter) = if self.0 >= self.1 None else {
             let out = self.0;
             self.0 += 1;
@@ -151,10 +197,10 @@ let Array = [].type_of();
 impl Array {
     /// An iterator over an array's contents
     struct ArrayIter(Array, RangeExc);
-    unstable_metaprogramming::iterator(ArrayIter, {
-        fn next(self: &Array::ArrayIter) match self.1.next() {
+    Iterator::_derive(ArrayIter, {
+        fn next(self: &Array::ArrayIter::ExclusiveIter) match self.1.next() {
             Some(index) => Some(self.0[index]);
-            None => None;
+            _ => None;
         }
     });
 
@@ -176,6 +222,12 @@ impl Array {
     /// Gets the index of the first value which matches the predicate
     fn find<T>(values: &[T], f: (&T) -> bool) =
         for idx in 0..values.len() {if f(values[idx]) break Some(idx) } else None;
+
+    fn collect<T>(iter: &Iterator<T>) -> Self {
+        let out = [];
+        while let Some(value) = (*iter).next() out.push(value);
+        out
+    }
 }
 
 
@@ -255,6 +307,15 @@ pub fn bin(n: u128) {
     }
     out
 }
+
+// TODO: Remove this when name resolution isn't fake
+unstable_metaprogramming::enum_impl(Option);
+unstable_metaprogramming::enum_impl(Result);
+unstable_metaprogramming::spread(f64, [f32]);
+unstable_metaprogramming::spread(i128, [
+    i8, i16, i32, i64,       isize,
+    u8, u16, u32, u64, u128, usize,
+]);
 
 /// Returns a shark
 pub fn shark() = '\u{1f988}';
