@@ -10,19 +10,12 @@
 enum Option<T> { Some(T), None };
 use Option::{Some, None};
 impl Option {
-    fn is_some(&self) -> bool {
-        match self {
-            Some(_) => true;
-            None() => false;
-        }
-    }
-    fn is_none(&self: &Self) -> bool {
-        let Some(_) = self
-    }
+    fn is_some(&self) -> bool = let Option::Some(_) = self;
+    fn is_none(&self: &Self) -> bool = let Option::None = self;
     fn map<U>(&self: Self, f: fn(T) -> U) -> Option<U> {
         match self {
             Some(value) => Some(f(value));
-            None() => None();
+            None => None;
         }
     }
     fn and_then<U>(&self: Self, f: fn(T) -> Option<U>) -> Option<U> {
@@ -216,9 +209,9 @@ impl RangeExc {
 let Array = [].type_of();
 impl Array {
     /// An iterator over an array's contents
-    struct ArrayIter(Array, RangeExc);
+    struct ArrayIter(Array, RangeExc::ExclusiveIter);
     Iterator::_derive(ArrayIter, {
-        fn next(self: &Array::ArrayIter::ExclusiveIter) match self.1.next() {
+        fn next(self: &Array::ArrayIter) match self.1.next() {
             Some(index) => Some(self.0[index]);
             _ => None;
         }
