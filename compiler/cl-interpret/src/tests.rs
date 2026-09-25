@@ -128,7 +128,7 @@ mod macros {
     pub macro env_eq($env:ident.$var:ident, $expr:expr) {{
         let evaluated = $env.get(stringify!($var).into())
             .expect(stringify!($var should be defined and initialized));
-        if !conv_cmp!(eq, evaluated, $expr, &$env) {
+        if !conv_cmp!(eq, evaluated, $expr, &mut $env) {
             panic!("assertion {} ({evaluated}) == {} failed.", stringify!($var), stringify!($expr))
         }
     }}

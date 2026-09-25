@@ -430,11 +430,7 @@ pub const Math: &[Builtin] = &builtins![
     fn not(tail) @env -> Self { tail.clone().not(env) }
 
     /// Compares two values
-    fn cmp(head, tail) @env {
-        let head = head.dereference_in(env)?;
-        let tail = tail.dereference_in(env)?;
-        Ok(head.compare(tail, env)? as i128)
-    }
+    fn cmp(head, tail) @env { Ok(head.compare(tail, env)? as i128) }
 
     /// Does the opposite of `&`
     fn deref(tail) @env -> _ {

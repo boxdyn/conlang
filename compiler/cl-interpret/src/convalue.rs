@@ -249,7 +249,7 @@ impl ConValue {
 macro cmp (with $env:ident; $($fn:ident: $op:tt);*$(;)?) {$(
     /// TODO: Remove when functions are implemented:
     ///       Desugar into function calls
-    pub fn $fn(&self, other: &Self, $env: &Environment) -> IResult<Self> {
+    pub fn $fn(&self, other: &Self, $env: &mut Environment) -> IResult<Self> {
         Ok(ConValue::Bool(self.compare(other, $env)? $op 0))
     }
 )*}
@@ -263,7 +263,7 @@ impl ConValue {
         gt_eq: >=;
         gt: >;
     }
-    pub fn compare(&self, other: &Self, env: &Environment) -> IResult<isize> {
+    pub fn compare(&self, other: &Self, env: &mut Environment) -> IResult<i128> {
         use std::cmp::Ord;
         Ok(match (self, other) {
             (Self::Unit, Self::Unit) => 0,
@@ -287,7 +287,21 @@ impl ConValue {
                 a.len().cmp(&b.len()) as _
             }
             (Self::TypeInfo(a), Self::TypeInfo(b)) => a.cmp(b) as _,
-            (a, b) => Err(Error::TypeError(b, a.type_of(env)))?,
+            (
+                // TODO: extend me if more things get added to `bin_ops!`
+                ConValue::Ref(..)
+                | ConValue::Struct(..)
+                | ConValue::TupleStruct(..)
+                | ConValue::TypeInfo(..),
+                _,
+            ) => match self.clone().cmp(other.clone(), env)? {
+                ConValue::Int(v) => v,
+                other => Err(Error::TypeError("{integer}", other.type_of(env)))?,
+            },
+            (a, b) => Err(Error::TypeError(
+                format_args!("{a}.cmp({b})"),
+                a.type_of(env),
+            ))?,
         })
     }
 }
@@ -340,6 +354,9 @@ bin_ops! {
             place.index(index.unsigned_abs() as _, index < 0),
         ),
         (a, idx) => Err(Error::TypeError(format!("{}.index({idx})", a.type_of(env)), idx.type_of(env)))?,
+    ]
+    Ord: cmp = [
+        (a, b) => ConValue::Int(a.compare(&b, env)? as _),
     ]
     Mul: mul = [
         (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
