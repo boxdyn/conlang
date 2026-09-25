@@ -96,7 +96,9 @@ impl Iterator<T> {
         next,
         Iterator::{
             into_iter,
-            foreach, any_of, all_of, first_where,
+            // consuming methods
+            foreach, any_of, all_of, first_where, fold, count,
+            // iterator adapters
             inspect, map, filter, filter_map,
         }
     };
@@ -126,6 +128,18 @@ impl Iterator<T> {
         while let Some(value) = (*self).next() {
             if f(&value) break Some(value)
         } else None
+    }
+
+    /// Folds items into the accumulator by repeatedly applying `f`.
+    fn fold<A>(self, acc: A, f: fn(A, T) -> A) -> A {
+        while let Some(value) = (*self).next() {
+            acc = f(acc, value)
+        } else acc
+    }
+
+    /// Counts the items in this iterator
+    fn count(self) -> usize {
+        (*self).fold(0, |count, _| count + 1)
     }
 
     /// An Iterator which calls a function on each value
