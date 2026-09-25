@@ -26,7 +26,7 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
                 ConValue::String(string) => string.as_str(),
                 ConValue::Ref(v) => {
                     let string = v.get(env).cloned().unwrap_or_default();
-                    return eval(env, &[string])
+                    return eval(env, vec![string])
                 }
                 _ => Err(Error::TypeError("string", string.type_of(env)))?
             };
@@ -157,7 +157,7 @@ fn run_code(path: &str, code: &str, env: &mut Environment) -> Result<(), Box<dyn
     let code = Parser::new(Lexer::new(path.into(), code)).parse::<At<Expr>>(0)?;
     code.interpret(env)?;
     if env.get("main".into()).is_ok() {
-        match env.call("main".into(), &[]) {
+        match env.call("main".into(), vec![]) {
             Ok(ConValue::Unit) => {}
             Ok(ret) => println!("{ret}"),
             Err(e) => println!("Error: {e}"),

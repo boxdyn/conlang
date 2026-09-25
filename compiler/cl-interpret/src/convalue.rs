@@ -93,7 +93,7 @@ impl Callable for ConValue {
             _ => None,
         }
     }
-    fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
+    fn call(&self, env: &mut Environment, args: Vec<ConValue>) -> IResult<ConValue> {
         let out = match self {
             Self::Function(func) => func.call(env, args),
             Self::Builtin(func) => func.call(env, args),
@@ -297,7 +297,7 @@ macro bin_ops(with $env:ident: Environment; $($trait:ty: $fn:ident = [$($match:t
                 | (a @ ConValue::Struct(ty, _), b)
                 | (a @ ConValue::TupleStruct(ty, _), b)
                 | (a @ ConValue::TypeInfo(ty), b) => {
-                    $env.get_impl(ty, stringify!($fn).into())?.call($env, &[a, b])?
+                    $env.get_impl(ty, stringify!($fn).into())?.call($env, vec![a, b])?
                 }
                 $($match)*
             })
@@ -421,7 +421,7 @@ macro un_ops(with $env:ident: Environment; $($trait:ty: $fn:ident = [$($match:tt
                 v @ ( ConValue::Struct(ty, _)
                     | ConValue::TupleStruct(ty, _)
                     | ConValue::TypeInfo(ty)) => {
-                    $env.get_impl(ty, stringify!($fn).into())?.call($env, &[v])?
+                    $env.get_impl(ty, stringify!($fn).into())?.call($env, vec![v])?
                 }
                 $($match)*
             })

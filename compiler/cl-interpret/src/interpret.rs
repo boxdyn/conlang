@@ -148,9 +148,9 @@ impl Interpret for (Op, &[At<Expr>]) {
                     .map(ConValue::Ref)
                     .or_else(|_| expr.interpret(env))?;
                 match arg.interpret(env)? {
-                    ConValue::Unit => callee.call(env, &[]),
-                    ConValue::Tuple(args) => callee.call(env, &args),
-                    arg => callee.call(env, slice::from_ref(&arg)),
+                    ConValue::Unit => callee.call(env, vec![]),
+                    ConValue::Tuple(args) => callee.call(env, args.into_vec()),
+                    arg => callee.call(env, vec![arg]),
                 }
             }
 
@@ -226,14 +226,14 @@ impl Interpret for (Op, &[At<Expr>]) {
                 };
                 let args = args.interpret(env)?;
                 match args {
-                    ConValue::Unit => function.call(env, &[ConValue::Ref(scrutinee)]),
+                    ConValue::Unit => function.call(env, vec![ConValue::Ref(scrutinee)]),
                     ConValue::Tuple(args) => function.call(
                         env,
-                        &iter::once(ConValue::Ref(scrutinee))
+                        iter::once(ConValue::Ref(scrutinee))
                             .chain(args) // TODO: remove allocation
-                            .collect::<Box<_>>(),
+                            .collect::<Vec<_>>(),
                     ),
-                    other => function.call(env, &[ConValue::Ref(scrutinee), other]),
+                    other => function.call(env, vec![ConValue::Ref(scrutinee), other]),
                 }
             }
             (

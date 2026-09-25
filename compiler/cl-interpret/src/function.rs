@@ -91,7 +91,7 @@ impl Callable for Function {
         }
         get_name(self.decl.0.value())
     }
-    fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
+    fn call(&self, env: &mut Environment, args: Vec<ConValue>) -> IResult<ConValue> {
         self.lift_upvars(env);
         let args = ConValue::Tuple(args.into());
 

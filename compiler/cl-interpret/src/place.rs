@@ -27,13 +27,13 @@ pub enum Projection {
 }
 
 impl Callable for Place {
-    fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
+    fn call(&self, env: &mut Environment, args: Vec<ConValue>) -> IResult<ConValue> {
         match self.get(env)? {
             ConValue::Struct(ty, _) | ConValue::TupleStruct(ty, _) => {
                 let func = env.get_impl(*ty, "call".into())?;
                 let mut self_args = vec![ConValue::Ref(self.clone())];
-                self_args.extend_from_slice(args);
-                func.call(env, &self_args)
+                self_args.extend(args);
+                func.call(env, self_args)
             }
             module @ ConValue::Module(m) => match m.get(&"call".into()) {
                 Some(func) => func.clone().call(env, args),

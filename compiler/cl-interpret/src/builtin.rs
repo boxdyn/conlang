@@ -10,7 +10,10 @@ use crate::{
     error::{Error, ErrorKind, IResult},
     place::Place,
 };
-use std::io::{Write, stdout};
+use std::{
+    io::{Write, stdout},
+    vec,
+};
 
 /// A function built into the interpreter.
 #[derive(Clone, Copy)]
@@ -20,7 +23,7 @@ pub struct Builtin {
     /// The signature, displayed when the builtin is printed
     pub desc: &'static str,
     /// The function to be run when called
-    pub func: &'static dyn Fn(&mut Environment, &[ConValue]) -> IResult<ConValue>,
+    pub func: &'static dyn Fn(&mut Environment, Vec<ConValue>) -> IResult<ConValue>,
 }
 
 impl Builtin {
@@ -28,7 +31,7 @@ impl Builtin {
     pub const fn new(
         name: &'static str,
         desc: &'static str,
-        func: &'static impl Fn(&mut Environment, &[ConValue]) -> IResult<ConValue>,
+        func: &'static impl Fn(&mut Environment, Vec<ConValue>) -> IResult<ConValue>,
     ) -> Builtin {
         Builtin { name, desc, func }
     }
@@ -53,7 +56,7 @@ impl std::fmt::Display for Builtin {
 }
 
 impl super::Callable for Builtin {
-    fn call(&self, interpreter: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
+    fn call(&self, interpreter: &mut Environment, args: Vec<ConValue>) -> IResult<ConValue> {
         (self.func)(interpreter, args)
     }
 
@@ -123,12 +126,12 @@ macro builtin_body(
     /// ```conlang
     #[doc = stringify!(builtin fn $name($($arg),*) $(-> $rety)?)]
     /// ```
-    fn $name(_env: &mut Environment, _args: &[ConValue]) -> IResult<ConValue> {
+    fn $name(_env: &mut Environment, mut _args: Vec<ConValue>) -> IResult<ConValue> {
         // Set up the builtin! environment
         $(#[allow(unused)]let $env = _env;)?
         // Allow for single argument `fn foo(args @ ..)` pattern
         #[allow(clippy::redundant_at_rest_pattern, irrefutable_let_patterns)]
-        let [$($arg),*] = _args else {
+        let [$($arg),*] = _args.as_mut_slice() else {
             Err($crate::error::Error::TypeError(
                 concat!("(", $(stringify!($arg,),)* ")"),
                 $crate::typeinfo::Model::Any.intern()
@@ -283,8 +286,8 @@ pub const Builtins: &[Builtin] = &builtins![
     }
 
     fn slice(ConValue::Ref(index), ConValue::Int(start), ConValue::Int(end)) -> [_] {
-        match (start, end) {
-            (0.., 0..) if start <= end => Ok(ConValue::Slice(index.clone(), *start as _, (end - start) as _)),
+        match (*start, *end) {
+            (0.., 0..) if start <= end => Ok(ConValue::Slice(index.clone(), *start as _, (*end - *start) as _)),
             _ => Err(error_format!("Bad index: {index}[{start}, {end}]"))
         }
     }
@@ -300,10 +303,10 @@ pub const Builtins: &[Builtin] = &builtins![
 
     /// Invokes a function with the given arguments
     fn invoke(function, args) @env -> R {
-        match args {
-            ConValue::Unit => function.call(env, &[]),
-            ConValue::Array(args) | ConValue::Tuple(args) => function.call(env, args),
-            _ => function.call(env, std::slice::from_ref(args)),
+        match args.take() {
+            ConValue::Unit => function.call(env, vec![]),
+            ConValue::Array(args) | ConValue::Tuple(args) => function.call(env, args.into_vec()),
+            value => function.call(env, vec![value]),
         }
     }
 
@@ -372,7 +375,7 @@ pub const Builtins: &[Builtin] = &builtins![
 
     /// Executes the provided `lambda` with `args`, and halts stack unwinding
     fn catch_panic(lambda, args @ ..) @env -> Result<_, _> {
-        let out = match lambda.call(env, args) {
+        let out = match lambda.call(env, args.to_vec()) {
             Err(Error { kind: ErrorKind::Panic(e, ..), ..}) => {
                 println!("Caught panic!");
                 Err(ConValue::String(e))
@@ -587,8 +590,8 @@ pub const ArrayIntrinsics: &[Builtin] = &builtins! {
     }
 
     fn slice(ConValue::Ref(index), ConValue::Int(start), ConValue::Int(end)) -> [_] {
-        match (start, end) {
-            (0.., 0..) if start <= end => Ok(ConValue::Slice(index.clone(), *start as _, (end - start) as _)),
+        match (*start, *end) {
+            (0.., 0..) if start <= end => Ok(ConValue::Slice(index.clone(), *start as _, (*end - *start) as _)),
             _ => Err(error_format!("Bad index: {index}[{start}, {end}]"))
         }
     }

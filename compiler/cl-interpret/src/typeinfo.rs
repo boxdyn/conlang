@@ -319,7 +319,7 @@ macro make_int($T:ty, $signed: expr) {
 }
 
 impl Callable for Model {
-    fn call(&self, env: &mut Environment, args: &[ConValue]) -> IResult<ConValue> {
+    fn call(&self, env: &mut Environment, args: Vec<ConValue>) -> IResult<ConValue> {
         self.make_tuple(args.into())
     }
 

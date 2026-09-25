@@ -147,7 +147,7 @@ impl Environment {
 
     /// Calls a function inside the Environment's scope,
     /// and returns the result
-    pub fn call(&mut self, name: Symbol, args: &[ConValue]) -> IResult<ConValue> {
+    pub fn call(&mut self, name: Symbol, args: Vec<ConValue>) -> IResult<ConValue> {
         let function = self.get(name)?;
         function.call(self, args)
     }

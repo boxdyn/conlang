@@ -13,7 +13,7 @@ use interpret::Interpret;
 pub trait Callable {
     /// Calls this [Callable] in the provided [Environment], with [ConValue] args  \
     /// The Callable is responsible for checking the argument count and validating types
-    fn call(&self, interpreter: &mut Environment, args: &[ConValue]) -> IResult<ConValue>;
+    fn call(&self, interpreter: &mut Environment, args: Vec<ConValue>) -> IResult<ConValue>;
     /// Returns the common name of this callable, if it has one.
     fn name(&self) -> Option<Sym>;
 }
