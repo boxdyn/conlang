@@ -87,6 +87,10 @@ impl f64 {
 /// TODO: real interfaces
 struct Iterator<T>;
 impl Iterator<T> {
+    // Required methods:
+    /// Produces the next item, or `None`
+    fn next(self: &Self) -> Option<T>;
+
     /// Implements the Iterator interface for a type
     const fn _derive(T: Type, next: fn(&T) -> Option<_>) impl T use {
         next,
@@ -97,9 +101,7 @@ impl Iterator<T> {
         }
     };
 
-    // Required methods:
-    /// Produces the next item, or `None`
-    fn next(self: &Self) -> Option<T>;
+    // "Provided" methods:
     /// Produces an Iterator instance from `self`
     fn into_iter(&self) -> Iterator<T> = self;
 
@@ -107,38 +109,46 @@ impl Iterator<T> {
     fn foreach(self, f: fn(T) -> ())
         while let Some(value) = (*self).next() f(value);
 
+    /// Returns `true` if there is at least one value for which `f` returns `true`
     fn any_of(self, f: fn(T) -> bool)
         while let Some(value) = (*self).next() {
             if f(value) break true
         } else false;
     
+    /// Returns `true` if `f` returns `true` for all values
     fn all_of(self, f: fn(T) -> bool)
         while let Some(value) = (*self).next() {
             if !f(value) break false
         } else true;
 
+    /// Returns the first value where `f` returns true
     fn first_where(self, f: fn(&T) -> bool) -> Option<T> {
         while let Some(value) = (*self).next() {
             if f(&value) break Some(value)
         } else None
     }
 
+    /// An Iterator which calls a function on each value
     struct Inspect<T>(&Iterator<T>, fn(&T));
+    /// Returns an iterator which calls `f` on every value
     fn inspect(self, f: fn(&T)) -> Inspect<T> =
         Iterator::Inspect(self, f);
 
     /// An Iterator which maps values in T to values in U
     struct Map<T, U>(&Iterator<T>, fn(T) -> U);
+    /// Returns an iterator which maps values in T to values in U through `f`
     fn map<U>(self, f: fn(T) -> U) -> Map<T, U> =
         Iterator::Map(self, f);
 
     /// An Iterator which skips values deemed false by the given predicate
     struct Filter<T>(&Iterator<T>, fn(T) -> bool);
+    /// Returns an iterator which skips values deemed false by the given predicate
     fn filter(self, f: fn(T) -> bool) -> Filter<T> =
         Iterator::Filter(self, f);
 
     /// An Iterator which both filters and maps values according to a predicate
     struct FilterMap<T, U>(&Iterator<T>, fn(T) -> Option<U>);
+    /// Returns an iterator which both filters and maps values according to `f`
     fn filter_map(self, f: fn(T) -> Option<U>) -> FilterMap<T, U> =
         Iterator::FilterMap(self, f);
 }
