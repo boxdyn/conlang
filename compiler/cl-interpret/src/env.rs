@@ -19,14 +19,17 @@ use std::{
     rc::Rc,
 };
 
+/// The cooked result of [Frame::pop_values]
 pub type StackFrame = HashMap<Symbol, ConValue>;
 
+/// The raw binds of an [EnvFrame]
 pub type StackBinds = HashMap<Symbol, usize>;
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct EnvFrame {
+    /// The name of this [EnvFrame], if one exists
     pub name: Option<&'static str>,
-
+    /// The [Span] associated with this [EnvFrame], if one exists
     pub span: Option<Span>,
     /// The length of the array when this stack frame was constructed
     pub base: usize,
@@ -161,12 +164,14 @@ impl Environment {
         self.insert(name.into(), value.into());
     }
 
+    /// Binds a `name` to a raw `id` value in the current scope
     pub fn bind_raw(&mut self, name: Symbol, id: usize) -> Option<()> {
         let EnvFrame { name: _, span: _, base: _, binds, defer: _ } = self.frames.last_mut()?;
         binds.insert(name, id);
         Some(())
     }
 
+    /// Adds an implementation (associated value) to a [Type]
     pub fn implement(&mut self, ty: Type, name: &'static str, value: ConValue) -> &mut ConValue {
         self.impls
             .entry(ty)
@@ -175,6 +180,7 @@ impl Environment {
             .or_insert(value)
     }
 
+    /// Gets a previously-[implement](Self::implement)ed item, by-value, copying if necessary.
     pub fn get_impl(&self, ty: Type, name: Symbol) -> IResult<ConValue> {
         if let Some(value) = self.impls.get(&ty).and_then(|map| map.get(name.to_ref())) {
             return Ok(value.clone());
@@ -195,6 +201,7 @@ impl Environment {
         self.frames.first().unwrap()
     }
 
+    /// Returns a [Backtrace] of the Environment's stack
     pub fn backtrace(&self) -> Backtrace<'_> {
         Backtrace { frames: &self.frames }
     }
@@ -219,6 +226,7 @@ impl Environment {
         self
     }
 
+    /// Adds "intrinsics" (associated builtin functions) to a [Type]
     pub fn add_intrinsics(&mut self, ty: Type, builtins: &'static [Builtin]) -> &mut Self {
         for builtin in builtins {
             self.implement(ty, builtin.name, builtin.into());
@@ -290,15 +298,18 @@ impl Environment {
         self.values.get_mut(id)
     }
 
+    /// Binds a [Type] to a name in the builtin-types scope
     pub fn def_type(&mut self, name: Symbol, ty: Type) -> Type {
         self.types.insert(name, ty);
         ty
     }
 
+    /// Gets the builtin [Type] with the given `name`
     pub fn get_type(&self, name: Symbol) -> Option<Type> {
         self.types.get(&name).copied()
     }
 
+    /// Gets the builtin [Type] with the given name, or produces [Error::NotDefined]
     pub fn get_type_or_err(&self, name: Symbol) -> IResult<Type> {
         self.get_type(name).ok_or(Error::NotDefined(name))
     }
@@ -346,6 +357,7 @@ pub struct Frame<'scope> {
     scope: &'scope mut Environment,
 }
 impl<'scope> Frame<'scope> {
+    /// Constructs a new [Frame] guard in the [Environment]
     fn new(scope: &'scope mut Environment, name: &'static str, span: Option<Span>) -> Self {
         scope.frames.push(EnvFrame {
             name: Some(name),
@@ -358,8 +370,9 @@ impl<'scope> Frame<'scope> {
         Self { scope }
     }
 
+    /// Pops this [Frame] into a [StackFrame]
     pub fn pop_values(mut self) -> Option<StackFrame> {
-        let mut out = HashMap::new();
+        let mut out = StackFrame::new();
         let binds = take(&mut self.frames.last_mut()?.binds);
         for (k, v) in binds {
             out.insert(k, self.values.get_mut(v).map(take)?);
@@ -367,17 +380,20 @@ impl<'scope> Frame<'scope> {
         Some(out)
     }
 }
+
 impl Deref for Frame<'_> {
     type Target = Environment;
     fn deref(&self) -> &Self::Target {
         self.scope
     }
 }
+
 impl DerefMut for Frame<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.scope
     }
 }
+
 impl Drop for Frame<'_> {
     fn drop(&mut self) {
         if let Some(EnvFrame { base, defer, .. }) = self.frames.last_mut() {
