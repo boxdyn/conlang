@@ -48,7 +48,7 @@ fn compile(program: str) {
             Brainfuck::Jz(-1 as usize)
         }
         ']' => {
-            let begin = stack.pop();
+            let Some(begin) = stack.pop() else continue;
             fucks[begin] = Brainfuck::Jz(fucks.len());
             Brainfuck::Jnz(begin)
         }

@@ -151,6 +151,13 @@ impl ConValue {
     }
 
     pub fn type_of(&self, env: &Environment) -> Type {
+        fn type_of_place(place: &Place, env: &Environment) -> Type {
+            place
+                .get(env)
+                .map(|v| v.type_of(env))
+                .unwrap_or_else(|_| Model::Any.already_interned())
+        }
+
         match self {
             Self::Unit => Model::Unit(None, None, 0).already_interned(),
             Self::Int(_) => Model::default_integer(),
@@ -159,8 +166,8 @@ impl ConValue {
             Self::Char(_) => Model::Char.already_interned(),
             Self::Str(_) => Model::Str.already_interned(),
             Self::String(_) => Model::Str.already_interned(),
-            Self::Ref(place) => Model::Ref(Model::Any.already_interned()).intern(),
-            Self::Slice(place, _, _) => Model::Slice(Model::Any.already_interned()).intern(),
+            Self::Ref(place) => Model::Ref(type_of_place(place, env)).intern(),
+            Self::Slice(place, _, _) => Model::Slice(type_of_place(place, env)).intern(),
             Self::Array(arr) if !arr.is_empty() => Model::Slice(arr[0].type_of(env)).intern(),
             Self::Array(_) => Model::Slice(Model::Any.already_interned()).intern(),
             Self::Tuple(vs) => {

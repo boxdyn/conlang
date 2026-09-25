@@ -187,9 +187,9 @@ impl Model {
             Model::Struct(_, None, _, _) => None,
             Model::Enum(_, items) => None,
             Model::Ref(Interned(Model::Any, ..)) => None,
-            Model::Ref(_) => Some(Model::Ref(Model::Any.already_interned()).intern()),
+            Model::Ref(ty) => Some(*ty),
             Model::Slice(Interned(Model::Any, ..)) => None,
-            Model::Slice(_) => Some(Model::Slice(Model::Any.already_interned()).intern()),
+            Model::Slice(ty) => Some(Model::Slice(Model::Any.already_interned()).intern()),
             Model::Function => None,
         }
     }
