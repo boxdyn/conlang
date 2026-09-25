@@ -25,7 +25,7 @@ pub fn get_env() -> Environment {
             let string = match string.dereference_in(env)? {
                 ConValue::Str(string) => string.to_ref(),
                 ConValue::String(string) => string.as_str(),
-                _ => Err(Error::TypeError("string", string.type_of()))?
+                _ => Err(Error::TypeError("str", string.type_of(env)))?
             };
 
             match Parser::new(Lexer::new("eval".into(), string)).parse::<At<Expr>>(0).map(inline_modules) {
@@ -47,7 +47,7 @@ pub fn get_env() -> Environment {
             let prompt = match prompt.dereference_in(env)? {
                 ConValue::Str(prompt) => prompt.to_ref(),
                 ConValue::String(prompt) => prompt.as_str(),
-                _ => Err(Error::TypeError("string", prompt.type_of()))?,
+                _ => Err(Error::TypeError("str", prompt.type_of(env)))?,
             };
             match repline::Repline::new("", prompt, "").read() {
                 Ok(line) => Ok(ConValue::String(line)),
@@ -62,7 +62,7 @@ pub fn get_env() -> Environment {
             let path = match path.dereference_in(env)? {
                 ConValue::Str(path) => path.to_ref(),
                 ConValue::String(path) => path.as_str(),
-                _ => Err(Error::TypeError("string", path.type_of()))?,
+                _ => Err(Error::TypeError("str", path.type_of(env)))?,
             };
             fs::read_to_string(path).map_err(Error::BuiltinError)
         }
@@ -71,12 +71,12 @@ pub fn get_env() -> Environment {
             let path = match path.dereference_in(env)? {
                 ConValue::Str(v) => v.to_ref(),
                 ConValue::String(v) => v.as_str(),
-                v => Err(Error::TypeError("string", v.type_of()))?,
+                v => Err(Error::TypeError("str", v.type_of(env)))?,
             };
             let data = match data.dereference_in(env)? {
                 ConValue::Str(v) => v.to_ref(),
                 ConValue::String(v) => v.as_str(),
-                v => Err(Error::TypeError("string", v.type_of()))?,
+                v => Err(Error::TypeError("str", v.type_of(env)))?,
             };
             fs::write(path, data).map_err(Error::BuiltinError)
         }

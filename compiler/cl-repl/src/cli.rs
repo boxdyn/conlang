@@ -28,7 +28,7 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
                     let string = v.get(env).cloned().unwrap_or_default();
                     return eval(env, &[string])
                 }
-                _ => Err(Error::TypeError("string", string.type_of()))?
+                _ => Err(Error::TypeError("string", string.type_of(env)))?
             };
             match Parser::new(Lexer::new("eval".into(), string)).parse::<Expr>(0) {
                 Err(e) => Ok(ConValue::String(format!("{e}"))),
@@ -42,7 +42,7 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
             match path {
                 ConValue::Str(path) => load_file(env, &**path).or(Ok(ConValue::Unit)),
                 ConValue::String(path) => load_file(env, &**path).or(Ok(ConValue::Unit)),
-                _ => Err(Error::TypeError("string", path.type_of()))
+                _ => Err(Error::TypeError("string", path.type_of(env)))
             }
         }
 
@@ -52,12 +52,12 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>> {
         }
 
         /// Gets a line of input from stdin
-        fn get_line(prompt) {
+        fn get_line(prompt) @env -> str {
             use cl_interpret::error::Error;
             let prompt = match prompt {
                 ConValue::Str(prompt) => prompt.to_ref(),
                 ConValue::String(prompt) => prompt.as_str(),
-                _ => Err(Error::TypeError("string", prompt.type_of()))?,
+                _ => Err(Error::TypeError("string", prompt.type_of(env)))?,
             };
             match repline::Repline::new("", prompt, "").read() {
                 Ok(line) => Ok(ConValue::String(line)),

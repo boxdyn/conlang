@@ -12,7 +12,7 @@ use cl_ast::{
 };
 use std::{fmt::Display, mem::take};
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Place {
     place: usize,
     projections: Vec<Projection>,
@@ -80,7 +80,7 @@ impl Place {
                     {
                         todo!("Projection::Slice ({start}, {end})")
                     }
-                    err => Err(Error::TypeError("int", err.type_of()))?,
+                    err => Err(Error::TypeError("int", err.type_of(env)))?,
                 }
             }
             (Op::Dot, [place, At(Expr::Lit(Literal::Int(idx, _)), _)]) => {
@@ -152,7 +152,9 @@ impl Place {
                 (ConValue::Struct(_, values), Projection::DotSym(sym)) => {
                     values.get_mut(sym).ok_or(Error::NotDefined(*sym))?
                 }
-                (place, Projection::DotSym(name)) => Err(Error::TypeError(name, place.type_of()))?,
+                (place, Projection::DotSym(name)) => {
+                    Err(Error::TypeError(name, place.clone().type_of(env)))?
+                }
                 (ConValue::Tuple(values), &Projection::DotIdx(idx)) => {
                     let len = values.len();
                     values.get_mut(idx).ok_or(Error::OobIndex(idx, len))?

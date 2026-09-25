@@ -110,10 +110,10 @@ mod macros {
             .expect_err(stringify!($($t)* should not execute correctly))
     }
 
-    pub macro conv_cmp($func: ident, $a: expr, $b: expr) {
-        $a.$func(&($b).into())
+    pub macro conv_cmp($func: ident, $a: expr, $b: expr, $env: expr) {
+        $a.$func(&($b).into(), $env)
             .expect(stringify!($a should be comparable to $b))
-            .truthy()
+            .truthy($env)
             .expect(stringify!(result of comparison should be ConValue::Bool))
     }
 
@@ -128,7 +128,7 @@ mod macros {
     pub macro env_eq($env:ident.$var:ident, $expr:expr) {{
         let evaluated = $env.get(stringify!($var).into())
             .expect(stringify!($var should be defined and initialized));
-        if !conv_cmp!(eq, evaluated, $expr) {
+        if !conv_cmp!(eq, evaluated, $expr, &$env) {
             panic!("assertion {} ({evaluated}) == {} failed.", stringify!($var), stringify!($expr))
         }
     }}

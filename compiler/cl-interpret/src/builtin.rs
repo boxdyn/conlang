@@ -278,14 +278,14 @@ pub const Builtins: &[Builtin] = &builtins![
             &ConValue::Slice(_, start, end) => end as i128 - start as i128,
             ConValue::Array(arr) => arr.len() as _,
             ConValue::Tuple(t) => t.len() as _,
-            other => Err(Error::TypeError("A type with a length", other.type_of()))?,
+            other => Err(Error::TypeError("A type with a length", other.type_of(env)))?,
         })
     }
 
     fn slice(ConValue::Ref(index), ConValue::Int(start), ConValue::Int(end)) -> [_] {
         match (start, end) {
             (0.., 0..) if start <= end => Ok(ConValue::Slice(index.clone(), *start as _, (end - start) as _)),
-            _ => Err(Error::BuiltinError(format_args!("Bad index: {index}[{start}, {end}]")))
+            _ => Err(error_format!("Bad index: {index}[{start}, {end}]"))
         }
     }
 
@@ -294,7 +294,7 @@ pub const Builtins: &[Builtin] = &builtins![
         Ok(match string.dereference_in(env)? {
             ConValue::Str(s) => ConValue::Array(s.chars().map(Into::into).collect()),
             ConValue::String(s) => ConValue::Array(s.chars().map(Into::into).collect()),
-            _ => Err(Error::TypeError("string", string.type_of()))?,
+            _ => Err(Error::TypeError("str", string.type_of(env)))?,
         })
     }
 
@@ -318,7 +318,7 @@ pub const Builtins: &[Builtin] = &builtins![
         let ty = ty.dereference_in(env)?;
         let ty = match ty {
             ConValue::TypeInfo(ty) => *ty,
-            other => other.type_of(),
+            other => other.type_of(env),
         };
         let Some(impls) = env.impls.get(&ty) else {
             return Ok(ConValue::Module(Default::default()));
@@ -330,7 +330,7 @@ pub const Builtins: &[Builtin] = &builtins![
 
     fn mod_into_binds(module) @env -> [(str, _)] {
         let ConValue::Module(m) = module.dereference_in(env)? else {
-            return Err(Error::TypeError("mod", module.type_of()))
+            return Err(Error::TypeError("mod", module.type_of(env)))
         };
 
         Ok(ConValue::Array(
@@ -341,13 +341,13 @@ pub const Builtins: &[Builtin] = &builtins![
     }
 
     fn type_of(value) @env -> Type {
-        Ok(value.dereference_in(env)?.type_of())
+        Ok(value.dereference_in(env)?.type_of(env))
     }
 
     /// Gets the underlying `mod` for type `ty`
     fn captures(func) @env -> [str] {
         let ConValue::Function(func) = func.dereference_in(env)? else {
-            return Err(Error::TypeError("fn", func.type_of()))
+            return Err(Error::TypeError("fn", func.type_of(env)))
         };
         Ok(ConValue::Array(
             func.captures()
@@ -361,7 +361,7 @@ pub const Builtins: &[Builtin] = &builtins![
     /// Gets the underlying `mod` for type `ty`
     fn upvars(func) @env -> Module {
         let ConValue::Function(func) = func.dereference_in(env)? else {
-            return Err(Error::TypeError("fn", func.type_of()))
+            return Err(Error::TypeError("fn", func.type_of(env)))
         };
         Ok(ConValue::Module(Box::new(
             func.upvars().borrow().0.iter().map(|(&name, &idx)| {
@@ -391,69 +391,46 @@ pub const Builtins: &[Builtin] = &builtins![
 
 pub const Math: &[Builtin] = &builtins![
     /// Multiplication `a * b`
-    fn mul(lhs, rhs) { lhs.clone() * rhs.clone() }
+    fn mul(lhs, rhs) @env -> Self { lhs.clone().mul(rhs.clone(), env) }
 
     /// Division `a / b`
-    fn div(lhs, rhs) { lhs.clone() / rhs.clone() }
+    fn div(lhs, rhs) @env -> Self { lhs.clone().div(rhs.clone(), env) }
 
     /// Remainder `a % b`
-    fn rem(lhs, rhs) { lhs.clone() % rhs.clone() }
+    fn rem(lhs, rhs) @env -> Self { lhs.clone().rem(rhs.clone(), env) }
 
     /// Addition `a + b`
-    fn add(lhs, rhs) { lhs.clone() + rhs.clone() }
+    fn add(lhs, rhs) @env -> Self { lhs.clone().add(rhs.clone(), env) }
 
     /// Subtraction `a - b`
-    fn sub(lhs, rhs) { lhs.clone() - rhs.clone() }
+    fn sub(lhs, rhs) @env -> Self { lhs.clone().sub(rhs.clone(), env) }
 
     /// Shift Left `a << b`
-    fn shl(lhs, rhs) { lhs.clone() << rhs.clone() }
+    fn shl(lhs, rhs) @env -> Self { lhs.clone().shl(rhs.clone(), env) }
 
     /// Shift Right `a >> b`
-    fn shr(lhs, rhs) { lhs.clone() >> rhs.clone() }
+    fn shr(lhs, rhs) @env -> Self { lhs.clone().shr(rhs.clone(), env) }
 
     /// Bitwise And `a & b`
-    fn and(lhs, rhs) { lhs.clone() & rhs.clone() }
+    fn and(lhs, rhs) @env -> Self { lhs.clone().and(rhs.clone(), env) }
 
     /// Bitwise Or `a | b`
-    fn or(lhs, rhs) { lhs.clone() | rhs.clone() }
+    fn or(lhs, rhs) @env -> Self { lhs.clone().or(rhs.clone(), env) }
 
     /// Bitwise Exclusive Or `a ^ b`
-    fn xor(lhs, rhs) { lhs.clone() ^ rhs.clone() }
+    fn xor(lhs, rhs) @env -> Self { lhs.clone().xor(rhs.clone(), env) }
 
     /// Negates the ConValue
-    fn neg(tail) {
-        Ok(match tail {
-            ConValue::Unit => ConValue::Unit,
-            ConValue::Int(v) => ConValue::Int(-v),
-            ConValue::Float(v) => ConValue::Float(-v),
-            _ => Err(Error::TypeError("type implements Neg", tail.type_of()))?,
-        })
-    }
+    fn neg(tail) @env -> Self { tail.clone().neg(env) }
 
     /// Inverts the ConValue
-    fn not(tail) {
-        Ok(match tail {
-            ConValue::Unit => ConValue::Unit,
-            ConValue::Int(v) => ConValue::Int(!v),
-            ConValue::Bool(v) => ConValue::Bool(!v),
-            _ => Err(Error::TypeError("type implements Not", tail.type_of()))?,
-        })
-    }
+    fn not(tail) @env -> Self { tail.clone().not(env) }
 
     /// Compares two values
     fn cmp(head, tail) @env {
         let head = head.dereference_in(env)?;
         let tail = tail.dereference_in(env)?;
-        Ok(ConValue::Int(match (head, tail) {
-            (ConValue::Int(a), ConValue::Int(b)) => a.cmp(b) as _,
-            (ConValue::Bool(a), ConValue::Bool(b)) => a.cmp(b) as _,
-            (ConValue::Char(a), ConValue::Char(b)) => a.cmp(b) as _,
-            (ConValue::Str(a), ConValue::Str(b)) => a.cmp(b) as _,
-            (ConValue::Str(a), ConValue::String(b)) => a.to_ref().cmp(b.as_str()) as _,
-            (ConValue::String(a), ConValue::Str(b)) => a.as_str().cmp(b.to_ref()) as _,
-            (ConValue::String(a), ConValue::String(b)) => a.cmp(b) as _,
-            _ => Err(error_format!("Incomparable values: {head}, {tail}"))?
-        }))
+        Ok(head.compare(tail, env)? as i128)
     }
 
     /// Does the opposite of `&`
@@ -585,7 +562,7 @@ pub const ArrayIntrinsics: &[Builtin] = &builtins! {
     fn len(array) @env -> i128 {
         Ok(match array.dereference_in(env)? {
             ConValue::Array(arr) => arr.len() as i128,
-            other => Err(Error::TypeError("[_]", other.type_of()))?,
+            other => Err(Error::TypeError("[_]", other.type_of(env)))?,
         })
     }
 
@@ -619,14 +596,14 @@ pub const ArrayIntrinsics: &[Builtin] = &builtins! {
 
 fn get_float(env: &mut Environment, value: &ConValue) -> IResult<f64> {
     let &ConValue::Float(f) = value.dereference_in(env)? else {
-        return Err(Error::TypeError("f64", value.type_of()));
+        return Err(Error::TypeError("f64", value.type_of(env)));
     };
     Ok(f)
 }
 
 fn get_int(env: &mut Environment, value: &ConValue, ty: &'static str) -> IResult<i128> {
     let &ConValue::Int(v) = value.dereference_in(env)? else {
-        return Err(Error::TypeError(ty, value.type_of()));
+        return Err(Error::TypeError(ty, value.type_of(env)));
     };
     Ok(v)
 }
@@ -635,7 +612,7 @@ fn get_str<'e>(env: &'e mut Environment, value: &'e ConValue) -> IResult<&'e str
     Ok(match value.dereference_in(env)? {
         ConValue::Str(s) => s.to_ref(),
         ConValue::String(s) => s.as_ref(),
-        _ => Err(Error::TypeError("str", value.type_of()))?,
+        _ => Err(Error::TypeError("str", value.type_of(env)))?,
     })
 }
 
@@ -643,15 +620,18 @@ fn get_array_by_ref<'e>(
     env: &'e mut Environment,
     value: &ConValue,
 ) -> IResult<&'e mut Box<[ConValue]>> {
-    let ConValue::Ref(array) = value else {
-        Err(Error::TypeError("&[_]", value.type_of()))?
+    let ConValue::Ref(place) = value else {
+        Err(Error::TypeError("&[_]", value.type_of(env)))?
     };
-    let mut array = array.get_mut(env)?;
+    let mut array = place.get_mut(env)?;
     while let ConValue::Ref(r) = array {
         array = r.clone().get_mut(env)?;
     }
     match array {
         ConValue::Array(array) => Ok(array),
-        _ => Err(Error::TypeError("[_]", array.type_of()))?,
+        _ => {
+            let array = place.get(env)?;
+            Err(Error::TypeError("[_]", array.type_of(env)))
+        }
     }
 }

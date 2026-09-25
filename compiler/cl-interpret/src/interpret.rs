@@ -101,8 +101,8 @@ impl Interpret for (Op, &[At<Expr>]) {
                 ret.0.interpret(env)
             }
             (Op::As, [value, ty]) => match ty.interpret(env)? {
-                ConValue::TypeInfo(ty) => value.interpret(env).map(|v| v.cast(&ty)),
-                other => Err(Error::TypeError("type", other.type_of())),
+                ConValue::TypeInfo(ty) => value.interpret(env).map(|v| v.cast(&ty, env)),
+                other => Err(Error::TypeError("type", other.type_of(env))),
             },
             (Op::As, [value, ty]) => cl_todo!("{value} as {ty} operator"),
             (Op::Block, []) => Ok(ConValue::Unit),
@@ -120,7 +120,7 @@ impl Interpret for (Op, &[At<Expr>]) {
                     ConValue::Int(rep) => {
                         Ok(ConValue::Array(vec![v; rep as usize].into_boxed_slice()))
                     }
-                    rep => Err(Error::TypeError("int", rep.type_of())),
+                    rep => Err(Error::TypeError("int", rep.type_of(env))),
                 }
             }
             (Op::Group, [expr]) => expr.interpret(env),
@@ -142,7 +142,7 @@ impl Interpret for (Op, &[At<Expr>]) {
                 v @ ConValue::TypeInfo(ty) if let "None" = ty.name() => Err(Error::Return(v)),
                 other => Ok(other),
             },
-            (Op::Index, [expr, idx]) => expr.interpret(env)?.index(&idx.interpret(env)?, env),
+            (Op::Index, [expr, idx]) => expr.interpret(env)?.index(idx.interpret(env)?, env),
             (Op::Call, [expr, arg]) => {
                 let callee = Place::new(expr.value(), env)
                     .map(ConValue::Ref)
@@ -173,7 +173,7 @@ impl Interpret for (Op, &[At<Expr>]) {
             },
             (Op::If, [cond, pass, fail]) => {
                 let mut scope = env.frame("if", None);
-                if cond.interpret(&mut scope)?.truthy()? {
+                if cond.interpret(&mut scope)?.truthy(&scope)? {
                     return pass.interpret(&mut scope);
                 }
                 drop(scope);
@@ -182,7 +182,7 @@ impl Interpret for (Op, &[At<Expr>]) {
             (Op::While, [cond, pass, fail]) => {
                 loop {
                     let mut scope = env.frame("while", Some(cond.1.merge(pass.1)));
-                    if cond.interpret(&mut scope)?.truthy()? {
+                    if cond.interpret(&mut scope)?.truthy(&scope)? {
                         match pass.interpret(&mut scope) {
                             Ok(_) => {}
                             Err(Error { kind: ErrorKind::Continue, .. }) => continue,
@@ -217,7 +217,7 @@ impl Interpret for (Op, &[At<Expr>]) {
                     cl_todo!("Interpret non-call {args:?}")?
                 };
                 let scrutinee = Place::new_or_temporary(scrutinee.value(), env)?;
-                let ty = scrutinee.get(env)?.type_of();
+                let ty = scrutinee.get(env)?.type_of(env);
                 let function = match callee.value() {
                     Expr::Id(Path { parts }) if let &[name] = &parts[..] => {
                         env.get_impl(ty, name).or_else(|_| callee.interpret(env))?
@@ -256,7 +256,7 @@ impl Interpret for (Op, &[At<Expr>]) {
                     ConValue::Struct(_, mut p) => p.remove(&name).ok_or(Error::NotDefined(name)),
                     ConValue::TypeInfo(ti) => ti.getattr(name),
                     ConValue::Module(m) => m.get(&name).cloned().ok_or(Error::NotDefined(name)),
-                    other => Err(Error::TypeError(name, other.type_of())),
+                    other => Err(Error::TypeError(name, other.type_of(env))),
                 }
             }
             (Op::Dot, [scrutinee, proj]) => cl_todo!("dot: {scrutinee}.{proj}"),
@@ -280,20 +280,8 @@ impl Interpret for (Op, &[At<Expr>]) {
             )),
 
             // Unary operators
-            (Op::Neg, [expr]) => {
-                let value = expr.interpret(env)?;
-                let name = "neg".into();
-                env.get_impl(value.type_of(), name)
-                    .or_else(|_| env.get(name))?
-                    .call(env, &[value])
-            }
-            (Op::Not, [expr]) => {
-                let value = expr.interpret(env)?;
-                let name = "not".into();
-                env.get_impl(value.type_of(), name)
-                    .or_else(|_| env.get(name))?
-                    .call(env, &[value])
-            }
+            (Op::Neg, [expr]) => expr.interpret(env)?.neg(env),
+            (Op::Not, [expr]) => expr.interpret(env)?.not(env),
             (Op::Identity, [expr]) => expr.interpret(env),
 
             // Reference manipulation operators
@@ -305,34 +293,34 @@ impl Interpret for (Op, &[At<Expr>]) {
             (Op::Deref, [expr]) => cl_todo!("Non-place dereference: *{expr}"),
 
             // Binary computation operators
-            (Op::Mul, [lhs, rhs]) => lhs.interpret(env)? * rhs.interpret(env)?,
-            (Op::Div, [lhs, rhs]) => lhs.interpret(env)? / rhs.interpret(env)?,
-            (Op::Rem, [lhs, rhs]) => lhs.interpret(env)? % rhs.interpret(env)?,
-            (Op::Add, [lhs, rhs]) => lhs.interpret(env)? + rhs.interpret(env)?,
-            (Op::Sub, [lhs, rhs]) => lhs.interpret(env)? - rhs.interpret(env)?,
-            (Op::Shl, [lhs, rhs]) => lhs.interpret(env)? << rhs.interpret(env)?,
-            (Op::Shr, [lhs, rhs]) => lhs.interpret(env)? >> rhs.interpret(env)?,
-            (Op::And, [lhs, rhs]) => lhs.interpret(env)? & rhs.interpret(env)?,
-            (Op::Xor, [lhs, rhs]) => lhs.interpret(env)? ^ rhs.interpret(env)?,
-            (Op::Or, [lhs, rhs]) => lhs.interpret(env)? | rhs.interpret(env)?,
+            (Op::Mul, [lhs, rhs]) => lhs.interpret(env)?.mul(rhs.interpret(env)?, env),
+            (Op::Div, [lhs, rhs]) => lhs.interpret(env)?.div(rhs.interpret(env)?, env),
+            (Op::Rem, [lhs, rhs]) => lhs.interpret(env)?.rem(rhs.interpret(env)?, env),
+            (Op::Add, [lhs, rhs]) => lhs.interpret(env)?.add(rhs.interpret(env)?, env),
+            (Op::Sub, [lhs, rhs]) => lhs.interpret(env)?.sub(rhs.interpret(env)?, env),
+            (Op::Shl, [lhs, rhs]) => lhs.interpret(env)?.shl(rhs.interpret(env)?, env),
+            (Op::Shr, [lhs, rhs]) => lhs.interpret(env)?.shr(rhs.interpret(env)?, env),
+            (Op::And, [lhs, rhs]) => lhs.interpret(env)?.and(rhs.interpret(env)?, env),
+            (Op::Xor, [lhs, rhs]) => lhs.interpret(env)?.xor(rhs.interpret(env)?, env),
+            (Op::Or, [lhs, rhs]) => lhs.interpret(env)?.or(rhs.interpret(env)?, env),
 
             // Comparison operators
-            (Op::Lt, [lhs, rhs]) => lhs.interpret(env)?.lt(&rhs.interpret(env)?),
-            (Op::Leq, [lhs, rhs]) => lhs.interpret(env)?.lt_eq(&rhs.interpret(env)?),
-            (Op::Eq, [lhs, rhs]) => lhs.interpret(env)?.eq(&rhs.interpret(env)?),
-            (Op::Neq, [lhs, rhs]) => lhs.interpret(env)?.neq(&rhs.interpret(env)?),
-            (Op::Geq, [lhs, rhs]) => lhs.interpret(env)?.gt_eq(&rhs.interpret(env)?),
-            (Op::Gt, [lhs, rhs]) => lhs.interpret(env)?.gt(&rhs.interpret(env)?),
+            (Op::Lt, [lhs, rhs]) => lhs.interpret(env)?.lt(&rhs.interpret(env)?, env),
+            (Op::Leq, [lhs, rhs]) => lhs.interpret(env)?.lt_eq(&rhs.interpret(env)?, env),
+            (Op::Eq, [lhs, rhs]) => lhs.interpret(env)?.eq(&rhs.interpret(env)?, env),
+            (Op::Neq, [lhs, rhs]) => lhs.interpret(env)?.neq(&rhs.interpret(env)?, env),
+            (Op::Geq, [lhs, rhs]) => lhs.interpret(env)?.gt_eq(&rhs.interpret(env)?, env),
+            (Op::Gt, [lhs, rhs]) => lhs.interpret(env)?.gt(&rhs.interpret(env)?, env),
 
             // Logical (control flow) operators
             (Op::LogAnd, [lhs, rhs]) => {
                 let lhs = lhs.interpret(env)?;
-                if lhs.truthy()? { rhs.interpret(env) } else { Ok(lhs) }
+                if lhs.truthy(env)? { rhs.interpret(env) } else { Ok(lhs) }
             }
             (Op::LogXor, [lhs, rhs]) => todo!(),
             (Op::LogOr, [lhs, rhs]) => {
                 let lhs = lhs.interpret(env)?;
-                if lhs.truthy()? { Ok(lhs) } else { rhs.interpret(env) }
+                if lhs.truthy(env)? { Ok(lhs) } else { rhs.interpret(env) }
             }
 
             // Assignment operators
@@ -359,70 +347,29 @@ impl Interpret for (Op, &[At<Expr>]) {
                 }
                 Ok(ConValue::Unit)
             }
-            (Op::MulSet, [target, value]) => {
-                let place = Place::new(target.value(), env)?;
-                let value = value.interpret(env)?;
-                place.get_mut(env)?.mul_assign(value)?;
-                Ok(ConValue::Unit)
-            }
-            (Op::DivSet, [target, value]) => {
-                let place = Place::new(target.value(), env)?;
-                let value = value.interpret(env)?;
-                place.get_mut(env)?.div_assign(value)?;
-                Ok(ConValue::Unit)
-            }
-            (Op::RemSet, [target, value]) => {
-                let place = Place::new(target.value(), env)?;
-                let value = value.interpret(env)?;
-                place.get_mut(env)?.rem_assign(value)?;
-                Ok(ConValue::Unit)
-            }
-            (Op::AddSet, [target, value]) => {
-                let place = Place::new(target.value(), env)?;
-                let value = value.interpret(env)?;
-                place.get_mut(env)?.add_assign(value)?;
-                Ok(ConValue::Unit)
-            }
-            (Op::SubSet, [target, value]) => {
-                let place = Place::new(target.value(), env)?;
-                let value = value.interpret(env)?;
-                place.get_mut(env)?.sub_assign(value)?;
-                Ok(ConValue::Unit)
-            }
-            (Op::ShlSet, [target, value]) => {
-                let place = Place::new(target.value(), env)?;
-                let value = value.interpret(env)?;
-                place.get_mut(env)?.shl_assign(value)?;
-                Ok(ConValue::Unit)
-            }
-            (Op::ShrSet, [target, value]) => {
-                let place = Place::new(target.value(), env)?;
-                let value = value.interpret(env)?;
-                place.get_mut(env)?.shr_assign(value)?;
-                Ok(ConValue::Unit)
-            }
-            (Op::AndSet, [target, value]) => {
-                let place = Place::new(target.value(), env)?;
-                let value = value.interpret(env)?;
-                place.get_mut(env)?.bitand_assign(value)?;
-                Ok(ConValue::Unit)
-            }
-            (Op::XorSet, [target, value]) => {
-                let place = Place::new(target.value(), env)?;
-                let value = value.interpret(env)?;
-                place.get_mut(env)?.bitxor_assign(value)?;
-                Ok(ConValue::Unit)
-            }
-            (Op::OrSet, [target, value]) => {
-                let place = Place::new(target.value(), env)?;
-                let mut value = value.interpret(env)?;
-                place.get_mut(env)?.bitor_assign(value)?;
-                Ok(ConValue::Unit)
-            }
+            (Op::MulSet, [target, value]) => assign_modify!(target.mul(value, env)),
+            (Op::DivSet, [target, value]) => assign_modify!(target.div(value, env)),
+            (Op::RemSet, [target, value]) => assign_modify!(target.rem(value, env)),
+            (Op::AddSet, [target, value]) => assign_modify!(target.add(value, env)),
+            (Op::SubSet, [target, value]) => assign_modify!(target.sub(value, env)),
+            (Op::ShlSet, [target, value]) => assign_modify!(target.shl(value, env)),
+            (Op::ShrSet, [target, value]) => assign_modify!(target.shr(value, env)),
+            (Op::AndSet, [target, value]) => assign_modify!(target.and(value, env)),
+            (Op::XorSet, [target, value]) => assign_modify!(target.xor(value, env)),
+            (Op::OrSet, [target, value]) => assign_modify!(target.or(value, env)),
             (op, exprs) => cl_unimplemented!("Evaluate {op:?} {exprs:#?}"),
         }
     }
 }
+
+/// Implements modifying-assignment
+macro assign_modify($target:ident . $op:ident ($value:ident, $env: ident)) {{
+    let place = Place::new($target.value(), $env)?;
+    let value = $value.interpret($env)?;
+    // do it twice to satisfy the borrow checker
+    *place.get_mut($env)? = place.get_mut($env)?.take().$op(value, $env)?;
+    Ok(ConValue::Unit)
+}}
 
 impl Interpret for Label<DefaultTypes> {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
@@ -617,7 +564,7 @@ impl Interpret for Use {
                     &ConValue::TypeInfo(ty) => use_ty(tree, ty, env),
                     #[expect(deprecated)]
                     ConValue::Module(md) => use_mod(tree, &md.clone(), env),
-                    other => Err(Error::TypeError("type", other.type_of())),
+                    other => Err(Error::TypeError("type", other.type_of(env))),
                 },
                 Use::Tree(uses) => {
                     for branch in uses {
@@ -649,7 +596,7 @@ impl Interpret for Use {
                 {
                     &ConValue::TypeInfo(ty) => use_ty(tree, ty, env),
                     ConValue::Module(md) => use_mod(tree, &md.clone(), env),
-                    other => Err(Error::TypeError("type", other.type_of())),
+                    other => Err(Error::TypeError("type", other.type_of(env))),
                 },
                 Use::Tree(uses) => {
                     for branch in uses {
@@ -674,7 +621,7 @@ impl Interpret for Use {
                 &ConValue::TypeInfo(ty) => use_ty(tree, ty, env),
                 #[expect(deprecated)]
                 ConValue::Module(md) => use_mod(tree, &md.clone(), env),
-                other => Err(Error::TypeError("type", other.type_of())),
+                other => Err(Error::TypeError("type", other.type_of(env))),
             }?,
             Use::Tree(trees) => {
                 for tree in trees {
@@ -878,7 +825,7 @@ impl Interpret for Make<DefaultTypes> {
 
         let tyinfo = match ty.interpret(env)? {
             ConValue::TypeInfo(info) => info,
-            other => Err(Error::TypeError("type", other.type_of()))?,
+            other => Err(Error::TypeError("type", other.type_of(env)))?,
         };
 
         let mut members = HashMap::new();
@@ -966,7 +913,7 @@ impl Match for Pat {
             }
             Self::Value(at) => {
                 let truth = at.interpret(in_env.env)?;
-                if truth.neq(&value)?.truthy()? {
+                if truth.neq(&value, in_env.env)?.truthy(in_env.env)? {
                     Err(Error::PatFailed(self.clone().into()))
                 } else {
                     Ok(())
@@ -1002,7 +949,11 @@ impl Match for (PatOp, &[At<Pat>]) {
             (PatOp::Rest, []) => Ok(()),
             // Rest pattern with const value is upper-bounded exclusive range
             (PatOp::Rest, [At(Pat::Value(end), ..)]) => {
-                if end.interpret(in_env.env)?.lt_eq(&value)?.truthy()? {
+                if end
+                    .interpret(in_env.env)?
+                    .lt_eq(&value, in_env.env)?
+                    .truthy(in_env.env)?
+                {
                     return Err(Error::MatchNonexhaustive(value));
                 }
                 Ok(())
@@ -1011,26 +962,46 @@ impl Match for (PatOp, &[At<Pat>]) {
             (PatOp::Rest, _) => unimplemented!("rest pattern with more than one arg"),
             (PatOp::RangeEx, [At(Pat::Value(start), ..)]) => {
                 // RangeEx pattern with const value is lower-bounded exclusive range
-                if start.interpret(in_env.env)?.gt(&value)?.truthy()? {
+                if start
+                    .interpret(in_env.env)?
+                    .gt(&value, in_env.env)?
+                    .truthy(in_env.env)?
+                {
                     return Err(Error::MatchNonexhaustive(value));
                 }
                 Ok(())
             }
             (PatOp::RangeEx, [At(Pat::Value(start), ..), At(Pat::Value(end), ..)]) => {
-                if start.interpret(in_env.env)?.gt(&value)?.truthy()? {
+                if start
+                    .interpret(in_env.env)?
+                    .gt(&value, in_env.env)?
+                    .truthy(in_env.env)?
+                {
                     return Err(Error::MatchNonexhaustive(value));
                 }
-                if end.interpret(in_env.env)?.lt_eq(&value)?.truthy()? {
+                if end
+                    .interpret(in_env.env)?
+                    .lt_eq(&value, in_env.env)?
+                    .truthy(in_env.env)?
+                {
                     return Err(Error::MatchNonexhaustive(value));
                 }
                 Ok(())
             }
             (PatOp::RangeEx, pats) => todo!("RangeEx patterns: {pats:?}"),
             (PatOp::RangeIn, [At(Pat::Value(start), ..), At(Pat::Value(end), ..)]) => {
-                if start.interpret(in_env.env)?.gt(&value)?.truthy()? {
+                if start
+                    .interpret(in_env.env)?
+                    .gt(&value, in_env.env)?
+                    .truthy(in_env.env)?
+                {
                     return Err(Error::MatchNonexhaustive(value));
                 }
-                if end.interpret(in_env.env)?.lt(&value)?.truthy()? {
+                if end
+                    .interpret(in_env.env)?
+                    .lt(&value, in_env.env)?
+                    .truthy(in_env.env)?
+                {
                     return Err(Error::MatchNonexhaustive(value));
                 }
                 Ok(())
@@ -1052,7 +1023,7 @@ impl Match for (PatOp, &[At<Pat>]) {
             (PatOp::TypePrefixed, [At(Pat::Value(e), ..), pat]) => {
                 let ty = match e.interpret(in_env.env)? {
                     ConValue::TypeInfo(ty) => ty,
-                    other => Err(Error::TypeError("type", other.type_of()))?,
+                    other => Err(Error::TypeError("type", other.type_of(in_env.env)))?,
                 };
                 match value {
                     ConValue::Struct(value_ty, _) | ConValue::TupleStruct(value_ty, _)
@@ -1099,7 +1070,7 @@ impl Match for (PatOp, &[At<Pat>]) {
                 pat.matches(value, in_env)?;
                 let mut scope = in_env.env.with_frame("guard", take(in_env.bind));
                 let value = cond.interpret(&mut scope)?;
-                if value.truthy()? {
+                if value.truthy(&scope)? {
                     *in_env.bind = scope.pop_values().unwrap_or_default();
                     Ok(())
                 } else {
