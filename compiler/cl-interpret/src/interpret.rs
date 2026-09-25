@@ -317,7 +317,20 @@ impl Interpret for (Op, &[At<Expr>]) {
                 let lhs = lhs.interpret(env)?;
                 if lhs.truthy(env)? { rhs.interpret(env) } else { Ok(lhs) }
             }
-            (Op::LogXor, [lhs, rhs]) => todo!(),
+            (Op::LogXor, [lhs, rhs]) => {
+                let lhs = lhs.interpret(env)?;
+                let rhs = rhs.interpret(env)?;
+                // | L | R |L^R|
+                // |---|---|---|
+                // | 0 | 0 | 0 |
+                // | 0 | 1 | 1 |
+                // | 1 | 0 | 1 |
+                // | 1 | 1 | 0 |
+                match lhs.truthy(env)? {
+                    false => Ok(rhs),
+                    true => rhs.not(env),
+                }
+            }
             (Op::LogOr, [lhs, rhs]) => {
                 let lhs = lhs.interpret(env)?;
                 if lhs.truthy(env)? { Ok(lhs) } else { rhs.interpret(env) }
