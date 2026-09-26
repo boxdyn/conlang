@@ -33,7 +33,7 @@ impl MTRand {
         return rand;
     }
 
-    /// Generates a 
+    /// Generates a random number in range 0..=0xffffffff
     fn gen_u32(self: &MTRand) -> u32 {
         // Generate STATE_VECTOR_LENGTH words at a time
         let out: u32 = 0;
