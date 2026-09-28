@@ -1,34 +1,44 @@
-//! Pseudo-random number generation using a LFSR algorithm
+//! Pseudo-random number generation using a xorshift algorithm
 
-static let state: u64 = 0xdeadbeefdeadbeef;
+struct Xorshift {
+    state: u64,
+};
 
-pub fn seed(seed: u64) {
-    state = seed;
-}
+impl Xorshift {
+    /// Constructs a new `Xorshift` with the provided `seed`
+    fn new(seed: u64) = Xorshift { state: seed };
 
-pub fn lfsr_next() {
-    state ^= state >> 7;
-    state ^= state << 9;
-    state ^= state >> 13;
-}
+    /// Advances to the next state
+    fn next(self: &Xorshift) {
+        self.state ^= self.state >> 7;
+        self.state ^= self.state << 9;
+        self.state ^= self.state >> 13;
+    }
 
-/// Returns a pseudorandom byte
-pub fn rand() -> u64 {
-    lfsr_next();
-    (state & 0xff) as u64
+    /// Returns a pseudorandom 32-bit integer
+    fn get_u32(self: &Xorshift) -> u32 {
+        self.next();
+        self.state as u32
+    }
+
+    /// Returns a pseudorandom byte
+    fn get_u8(self: &Xorshift) -> u8 {
+        self.next();
+        self.state as u8
+    }
 }
 
 // Prints a maze out of diagonal box drawing characters, ['╲', '╱']
-fn mazel(width: u64, height: u64) {
+fn mazel(rng: &Xorshift, width: u64, height: u64) {
     let walls = ['\u{2571}', '\u{2572}'];
-    rand_rect(width, height, walls)
+    rand_rect(rng, width, height, walls)
 }
 
 // Prints a rectangle with the provided walls
-fn rand_rect(width: u64, height: u64, walls: [char; 2]) {
+fn rand_rect(rng: &Xorshift, width: u64, height: u64, walls: [char]) {
     for _ in 0..height {
         for _ in 0..width {
-            print(walls[rand() % 2])
+            print(walls[rng.get_u32() % walls.len()])
         }
         println()
     }
