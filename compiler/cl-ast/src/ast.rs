@@ -282,10 +282,16 @@ impl<A: AstTypes> Expr<A> {
 
     /// Returns whether `self` is a "place projection" expression (identifier, index, dot, or deref)
     pub const fn is_place(&self) -> bool {
-        matches!(
-            self,
-            Self::Id(_) | Self::Op(Op::Index | Op::Dot | Op::Deref, _)
-        )
+        match self {
+            Self::Op(Op::Group | Op::MetaInner | Op::MetaOuter | Op::Pub, es)
+                if let [e] = es.as_slice() =>
+            {
+                e.value().is_place()
+            }
+            Self::Op(Op::Dot, es) if let [_, At(Self::Op(Op::Call, _), _)] = es.as_slice() => false,
+            Self::Id(_) | Self::Op(Op::Index | Op::Dot | Op::Deref, _) => true,
+            _ => false,
+        }
     }
 
     /// Returns whether `self` is NOT a "place projection" expression
