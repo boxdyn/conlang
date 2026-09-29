@@ -81,3 +81,6 @@ pub use crate::{
     error::{EOF, LexError, LexFailure},
     lexer::{Lexer, Symbol},
 };
+
+#[cfg(test)]
+mod tests;

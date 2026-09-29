@@ -22,7 +22,7 @@ impl Token {
 }
 
 /// The (possibly pre-processed) lexical information, in the form of a [String], [u128], or [char]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Lexeme {
     String(String),
     Integer(u128, u32),

@@ -1,43 +1,58 @@
 use crate::Lexer;
 use cl_token::*;
 
-macro test_lexer_output_type  ($($f:ident {$($test:expr => $expect:expr),*$(,)?})*) {$(
+macro_rules! test_tkind {
+    ($($f:ident {$($test:expr => $expect:expr),*$(,)?})*) => {$(
     #[test]
-    fn $f() {$(
-        assert_eq!(
-            Lexer::new($test)
-                .into_iter()
-                .map(|t| t.unwrap().ty())
-                .collect::<Vec<_>>(),
+    fn $f() -> Result<(), $crate::LexError> {
+        $(assert_eq!(
+            {
+                let mut out = vec![];
+                let mut lexer = Lexer::new("".into(), $test);
+                loop{match lexer.scan() {
+                    Ok(token) => out.push(token.kind),
+                    Err($crate::LexError { res: $crate::LexFailure::EOF, .. }) => break,
+                    Err(e) => Err(e)?,
+                }};
+                out
+            },
             dbg!($expect)
-        );
-    )*}
-)*}
+        ));*;
+        Ok(())
+    }
+)*};
+}
 
-macro test_lexer_data_type  ($($f:ident {$($test:expr => $expect:expr),*$(,)?})*) {$(
+macro_rules! test_lexeme {
+    ($($f:ident {$($test:expr => $expect:expr),*$(,)?})*) => {$(
     #[test]
-    fn $f() {$(
-        assert_eq!(
-            Lexer::new($test)
-                .into_iter()
-                .map(|t| t.unwrap().into_data())
-                .collect::<Vec<_>>(),
+    fn $f() -> Result<(), $crate::LexError> {
+        $(assert_eq!(
+            {
+                let mut out = vec![];
+                let mut lexer = Lexer::new("".into(), $test);
+                loop{match lexer.scan() {
+                    Ok(token) => out.push(token.lexeme),
+                    Err($crate::LexError { res: $crate::LexFailure::EOF, .. }) => break,
+                    Err(e) => Err(e)?,
+                }};
+                out
+            },
             dbg!($expect)
-        );
-    )*}
-)*}
-
-/// Convert an `[ expr, ... ]` into a `[ *, ... ]`
-macro td ($($id:expr),*) {
-    [$($id.into()),*]
+        ));*;
+        Ok(())
+    }
+)*};
 }
 
 mod ident {
     use super::*;
-    macro ident ($($id:literal),*) {
-        [$(TokenData::String($id.into())),*]
+    macro_rules! ident {
+        ($($id:literal),*) => {
+            [$(Lexeme::String($id.into())),*]
+        };
     }
-    test_lexer_data_type! {
+    test_lexeme! {
         underscore { "_ _" => ident!["_", "_"] }
         unicode { "_ε ε_" => ident!["_ε", "ε_"] }
         many_underscore { "____________________________________" =>
@@ -46,10 +61,12 @@ mod ident {
 }
 mod keyword {
     use super::*;
-    macro kw($($k:ident),*) {
-        [ $(TokenKind::$k,)* ]
+    macro_rules! kw {
+        ($($k:ident),*) => {
+            [ $(TKind::$k,)* ]
+        };
     }
-    test_lexer_output_type! {
+    test_tkind! {
         kw_break { "break break" => kw![Break, Break] }
         kw_continue { "continue continue" => kw![Continue, Continue] }
         kw_else { "else else" => kw![Else, Else] }
@@ -68,53 +85,59 @@ mod keyword {
 }
 mod integer {
     use super::*;
-    test_lexer_data_type! {
+    test_lexeme! {
+        b36 {
+            "0~0 0~1 0~l 0~6io 0~pa8" =>
+            [Lexeme::Integer(0, 36), Lexeme::Integer(1, 36), Lexeme::Integer(21, 36), Lexeme::Integer(8448, 36), Lexeme::Integer(32768, 36)]
+        }
         hex {
             "0x0 0x1 0x15 0x2100 0x8000" =>
-            td![0x0, 0x1, 0x15, 0x2100, 0x8000]
+            [Lexeme::Integer(0, 16), Lexeme::Integer(1, 16), Lexeme::Integer(21, 16), Lexeme::Integer(8448, 16), Lexeme::Integer(32768, 16)]
         }
         dec {
             "0d0 0d1 0d21 0d8448 0d32768" =>
-            td![0, 0x1, 0x15, 0x2100, 0x8000]
+            [Lexeme::Integer(0, 10), Lexeme::Integer(1, 10), Lexeme::Integer(21, 10), Lexeme::Integer(8448, 10), Lexeme::Integer(32768, 10)]
         }
         oct {
             "0o0 0o1 0o25 0o20400 0o100000" =>
-            td![0x0, 0x1, 0x15, 0x2100, 0x8000]
+            [Lexeme::Integer(0, 8), Lexeme::Integer(1, 8), Lexeme::Integer(21, 8), Lexeme::Integer(8448, 8), Lexeme::Integer(32768, 8)]
         }
         bin {
             "0b0 0b1 0b10101 0b10000100000000 0b1000000000000000" =>
-            td![0x0, 0x1, 0x15, 0x2100, 0x8000]
+            [Lexeme::Integer(0, 2), Lexeme::Integer(1, 2), Lexeme::Integer(21, 2), Lexeme::Integer(8448, 2), Lexeme::Integer(32768, 2)]
         }
         baseless {
             "0 1 21 8448 32768" =>
-            td![0x0, 0x1, 0x15, 0x2100, 0x8000]
+            [Lexeme::Integer(0, 10), Lexeme::Integer(1, 10), Lexeme::Integer(21, 10), Lexeme::Integer(8448, 10), Lexeme::Integer(32768, 10)]
         }
     }
 }
 mod string {
     use super::*;
-    test_lexer_data_type! {
+    test_lexeme! {
         empty_string {
             "\"\"" =>
-            td![String::from("")]
+            [Lexeme::String("".into())]
         }
         unicode_string {
             "\"I 💙 🦈!\"" =>
-            td![String::from("I 💙 🦈!")]
+            [Lexeme::String("I 💙 🦈!".into())]
         }
         escape_string {
             " \"This is a shark: \\u{1f988}\" " =>
-            td![String::from("This is a shark: 🦈")]
+            [Lexeme::String("This is a shark: 🦈".into())]
         }
     }
 }
 mod punct {
-    macro op($op:ident) {
-        TKind::$op
+    macro_rules! op {
+        ($op:ident) => {
+            TKind::$op
+        };
     }
 
     use super::*;
-    test_lexer_output_type! {
+    test_tkind! {
         l_curly   { "{ {"   => [ op!(LCurly), op!(LCurly) ] }
         r_curly   { "} }"   => [ op!(RCurly), op!(RCurly) ] }
         l_brack   { "[ ["   => [ op!(LBrack), op!(LBrack) ] }
@@ -147,6 +170,7 @@ mod punct {
         gtgt      { ">> >>" => [ op!(GtGt), op!(GtGt)] }
         gtgteq    { ">>= >>=" => [ op!(GtGtEq), op!(GtGtEq)] }
         hash      { "# #"   => [ op!(Hash), op!(Hash)] }
+        hashbang  { "#! #!" => [ op!(HashBang), op!(HashBang)] }
         lt        { "< <"   => [ op!(Lt), op!(Lt)] }
         lteq      { "<= <=" => [ op!(LtEq), op!(LtEq)] }
         ltlt      { "<< <<" => [ op!(LtLt), op!(LtLt)] }
