@@ -64,7 +64,6 @@ impl Place {
         };
 
         match (op, exprs.as_slice()) {
-            (Op::As, exprs) => Err(Error::NotPlace()),
             (Op::Block | Op::Group | Op::MetaInner | Op::MetaOuter | Op::Pub, [expr]) => {
                 Self::new(expr.value(), env)
             }
@@ -89,7 +88,18 @@ impl Place {
             (Op::Dot, [place, At(Expr::Id(path), _)]) if path.parts.len() == 1 => {
                 Ok(Self::new(place.value(), env)?.dot_sym(path.parts[0]))
             }
-            (Op::Deref, [place]) => Ok(Self::new(place.value(), env)?.deref()),
+            (Op::Deref, [expr]) if expr.value().is_place() => match expr.interpret(env)? {
+                ConValue::Ref(ref r) => {
+                    let mut r = r;
+                    loop {
+                        let Ok(ConValue::Ref(place)) = r.get(env) else {
+                            break Ok(r.clone());
+                        };
+                        r = place;
+                    }
+                }
+                _ => Err(Error::NotPlace()),
+            },
             _ => Err(Error::NotPlace()),
         }
     }
@@ -204,7 +214,9 @@ impl Place {
                     values.get(idx).ok_or(Error::OobIndex(idx, values.len()))?
                 }
                 (place, Projection::DotIdx(_)) => todo!(".idx projection for {place}")?,
-                _ => Err(Error::NotPlace())?,
+                (value, place) => Err(Error::Panic(format!(
+                    "Failed to match {value} against {place:?}"
+                )))?,
             }
         }
 
