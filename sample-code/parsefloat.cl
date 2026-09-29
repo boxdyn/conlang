@@ -49,7 +49,3 @@ fn parf(string: str) -> f64 {
         + frac as f64 / 10.0.powf(frac_scale as f64)
     )
 }
-
-fn fold<T, U>(&iter: _, init: T, f: fn(T, U) -> T) -> T {
-    for _u in iter init = f(init, _u) else init
-}
