@@ -340,21 +340,10 @@ pub fn radix(n: i64, radix: i64) {
     }
 }
 
-/// Counts the leading zeroes in `n`
-pub fn count_leading_zeroes(n: u128) -> u128 {
-    let mut xd = u128::BITS;
-    if n < 0 return 0;
-    while n != 0 {
-        xd -= 1;
-        n >>= 1;
-    }
-    xd
-}
-
 /// Formats `n` as a hexadecimal literal (0xf...)
 pub fn hex(n: u128) {
     let out = "0x";
-    for xd in min(count_leading_zeroes(n) / 4, 31)..32 {
+    for xd in min(n.leading_zeroes() / 4, 31)..32 {
         out += as_digit(n >> (31 - xd) * 4 & 0xf)
     }
     out
@@ -363,7 +352,7 @@ pub fn hex(n: u128) {
 /// Formats `n` as an octal literal (0o7...)
 pub fn oct(n: u128) {
     let out = "0o";
-    for xd in min((count_leading_zeroes(n) + 1) / 3, 42)..43 {
+    for xd in min((n.leading_zeroes() + 1) / 3, 42)..43 {
         out += as_digit(n >> (42 - xd) * 3 & 7)
     }
     out
@@ -372,7 +361,7 @@ pub fn oct(n: u128) {
 /// Formats `n` as a binary literal (0b1...)
 pub fn bin(n: u128) {
     let out = "0b";
-    for xd in min(count_leading_zeroes(n), 127)..128 {
+    for xd in min(n.leading_zeroes(), 127)..128 {
         out += as_digit(n >> 127 - xd & 1)
     }
     out
