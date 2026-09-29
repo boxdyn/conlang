@@ -39,7 +39,7 @@ struct {
 }
 */
 
-type Integer = i128;
+pub type Integer = i128;
 
 /// A Conlang value stores data in the interpreter
 #[derive(Clone, Debug, Default)]
@@ -263,7 +263,7 @@ impl ConValue {
         gt_eq: >=;
         gt: >;
     }
-    pub fn compare(&self, other: &Self, env: &mut Environment) -> IResult<i128> {
+    pub fn compare(&self, other: &Self, env: &mut Environment) -> IResult<Integer> {
         use std::cmp::Ord;
         Ok(match (self, other) {
             (Self::Unit, Self::Unit) => 0,

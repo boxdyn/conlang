@@ -5,7 +5,7 @@ use cl_ast::types::Symbol;
 
 use crate::{
     Callable,
-    convalue::ConValue,
+    convalue::{ConValue, Integer},
     env::Environment,
     error::{Error, ErrorKind, IResult},
     place::Place,
@@ -278,7 +278,7 @@ pub const Builtins: &[Builtin] = &builtins![
             ConValue::Unit => 0,
             ConValue::Str(s) => s.chars().count() as _,
             ConValue::String(s) => s.chars().count() as _,
-            &ConValue::Slice(_, start, end) => end as i128 - start as i128,
+            &ConValue::Slice(_, start, end) => end as Integer - start as Integer,
             ConValue::Array(arr) => arr.len() as _,
             ConValue::Tuple(t) => t.len() as _,
             other => Err(Error::TypeError("A type with a length", other.type_of(env)))?,
@@ -430,7 +430,7 @@ pub const Math: &[Builtin] = &builtins![
     fn not(tail) @env -> Self { tail.clone().not(env) }
 
     /// Compares two values
-    fn cmp(head, tail) @env { Ok(head.compare(tail, env)? as i128) }
+    fn cmp(head, tail) @env { Ok(head.compare(tail, env)? as Integer) }
 
     /// Does the opposite of `&`
     fn deref(tail) @env -> _ {
@@ -456,36 +456,36 @@ pub const IntIntrinsics: &[Builtin] = &builtins! {
     }
     /// Counts the number of one-bits in `int`
     fn count_ones(int) @env -> i128 {
-        Ok(get_int(env, int, "i128")?.count_ones() as i128)
+        Ok(get_int(env, int, "i128")?.count_ones() as Integer)
     }
     /// Counts the number of zero-bits in `int`
-    fn count_zeros(int) @env -> i128 {
-        Ok(get_int(env, int, "i128")?.count_zeros() as i128)
+    fn count_zeroes(int) @env -> i128 {
+        Ok(get_int(env, int, "i128")?.count_zeros() as Integer)
     }
     /// Counts the number of leading zeroes in `int`
-    fn leading_zeros(int) @env -> i128 {
-        Ok(get_int(env, int, "i128")?.leading_zeros() as i128)
+    fn leading_zeroes(int) @env -> i128 {
+        Ok(get_int(env, int, "i128")?.leading_zeros() as Integer)
     }
     /// Counts the number of trailing zeroes in `int`
-    fn trailing_zeros(int) @env -> i128 {
-        Ok(get_int(env, int, "i128")?.trailing_zeros() as i128)
+    fn trailing_zeroes(int) @env -> i128 {
+        Ok(get_int(env, int, "i128")?.trailing_zeros() as Integer)
     }
     /// Swaps the bytes of `int` (as i128)
     fn swap_bytes(int) @env -> i128 {
-        Ok(get_int(env, int, "i128")?.swap_bytes() as i128)
+        Ok(get_int(env, int, "i128")?.swap_bytes() as Integer)
     }
     /// Reverses the bits of `int` (as i128)
     fn reverse_bits(int) @env -> i128 {
-        Ok(get_int(env, int, "i128")?.reverse_bits() as i128)
+        Ok(get_int(env, int, "i128")?.reverse_bits() as Integer)
     }
     /// Reverses the bits of `int` (as i128)
     fn abs(int) @env -> i128 {
-        Ok(get_int(env, int, "i128")?.wrapping_abs() as i128)
+        Ok(get_int(env, int, "i128")?.wrapping_abs() as Integer)
     }
     /// Returns the absolute difference between `int` and `other`
     fn abs_diff(int, other) @env -> i128 {
         let other = get_int(env, other, "i128")?;
-        Ok(get_int(env, int, "i128")?.abs_diff(other) as i128)
+        Ok(get_int(env, int, "i128")?.abs_diff(other) as Integer)
     }
     /// Returns the logarithm of `int` with respect to `base`, rounded down
     fn ilog(int, base) @env -> i128 {
@@ -493,7 +493,7 @@ pub const IntIntrinsics: &[Builtin] = &builtins! {
         Ok(
             get_int(env, int, "i128")?
                 .checked_ilog(base)
-                .ok_or_else(|| error_format!("Invalid base: {base}"))? as i128
+                .ok_or_else(|| error_format!("Invalid base: {base}"))? as Integer
         )
     }
     /// Transmutes `bits` into [f64]
@@ -505,7 +505,7 @@ pub const IntIntrinsics: &[Builtin] = &builtins! {
         let 2..=36 = radix else {
             Err(Error::OobIndex(radix as _, 32))?
         };
-        i128::from_str_radix(get_str(env, str)?, radix as _)
+        Integer::from_str_radix(get_str(env, str)?, radix as _)
             .map_err(|e| error_format!("{e}"))
     }
 };
@@ -560,7 +560,7 @@ pub const ArrayIntrinsics: &[Builtin] = &builtins! {
     /// Returns the length of the input list as a [ConValue::Int]
     fn len(array) @env -> i128 {
         Ok(match array.dereference_in(env)? {
-            ConValue::Array(arr) => arr.len() as i128,
+            ConValue::Array(arr) => arr.len() as Integer,
             other => Err(Error::TypeError("[_]", other.type_of(env)))?,
         })
     }
@@ -600,7 +600,7 @@ fn get_float(env: &mut Environment, value: &ConValue) -> IResult<f64> {
     Ok(f)
 }
 
-fn get_int(env: &mut Environment, value: &ConValue, ty: &'static str) -> IResult<i128> {
+fn get_int(env: &mut Environment, value: &ConValue, ty: &'static str) -> IResult<Integer> {
     let &ConValue::Int(v) = value.dereference_in(env)? else {
         return Err(Error::TypeError(ty, value.type_of(env)));
     };

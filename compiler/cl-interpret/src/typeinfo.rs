@@ -9,7 +9,7 @@ use cl_structures::intern::{
 
 use crate::{
     Callable,
-    convalue::ConValue,
+    convalue::{ConValue, Integer},
     env::Environment,
     error::{Error, IResult},
 };
@@ -24,7 +24,7 @@ pub(crate) static TYPE_INTERNER: OnceLock<LeakyInterner<Model>> = OnceLock::new(
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Model {
     /// A primitive integer ([u8], [i32], ...)
-    Integer { signed: bool, size: usize, min: i128, max: i128 },
+    Integer { signed: bool, size: usize, min: Integer, max: Integer },
     /// A float ([f32], [f64])
     Float { size: usize },
     /// A [bool]
@@ -264,7 +264,7 @@ impl Model {
             (_, "Self") => ConValue::TypeInfo(self.already_interned()),
             (&Model::Integer { signed, .. }, "SIGNED") => ConValue::Bool(signed),
             (&Model::Integer { size, .. }, "SIZE") => ConValue::Int(size as _),
-            (&Model::Integer { size, .. }, "BITS") => ConValue::Int(8 * size as i128),
+            (&Model::Integer { size, .. }, "BITS") => ConValue::Int(8 * size as Integer),
             (&Model::Integer { min, .. }, "MIN") => ConValue::Int(min),
             (&Model::Integer { max, .. }, "MAX") => ConValue::Int(max),
             (&Model::Float { size }, "SIZE") => ConValue::Int(size as _),
