@@ -10,7 +10,7 @@ use cl_ast::{
     At, Expr, Op,
     types::{Literal, Symbol},
 };
-use std::{fmt::Display, mem::take};
+use std::fmt::Display;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Place {
@@ -123,16 +123,16 @@ impl Place {
         self.projections.push(projection);
         self
     }
-    pub fn deref(mut self) -> Self {
+    pub fn deref(self) -> Self {
         self.with(Projection::Deref)
     }
-    pub fn index(mut self, idx: usize, from_end: bool) -> Self {
+    pub fn index(self, idx: usize, from_end: bool) -> Self {
         self.with(Projection::Index(idx, from_end))
     }
-    pub fn dot_idx(mut self, idx: usize) -> Self {
+    pub fn dot_idx(self, idx: usize) -> Self {
         self.with(Projection::DotIdx(idx))
     }
-    pub fn dot_sym(mut self, sym: impl Into<Symbol>) -> Self {
+    pub fn dot_sym(self, sym: impl Into<Symbol>) -> Self {
         self.with(Projection::DotSym(sym.into()))
     }
 
@@ -158,7 +158,7 @@ impl Place {
                     };
                     place.clone().index(idx, from_end).get_mut(env)?
                 }
-                (place, Projection::Index(_, _)) => Err(Error::NotIndexable())?,
+                (_place, Projection::Index(_, _)) => Err(Error::NotIndexable())?,
                 (ConValue::Struct(_, values), Projection::DotSym(sym)) => {
                     values.get_mut(sym).ok_or(Error::NotDefined(*sym))?
                 }
@@ -174,9 +174,6 @@ impl Place {
                     values.get_mut(idx).ok_or(Error::OobIndex(idx, len))?
                 }
                 (place, Projection::DotIdx(idx)) => todo!("{place}.{idx}")?,
-                (value, place) => Err(Error::Panic(format!(
-                    "Failed to match {value} against {place:?}"
-                )))?,
             }
         }
 
@@ -195,25 +192,25 @@ impl Place {
                 }
                 (ConValue::Array(arr), &Projection::Index(idx, from_end)) => {
                     let len = arr.len();
-                    let idx = if from_end { len - idx } else { idx };
+                    let idx = if from_end { len.wrapping_sub(idx) } else { idx };
                     arr.get(idx).ok_or(Error::OobIndex(idx, len))?
                 }
                 (ConValue::Slice(place, start, len), &Projection::Index(idx, from_end)) => {
-                    let idx = if from_end { len - idx } else { idx };
+                    let idx = if from_end { len.wrapping_sub(idx) } else { idx };
                     place.clone().index(start + idx, false).get(env)?
                 }
-                (place, Projection::Index(_, _)) => todo!("Index {self}")?,
+                (_place, Projection::Index(_, _)) => todo!("Index {self}")?,
                 (ConValue::Struct(_, values), Projection::DotSym(sym)) => {
                     values.get(sym).ok_or(Error::NotDefined(*sym))?
                 }
-                (place, Projection::DotSym(interned)) => todo!(".sym projection for {place}")?,
+                (place, Projection::DotSym(sym)) => todo!(".{sym} projection for {place}")?,
                 (ConValue::Tuple(values), &Projection::DotIdx(idx)) => {
                     values.get(idx).ok_or(Error::OobIndex(idx, values.len()))?
                 }
                 (ConValue::TupleStruct(_, values), &Projection::DotIdx(idx)) => {
                     values.get(idx).ok_or(Error::OobIndex(idx, values.len()))?
                 }
-                (place, Projection::DotIdx(_)) => todo!(".idx projection for {place}")?,
+                (place, Projection::DotIdx(idx)) => todo!(".{idx} projection for {place}")?,
                 (value, place) => Err(Error::Panic(format!(
                     "Failed to match {value} against {place:?}"
                 )))?,
@@ -250,7 +247,6 @@ impl Display for Place {
                     format_inner(place, rest, f)?;
                     write!(f, ".{idx}")
                 }
-                _ => unreachable!("{projections:?}"),
             }
         }
         format_inner(*place, projections, f)

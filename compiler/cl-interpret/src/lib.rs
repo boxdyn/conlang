@@ -1,7 +1,6 @@
 //! Walks a Conlang AST, interpreting it as a program.
 #![warn(clippy::all)]
 #![feature(decl_macro, rev_into_inner, string_into_chars)]
-#![expect(unused, reason = "Work in progress")]
 
 use cl_ast::types::Symbol as Sym;
 use convalue::ConValue;

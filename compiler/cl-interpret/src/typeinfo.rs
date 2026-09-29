@@ -2,10 +2,8 @@
 
 use std::{collections::HashMap, fmt::Display, sync::OnceLock};
 
-use cl_ast::{Pat, PatOp, fmt::FmtAdapter, types::Symbol};
-use cl_structures::intern::{
-    interned::Interned, leaky_interner::LeakyInterner, string_interner::StringInterner,
-};
+use cl_ast::{fmt::FmtAdapter, types::Symbol};
+use cl_structures::intern::{interned::Interned, leaky_interner::LeakyInterner};
 
 use crate::{
     Callable,
@@ -86,7 +84,7 @@ impl Display for Model {
             Self::Enum(name, items) => {
                 let mut f = f.delimit_indented(format_args!("enum {name} {{"), "\n}");
                 for (name, ty) in items {
-                    if (name.to_ref() == ty.name()) {
+                    if name.to_ref() == ty.name() {
                         write!(f, "\n{ty},")?;
                     } else {
                         write!(f, "\n{name}: {ty},")?;
@@ -157,8 +155,8 @@ impl Model {
             Self::Tuple(Some(name), ..) => name.to_ref(),
             Self::Struct(Some(name), ..) => name.to_ref(),
             Self::Enum(name, _items) => name.to_ref(),
-            Self::Ref(interned) => "&...",
-            Self::Slice(interned) => "[...]",
+            Self::Ref(_) => "&...",
+            Self::Slice(_) => "[...]",
             Self::Function => "",
             _ => "",
         }
@@ -185,11 +183,11 @@ impl Model {
             Model::Tuple(_, None, _) => None,
             Model::Struct(_, Some(parent), _, _) => Some(*parent),
             Model::Struct(_, None, _, _) => None,
-            Model::Enum(_, items) => None,
+            Model::Enum(_, _) => None,
             Model::Ref(Interned(Model::Any, ..)) => None,
             Model::Ref(ty) => Some(*ty),
             Model::Slice(Interned(Model::Any, ..)) => None,
-            Model::Slice(ty) => Some(Model::Slice(Model::Any.already_interned()).intern()),
+            Model::Slice(_) => Some(Model::Slice(Model::Any.already_interned()).intern()),
             Model::Function => None,
         }
     }
@@ -200,9 +198,7 @@ impl Model {
             Model::Tuple(_, _, typeids) if typeids.len() != values.len() => {
                 Err(Error::ArgNumber(typeids.len(), values.len()))
             }
-            Model::Tuple(_, _, typeids) => {
-                Ok(ConValue::TupleStruct(self.already_interned(), values))
-            }
+            Model::Tuple(_, _, _) => Ok(ConValue::TupleStruct(self.already_interned(), values)),
             _ => Err(Error::NotCallable(ConValue::TypeInfo(
                 self.already_interned(),
             ))),
@@ -291,7 +287,7 @@ impl Model {
                     })
                     .collect(),
             ),
-            (Model::Struct(_, _, items, exhaustive), _) => items
+            (Model::Struct(_, _, items, _), _) => items
                 .iter()
                 .find_map(|&(name, ty)| (name == attr).then_some(ConValue::TypeInfo(ty)))
                 .ok_or(Error::NotDefined(attr))?,
@@ -304,7 +300,7 @@ impl Model {
                 .find_map(|&(name, ty)| (name == attr).then_some(ConValue::TypeInfo(ty)))
                 .ok_or(Error::NotDefined(attr))?,
             (model, "super") if let Some(ty) = model.parent() => ConValue::TypeInfo(ty),
-            (model, _) => Err(Error::NotDefined(attr))?,
+            (_, _) => Err(Error::NotDefined(attr))?,
         })
     }
 }
@@ -319,7 +315,7 @@ macro make_int($T:ty, $signed: expr) {
 }
 
 impl Callable for Model {
-    fn call(&self, env: &mut Environment, args: Vec<ConValue>) -> IResult<ConValue> {
+    fn call(&self, _env: &mut Environment, args: Vec<ConValue>) -> IResult<ConValue> {
         self.make_tuple(args.into())
     }
 

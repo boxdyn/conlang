@@ -5,18 +5,15 @@ use super::{
     builtin::*,
     convalue::ConValue,
     error::{Error, IResult},
-    function::Function,
-    place::Place,
     typeinfo::{self, Model, Type},
 };
-use cl_ast::{Bind as FnDecl, fmt::FmtAdapter, types::Symbol};
-use cl_structures::{intern::interned::Interned, span::Span};
+use cl_ast::{fmt::FmtAdapter, types::Symbol};
+use cl_structures::span::Span;
 use std::{
     collections::HashMap,
     fmt::Display,
     mem::take,
     ops::{Deref, DerefMut},
-    rc::Rc,
 };
 
 /// The cooked result of [Frame::pop_values]
@@ -49,7 +46,7 @@ impl std::fmt::Display for Backtrace<'_> {
         let mut count = 0;
         for EnvFrame { name, span, .. } in self.frames.iter().rev() {
             if let (Some(name), Some(span)) = (name, span) {
-                writeln!(f, "{count:>4}: {name}")?;
+                writeln!(f, "{count:>4}: {name} [{span}]")?;
                 count += 1;
             }
         }

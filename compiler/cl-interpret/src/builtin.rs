@@ -227,9 +227,9 @@ pub const Builtins: &[Builtin] = &builtins![
         let mut stdout = stdout().lock();
         let mut out = String::from("Explicit panic: ");
         if let Err(e) = args.iter().try_for_each(|arg| write!(out, "{arg}")) {
-            writeln!(stdout, "{e}").ok();
+            let _ = writeln!(stdout, "{e}");
         }
-        writeln!(stdout, "{out}");
+        let _ = writeln!(stdout, "{out}");
         Err(Error::Panic(out))?;
         Ok(())
     }
@@ -239,9 +239,9 @@ pub const Builtins: &[Builtin] = &builtins![
         let mut stdout = stdout().lock();
         let mut out = String::from("Not yet implemented: ");
         if let Err(e) = args.iter().try_for_each(|arg| write!(out, "{arg}")) {
-            writeln!(stdout, "{e}").ok();
+            let _ = writeln!(stdout, "{e}");
         }
-        writeln!(stdout, "{out}");
+        let _ = writeln!(stdout, "{out}");
         Err(Error::Panic(out))?;
         Ok(())
     }
@@ -570,7 +570,7 @@ pub const ArrayIntrinsics: &[Builtin] = &builtins! {
 
     /// Pushes an `item` onto the top of an array (by reference)
     fn push(array_by_ref, item) @env {
-        let mut array = get_array_by_ref(env, array_by_ref)?;
+        let array = get_array_by_ref(env, array_by_ref)?;
         let mut items = std::mem::take(array).into_vec();
         items.push(item.clone());
         *array = items.into_boxed_slice();
@@ -580,7 +580,7 @@ pub const ArrayIntrinsics: &[Builtin] = &builtins! {
 
     /// Pops an item off the top of an array (by reference)
     fn pop(array_by_ref) @env -> Option<_> {
-        let mut array = get_array_by_ref(env, array_by_ref)?;
+        let array = get_array_by_ref(env, array_by_ref)?;
         let mut items = std::mem::take(array).into_vec();
         let out = items.pop();
         *array = items.into_boxed_slice();

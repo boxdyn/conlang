@@ -185,7 +185,7 @@ impl ConValue {
 
     pub fn cast(self, ty: &Model, env: &Environment) -> Self {
         match ty {
-            &Model::Integer { signed, size, min, max } => {
+            &Model::Integer { signed, size: _, min, max } => {
                 let i = match self {
                     Self::Int(v) => v,
                     Self::Float(v) => v as _,
@@ -202,7 +202,7 @@ impl ConValue {
                     ConValue::Int(i & max)
                 }
             }
-            Model::Float { size } => {
+            Model::Float { size: _ } => {
                 let f = match self {
                     Self::Float(v) => v,
                     Self::Int(v) => v as _,
@@ -219,7 +219,7 @@ impl ConValue {
                     Self::Int(v) => v as _,
                     Self::Float(v) => v as _,
                     Self::Bool(v) => v as _,
-                    Self::Char(v) => return self,
+                    Self::Char(_) => return self,
                     Self::TypeInfo(Interned(Model::Unit(_, _, d), ..)) => *d as _,
                     _ => return self,
                 };
@@ -343,16 +343,22 @@ bin_ops! {
             .get(index as usize)
             .cloned()
             .ok_or(Error::OobIndex(index as usize, arr.len()))?,
-        (ConValue::Slice(place, start, len), ConValue::Int(index)) => {
-            if (index.unsigned_abs() as usize) < len {
-                ConValue::Ref(place.index(index.unsigned_abs() as _, index < 0))
+        (ConValue::Slice(place, start, len), ConValue::Int(index)) if index > 0 => {
+            let index = start + index as usize;
+            if index < len {
+                ConValue::Ref(place.index(index, false))
             } else {
-                Err(Error::OobIndex(index.unsigned_abs() as _, len))?
+                Err(Error::OobIndex(index, len))?
             }
         }
-        (ConValue::Ref(place), ConValue::Int(index)) => ConValue::Ref(
-            place.index(index.unsigned_abs() as _, index < 0),
-        ),
+        (ConValue::Slice(place, start, len), ConValue::Int(index)) => {
+            let index = start + len - index as usize;
+            if index < len {
+                ConValue::Ref(place.index(index, false))
+            } else {
+                Err(Error::OobIndex(index - start, len - start))?
+            }
+        }
         (a, idx) => Err(Error::TypeError(format!("{}.index({idx})", a.type_of(env)), idx.type_of(env)))?,
     ]
     Ord: cmp = [
@@ -504,7 +510,7 @@ impl std::fmt::Display for ConValue {
                 let mut items = module.iter().collect::<Vec<_>>();
                 items.sort_by_key(|i| i.0);
                 for (k, v) in items {
-                    writeln!(f);
+                    writeln!(f)?;
                     write!(f.indent(), "{k}: {v},")?;
                 }
                 Ok(())

@@ -12,9 +12,9 @@ use cl_ast::{
     types::Symbol as Sym,
     visit::{Visit, Walk},
 };
-use cl_structures::{intern::interned::Interned, span::Span};
+use cl_structures::span::Span;
 use std::{
-    cell::{Ref, RefCell},
+    cell::RefCell,
     collections::{BTreeSet, HashMap},
     rc::Rc,
 };
@@ -250,7 +250,7 @@ impl Visit<'_, DefaultTypes> for Marker<'_, '_> {
 
     fn visit_pat(&mut self, item: &'_ Pat<DefaultTypes>) -> Result<(), Self::Error> {
         match item {
-            Pat::Op(PatOp::PrefixGeneric, binds) if let [bound @ .., pat] = &binds[..] => {
+            Pat::Op(PatOp::PrefixGeneric, binds) if let [.., pat] = &binds[..] => {
                 self.0.scope(|scope| {
                     scope.visit(binds)?; // Pass the bound names back to the Lifter
                     scope.user().visit(pat)
