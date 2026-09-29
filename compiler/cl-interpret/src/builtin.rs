@@ -292,15 +292,6 @@ pub const Builtins: &[Builtin] = &builtins![
         }
     }
 
-    /// Converts `string` into an array of chars
-    fn chars(string) @env -> [char] {
-        Ok(match string.dereference_in(env)? {
-            ConValue::Str(s) => ConValue::Array(s.chars().map(Into::into).collect()),
-            ConValue::String(s) => ConValue::Array(s.chars().map(Into::into).collect()),
-            _ => Err(Error::TypeError("str", string.type_of(env)))?,
-        })
-    }
-
     /// Invokes a function with the given arguments
     fn invoke(function, args) @env -> R {
         match args.take() {
@@ -553,6 +544,18 @@ pub const FloatIntrinsics: &[Builtin] = &builtins![
 ];
 
 pub const CharIntrinsics: &[Builtin] = &builtins![];
+
+pub const StringIntrinsics: &[Builtin] = &builtins![
+    /// Returns the length of the input str as a [ConValue::Int]
+    fn len(string) @env -> i128 {
+        get_str(env, string).map(|s| s.len() as Integer)
+    }
+
+    /// Converts `string` into an array of chars
+    fn chars(string) @env -> [char] {
+        Ok(ConValue::Array(get_str(env, string)?.chars().map(Into::into).collect()))
+    }
+];
 
 // TODO: BoolIntrinsics, StringIntrinsics, ArrayIntrinsics, TupleIntrinsics
 

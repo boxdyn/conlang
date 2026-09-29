@@ -104,6 +104,7 @@ impl Default for Environment {
             .add_builtins(Math)
             .add_intrinsics(Model::default_float(), FloatIntrinsics)
             .add_intrinsics(Model::default_integer(), IntIntrinsics)
+            .add_intrinsics(Model::Str.already_interned(), StringIntrinsics)
             .add_intrinsics(
                 Model::Slice(Model::Any.already_interned()).intern(),
                 ArrayIntrinsics,
