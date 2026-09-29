@@ -27,27 +27,27 @@ enum Result<T, E> { Ok(T), Err(E) };
 use Result::{Ok, Err};
 impl Result {
     fn is_ok(self: &Self) -> bool {
-        match *self {
-            Ok(_) => true;
-            Err(_) => false;
+        match self {
+            &Ok(_) => true;
+            &Err(_) => false;
         }
     }
     fn is_err(self: &Self) -> bool {
-        match *self {
-            Ok(_) => false;
-            Err(_) => true;
+        match self {
+            &Ok(_) => false;
+            &Err(_) => true;
         }
     }
     /// Maps the value inside the Result::Ok, leaving errors alone.
-    fn map<U>(self: &Self, f: fn(T) -> U) -> Result<U, E> {
-        match *self {
+    fn map<U>(&self: Self, f: fn(T) -> U) -> Result<U, E> {
+        match self {
             Ok(t) => Ok(f(t));
             Err(e) => Err(e);
         }
     }
     /// Maps the value inside the Result::Err, leaving values alone.
-    fn map_err<F>(self: &Self, f: fn(E) -> F) -> Result<T, F> {
-        match *self {
+    fn map_err<F>(&self: Self, f: fn(E) -> F) -> Result<T, F> {
+        match self {
             Ok(t) => Ok(t);
             Err(e) => Err(f(e));
         }
@@ -109,37 +109,35 @@ impl Iterator<T> {
 
     /// Consumes the Iterator, calling `f` on each item
     fn foreach(self, f: fn(T) -> ())
-        while let Some(value) = (*self).next() f(value);
+        while let Some(value) = self.next() f(value);
 
     /// Returns `true` if there is at least one value for which `f` returns `true`
     fn any_of(self, f: fn(T) -> bool)
-        while let Some(value) = (*self).next() {
+        while let Some(value) = self.next() {
             if f(value) break true
         } else false;
     
     /// Returns `true` if `f` returns `true` for all values
     fn all_of(self, f: fn(T) -> bool)
-        while let Some(value) = (*self).next() {
+        while let Some(value) = self.next() {
             if !f(value) break false
         } else true;
 
     /// Returns the first value where `f` returns true
-    fn first_where(self, f: fn(&T) -> bool) -> Option<T> {
-        while let Some(value) = (*self).next() {
+    fn first_where(self, f: fn(&T) -> bool) -> Option<T>
+        while let Some(value) = self.next() {
             if f(&value) break Some(value)
-        } else None
-    }
+        } else None;
 
     /// Folds items into the accumulator by repeatedly applying `f`.
-    fn fold<A>(self, acc: A, f: fn(A, T) -> A) -> A {
-        while let Some(value) = (*self).next() {
+    fn fold<A>(self, acc: A, f: fn(A, T) -> A) -> A
+        while let Some(value) = self.next() {
             acc = f(acc, value)
-        } else acc
-    }
+        } else acc;
 
     /// Counts the items in this iterator
     fn count(self) -> usize {
-        (*self).fold(0, |count, _| count + 1)
+        self.fold(0, |count, _| count + 1)
     }
 
     /// An Iterator which calls a function on each value
@@ -168,22 +166,22 @@ impl Iterator<T> {
 }
 
 Iterator::_derive(Iterator::Inspect, {
-    fn next(self: &Iterator::Inspect) = match (*self.0).next() {
+    fn next(self: &Iterator::Inspect) = match self.0.next() {
         Some(value) => Some((self.1)(&value); value);
         _ => None;
     }
 });
 Iterator::_derive(Iterator::Map, {
-    fn next(self: &Iterator::Map) = Some((self.1)((*self.0).next()?))
+    fn next(self: &Iterator::Map) = Some((self.1)(self.0.next()?))
 });
 Iterator::_derive(Iterator::Filter, {
     fn next(self: &Iterator::Filter) = loop {
-        let Some(value) = (*self.0).next() else break None;
+        let Some(value) = self.0.next() else break None;
         if (self.1)(value) break Some(value);
     }
 });
 Iterator::_derive(Iterator::FilterMap, {
-    fn next(self: &Iterator::FilterMap) = while let Some(value) = (*self.0).next() {
+    fn next(self: &Iterator::FilterMap) = while let Some(value) = self.0.next() {
         if let Some(value) = (self.1)(value) break Some(value);
     } else None
 });
@@ -230,7 +228,7 @@ impl RangeExc {
 }
 
 // TODO: type Array = [_];
-let Array = [].type_of();
+let Array = type_of([]);
 impl Array {
     /// An iterator over an array's contents
     struct ArrayIter(Array, RangeExc::ExclusiveIter);
@@ -256,8 +254,8 @@ impl Array {
 
     /// The wrong way to sort a million 32-bit integers
     fn sort<T>(self: &[T]) -> &[T] {
-        for i in 0..(*self).len()
-            for j in i + 1..(*self).len()
+        for i in 0..self.len()
+            for j in i + 1..self.len()
                 if self[i] > self[j]
                     self[i], self[j] = self[j], self[i];
         self
@@ -273,7 +271,7 @@ impl Array {
     /// Collects values from `iter` into a buffer
     fn collect<T>(iter: &IntoIterator<T>) -> [T] {
         let out = [];
-        let iter = (*iter).into_iter();
+        let iter = iter.into_iter();
         while let Some(value) = iter.next() out.push(value);
         out
     }
@@ -282,7 +280,7 @@ impl Array {
     ///
     /// Has `O(n^2)` time complexity.
     fn unique<T>(iter: &IntoIterator<T>) -> [T] {
-        let iter = (*iter).into_iter();
+        let iter = iter.into_iter();
         let out = [];
         while let Some(value) = iter.next() {
             for item in out {
