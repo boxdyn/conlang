@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "compiler/cl-repl",
     "compiler/cl-typeck",
     "compiler/cl-interpret",
     "compiler/cl-structures",
@@ -30,7 +29,6 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-# cl-repl = { path = "compiler/cl-repl" }
 # cl-typeck = { path = "compiler/cl-typeck" }
 cl-interpret = { path = "compiler/cl-interpret" }
 cl-structures = { path = "compiler/cl-structures" }
