@@ -1,6 +1,10 @@
 #![allow(unused_imports)]
 use crate::{Interpret, convalue::ConValue, env::Environment};
-use cl_ast::*;
+use cl_ast::{
+    desugar::while_else::{ForElseDesugar, LoopLabelDesugar, WhileElseDesugar},
+    fold::Foldable,
+    *,
+};
 use cl_lexer::Lexer;
 use cl_parser::Parser;
 pub use macros::*;
@@ -62,6 +66,11 @@ mod macros {
     /// Returns a `Result<`[`Expr`]`, ParseError>`
     pub macro expr($($t:tt)*) {
         Expr::parse(&mut Parser::new(Lexer::new("test".into(), stringify!( $($t)* ))), 0)
+            .map(|expr| {
+                expr.fold_in(&mut LoopLabelDesugar::new()).unwrap()
+                    .fold_in(&mut WhileElseDesugar).unwrap()
+                    .fold_in(&mut ForElseDesugar::new()).unwrap()
+            })
     }
 
     /// Evaluates a block of code in the given environment
