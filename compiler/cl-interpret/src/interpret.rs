@@ -4,21 +4,20 @@
 //! implemented in its current form. Namely, since no [ConValue] has a stable location, it's
 //! meaningless to get a pointer to one, and would be undefined behavior to dereference a pointer to
 //! one in any situation.
-#![expect(unused, reason = "Work in progress")]
 
 use super::*;
 use crate::{
     function::Function,
-    place::{Place, PlaceIndexIter},
+    place::Place,
     typeinfo::{Model, Type},
 };
 use cl_ast::{
     types::{Literal, Path},
     *,
 };
-use cl_structures::intern::interned::Interned;
-use std::{collections::HashMap, iter, rc::Rc, slice};
+use std::{collections::HashMap, iter, mem::take, rc::Rc};
 
+#[expect(unused, reason = "To be reintroduced later")]
 macro trace($($t:tt)*) {{
     #[cfg(debug_assertions)]
     if std::env::var("CONLANG_TRACE").is_ok() {
@@ -104,7 +103,6 @@ impl Interpret for (Op, &[At<Expr>]) {
                 ConValue::TypeInfo(ty) => value.interpret(env).map(|v| v.cast(&ty, env)),
                 other => Err(Error::TypeError("type", other.type_of(env))),
             },
-            (Op::As, [value, ty]) => cl_todo!("{value} as {ty} operator"),
             (Op::Block, []) => Ok(ConValue::Unit),
             (Op::Block, [expr]) => expr.interpret(&mut env.frame("block", Some(expr.1))),
             (Op::Array, []) => Ok(ConValue::Array(Box::new([]))),
@@ -273,7 +271,6 @@ impl Interpret for (Op, &[At<Expr>]) {
                 ConValue::Ref(place) => place.get(env).cloned(),
                 other => Ok(other),
             },
-            (Op::Deref, [expr]) => cl_todo!("Non-place dereference: *{expr}"),
 
             // Binary computation operators
             (Op::Mul, [lhs, rhs]) => lhs.interpret(env)?.mul(rhs.interpret(env)?, env),
@@ -394,7 +391,7 @@ impl Interpret for Bind<DefaultTypes> {
                         }
                         true
                     }
-                    Err(e) => false,
+                    Err(_) => false,
                 }))
             }
             (BindOp::Let, _, [scrutinee, default]) => {
@@ -421,7 +418,7 @@ impl Interpret for Bind<DefaultTypes> {
             }
             (BindOp::Type, _, []) => cl_todo!("type {pat}"),
             (BindOp::Type, _, [body]) => cl_todo!("type {pat} = {body}"),
-            (BindOp::Fn, _, [body]) => {
+            (BindOp::Fn, _, [_]) => {
                 let func = Rc::new(Function::new(self));
                 if let Some(name) = func.name() {
                     env.bind(name, ConValue::Function(func.clone()))
@@ -474,19 +471,12 @@ impl Interpret for Bind<DefaultTypes> {
                     model.intern()
                 }))
             }
-            (BindOp::Struct, Pat::Name(name), []) => {
-                let typeid = env.def_type(*name, Model::Unit(Some(*name), None, 0).intern());
-                env.bind(*name, ConValue::TypeInfo(typeid));
-                Ok(ConValue::TypeInfo(typeid))
-            }
-            (BindOp::Struct, pat, []) => cl_todo!("struct {pat}"),
             (BindOp::Enum, Pat::Name(name), []) => {
                 let typeid = env.def_type(*name, Model::Never.intern());
                 env.bind(*name, ConValue::TypeInfo(typeid));
                 Ok(ConValue::TypeInfo(typeid))
             }
             (BindOp::Enum, pat, []) => bind_enum(pat, env),
-            (BindOp::Enum, _, []) => cl_todo!("enum {pat}"),
             (BindOp::For, _, [iter, pass, fail]) => {
                 unimplemented!("`for {pat} in {iter} {pass} else {fail}` needs desugar!")
             }
@@ -601,7 +591,6 @@ impl Interpret for Path {
                 Ok(value)
             }
             [] => unimplemented!("Empty paths"),
-            _ => todo!("Extract value at {self}"),
         }
     }
 }
@@ -660,13 +649,13 @@ fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)
             (PatOp::Record, elements) => {
                 let mut members = Vec::new();
                 let mut exhaustive = true;
-                for (idx, member) in elements.iter().enumerate() {
+                for member in elements.iter() {
                     if let Pat::Op(PatOp::Rest, _) = member.value() {
                         exhaustive = false;
                         continue;
                     }
                     if let (Some(name), model) = bind_struct(member.value(), env)? {
-                        let mut ti: Option<Type> = find_interned_type(&model);
+                        let ti: Option<Type> = find_interned_type(&model);
                         members.push((name, ti.unwrap_or(env.get_type("_".into()).unwrap())));
                     }
                 }
@@ -981,7 +970,7 @@ impl Match for (PatOp, &[At<Pat>]) {
                     {
                         Err(Error::TypeError(format!("{ty}"), value_ty))?
                     }
-                    ConValue::TupleStruct(value_ty, values) => {
+                    ConValue::TupleStruct(_ty, values) => {
                         pat.matches(ConValue::Tuple(values), in_env)
                     }
                     _ => pat.matches(value, in_env),
@@ -1016,7 +1005,6 @@ impl Match for (PatOp, &[At<Pat>]) {
             (PatOp::Fn, [args, _]) => args.matches(value, in_env),
             (PatOp::Fn, _) => todo!(),
             (PatOp::Guard, [pat, At(Pat::Value(cond), ..)]) => {
-                use std::mem::{replace, take};
                 pat.matches(value, in_env)?;
                 let mut scope = in_env.env.with_frame("guard", take(in_env.bind));
                 let value = cond.interpret(&mut scope)?;
