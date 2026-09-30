@@ -321,11 +321,11 @@ fn run<'env: 't, 't>(
         // TODO: perform loop desugaring in one meta-pass
         let code = inline_modules(code)
             .fold_in(&mut LoopLabelDesugar::new())
-            .unwrap()
+            .map_err(|e| e.to_string())?
             .fold_in(&mut WhileElseDesugar)
-            .unwrap()
+            .map_err(|e| e.to_string())?
             .fold_in(&mut ForElseDesugar::new())
-            .unwrap();
+            .map_err(|e| e.to_string())?;
 
         match (inline_modules(code).interpret(env), verbose) {
             (Err(Error { span: Some(span), kind }), _) => {
