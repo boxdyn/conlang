@@ -15,7 +15,10 @@
 
 use cl_ast::{
     AstNode, At, Bind, DefaultTypes, Expr, Pat, Use,
-    desugar::type_bubbler::Bubbler,
+    desugar::{
+        type_bubbler::Bubbler,
+        while_else::{ForElseDesugar, LoopLabelDesugar, WhileElseDesugar},
+    },
     fold::Foldable,
     macro_matcher::{Match, Subst},
     visit::Walk,
@@ -315,6 +318,15 @@ fn run<'env: 't, 't>(
             }
             _ => break,
         };
+        // TODO: perform loop desugaring in one meta-pass
+        let code = inline_modules(code)
+            .fold_in(&mut LoopLabelDesugar::new())
+            .unwrap()
+            .fold_in(&mut WhileElseDesugar)
+            .unwrap()
+            .fold_in(&mut ForElseDesugar::new())
+            .unwrap();
+
         match (inline_modules(code).interpret(env), verbose) {
             (Err(Error { span: Some(span), kind }), _) => {
                 pretty_error(span, document, kind);

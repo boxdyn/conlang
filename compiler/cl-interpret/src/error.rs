@@ -27,10 +27,13 @@ impl Error {
         &self.kind
     }
 
-    pub fn catch_a_break(self, label: &'static str, or_unlabeled: bool) -> IResult<ConValue> {
+    /// Catches a `break` error.
+    ///
+    /// If the `break` broke with a label that isn't our label, it is propagated.
+    pub fn catch_a_break(self, label: &'static str) -> IResult<ConValue> {
         match self.kind {
             ErrorKind::Break(Some(broke_with), value) if broke_with == label => Ok(value),
-            ErrorKind::Break(None, value) if or_unlabeled => Ok(value),
+            ErrorKind::Break(None, value) => Ok(value),
             _ => Err(self),
         }
     }

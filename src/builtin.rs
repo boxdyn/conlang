@@ -1,5 +1,9 @@
 use crate::{inline_modules, pretty_error};
-use cl_ast::{At, Expr};
+use cl_ast::{
+    At, Expr,
+    desugar::while_else::{ForElseDesugar, LoopLabelDesugar, WhileElseDesugar},
+    fold::Foldable,
+};
 use cl_interpret::{
     builtin::builtins, convalue::ConValue, env::Environment, error::Error, interpret::Interpret,
 };
@@ -81,7 +85,12 @@ pub fn get_env() -> Environment {
             fs::write(path, data).map_err(Error::BuiltinError)
         }
     });
-    match Parser::new(Lexer::new("preamble.cl".into(), PREAMBLE)).parse::<At<Expr>>(0) {
+    match Parser::new(Lexer::new("preamble.cl".into(), PREAMBLE))
+        .parse::<At<Expr>>(0)
+        .map(|v| v.fold_in(&mut LoopLabelDesugar::new()).unwrap())
+        .map(|v| v.fold_in(&mut WhileElseDesugar).unwrap())
+        .map(|v| v.fold_in(&mut ForElseDesugar::new()).unwrap())
+    {
         Ok(code) => match code.interpret(&mut env) {
             Ok(_) => {}
             Err(Error { kind, span: Some(span) }) => pretty_error(span, PREAMBLE, kind),

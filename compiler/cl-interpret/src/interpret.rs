@@ -162,11 +162,9 @@ impl Interpret for (Op, &[At<Expr>]) {
             // Control-flow
             (Op::Macro, _) => cl_todo!("Macros are not supported in the interpreter"),
             (Op::Loop, [expr]) => loop {
-                match expr.interpret(&mut env.frame("loop", Some(expr.1))) {
+                match expr.interpret(&mut env.frame("loop_body", Some(expr.1))) {
                     Ok(_) => {}
-                    Err(e @ Error { kind: ErrorKind::Break(..), .. }) => {
-                        break e.catch_a_break("loop", true);
-                    }
+                    // `break` handeled by surrounding `Label`
                     Err(Error { kind: ErrorKind::Continue, .. }) => continue,
                     Err(e) => Err(e)?,
                 }
@@ -180,22 +178,7 @@ impl Interpret for (Op, &[At<Expr>]) {
                 fail.interpret(env)
             }
             (Op::While, [cond, pass, fail]) => {
-                loop {
-                    let mut scope = env.frame("while", Some(cond.1.merge(pass.1)));
-                    if cond.interpret(&mut scope)?.truthy(&scope)? {
-                        match pass.interpret(&mut scope) {
-                            Ok(_) => {}
-                            Err(Error { kind: ErrorKind::Continue, .. }) => continue,
-                            Err(e @ Error { kind: ErrorKind::Break(..), .. }) => {
-                                return e.catch_a_break("while", true);
-                            }
-                            Err(e) => Err(e)?,
-                        }
-                    } else {
-                        break;
-                    }
-                }
-                fail.interpret(env)
+                unimplemented!("while {cond} {pass} else {fail} needs desugar!")
             }
             (Op::Defer, [expr]) => {
                 env.defer(expr.value().clone());
@@ -388,7 +371,7 @@ impl Interpret for Label<DefaultTypes> {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self(label, expr) = self;
         expr.interpret(&mut env.frame(label.to_ref(), None))
-            .or_else(|e| e.catch_a_break(label.to_ref(), false))
+            .or_else(|e| e.catch_a_break(label.to_ref()))
     }
 }
 
@@ -505,53 +488,7 @@ impl Interpret for Bind<DefaultTypes> {
             (BindOp::Enum, pat, []) => bind_enum(pat, env),
             (BindOp::Enum, _, []) => cl_todo!("enum {pat}"),
             (BindOp::For, _, [iter, pass, fail]) => {
-                let iter: Box<dyn Iterator<Item = ConValue>> = match iter.interpret(env)? {
-                    ConValue::Array(values) | ConValue::Tuple(values) => {
-                        Box::new(values.into_iter())
-                    }
-                    ConValue::String(str) => Box::new(str.into_chars().map(ConValue::Char)),
-                    ConValue::Str(str) => Box::new(str.to_ref().chars().map(ConValue::Char)),
-                    ConValue::TupleStruct(Interned(model, ..), bounds)
-                        if model.name() == "RangeExc"
-                            && let &[ConValue::Int(start), ConValue::Int(end)] = &bounds[..] =>
-                    {
-                        Box::new((start..end).map(ConValue::Int))
-                    }
-                    ConValue::TupleStruct(Interned(model, ..), bounds)
-                        if model.name() == "RangeInc"
-                            && let &[ConValue::Int(start), ConValue::Int(end)] = &bounds[..] =>
-                    {
-                        Box::new((start..=end).map(ConValue::Int))
-                    }
-                    ConValue::Ref(place) => match place.get(env)? {
-                        ConValue::Array(a) => {
-                            Box::new(PlaceIndexIter::index(place, 0, a.len()).map(ConValue::Ref))
-                        }
-                        ConValue::Tuple(a) | ConValue::TupleStruct(_, a) => {
-                            Box::new(PlaceIndexIter::dot_idx(place, 0, a.len()).map(ConValue::Ref))
-                        }
-                        item => todo!("Iterate over references to {item}")?,
-                    },
-                    ConValue::Slice(p, start, end) => {
-                        Box::new(PlaceIndexIter::index(p.clone(), start, end).map(ConValue::Ref))
-                    }
-                    _ => Err(Error::NotIterable())?,
-                };
-                for item in iter {
-                    let mut bind = HashMap::new();
-                    pat.matches(item, &mut MatchEnv::new(env, &mut bind))?;
-
-                    let mut scope = env.with_frame("for-loop", bind);
-                    match pass.interpret(&mut scope) {
-                        Ok(_) => {}
-                        Err(e @ Error { kind: ErrorKind::Break(..), .. }) => {
-                            return e.catch_a_break("for", true);
-                        }
-                        Err(Error { kind: ErrorKind::Continue, .. }) => continue,
-                        Err(e) => Err(e)?,
-                    }
-                }
-                fail.interpret(env)
+                unimplemented!("`for {pat} in {iter} {pass} else {fail}` needs desugar!")
             }
             _ => cl_unimplemented!("{self}"),
         }
