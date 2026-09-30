@@ -141,72 +141,45 @@ impl<A: AstTypes> Fold<A, A> for ForElseDesugar<A> {
         let fail = parts.pop().unwrap();
         let pass = parts.pop().unwrap();
         let iter = parts.pop().unwrap();
+        let pat_span = pat.1;
+        let fail_span = fail.1;
+        let iter_span = iter.1;
+
+        // into_iter := iter.into_iter()
+        let into_iter = Expr::Id::<A>(self.into_iter.clone()).at(iter_span);
+        let iter_args = Expr::Op(Op::Tuple, vec![]).at(iter_span);
+        let call_iter = Expr::Op(Op::Call, vec![into_iter, iter_args]).at(iter_span);
+        let into_iter = Expr::Op(Op::Dot, vec![iter, call_iter]).at(iter_span);
+
+        // iter_next := $iter.next()
+        let iter = Expr::Id::<A>(self.object_path.clone()).at(iter_span);
+        let next = Expr::Id::<A>(self.next.clone()).at(iter_span);
+        let next_args = Expr::Op(Op::Tuple, vec![]).at(iter_span);
+        let call_next = Expr::Op(Op::Call, vec![next, next_args]).at(iter_span);
+        let iter_next = Expr::Op(Op::Dot, vec![iter, call_next]).at(iter_span);
+
+        // some_pat := Some(pat)
+        let some = Expr::Id::<A>(self.option_some.clone()).at(pat_span);
+        let some = Pat::Value(Box::new(some)).at(pat_span);
+        let some_pat = Pat::Op(PatOp::Tuple, vec![pat]).at(pat_span);
+        let some_pat = Pat::Op(PatOp::TypePrefixed, vec![some, some_pat]).at(pat_span);
+
+        // cond := let Some(pat) = $iter.next()
+        let cond = Bind(BindOp::Let, some_pat, vec![iter_next]);
+        let cond = Expr::Bind(cond.into()).at(span);
 
         // fail := break fail
-        let fail_span = fail.1;
-        let fail = Expr::Op(Op::Break, vec![fail]);
+        let fail = Expr::Op(Op::Break, vec![fail]).at(fail_span);
 
-        let iter_span = iter.1;
-        // iter := into_iter()
-        let into_iter = Expr::Op(
-            Op::Call,
-            vec![
-                Expr::Id::<A>(self.into_iter.clone()).at(iter_span),
-                Expr::Op(Op::Tuple, vec![]).at(iter_span),
-            ],
-        );
-        // iter := iter.into_iter()
-        let into_iter = Expr::Op(Op::Dot, vec![iter, into_iter.at(iter_span)]);
-
-        // body := next()
-        let body = Expr::Op(
-            Op::Call,
-            vec![
-                Expr::Id::<A>(self.next.clone()).at(iter_span),
-                Expr::Op(Op::Tuple, vec![]).at(iter_span),
-            ],
-        );
-        // body := $iter.next()
-        let body = Expr::Op(
-            Op::Dot,
-            vec![
-                Expr::Id::<A>(self.object_path.clone()).at(iter_span),
-                body.at(iter_span),
-            ],
-        );
-
-        // pat := Some(pat)
-        let pat_span = pat.1;
-        let pat = Pat::Op(
-            PatOp::TypePrefixed,
-            vec![
-                Pat::Value(Box::new(
-                    Expr::Id::<A>(self.option_some.clone()).at(pat_span),
-                ))
-                .at(pat_span),
-                Pat::Op(PatOp::Tuple, vec![pat]).at(pat_span),
-            ],
-        );
-
-        // body := let Some(pat) = $iter.next()
-        let body = Bind(BindOp::Let, pat.at(pat_span), vec![body.at(iter_span)]);
         // body := if let Some(pat) = $iter.next() Pass else break Fail
-        let body = Expr::Op(
-            Op::If,
-            vec![Expr::Bind(body.into()).at(span), pass, fail.at(fail_span)],
-        );
-        // body := loop (if let Some(pat) = ...)
-        let body = Expr::Op(Op::Loop, vec![body.at(span)]);
+        let body = Expr::Op(Op::If, vec![cond, pass, fail]).at(span);
+        // body := loop (if let Some(pat) = $iter.next() Pass else break Fail)
+        let body = Expr::Op(Op::Loop, vec![body]).at(span);
 
-        // iter := match iter.into_iter() { $iter => (loop if let ...); }
-        let iter = Match(
-            into_iter.at(iter_span),
-            vec![MatchArm(
-                Pat::Name::<A>(self.object_symbol).at(iter_span),
-                body.at(span),
-            )],
-        );
+        // mtch := match iter.into_iter() { $iter => (loop if let ...); }
+        let iter_pat = Pat::Name::<A>(self.object_symbol).at(iter_span);
+        let mtch = Match(into_iter, vec![MatchArm(iter_pat, body)]);
 
-        Ok(Expr::Match(iter.into()).at(span))
+        Ok(Expr::Match(mtch.into()).at(span))
     }
 }
