@@ -19,7 +19,7 @@ fn radix_by_chars(stream: &fn(char), n: i128, radix: i64) {
 }
 
 fn format_bool(stream: &fn(char), arg: bool) = {
-    for c in if arg "true" else "false" stream(c);
+    for c in (if arg "true" else "false").chars() stream(c);
 }
 
 /// Base formatting functionality: outputs a formatted char sequence,
@@ -36,7 +36,7 @@ fn vformat(stream: &fn(char), format: str, args: (..)) {
         Some('%') => match take() {
             Some('%') => stream('%');
             // TODO: float formatting
-            Some('s') => for c in (arg() as str) stream(c);
+            Some('s') => for c in (arg() as str).chars() stream(c);
             Some('c') => stream(arg() as char);
             Some('i') => radix_by_chars(stream, arg() as i64, 10);
             Some('u') => radix_by_chars(stream, arg() as u64, 10);
