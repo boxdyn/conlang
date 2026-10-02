@@ -50,20 +50,20 @@ color slate start="#!\[" end="\]"
 color slate start="#\[" end="\]"
 
 # numbers
-color italic,orange "0(x[0-9A-Fa-f]+|d[0-9]+|o[0-7]+|b[01]+|~[0-9A-Za-z]+)|[0-9]+"
+color orange "0(x[0-9A-Fa-f]+|d[0-9]+|o[0-7]+|b[01]+|~[0-9A-Za-z]+)|[0-9]+"
 
 # identifiers
 color italic,lightcyan "\<[a-z_][[:alnum:]_]*\>"
 color white "\<_\>"
 
-# constants
-color bold,cyan "\<[A-Z][A-Z0-9_]+\>"
-
 # function definitions
 color cyan "fn\s+(r')?[a-z_][[:alnum:]_]*\>"
 
 # enums/structs/types/etc.
-color bold,sky "\<[A-Z][a-z0-9][A-Za-z0-9]*\>"
+color bold,sky "\<[A-Z][a-z0-9]?[[:alnum:]]*\>"
+
+# constants
+color bold,blue "\<[A-Z][A-Z0-9_]+\>"
 
 # keyword-types
 color bold,sky "\<([iuf](8|16|32|64|128|size)|u?int|bool|char|str)\>"
