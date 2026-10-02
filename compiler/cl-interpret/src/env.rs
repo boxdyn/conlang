@@ -97,15 +97,13 @@ impl Default for Environment {
             let value = this.def_type(ident.into(), model.intern());
             this.bind(ident, ConValue::TypeInfo(value));
         }
+        let slice_or_array = Model::Slice(Model::Any.already_interned()).intern();
         this.add_builtins(Builtins)
             .add_builtins(Math)
-            .add_intrinsics(Model::default_float(), FloatIntrinsics)
-            .add_intrinsics(Model::default_integer(), IntIntrinsics)
-            .add_intrinsics(Model::Str.already_interned(), StringIntrinsics)
-            .add_intrinsics(
-                Model::Slice(Model::Any.already_interned()).intern(),
-                ArrayIntrinsics,
-            );
+            .add_methods(Model::default_float(), FloatMethods)
+            .add_methods(Model::default_integer(), IntMethods)
+            .add_methods(Model::Str.already_interned(), StringMethods)
+            .add_methods(slice_or_array, ArrayMethods);
         this
     }
 }
@@ -225,7 +223,7 @@ impl Environment {
     }
 
     /// Adds "intrinsics" (associated builtin functions) to a [Type]
-    pub fn add_intrinsics(&mut self, ty: Type, builtins: &'static [Builtin]) -> &mut Self {
+    pub fn add_methods(&mut self, ty: Type, builtins: &'static [Builtin]) -> &mut Self {
         for builtin in builtins {
             self.implement(ty, builtin.name, builtin.into());
         }

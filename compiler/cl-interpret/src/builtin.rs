@@ -12,6 +12,7 @@ use crate::{
 };
 use std::{
     io::{Write, stdout},
+    mem::take,
     vec,
 };
 
@@ -198,7 +199,7 @@ pub const Builtins: &[Builtin] = &builtins![
     /// Debug-prints the argument, returning a copy
     fn dbg(arg) @env -> arg {
         println!("{:?}", arg.dereference_in(env)?);
-        Ok(arg.clone())
+        Ok(arg.take())
     }
 
     /// Debug-prints the argument
@@ -212,7 +213,7 @@ pub const Builtins: &[Builtin] = &builtins![
     /// bypassing identifiers entirely.
     fn bind(name, value) @env {
         let name = Symbol::from(get_str(env, name)?);
-        env.bind(name, value.clone());
+        env.bind(name, value.take());
         Ok(())
     }
 
@@ -287,7 +288,7 @@ pub const Builtins: &[Builtin] = &builtins![
 
     fn slice(ConValue::Ref(index), ConValue::Int(start), ConValue::Int(end)) -> [_] {
         match (*start, *end) {
-            (0.., 0..) if start <= end => Ok(ConValue::Slice(index.clone(), *start as _, (*end - *start) as _)),
+            (0.., 0..) if start <= end => Ok(ConValue::Slice(take(index), *start as _, (*end - *start) as _)),
             _ => Err(error_format!("Bad index: {index}[{start}, {end}]"))
         }
     }
@@ -385,43 +386,43 @@ pub const Builtins: &[Builtin] = &builtins![
 
 pub const Math: &[Builtin] = &builtins![
     /// Multiplication `a * b`
-    fn mul(lhs, rhs) @env -> Self { lhs.clone().mul(rhs.clone(), env) }
+    fn mul(lhs, rhs) @env -> Self { lhs.take().mul(rhs.take(), env) }
 
     /// Division `a / b`
-    fn div(lhs, rhs) @env -> Self { lhs.clone().div(rhs.clone(), env) }
+    fn div(lhs, rhs) @env -> Self { lhs.take().div(rhs.take(), env) }
 
     /// Remainder `a % b`
-    fn rem(lhs, rhs) @env -> Self { lhs.clone().rem(rhs.clone(), env) }
+    fn rem(lhs, rhs) @env -> Self { lhs.take().rem(rhs.take(), env) }
 
     /// Addition `a + b`
-    fn add(lhs, rhs) @env -> Self { lhs.clone().add(rhs.clone(), env) }
+    fn add(lhs, rhs) @env -> Self { lhs.take().add(rhs.take(), env) }
 
     /// Subtraction `a - b`
-    fn sub(lhs, rhs) @env -> Self { lhs.clone().sub(rhs.clone(), env) }
+    fn sub(lhs, rhs) @env -> Self { lhs.take().sub(rhs.take(), env) }
 
     /// Shift Left `a << b`
-    fn shl(lhs, rhs) @env -> Self { lhs.clone().shl(rhs.clone(), env) }
+    fn shl(lhs, rhs) @env -> Self { lhs.take().shl(rhs.take(), env) }
 
     /// Shift Right `a >> b`
-    fn shr(lhs, rhs) @env -> Self { lhs.clone().shr(rhs.clone(), env) }
+    fn shr(lhs, rhs) @env -> Self { lhs.take().shr(rhs.take(), env) }
 
     /// Bitwise And `a & b`
-    fn and(lhs, rhs) @env -> Self { lhs.clone().and(rhs.clone(), env) }
+    fn and(lhs, rhs) @env -> Self { lhs.take().and(rhs.take(), env) }
 
     /// Bitwise Or `a | b`
-    fn or(lhs, rhs) @env -> Self { lhs.clone().or(rhs.clone(), env) }
+    fn or(lhs, rhs) @env -> Self { lhs.take().or(rhs.take(), env) }
 
     /// Bitwise Exclusive Or `a ^ b`
-    fn xor(lhs, rhs) @env -> Self { lhs.clone().xor(rhs.clone(), env) }
+    fn xor(lhs, rhs) @env -> Self { lhs.take().xor(rhs.take(), env) }
 
     /// Negates the ConValue
-    fn neg(tail) @env -> Self { tail.clone().neg(env) }
+    fn neg(tail) @env -> Self { tail.take().neg(env) }
 
     /// Inverts the ConValue
-    fn not(tail) @env -> Self { tail.clone().not(env) }
+    fn not(tail) @env -> Self { tail.take().not(env) }
 
     /// Compares two values
-    fn cmp(head, tail) @env { Ok(head.compare(tail, env)? as Integer) }
+    fn cmp(head, tail) @env { head.compare(tail, env) }
 
     /// Does the opposite of `&`
     fn deref(tail) @env -> _ {
@@ -436,7 +437,8 @@ pub const Math: &[Builtin] = &builtins![
     }
 ];
 
-pub const IntIntrinsics: &[Builtin] = &builtins! {
+/// Associated [Builtin] functions for [ConValue::Int]s
+pub const IntMethods: &[Builtin] = &builtins! {
     /// Computes `int` to the `power`th power
     fn pow(int, power) @env -> i128 {
         Ok(get_int(env, int, "i128")?.wrapping_pow(get_int(env, power, "i128")? as _))
@@ -501,7 +503,8 @@ pub const IntIntrinsics: &[Builtin] = &builtins! {
     }
 };
 
-pub const FloatIntrinsics: &[Builtin] = &builtins![
+/// Associated [Builtin] functions for [ConValue::Float]s
+pub const FloatMethods: &[Builtin] = &builtins![
     /// Transmutes `float` into [u64]
     fn to_bits(float) @env -> u64 {
         Ok(ConValue::Int(get_float(env, float)?.to_bits() as _))
@@ -543,9 +546,11 @@ pub const FloatIntrinsics: &[Builtin] = &builtins![
     }
 ];
 
-pub const CharIntrinsics: &[Builtin] = &builtins![];
+/// Associated [Builtin] functions for [ConValue::Char]s
+pub const CharMethods: &[Builtin] = &builtins![];
 
-pub const StringIntrinsics: &[Builtin] = &builtins![
+/// Associated [Builtin] functions for [ConValue::Str]s and [ConValue::String]s
+pub const StringMethods: &[Builtin] = &builtins![
     /// Returns the length of the input str as a [ConValue::Int]
     fn len(string) @env -> i128 {
         get_str(env, string).map(|s| s.len() as Integer)
@@ -557,9 +562,10 @@ pub const StringIntrinsics: &[Builtin] = &builtins![
     }
 ];
 
-// TODO: BoolIntrinsics, StringIntrinsics, ArrayIntrinsics, TupleIntrinsics
+// TODO: BoolMethods, TupleMethods
 
-pub const ArrayIntrinsics: &[Builtin] = &builtins! {
+/// Associated [Builtin] functions for [ConValue::Array] and [ConValue::Slice]
+pub const ArrayMethods: &[Builtin] = &builtins! {
     /// Returns the length of the input list as a [ConValue::Int]
     fn len(array) @env -> i128 {
         Ok(match array.dereference_in(env)? {
@@ -572,7 +578,7 @@ pub const ArrayIntrinsics: &[Builtin] = &builtins! {
     fn push(array_by_ref, item) @env {
         let array = get_array_by_ref(env, array_by_ref)?;
         let mut items = std::mem::take(array).into_vec();
-        items.push(item.clone());
+        items.push(item.take());
         *array = items.into_boxed_slice();
 
         Ok(ConValue::Unit)
@@ -590,7 +596,7 @@ pub const ArrayIntrinsics: &[Builtin] = &builtins! {
 
     fn slice(ConValue::Ref(index), ConValue::Int(start), ConValue::Int(end)) -> [_] {
         match (*start, *end) {
-            (0.., 0..) if start <= end => Ok(ConValue::Slice(index.clone(), *start as _, (*end - *start) as _)),
+            (0.., 0..) if start <= end => Ok(ConValue::Slice(take(index), *start as _, (*end - *start) as _)),
             _ => Err(error_format!("Bad index: {index}[{start}, {end}]"))
         }
     }
