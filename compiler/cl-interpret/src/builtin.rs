@@ -547,7 +547,13 @@ pub const FloatMethods: &[Builtin] = &builtins![
 ];
 
 /// Associated [Builtin] functions for [ConValue::Char]s
-pub const CharMethods: &[Builtin] = &builtins![];
+pub const CharMethods: &[Builtin] = &builtins![
+    fn is_ascii(c) @env -> bool { get_char(env, c).map(|c| c.is_ascii()) }
+    fn is_numeric(c) @env  -> bool{ get_char(env, c).map(|c| c.is_numeric()) }
+    fn is_alphabetic(c) @env -> bool { get_char(env, c).map(|c| c.is_alphabetic()) }
+    fn is_alphanumeric(c) @env -> bool { get_char(env, c).map(|c| c.is_alphanumeric()) }
+    fn is_whitespace(c) @env  -> bool{ get_char(env, c).map(|c| c.is_whitespace()) }
+];
 
 /// Associated [Builtin] functions for [ConValue::Str]s and [ConValue::String]s
 pub const StringMethods: &[Builtin] = &builtins![
@@ -612,6 +618,13 @@ fn get_float(env: &mut Environment, value: &ConValue) -> IResult<f64> {
 fn get_int(env: &mut Environment, value: &ConValue, ty: &'static str) -> IResult<Integer> {
     let &ConValue::Int(v) = value.dereference_in(env)? else {
         return Err(Error::TypeError(ty, value.type_of(env)));
+    };
+    Ok(v)
+}
+
+fn get_char(env: &mut Environment, value: &ConValue) -> IResult<char> {
+    let &ConValue::Char(v) = value.dereference_in(env)? else {
+        return Err(Error::TypeError("char", value.type_of(env)));
     };
     Ok(v)
 }
