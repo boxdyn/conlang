@@ -38,8 +38,14 @@ pub fn get_env() -> Environment {
             }
         }
 
-        /// Puts a single character, flushing stdout
+        /// Puts a single character without flushing stdout
         fn putchar(ConValue::Char(c)) {
+            let _ = stdout().write(c.encode_utf8(&mut [0;4]).as_bytes());
+            Ok(ConValue::Unit)
+        }
+
+        /// Puts a single character, flushing stdout
+        fn putchar_unbuffered(ConValue::Char(c)) {
             let mut stdout = stdout().lock();
             let _ = write!(stdout, "{c}");
             let _ = stdout.flush();
