@@ -116,7 +116,7 @@ impl Iterator<T> {
         while let Some(value) = self.next() {
             if f(value) break true
         } else false;
-    
+
     /// Returns `true` if `f` returns `true` for all values
     fn all_of(self, f: fn(T) -> bool)
         while let Some(value) = self.next() {
@@ -212,7 +212,7 @@ impl RangeInc {
             Some(out)
         }
     });
-    
+
     fn into_iter(&RangeInc(start, end)) = RangeInc::InclusiveIter(start, end);
 }
 impl RangeExc {
@@ -275,7 +275,7 @@ impl Array {
         while let Some(value) = iter.next() out.push(value);
         out
     }
-    
+
     /// Returns a list of unique elements in `values`.
     ///
     /// Has `O(n^2)` time complexity.
