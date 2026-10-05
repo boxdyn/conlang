@@ -34,9 +34,9 @@ enum Brainfuck {
     Jnz(usize),
 }
 
-fn compile(program: str) {
+fn compile(program: str) -> [Brainfuck] {
     let stack, fucks = [], [];
-    for c in program fucks.join(match c {
+    for c in program.chars() fucks.join(match c {
         '>' => Brainfuck::Right(1);
         '<' => Brainfuck::Left(1);
         '+' => Brainfuck::Inc(1);
@@ -87,9 +87,9 @@ fn run(fucks: &[Brainfuck], ..input: [char]) {
         Brainfuck::Inc(n) => tape[head] = (tape[head] + n) as u8;
         Brainfuck::Dec(n) => tape[head] = (tape[head] - n) as u8;
         Brainfuck::Out(n) => for _ in 0..n putchar(tape[head] as char);
-        Brainfuck::In => match input {
-            [] => tape[head] = 0;
-            [first, ..rest] => (tape[head] = first as u8; input = rest);
+        Brainfuck::In => tape[head] = loop match input {
+            [] => (input = get_line("  , ").chars(); input.push('\0'));
+            [first, ..rest] => (input = rest; break first as u8);
         }
         Brainfuck::Jz(goto) => if tape[head] == 0 { pc = goto }
         Brainfuck::Jnz(goto) => if tape[head] != 0 { pc = goto }
