@@ -7,6 +7,7 @@
 
 // Note: module inlining is NOT performed for this file.
 
+mod preamble {
 enum Option<T> { Some(T), None };
 use Option::{Some, None};
 impl Option {
@@ -183,22 +184,6 @@ Iterator::_derive(Iterator::FilterMap, {
     } else None
 });
 
-mod _ {
-    struct unstable_metaprogramming;
-    impl unstable_metaprogramming {
-        // TODO: give enums a parental relation
-        const fn enum_impl(Enum) {
-            for Variant in Enum::VARIANTS
-                for key, value in Enum.module().mod_into_binds()
-                    impl Variant { let Self = Enum; bind(key, value) }
-        }
-        const fn spread(Type, types: [_]) {
-            for ty in types
-                for key, value in Type.module().mod_into_binds()
-                    impl ty { bind(key, value) }
-        }
-    }
-}
 
 impl RangeInc {
     struct InclusiveIter(usize, usize);
@@ -289,6 +274,20 @@ impl Array {
 }
 
 // TODO: Remove this when name resolution isn't fake
+struct unstable_metaprogramming;
+impl unstable_metaprogramming {
+    // TODO: give enums a parental relation
+    const fn enum_impl(Enum) {
+        for Variant in Enum::VARIANTS
+            for key, value in Enum.module().mod_into_binds()
+                impl Variant { let Self = Enum; bind(key, value) }
+    }
+    const fn spread(Type, types: [_]) {
+        for ty in types
+            for key, value in Type.module().mod_into_binds()
+                impl ty { bind(key, value) }
+    }
+}
 unstable_metaprogramming::enum_impl(Option);
 unstable_metaprogramming::enum_impl(Result);
 unstable_metaprogramming::spread(f64, [f32]);
@@ -366,3 +365,5 @@ pub fn bin(n: u128) {
 
 /// Returns a shark
 pub fn shark() = '\u{1f988}';
+}
+use preamble::*;
