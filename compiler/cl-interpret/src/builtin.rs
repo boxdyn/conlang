@@ -6,7 +6,7 @@ use cl_ast::types::Symbol;
 use crate::{
     Callable,
     convalue::{ConValue, Integer},
-    env::Environment,
+    env::{Environment, Location},
     error::{Error, ErrorKind, IResult},
     place::Place,
 };
@@ -219,7 +219,7 @@ pub const Builtins: &[Builtin] = &builtins![
 
     /// Constructs a reference from a raw integer
     fn raw_ref(ConValue::Int(index)) -> &_ {
-        Ok(ConValue::Ref(Place::from_index(*index as _)))
+        Ok(ConValue::Ref(Place::from_index(Location::Stack(*index as _))))
     }
 
     /// Panics, with a message created by formatting `args` (as if by `fmt`)
@@ -266,7 +266,7 @@ pub const Builtins: &[Builtin] = &builtins![
     fn builtins() @env {
         let len = env.globals().binds.len();
         for builtin in 0..len {
-            if let Some(value @ ConValue::Builtin(_)) = env.get_id(builtin) {
+            if let Some(value @ ConValue::Builtin(_)) = env.get_id(Location::Stack(builtin as _)) {
                 println!("{builtin}: {value}")
             }
         }

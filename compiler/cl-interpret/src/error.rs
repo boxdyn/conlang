@@ -3,7 +3,7 @@
 use cl_ast::{Pat, types::Symbol};
 use cl_structures::span::Span;
 
-use crate::typeinfo::Type;
+use crate::{env::Location, typeinfo::Type};
 
 use super::convalue::ConValue;
 
@@ -59,8 +59,8 @@ impl Error {
         Self { kind: ErrorKind::Continue, span: None }
     }
     /// Indexed out of bounds in the stack
-    pub fn StackOob(place: usize) -> Self {
-        Self { kind: ErrorKind::StackOob(place), span: None }
+    pub fn LocationOob(place: Location) -> Self {
+        Self { kind: ErrorKind::LocationOob(place), span: None }
     }
     /// Exited the last scope
     pub fn ScopeExit() -> Self {
@@ -144,7 +144,7 @@ pub enum ErrorKind {
     /// Continue to the next iteration of a loop
     Continue,
     /// Overflowed the stack
-    StackOob(usize),
+    LocationOob(Location),
     /// Exited the last scope
     ScopeExit,
     /// Type incompatibility
@@ -185,8 +185,8 @@ impl std::fmt::Display for ErrorKind {
             ErrorKind::Break(None, value) => write!(f, "break {value}"),
             ErrorKind::BadBreak(value) => write!(f, "rogue break: {value}"),
             ErrorKind::Continue => "continue".fmt(f),
-            ErrorKind::StackOob(id) => {
-                write!(f, "Out of bounds access of stack entry <{id}>.")
+            ErrorKind::LocationOob(id) => {
+                write!(f, "Out of bounds access of {id:?}.")
             }
             ErrorKind::ScopeExit => "Exited the last scope. This is a logic bug.".fmt(f),
             ErrorKind::TypeError(want, got) => {

@@ -2,7 +2,7 @@
 use crate::{
     Callable,
     convalue::ConValue,
-    env::Environment,
+    env::{Environment, Location},
     error::{Error, ErrorKind, IResult},
     interpret::{Interpret, todo},
 };
@@ -14,7 +14,7 @@ use std::fmt::Display;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Place {
-    place: usize,
+    place: Location,
     projections: Vec<Projection>,
 }
 
@@ -115,7 +115,7 @@ impl Place {
         new
     }
 
-    pub fn from_index(index: usize) -> Self {
+    pub fn from_index(index: Location) -> Self {
         Self { place: index, projections: vec![] }
     }
 
@@ -138,7 +138,9 @@ impl Place {
 
     pub fn get_mut<'e>(&self, env: &'e mut Environment) -> IResult<&'e mut ConValue> {
         let Self { place, projections } = self;
-        let mut place = env.get_id_mut(*place).ok_or(Error::StackOob(*place as _))?;
+        let mut place = env
+            .get_id_mut(*place)
+            .ok_or(Error::LocationOob(*place as _))?;
 
         for projection in projections {
             place = match (place, projection) {
@@ -182,7 +184,7 @@ impl Place {
 
     pub fn get<'e>(&self, env: &'e Environment) -> IResult<&'e ConValue> {
         let Self { place, projections } = self;
-        let mut value = env.get_id(*place).ok_or(Error::StackOob(*place as _))?;
+        let mut value = env.get_id(*place).ok_or(Error::LocationOob(*place as _))?;
 
         for projection in projections {
             value = match (value, projection) {
@@ -225,12 +227,12 @@ impl Display for Place {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self { place, projections } = self;
         fn format_inner(
-            place: usize,
+            place: Location,
             projections: &[Projection],
             f: &mut std::fmt::Formatter<'_>,
         ) -> std::fmt::Result {
             match projections {
-                [] => place.fmt(f),
+                [] => write!(f, "{place:?}"),
                 [first @ .., Projection::Deref] => {
                     "*".fmt(f)?;
                     format_inner(place, first, f)

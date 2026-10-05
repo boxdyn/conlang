@@ -1,6 +1,7 @@
 //! Represents a [block of code](Function) which lives inside the Interpreter
 
 use crate::{
+    env::Location,
     error::ErrorKind,
     interpret::{Match, MatchEnv},
     typeinfo::Type,
@@ -20,7 +21,7 @@ use std::{
     rc::Rc,
 };
 
-type Upvars = HashMap<Sym, usize>;
+type Upvars = HashMap<Sym, Location>;
 
 #[derive(Clone, Debug)]
 pub struct FnInner {
@@ -90,7 +91,9 @@ impl Function {
                 let Ok(id) = env.id_of(name) else {
                     continue;
                 };
-                if id >= frame_top {
+                if let Location::Stack(id) = id
+                    && id as usize >= frame_top
+                {
                     continue;
                 }
                 self_upvars.entry(name).or_insert(id);

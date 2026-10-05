@@ -20,7 +20,7 @@ use std::{
 pub type StackFrame = HashMap<Symbol, ConValue>;
 
 /// The raw binds of an [EnvFrame]
-pub type StackBinds = HashMap<Symbol, usize>;
+pub type StackBinds = HashMap<Symbol, Location>;
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct EnvFrame {
@@ -56,6 +56,18 @@ impl std::fmt::Display for Backtrace<'_> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Location {
+    Stack(u32),
+    Globals(u32),
+}
+
+impl Default for Location {
+    fn default() -> Self {
+        Self::Stack(0)
+    }
+}
+
 /// Implements a nested lexical scope
 #[derive(Clone, Debug)]
 pub struct Environment {
@@ -78,14 +90,19 @@ impl Display for Environment {
             let mut binds: Vec<_> = binds.iter().collect();
             binds.sort_by_key(|(_, a)| *a);
             for (name, idx) in binds {
-                let mut f = f.indent();
-                writeln!(f, "{idx:4} {name}:")?;
-                match self.values.get(*idx) {
-                    Some(ConValue::TypeInfo(t)) => writeln!(f, "type {t}"),
-                    Some(ConValue::Function(v)) => writeln!(f, "fn {}", v.pat()),
-                    Some(value) => writeln!(f, "{value}"),
-                    None => writeln!(f, "ERROR: {name}'s address blows the stack!"),
-                }?
+                match idx {
+                    Location::Stack(idx) => {
+                        let mut f = f.indent();
+                        writeln!(f, "{idx:4} {name}:")?;
+                        match self.values.get(*idx as usize) {
+                            Some(ConValue::TypeInfo(t)) => writeln!(f, "type {t}"),
+                            Some(ConValue::Function(v)) => writeln!(f, "fn {}", v.pat()),
+                            Some(value) => writeln!(f, "{value}"),
+                            None => writeln!(f, "ERROR: {name}'s address blows the stack!"),
+                        }?
+                    }
+                    Location::Globals(_) => todo!("Globals!"),
+                }
             }
         }
         Ok(())
@@ -153,7 +170,7 @@ impl Environment {
     }
 
     /// Binds a `name` to a raw `id` value in the current scope
-    pub fn bind_raw(&mut self, name: Symbol, id: usize) -> Option<()> {
+    pub fn bind_raw(&mut self, name: Symbol, id: Location) -> Option<()> {
         let EnvFrame { name: _, span: _, base: _, binds, module: _, defer: _ } =
             self.frames.last_mut()?;
         binds.insert(name, id);
@@ -269,7 +286,7 @@ impl Environment {
     pub fn with_raw_frame<'e>(
         &'e mut self,
         name: &'static str,
-        frame: &HashMap<Symbol, usize>,
+        frame: &HashMap<Symbol, Location>,
         module: Option<Type>,
     ) -> Frame<'e> {
         let mut scope = self.frame(name, None, module);
@@ -285,21 +302,25 @@ impl Environment {
     pub fn get(&self, name: Symbol) -> IResult<ConValue> {
         // TODO: Limit stack depth to 32 bits
         // TODO: Separate "globals" (including module-scoped items) from stack
-        self.id_of(name)
-            .and_then(|id| self.values.get(id).ok_or(Error::NotDefined(name)))
-            .cloned()
-            .or_else(|e| {
-                self.get_module()
-                    .ok_or(e)
-                    .and_then(|ty| self.get_impl(ty, name))
-            })
+        let id = self.id_of(name)?;
+        match id {
+            Location::Stack(id) => self.values.get(id as usize).ok_or(Error::NotDefined(name)),
+            Location::Globals(_) => todo!(),
+        }
+        .cloned()
+        .or_else(|e| {
+            self.get_module()
+                .ok_or(e)
+                .and_then(|ty| self.get_impl(ty, name))
+        })
+
         // let id = self.id_of(name)?;
         // let res = self.values.get(id);
         // Ok(res.ok_or(Error::NotDefined(name))?.clone())
     }
 
     /// Resolves the index associated with a [Symbol]
-    pub fn id_of(&self, name: Symbol) -> IResult<usize> {
+    pub fn id_of(&self, name: Symbol) -> IResult<Location> {
         for EnvFrame { binds, .. } in self.frames.iter().rev() {
             if let Some(id) = binds.get(&name).copied() {
                 return Ok(id);
@@ -309,13 +330,19 @@ impl Environment {
     }
 
     /// Returns a shared reference to the `id`'s record, if it exists.
-    pub fn get_id(&self, id: usize) -> Option<&ConValue> {
-        self.values.get(id)
+    pub fn get_id(&self, id: Location) -> Option<&ConValue> {
+        match id {
+            Location::Stack(id) => self.values.get(id as usize),
+            Location::Globals(_) => todo!("self.globals.get(id as usize)"),
+        }
     }
 
     /// Returns a mutable reference to the `id`'s record, if it exists.
-    pub fn get_id_mut(&mut self, id: usize) -> Option<&mut ConValue> {
-        self.values.get_mut(id)
+    pub fn get_id_mut(&mut self, id: Location) -> Option<&mut ConValue> {
+        match id {
+            Location::Stack(id) => self.values.get_mut(id as usize),
+            Location::Globals(_) => todo!("self.globals.get_mut(id as usize)"),
+        }
     }
 
     /// Binds a [Type] to a name in the builtin-types scope
@@ -358,14 +385,17 @@ impl Environment {
 
     /// Inserts a new [ConValue] into this [Environment]
     pub fn insert(&mut self, k: Symbol, v: ConValue) {
-        if self.bind_raw(k, self.values.len()).is_some() {
+        if self
+            .bind_raw(k, Location::Stack(self.values.len() as _))
+            .is_some()
+        {
             self.values.push(v);
         }
     }
 
     /// Allocates a local variable
-    pub fn stack_alloc(&mut self, value: ConValue) -> IResult<usize> {
-        let adr = self.values.len();
+    pub fn stack_alloc(&mut self, value: ConValue) -> IResult<Location> {
+        let adr = Location::Stack(self.values.len() as _);
         self.values.push(value);
         Ok(adr)
     }
@@ -401,7 +431,7 @@ impl<'scope> Frame<'scope> {
         let mut out = StackFrame::new();
         let binds = take(&mut self.frames.last_mut()?.binds);
         for (k, v) in binds {
-            out.insert(k, self.values.get_mut(v).map(take)?);
+            out.insert(k, self.get_id_mut(v).map(take)?);
         }
         Some(out)
     }
