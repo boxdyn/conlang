@@ -111,10 +111,10 @@ let v = for value in 1..=100 {
 /// previous expression, and return the result of the
 /// following expression:
 let v = (
-    print("I did this!"); // "I did this!"
+    println("I did this!"); // "I did this!"
     "and then returned this!"
 );
-print(v); // "and then returned this!"
+println(v); // "and then returned this!"
 
 // You'll notice that this entire tutorial section
 // has been separated by `do` operators (semicolons.)
@@ -125,11 +125,11 @@ print(v); // "and then returned this!"
 /// They are otherwise equivalent to parentheses.
 {
     let explanation = "This is a block expression!";
-    print(explanation);
+    println(explanation);
     // If a closing brace follows a `do` operator,
     // the block evaluates to the unit type/value.
 }
 
 /// After a block-expression, the parser *may* insert a
 /// semicolon if it makes sense to do so.
-print("So, even though there was no ';', this still works!");
+println("So, even though there was no ';', this still works!");
