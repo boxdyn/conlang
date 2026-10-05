@@ -58,8 +58,8 @@ impl std::fmt::Display for Backtrace<'_> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Location {
+    Global(u32),
     Stack(u32),
-    Globals(u32),
 }
 
 impl Default for Location {
@@ -72,9 +72,10 @@ impl Default for Location {
 #[derive(Clone, Debug)]
 pub struct Environment {
     values: Vec<ConValue>,
+    globals: Vec<ConValue>,
     frames: Vec<EnvFrame>,
     types: HashMap<Symbol, Type>,
-    pub(crate) impls: HashMap<typeinfo::Type, HashMap<&'static str, ConValue>>,
+    pub(crate) impls: HashMap<typeinfo::Type, HashMap<&'static str, u32>>,
 }
 
 impl Display for Environment {
@@ -90,19 +91,23 @@ impl Display for Environment {
             let mut binds: Vec<_> = binds.iter().collect();
             binds.sort_by_key(|(_, a)| *a);
             for (name, idx) in binds {
-                match idx {
+                let mut f = f.indent();
+                let value = match idx {
                     Location::Stack(idx) => {
-                        let mut f = f.indent();
-                        writeln!(f, "{idx:4} {name}:")?;
-                        match self.values.get(*idx as usize) {
-                            Some(ConValue::TypeInfo(t)) => writeln!(f, "type {t}"),
-                            Some(ConValue::Function(v)) => writeln!(f, "fn {}", v.pat()),
-                            Some(value) => writeln!(f, "{value}"),
-                            None => writeln!(f, "ERROR: {name}'s address blows the stack!"),
-                        }?
+                        writeln!(f, "s{idx:4} {name}:")?;
+                        self.values.get(*idx as usize)
                     }
-                    Location::Globals(_) => todo!("Globals!"),
-                }
+                    Location::Global(idx) => {
+                        writeln!(f, "g{idx:4} {name}:")?;
+                        self.globals.get(*idx as usize)
+                    }
+                };
+                match value {
+                    Some(ConValue::TypeInfo(t)) => writeln!(f, "type {t}"),
+                    Some(ConValue::Function(v)) => writeln!(f, "fn {}", v.pat()),
+                    Some(value) => writeln!(f, "{value}"),
+                    None => writeln!(f, "ERROR: {name}'s address blows the stack!"),
+                }?
             }
         }
         Ok(())
@@ -114,7 +119,7 @@ impl Default for Environment {
         let mut this = Self::no_builtins();
         for (ident, model) in Model::defaults() {
             let value = this.def_type(ident.into(), model.intern());
-            this.bind(ident, ConValue::TypeInfo(value));
+            this.bind_global(ident, ConValue::TypeInfo(value));
         }
         let slice_or_array = Model::Slice(Model::Any.already_interned()).intern();
         this.add_builtins(Builtins)
@@ -136,6 +141,7 @@ impl Environment {
     pub fn no_builtins() -> Self {
         Self {
             values: Vec::new(),
+            globals: Vec::new(),
             frames: vec![EnvFrame::default()],
             types: HashMap::new(),
             impls: HashMap::new(),
@@ -166,7 +172,11 @@ impl Environment {
 
     /// Binds a value to the given name in the current scope.
     pub fn bind(&mut self, name: impl Into<Symbol>, value: impl Into<ConValue>) {
-        self.insert(name.into(), value.into());
+        self.insert(name.into(), value.into(), false);
+    }
+
+    pub fn bind_global(&mut self, name: impl Into<Symbol>, value: impl Into<ConValue>) {
+        self.insert(name.into(), value.into(), true);
     }
 
     /// Binds a `name` to a raw `id` value in the current scope
@@ -178,28 +188,37 @@ impl Environment {
     }
 
     /// Adds an implementation (associated value) to a [Type]
-    pub fn implement(&mut self, ty: Type, name: &'static str, value: ConValue) -> &mut ConValue {
-        self.impls
-            .entry(ty)
-            .or_default()
-            .entry(name)
-            .or_insert(value)
+    pub fn implement(&mut self, ty: Type, name: &'static str, value: ConValue) {
+        let loc = self.globals.len() as _;
+        self.globals.push(value);
+        self.implement_raw(ty, name, loc);
+    }
+
+    pub fn implement_raw(&mut self, ty: Type, name: &'static str, loc: u32) {
+        self.impls.entry(ty).or_default().entry(name).or_insert(loc);
     }
 
     /// Gets a previously-[implement](Self::implement)ed item, by-value, copying if necessary.
     pub fn get_impl(&self, ty: Type, name: Symbol) -> IResult<ConValue> {
+        if let Some(id) = self.get_impl_id(ty, name) {
+            return self.get_id(id).cloned().ok_or(Error::NotDefined(name));
+        }
+        ty.getattr(name)
+    }
+
+    fn get_impl_id(&self, ty: Type, name: Symbol) -> Option<Location> {
         if let Some(value) = self.impls.get(&ty).and_then(|map| map.get(name.to_ref())) {
-            return Ok(value.clone());
+            return Some(Location::Global(*value));
         }
 
         if let Some(parent) = ty.parent()
             && parent != ty
-            && let Ok(value) = self.get_impl(parent, name)
+            && let Some(value) = self.get_impl_id(parent, name)
         {
-            return Ok(value);
+            return Some(value);
         }
 
-        ty.getattr(name)
+        None
     }
 
     /// Gets the "current" module
@@ -213,8 +232,8 @@ impl Environment {
     }
 
     /// Gets all registered globals, bound or unbound.
-    pub(crate) fn globals(&self) -> &EnvFrame {
-        self.frames.first().unwrap()
+    pub(crate) fn globals(&self) -> &[ConValue] {
+        &self.globals
     }
 
     /// Returns a [Backtrace] of the Environment's stack
@@ -236,6 +255,7 @@ impl Environment {
             self.insert(
                 builtin.name().expect("Builtin functions must have names!"),
                 builtin.into(),
+                true,
             );
         }
 
@@ -274,7 +294,7 @@ impl Environment {
     ) -> Frame<'e> {
         let mut scope = self.frame(name, None, module);
         for (k, v) in frame {
-            scope.insert(k, v);
+            scope.insert(k, v, false);
         }
         scope
     }
@@ -305,7 +325,7 @@ impl Environment {
         let id = self.id_of(name)?;
         match id {
             Location::Stack(id) => self.values.get(id as usize).ok_or(Error::NotDefined(name)),
-            Location::Globals(_) => todo!(),
+            Location::Global(id) => self.globals.get(id as usize).ok_or(Error::NotDefined(name)),
         }
         .cloned()
         .or_else(|e| {
@@ -313,19 +333,21 @@ impl Environment {
                 .ok_or(e)
                 .and_then(|ty| self.get_impl(ty, name))
         })
-
-        // let id = self.id_of(name)?;
-        // let res = self.values.get(id);
-        // Ok(res.ok_or(Error::NotDefined(name))?.clone())
     }
 
     /// Resolves the index associated with a [Symbol]
     pub fn id_of(&self, name: Symbol) -> IResult<Location> {
-        for EnvFrame { binds, .. } in self.frames.iter().rev() {
+        for EnvFrame { binds, module, .. } in self.frames.iter().rev() {
+            if let Some(module) = module
+                && let Some(id) = self.get_impl_id(*module, name)
+            {
+                return Ok(id);
+            }
             if let Some(id) = binds.get(&name).copied() {
                 return Ok(id);
             }
         }
+
         Err(Error::NotDefined(name))
     }
 
@@ -333,7 +355,7 @@ impl Environment {
     pub fn get_id(&self, id: Location) -> Option<&ConValue> {
         match id {
             Location::Stack(id) => self.values.get(id as usize),
-            Location::Globals(_) => todo!("self.globals.get(id as usize)"),
+            Location::Global(id) => self.globals.get(id as usize),
         }
     }
 
@@ -341,7 +363,7 @@ impl Environment {
     pub fn get_id_mut(&mut self, id: Location) -> Option<&mut ConValue> {
         match id {
             Location::Stack(id) => self.values.get_mut(id as usize),
-            Location::Globals(_) => todo!("self.globals.get_mut(id as usize)"),
+            Location::Global(id) => self.globals.get_mut(id as usize),
         }
     }
 
@@ -384,12 +406,21 @@ impl Environment {
     }
 
     /// Inserts a new [ConValue] into this [Environment]
-    pub fn insert(&mut self, k: Symbol, v: ConValue) {
-        if self
-            .bind_raw(k, Location::Stack(self.values.len() as _))
-            .is_some()
-        {
-            self.values.push(v);
+    pub fn insert(&mut self, name: Symbol, value: ConValue, global: bool) {
+        if global {
+            if self
+                .bind_raw(name, Location::Global(self.globals.len() as _))
+                .is_some()
+            {
+                self.globals.push(value);
+            }
+        } else {
+            if self
+                .bind_raw(name, Location::Stack(self.values.len() as _))
+                .is_some()
+            {
+                self.values.push(value);
+            }
         }
     }
 
@@ -398,6 +429,12 @@ impl Environment {
         let adr = Location::Stack(self.values.len() as _);
         self.values.push(value);
         Ok(adr)
+    }
+
+    pub fn global_alloc(&mut self, value: ConValue) -> Location {
+        let adr = Location::Global(self.globals.len() as _);
+        self.globals.push(value);
+        adr
     }
 }
 
@@ -424,6 +461,26 @@ impl<'scope> Frame<'scope> {
         });
 
         Self { scope }
+    }
+
+    /// Pops this [Frame] into a mapping of names to globals
+    pub fn pop_into_globals(mut self) -> Option<HashMap<Symbol, Location>> {
+        let mut out = HashMap::new();
+        let binds = take(&mut self.frames.last_mut()?.binds);
+        for (k, v) in binds {
+            match v {
+                Location::Stack(id) => {
+                    let Some(value) = self.get_id_mut(Location::Stack(id)).map(take) else {
+                        continue;
+                    };
+                    out.insert(k, self.global_alloc(value));
+                }
+                Location::Global(_) => {
+                    out.insert(k, v);
+                }
+            }
+        }
+        Some(out)
     }
 
     /// Pops this [Frame] into a [StackFrame]

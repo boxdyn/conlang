@@ -263,12 +263,9 @@ pub const Builtins: &[Builtin] = &builtins![
         Ok(())
     }
 
-    fn builtins() @env {
-        let len = env.globals().binds.len();
-        for builtin in 0..len {
-            if let Some(value @ ConValue::Builtin(_)) = env.get_id(Location::Stack(builtin as _)) {
-                println!("{builtin}: {value}")
-            }
+    fn globals() @env {
+        for (idx, global) in env.globals().iter().enumerate() {
+            println!("g{idx:4} {global}")
         }
         Ok(())
     }
@@ -319,7 +316,10 @@ pub const Builtins: &[Builtin] = &builtins![
             return Ok(ConValue::Module(Default::default()));
         };
         Ok(ConValue::Module(Box::new(
-            impls.iter().map(|(&k, v)| (k.into(), v.clone())).collect()
+            impls.iter().map(|(&k, v)| (
+                k.into(),
+                env.get_id(Location::Global(*v)).cloned().unwrap_or_default()
+            )).collect()
         )))
     }
 

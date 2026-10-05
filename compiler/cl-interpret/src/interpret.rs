@@ -7,6 +7,7 @@
 
 use super::*;
 use crate::{
+    env::Location,
     function::Function,
     place::Place,
     typeinfo::{Model, Type},
@@ -375,6 +376,43 @@ impl Interpret for Label<DefaultTypes> {
 impl Interpret for Bind<DefaultTypes> {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Bind(op, pat, exprs) = self;
+
+        fn module(pat: &At<Pat>, body: &At<Expr>, env: &mut Environment) -> IResult<ConValue> {
+            let (name, model) = bind_struct(pat.value(), env)?;
+            let ty = model.intern();
+            let mut scope = env.frame(ty.name(), Some(pat.1), Some(ty));
+            body.interpret(&mut scope)?;
+            if let Some(values) = scope.pop_into_globals() {
+                for (name, value) in values {
+                    let Location::Global(id) = value else {
+                        continue;
+                    };
+                    env.implement_raw(ty, name.0, id);
+                }
+            }
+            if let Some(name) = name {
+                env.bind(name, ConValue::TypeInfo(ty));
+            }
+            Ok(ConValue::TypeInfo(ty))
+        }
+
+        fn implement(pat: &At<Pat>, body: &At<Expr>, env: &mut Environment) -> IResult<ConValue> {
+            let (_, model) = bind_struct(pat.value(), env)?;
+            let ty = model.intern();
+            let mut scope = env.frame(ty.name(), Some(pat.1), Some(ty));
+            scope.bind("Self", ty);
+            body.interpret(&mut scope)?;
+            if let Some(values) = scope.pop_into_globals() {
+                for (name, value) in values {
+                    let Location::Global(id) = value else {
+                        continue;
+                    };
+                    env.implement_raw(ty, name.0, id);
+                }
+            }
+            Ok(ConValue::TypeInfo(ty))
+        }
+
         match (op, pat.value(), exprs.as_slice()) {
             (BindOp::Let, _, []) => cl_todo!("let {pat}"),
             (BindOp::Let, _, [scrutinee]) => {
@@ -429,38 +467,16 @@ impl Interpret for Bind<DefaultTypes> {
             (BindOp::Mod, _, [At(Expr::Op(Op::Block, exprs), ..)])
                 if let [body] = exprs.as_slice() =>
             {
-                body.interpret(env)
+                module(pat, body, env)
             }
-            (BindOp::Mod, _, [body]) => body.interpret(env),
+            (BindOp::Mod, _, [body]) => module(pat, body, env),
             // Unwrap block-scopes
-            (BindOp::Impl, ty_pat, [At(Expr::Op(Op::Block, exprs), ..)])
-                if let [body] = exprs.as_slice()
-                    && let (_, model) = bind_struct(ty_pat, env)? =>
+            (BindOp::Impl, _, [At(Expr::Op(Op::Block, exprs), ..)])
+                if let [body] = exprs.as_slice() =>
             {
-                let ty = model.intern();
-                let mut scope = env.frame(ty.name(), Some(pat.1), Some(ty));
-                scope.bind("Self", ty);
-                body.interpret(&mut scope)?;
-                if let Some(values) = scope.pop_values() {
-                    for (name, value) in values {
-                        env.implement(ty, name.0, value);
-                    }
-                }
-                Ok(ConValue::TypeInfo(ty))
+                implement(pat, body, env)
             }
-            (BindOp::Impl, ty_pat, [body]) => {
-                let (_, model) = bind_struct(ty_pat, env)?;
-                let ty = model.intern();
-                let mut scope = env.frame(ty.name(), Some(pat.1), Some(ty));
-                scope.bind("Self", ty);
-                body.interpret(&mut scope)?;
-                if let Some(values) = scope.pop_values() {
-                    for (name, value) in values {
-                        env.implement(ty, name.0, value);
-                    }
-                }
-                Ok(ConValue::TypeInfo(ty))
-            }
+            (BindOp::Impl, _, [body]) => implement(pat, body, env),
             (BindOp::Struct, pat, []) => {
                 let (name, model) = bind_struct(pat, env)?;
                 Ok(ConValue::TypeInfo(if let Some(name) = name {
@@ -489,7 +505,17 @@ impl Interpret for Use {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         fn use_ty(tree: &Use, ty: Type, env: &mut Environment) -> IResult<()> {
             match tree {
-                Use::Glob => todo!("{tree} in {ty}"),
+                Use::Glob => {
+                    for (k, v) in env
+                        .impls
+                        .get(&ty)
+                        .ok_or(Error::TypeError("impls", ty))?
+                        .clone()
+                    {
+                        env.bind_raw(k.into(), Location::Global(v));
+                    }
+                    Ok(())
+                }
                 &Use::Name(name) => {
                     let value = env.get_impl(ty, name)?;
                     env.bind(name, value);

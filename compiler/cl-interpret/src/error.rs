@@ -39,19 +39,19 @@ impl Error {
     }
 
     /// Propagate a Return value
-    pub fn Return(value: ConValue) -> Self {
+    pub const fn Return(value: ConValue) -> Self {
         Self { kind: ErrorKind::Return(value), span: None }
     }
     /// Propagate a Break value
-    pub fn Break(value: ConValue) -> Self {
+    pub const fn Break(value: ConValue) -> Self {
         Self { kind: ErrorKind::Break(None, value), span: None }
     }
     /// Propagate a Break value
-    pub fn BreakLabel(label: &'static str, value: ConValue) -> Self {
+    pub const fn BreakLabel(label: &'static str, value: ConValue) -> Self {
         Self { kind: ErrorKind::Break(Some(label), value), span: None }
     }
     /// Break propagated across function bounds
-    pub fn BadBreak(value: ConValue) -> Self {
+    pub const fn BadBreak(value: ConValue) -> Self {
         Self { kind: ErrorKind::BadBreak(value), span: None }
     }
     /// Continue to the next iteration of a loop
@@ -59,11 +59,11 @@ impl Error {
         Self { kind: ErrorKind::Continue, span: None }
     }
     /// Indexed out of bounds in the stack
-    pub fn LocationOob(place: Location) -> Self {
+    pub const fn LocationOob(place: Location) -> Self {
         Self { kind: ErrorKind::LocationOob(place), span: None }
     }
     /// Exited the last scope
-    pub fn ScopeExit() -> Self {
+    pub const fn ScopeExit() -> Self {
         Self { kind: ErrorKind::ScopeExit, span: None }
     }
     /// Type incompatibility
@@ -72,47 +72,47 @@ impl Error {
         Self { kind: ErrorKind::TypeError(want.to_string(), got), span: None }
     }
     /// In clause of For loop didn't yield a Range
-    pub fn NotIterable() -> Self {
+    pub const fn NotIterable() -> Self {
         Self { kind: ErrorKind::NotIterable, span: None }
     }
     /// A value could not be indexed
-    pub fn NotIndexable() -> Self {
+    pub const fn NotIndexable() -> Self {
         Self { kind: ErrorKind::NotIndexable, span: None }
     }
     /// An array index went out of bounds
-    pub fn OobIndex(index: usize, length: usize) -> Self {
+    pub const fn OobIndex(index: usize, length: usize) -> Self {
         Self { kind: ErrorKind::OobIndex(index, length), span: None }
     }
     /// An expression in place position is not a place-expression
-    pub fn NotPlace() -> Self {
+    pub const fn NotPlace() -> Self {
         Self { kind: ErrorKind::NotPlace, span: None }
     }
     /// A name was not defined in scope before being used
-    pub fn NotDefined(name: Symbol) -> Self {
+    pub const fn NotDefined(name: Symbol) -> Self {
         Self { kind: ErrorKind::NotDefined(name), span: None }
     }
     /// A name was defined but not initialized
-    pub fn NotInitialized(name: Symbol) -> Self {
+    pub const fn NotInitialized(name: Symbol) -> Self {
         Self { kind: ErrorKind::NotInitialized(name), span: None }
     }
     /// A value was called, but is not callable
-    pub fn NotCallable(value: ConValue) -> Self {
+    pub const fn NotCallable(value: ConValue) -> Self {
         Self { kind: ErrorKind::NotCallable(value), span: None }
     }
     /// A function was called with the wrong number of arguments
-    pub fn ArgNumber(want: usize, got: usize) -> Self {
+    pub const fn ArgNumber(want: usize, got: usize) -> Self {
         Self { kind: ErrorKind::ArgNumber { want, got }, span: None }
     }
     /// A pattern failed to match
-    pub fn PatFailed(pat: Box<Pat>) -> Self {
+    pub const fn PatFailed(pat: Box<Pat>) -> Self {
         Self { kind: ErrorKind::PatFailed(pat), span: None }
     }
     /// Fell through a non-exhaustive match
-    pub fn MatchNonexhaustive(value: ConValue) -> Self {
+    pub const fn MatchNonexhaustive(value: ConValue) -> Self {
         Self { kind: ErrorKind::MatchNonexhaustive(value), span: None }
     }
     /// Explicit panic
-    pub fn Panic(msg: String) -> Self {
+    pub const fn Panic(msg: String) -> Self {
         Self { kind: ErrorKind::Panic(msg, 0), span: None }
     }
     /// Error produced by a Builtin
