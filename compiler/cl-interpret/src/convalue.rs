@@ -390,12 +390,12 @@ bin_ops! {
         (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_add(b)),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a + b),
-        (ConValue::Str(a), ConValue::Str(b)) => (a.to_string() + &*b).into(),
-        (ConValue::Str(a), ConValue::String(b)) => (a.to_string() + &*b).into(),
-        (ConValue::String(a), ConValue::Str(b)) => (a + &*b).into(),
-        (ConValue::String(a), ConValue::String(b)) => (a + &*b).into(),
+        (ConValue::Str(a), ConValue::Str(b)) => (a.to_string() + b.to_ref()).into(),
+        (ConValue::Str(a), ConValue::String(b)) => (a.to_string() + &b).into(),
+        (ConValue::String(a), ConValue::Str(b)) => (a + b.to_ref()).into(),
+        (ConValue::String(a), ConValue::String(b)) => (a + &b).into(),
         (ConValue::Str(s), ConValue::Char(c)) => { let mut s = s.to_string(); s.push(c); s.into() }
-        (ConValue::String(s), ConValue::Char(c)) => { let mut s = s.to_string(); s.push(c); s.into() }
+        (ConValue::String(mut s), ConValue::Char(c)) => { s.push(c); ConValue::String(s) }
         (ConValue::Char(a), ConValue::Char(b)) => {
             ConValue::String([a, b].into_iter().collect::<String>())
         }

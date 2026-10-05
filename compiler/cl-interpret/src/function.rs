@@ -3,6 +3,7 @@
 use crate::{
     error::ErrorKind,
     interpret::{Match, MatchEnv},
+    typeinfo::Type,
 };
 
 use super::{Callable, ConValue, Environment, Error, IResult, Interpret};
@@ -21,40 +22,59 @@ use std::{
 
 type Upvars = HashMap<Sym, usize>;
 
+#[derive(Clone, Debug)]
+pub struct FnInner {
+    pat: At<Pat>,
+    body: At<Expr>,
+    module: Option<Type>,
+    captures: BTreeSet<Sym>,
+    upvars: RefCell<(Upvars, usize)>,
+}
+
 /// Represents a block of code which persists inside the Interpreter
 #[derive(Clone, Debug)]
 pub struct Function {
     /// Stores the contents of the function declaration
-    decl: Rc<(At<Pat>, At<Expr>, BTreeSet<Sym>, RefCell<(Upvars, usize)>)>,
+    decl: Rc<FnInner>,
 }
 
 impl Function {
-    pub fn new(decl: &Bind) -> Self {
+    pub fn new(decl: &Bind, module: Option<Type>) -> Self {
         // let upvars = collect_upvars(decl, env);
         if let Bind(BindOp::Fn, pat, exprs) = decl
             && let [body] = exprs.as_slice()
         {
             let mut free = BTreeSet::new();
             Lifter::new(&mut free).visit(decl);
-            Self { decl: (pat.clone(), body.clone(), free, Default::default()).into() }
+            let decl = FnInner {
+                pat: pat.clone(),
+                body: body.clone(),
+                module,
+                captures: free,
+                upvars: Default::default(),
+            };
+            Self { decl: decl.into() }
         } else {
             unimplemented!()
         }
     }
     pub fn pat(&self) -> &At<Pat> {
-        &self.decl.0
+        &self.decl.pat
     }
     pub fn body(&self) -> &At<Expr> {
-        &self.decl.1
+        &self.decl.body
     }
     pub fn span(&self) -> Span {
-        self.decl.1.1
+        self.decl.body.1
+    }
+    pub fn module(&self) -> Option<Type> {
+        self.decl.module
     }
     pub fn captures(&self) -> &BTreeSet<Sym> {
-        &self.decl.2
+        &self.decl.captures
     }
     pub fn upvars(&self) -> &RefCell<(Upvars, usize)> {
-        &self.decl.3
+        &self.decl.upvars
     }
     pub fn lift_upvars(&self, env: &Environment) {
         // TODO: is this optional and/or necessary?
@@ -89,7 +109,7 @@ impl Callable for Function {
                 _ => None,
             }
         }
-        get_name(self.decl.0.value())
+        get_name(self.decl.pat.value())
     }
     fn call(&self, env: &mut Environment, args: Vec<ConValue>) -> IResult<ConValue> {
         self.lift_upvars(env);
@@ -99,11 +119,12 @@ impl Callable for Function {
         let mut bindings = HashMap::new();
         pat.matches(args, &mut MatchEnv::new(env, &mut bindings))?;
 
-        let mut scope = env.with_raw_frame("captures", &self.upvars().borrow().0);
-        let mut scope = scope.with_frame("args", bindings);
+        let mut scope = env.with_raw_frame("captures", &self.upvars().borrow().0, self.module());
+        let mut scope = scope.with_frame("args", bindings, None);
         let mut scope = scope.frame(
             self.name().map(|name| name.to_ref()).unwrap_or("closure"),
             Some(self.span()),
+            None,
         );
         match self.body().interpret(&mut scope) {
             Err(Error { kind: ErrorKind::Panic(e, depth), span }) => {

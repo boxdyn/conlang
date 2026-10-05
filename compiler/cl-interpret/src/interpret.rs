@@ -104,7 +104,7 @@ impl Interpret for (Op, &[At<Expr>]) {
                 other => Err(Error::TypeError("type", other.type_of(env))),
             },
             (Op::Block, []) => Ok(ConValue::Unit),
-            (Op::Block, [expr]) => expr.interpret(&mut env.frame("block", Some(expr.1))),
+            (Op::Block, [expr]) => expr.interpret(&mut env.frame("block", Some(expr.1), None)),
             (Op::Array, []) => Ok(ConValue::Array(Box::new([]))),
             (Op::Array, exprs) => Ok(ConValue::Array(
                 exprs
@@ -160,7 +160,7 @@ impl Interpret for (Op, &[At<Expr>]) {
             // Control-flow
             (Op::Macro, _) => cl_todo!("Macros are not supported in the interpreter"),
             (Op::Loop, [expr]) => loop {
-                match expr.interpret(&mut env.frame("loop_body", Some(expr.1))) {
+                match expr.interpret(&mut env.frame("loop_body", Some(expr.1), None)) {
                     Ok(_) => {}
                     // `break` handeled by surrounding `Label`
                     Err(Error { kind: ErrorKind::Continue, .. }) => continue,
@@ -168,7 +168,7 @@ impl Interpret for (Op, &[At<Expr>]) {
                 }
             },
             (Op::If, [cond, pass, fail]) => {
-                let mut scope = env.frame("if", None);
+                let mut scope = env.frame("if", None, None);
                 if cond.interpret(&mut scope)?.truthy(&scope)? {
                     return pass.interpret(&mut scope);
                 }
@@ -367,7 +367,7 @@ macro assign_modify($target:ident . $op:ident ($value:ident, $env: ident)) {{
 impl Interpret for Label<DefaultTypes> {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self(label, expr) = self;
-        expr.interpret(&mut env.frame(label.to_ref(), None))
+        expr.interpret(&mut env.frame(label.to_ref(), None, None))
             .or_else(|e| e.catch_a_break(label.to_ref()))
     }
 }
@@ -419,7 +419,7 @@ impl Interpret for Bind<DefaultTypes> {
             (BindOp::Type, _, []) => cl_todo!("type {pat}"),
             (BindOp::Type, _, [body]) => cl_todo!("type {pat} = {body}"),
             (BindOp::Fn, _, [_]) => {
-                let func = Rc::new(Function::new(self));
+                let func = Rc::new(Function::new(self, env.get_module()));
                 if let Some(name) = func.name() {
                     env.bind(name, ConValue::Function(func.clone()))
                 }
@@ -438,7 +438,7 @@ impl Interpret for Bind<DefaultTypes> {
                     && let (_, model) = bind_struct(ty_pat, env)? =>
             {
                 let ty = model.intern();
-                let mut scope = env.frame(ty.name(), Some(pat.1));
+                let mut scope = env.frame(ty.name(), Some(pat.1), Some(ty));
                 scope.bind("Self", ty);
                 body.interpret(&mut scope)?;
                 if let Some(values) = scope.pop_values() {
@@ -451,7 +451,7 @@ impl Interpret for Bind<DefaultTypes> {
             (BindOp::Impl, ty_pat, [body]) => {
                 let (_, model) = bind_struct(ty_pat, env)?;
                 let ty = model.intern();
-                let mut scope = env.frame(ty.name(), Some(pat.1));
+                let mut scope = env.frame(ty.name(), Some(pat.1), Some(ty));
                 scope.bind("Self", ty);
                 body.interpret(&mut scope)?;
                 if let Some(values) = scope.pop_values() {
@@ -719,7 +719,7 @@ fn bind_enum(pat: &Pat, env: &mut Environment) -> IResult<ConValue> {
     if let Pat::Op(PatOp::TypePrefixed, _) = pat
         && let Pat::Op(PatOp::Record, pats) = pat.inner()
     {
-        let mut scope = env.frame(name.to_ref(), Default::default());
+        let mut scope = env.frame(name.to_ref(), Default::default(), None);
         match pat.generics() {
             Some(Pat::Op(PatOp::Tuple, vars)) => {
                 for var in vars {
@@ -794,7 +794,7 @@ impl Interpret for cl_ast::ast::Match<DefaultTypes> {
                 .matches(scrutinee.clone(), &mut MatchEnv::new(env, &mut bind))
                 .is_ok()
             {
-                return expr.interpret(&mut env.with_frame("match-arm", bind));
+                return expr.interpret(&mut env.with_frame("match-arm", bind, None));
             }
         }
         Err(Error::MatchNonexhaustive(ConValue::Unit))
@@ -1006,7 +1006,7 @@ impl Match for (PatOp, &[At<Pat>]) {
             (PatOp::Fn, _) => todo!(),
             (PatOp::Guard, [pat, At(Pat::Value(cond), ..)]) => {
                 pat.matches(value, in_env)?;
-                let mut scope = in_env.env.with_frame("guard", take(in_env.bind));
+                let mut scope = in_env.env.with_frame("guard", take(in_env.bind), None);
                 let value = cond.interpret(&mut scope)?;
                 if value.truthy(&scope)? {
                     *in_env.bind = scope.pop_values().unwrap_or_default();

@@ -32,6 +32,8 @@ pub(crate) struct EnvFrame {
     pub base: usize,
     /// The bindings of name to stack position
     pub binds: StackBinds,
+    /// A type whose namespace we're executing in
+    pub module: Option<Type>,
     /// A list of deferred instructions to run on scope exit
     pub defer: Vec<cl_ast::Expr>,
 }
@@ -137,21 +139,10 @@ impl Environment {
         self.frames.get(index)
     }
 
-    /// Reflexively evaluates a node
-    pub fn eval(&mut self, node: &impl Interpret) -> IResult<ConValue> {
-        node.interpret(self)
-    }
-
-    /// Calls a function inside the Environment's scope,
-    /// and returns the result
-    pub fn call(&mut self, name: Symbol, args: Vec<ConValue>) -> IResult<ConValue> {
-        let function = self.get(name)?;
-        function.call(self, args)
-    }
-
     /// Defers an expression until the end of scope. The expression must not fail..?
     pub fn defer(&mut self, expr: cl_ast::Expr) -> Option<()> {
-        let EnvFrame { name: _, span: _, base: _, binds: _, defer } = self.frames.last_mut()?;
+        let EnvFrame { name: _, span: _, base: _, binds: _, module: _, defer } =
+            self.frames.last_mut()?;
         defer.push(expr);
         Some(())
     }
@@ -163,7 +154,8 @@ impl Environment {
 
     /// Binds a `name` to a raw `id` value in the current scope
     pub fn bind_raw(&mut self, name: Symbol, id: usize) -> Option<()> {
-        let EnvFrame { name: _, span: _, base: _, binds, defer: _ } = self.frames.last_mut()?;
+        let EnvFrame { name: _, span: _, base: _, binds, module: _, defer: _ } =
+            self.frames.last_mut()?;
         binds.insert(name, id);
         Some(())
     }
@@ -191,6 +183,16 @@ impl Environment {
         }
 
         ty.getattr(name)
+    }
+
+    /// Gets the "current" module
+    pub fn get_module(&self) -> Option<Type> {
+        for EnvFrame { module, .. } in self.frames.iter().rev() {
+            if module.is_some() {
+                return *module;
+            }
+        }
+        None
     }
 
     /// Gets all registered globals, bound or unbound.
@@ -234,16 +236,26 @@ impl Environment {
     /// Enters a nested scope, returning a [`Frame`] stack-guard.
     ///
     /// [`Frame`] implements Deref/DerefMut for [`Environment`].
-    pub fn frame(&mut self, name: &'static str, span: Option<Span>) -> Frame<'_> {
-        Frame::new(self, name, span)
+    pub fn frame(
+        &mut self,
+        name: &'static str,
+        span: Option<Span>,
+        module: Option<Type>,
+    ) -> Frame<'_> {
+        Frame::new(self, name, span, module)
     }
 
     /// Enters a nested scope, assigning the contents of `frame`,
     /// and returning a [`Frame`] stack-guard.
     ///
     /// [`Frame`] implements Deref/DerefMut for [`Environment`].
-    pub fn with_frame<'e>(&'e mut self, name: &'static str, frame: StackFrame) -> Frame<'e> {
-        let mut scope = self.frame(name, None);
+    pub fn with_frame<'e>(
+        &'e mut self,
+        name: &'static str,
+        frame: StackFrame,
+        module: Option<Type>,
+    ) -> Frame<'e> {
+        let mut scope = self.frame(name, None, module);
         for (k, v) in frame {
             scope.insert(k, v);
         }
@@ -258,8 +270,9 @@ impl Environment {
         &'e mut self,
         name: &'static str,
         frame: &HashMap<Symbol, usize>,
+        module: Option<Type>,
     ) -> Frame<'e> {
-        let mut scope = self.frame(name, None);
+        let mut scope = self.frame(name, None, module);
         for (&k, &v) in frame {
             scope.bind_raw(k, v);
         }
@@ -270,9 +283,19 @@ impl Environment {
     ///
     /// Returns a reference to the variable's contents, if it is defined and initialized.
     pub fn get(&self, name: Symbol) -> IResult<ConValue> {
-        let id = self.id_of(name)?;
-        let res = self.values.get(id);
-        Ok(res.ok_or(Error::NotDefined(name))?.clone())
+        // TODO: Limit stack depth to 32 bits
+        // TODO: Separate "globals" (including module-scoped items) from stack
+        self.id_of(name)
+            .and_then(|id| self.values.get(id).ok_or(Error::NotDefined(name)))
+            .cloned()
+            .or_else(|e| {
+                self.get_module()
+                    .ok_or(e)
+                    .and_then(|ty| self.get_impl(ty, name))
+            })
+        // let id = self.id_of(name)?;
+        // let res = self.values.get(id);
+        // Ok(res.ok_or(Error::NotDefined(name))?.clone())
     }
 
     /// Resolves the index associated with a [Symbol]
@@ -355,12 +378,18 @@ pub struct Frame<'scope> {
 }
 impl<'scope> Frame<'scope> {
     /// Constructs a new [Frame] guard in the [Environment]
-    fn new(scope: &'scope mut Environment, name: &'static str, span: Option<Span>) -> Self {
+    fn new(
+        scope: &'scope mut Environment,
+        name: &'static str,
+        span: Option<Span>,
+        module: Option<Type>,
+    ) -> Self {
         scope.frames.push(EnvFrame {
             name: Some(name),
             span,
             base: scope.values.len(),
             binds: HashMap::new(),
+            module,
             defer: vec![],
         });
 
