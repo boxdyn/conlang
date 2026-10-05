@@ -236,6 +236,10 @@ impl Environment {
         &self.globals
     }
 
+    pub(crate) fn stack(&self) -> &[ConValue] {
+        &self.values
+    }
+
     /// Returns a [Backtrace] of the Environment's stack
     pub fn backtrace(&self) -> Backtrace<'_> {
         Backtrace { frames: &self.frames }

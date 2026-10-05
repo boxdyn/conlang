@@ -265,7 +265,14 @@ pub const Builtins: &[Builtin] = &builtins![
 
     fn globals() @env {
         for (idx, global) in env.globals().iter().enumerate() {
-            println!("g{idx:4} {global}")
+            println!("g{idx:4}: {global}")
+        }
+        Ok(())
+    }
+
+    fn stack() @env {
+        for (idx, value) in env.stack().iter().enumerate() {
+            println!("s{idx:4}: {value}")
         }
         Ok(())
     }
