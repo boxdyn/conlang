@@ -14,8 +14,8 @@ impl Option {
     fn is_none(&self: &Self) -> bool = let Option::None = self;
     fn map<U>(&self: Self, f: fn(T) -> U) -> Option<U> {
         match self {
-            Some(value) => Some(f(value));
-            None => None;
+            Option::Some(value) => Some(f(value));
+            Option::None => None;
         }
     }
     fn and_then<U>(&self: Self, f: fn(T) -> Option<U>) -> Option<U> {
@@ -141,28 +141,25 @@ impl Iterator<T> {
     }
 
     /// An Iterator which calls a function on each value
-    struct Inspect<T>(&Iterator<T>, fn(&T));
+    struct Inspect<T>(&Self, fn(&T));
     /// Returns an iterator which calls `f` on every value
-    fn inspect(self, f: fn(&T)) -> Inspect<T> =
-        Iterator::Inspect(self, f);
+    fn inspect(self, f: fn(&T)) -> Inspect<T> = Inspect(self, f);
 
     /// An Iterator which maps values in T to values in U
-    struct Map<T, U>(&Iterator<T>, fn(T) -> U);
+    struct Map<T, U>(&Self, fn(T) -> U);
     /// Returns an iterator which maps values in T to values in U through `f`
-    fn map<U>(self, f: fn(T) -> U) -> Map<T, U> =
-        Iterator::Map(self, f);
+    fn map<U>(self, f: fn(T) -> U) -> Map<T, U> = Map(self, f);
 
     /// An Iterator which skips values deemed false by the given predicate
-    struct Filter<T>(&Iterator<T>, fn(T) -> bool);
+    struct Filter<T>(&Self, fn(T) -> bool);
     /// Returns an iterator which skips values deemed false by the given predicate
-    fn filter(self, f: fn(T) -> bool) -> Filter<T> =
-        Iterator::Filter(self, f);
+    fn filter(self, f: fn(T) -> bool) -> Filter<T> =  Filter(self, f);
 
     /// An Iterator which both filters and maps values according to a predicate
-    struct FilterMap<T, U>(&Iterator<T>, fn(T) -> Option<U>);
+    struct FilterMap<T, U>(&Self, fn(T) -> Option<U>);
     /// Returns an iterator which both filters and maps values according to `f`
     fn filter_map(self, f: fn(T) -> Option<U>) -> FilterMap<T, U> =
-        Iterator::FilterMap(self, f);
+        FilterMap(self, f);
 }
 
 Iterator::_derive(Iterator::Inspect, {
