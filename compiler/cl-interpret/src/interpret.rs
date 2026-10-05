@@ -380,7 +380,10 @@ impl Interpret for Bind<DefaultTypes> {
         fn module(pat: &At<Pat>, body: &At<Expr>, env: &mut Environment) -> IResult<ConValue> {
             let (name, model) = bind_struct(pat.value(), env)?;
             let ty = model.intern();
+            let m = env.get_module();
             let mut scope = env.frame(ty.name(), Some(pat.1), Some(ty));
+            scope.bind("self", ty);
+            scope.bind("super", if let Some(m) = m { m } else { ty });
             body.interpret(&mut scope)?;
             if let Some(values) = scope.pop_into_globals() {
                 for (name, value) in values {
