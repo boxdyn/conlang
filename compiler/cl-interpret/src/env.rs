@@ -172,7 +172,11 @@ impl Environment {
 
     /// Binds a value to the given name in the current scope.
     pub fn bind(&mut self, name: impl Into<Symbol>, value: impl Into<ConValue>) {
-        self.insert(name.into(), value.into(), false);
+        self.insert(
+            name.into(),
+            value.into(),
+            self.get_direct_ancestor().is_some(),
+        );
     }
 
     pub fn bind_global(&mut self, name: impl Into<Symbol>, value: impl Into<ConValue>) {
@@ -229,6 +233,11 @@ impl Environment {
             }
         }
         None
+    }
+
+    pub fn get_direct_ancestor(&self) -> Option<Type> {
+        let EnvFrame { module, .. } = self.frames.last()?;
+        *module
     }
 
     /// Gets all registered globals, bound or unbound.

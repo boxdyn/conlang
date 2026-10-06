@@ -380,30 +380,41 @@ impl Interpret for Bind<DefaultTypes> {
         fn module(pat: &At<Pat>, body: &At<Expr>, env: &mut Environment) -> IResult<ConValue> {
             let (name, model) = bind_struct(pat.value(), env)?;
             let ty = model.intern();
-            let m = env.get_module();
-            let mut scope = env.frame(ty.name(), Some(pat.1), Some(ty));
-            scope.bind("self", ty);
-            scope.bind("super", if let Some(m) = m { m } else { ty });
-            body.interpret(&mut scope)?;
-            if let Some(values) = scope.pop_into_globals() {
-                for (name, value) in values {
-                    let Location::Global(id) = value else {
-                        continue;
-                    };
-                    env.implement_raw(ty, name.0, id);
+            if env
+                .get("modules_enabled".into())
+                .and_then(|v| v.truthy(env))
+                .is_ok_and(|v| v)
+            {
+                let m = env.get_module();
+                let mut scope = env.frame(ty.name(), Some(pat.1), Some(ty));
+                scope.bind("self", ty);
+                scope.bind("super", if let Some(m) = m { m } else { ty });
+                body.interpret(&mut scope)?;
+                if let Some(values) = scope.pop_into_globals() {
+                    for (name, value) in values {
+                        let Location::Global(id) = value else {
+                            continue;
+                        };
+                        env.implement_raw(ty, name.0, id);
+                    }
                 }
-            }
-            if let Some(name) = name {
-                env.bind(name, ConValue::TypeInfo(ty));
+                if let Some(name) = name {
+                    env.bind(name, ConValue::TypeInfo(ty));
+                }
+            } else {
+                body.interpret(env)?;
             }
             Ok(ConValue::TypeInfo(ty))
         }
 
         fn implement(pat: &At<Pat>, body: &At<Expr>, env: &mut Environment) -> IResult<ConValue> {
-            let (_, model) = bind_struct(pat.value(), env)?;
+            let (name, model) = bind_struct(pat.value(), env)?;
             let ty = model.intern();
             let mut scope = env.frame(ty.name(), Some(pat.1), Some(ty));
-            scope.bind("Self", ty);
+            scope.bind_global("Self", ty);
+            if let Some(name) = name {
+                scope.bind_global(name, ty);
+            }
             body.interpret(&mut scope)?;
             if let Some(values) = scope.pop_into_globals() {
                 for (name, value) in values {

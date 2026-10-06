@@ -7,6 +7,9 @@
 
 // Note: module inlining is NOT performed for this file.
 
+/// Enables the unstable module system
+let modules_enabled = true;
+
 mod preamble {
 enum Option<T> { Some(T), None };
 use Option::{Some, None};
@@ -367,3 +370,5 @@ pub fn bin(n: u128) {
 pub fn shark() = '\u{1f988}';
 }
 use preamble::*;
+
+modules_enabled = false;
