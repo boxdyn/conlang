@@ -210,7 +210,7 @@ impl Environment {
         ty.getattr(name)
     }
 
-    fn get_impl_id(&self, ty: Type, name: Symbol) -> Option<Location> {
+    pub(crate) fn get_impl_id(&self, ty: Type, name: Symbol) -> Option<Location> {
         if let Some(value) = self.impls.get(&ty).and_then(|map| map.get(name.to_ref())) {
             return Some(Location::Global(*value));
         }

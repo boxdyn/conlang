@@ -13,7 +13,7 @@ use crate::{
     typeinfo::{Model, Type},
 };
 use cl_ast::{
-    types::{Literal, Path},
+    types::{Literal, Path, Symbol},
     *,
 };
 use std::{collections::HashMap, iter, mem::take, rc::Rc};
@@ -518,6 +518,16 @@ impl Interpret for Bind<DefaultTypes> {
 impl Interpret for Use {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         fn use_ty(tree: &Use, ty: Type, env: &mut Environment) -> IResult<()> {
+            fn bind_name(ty: Type, from: Symbol, to: Symbol, env: &mut Environment) -> IResult<()> {
+                if let Some(id) = env.get_impl_id(ty, from) {
+                    env.bind_raw(to, id);
+                } else {
+                    let value = ty.getattr(from)?;
+                    env.bind(to, value);
+                }
+                Ok(())
+            }
+
             match tree {
                 Use::Glob => {
                     for (k, v) in env
@@ -530,16 +540,8 @@ impl Interpret for Use {
                     }
                     Ok(())
                 }
-                &Use::Name(name) => {
-                    let value = env.get_impl(ty, name)?;
-                    env.bind(name, value);
-                    Ok(())
-                }
-                &Use::Alias(from, to) => {
-                    let value = env.get_impl(ty, from)?;
-                    env.bind(to, value);
-                    Ok(())
-                }
+                &Use::Name(name) => bind_name(ty, name, name, env),
+                &Use::Alias(from, to) => bind_name(ty, from, to, env),
                 Use::Path(name, tree) => match env.get_impl(ty, *name)?.dereference_in(env)? {
                     &ConValue::TypeInfo(ty) => use_ty(tree, ty, env),
                     #[expect(deprecated)]
@@ -557,18 +559,20 @@ impl Interpret for Use {
 
         #[deprecated]
         fn use_mod(tree: &Use, map: &HashMap<Sym, ConValue>, env: &mut Environment) -> IResult<()> {
+            fn bind_name(
+                map: &HashMap<Sym, ConValue>,
+                from: Sym,
+                to: Sym,
+                env: &mut Environment,
+            ) -> IResult<()> {
+                let value = map.get(&from).ok_or(Error::NotDefined(from))?.clone();
+                env.bind(to, value);
+                Ok(())
+            }
             match tree {
                 Use::Glob => todo!("{tree} in {map:?}"),
-                &Use::Name(name) => {
-                    let value = map.get(&name).ok_or(Error::NotDefined(name))?.clone();
-                    env.bind(name, value);
-                    Ok(())
-                }
-                &Use::Alias(from, to) => {
-                    let value = map.get(&from).ok_or(Error::NotDefined(from))?.clone();
-                    env.bind(to, value);
-                    Ok(())
-                }
+                &Use::Name(name) => bind_name(map, name, name, env),
+                &Use::Alias(from, to) => bind_name(map, from, to, env),
                 Use::Path(name, tree) => match map
                     .get(name)
                     .ok_or(Error::NotDefined(*name))?
