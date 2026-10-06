@@ -1,3 +1,4 @@
+#!/usr/bin/env -S conlang main()
 //! Disjoint Set Forest implementation of the Union Find algorithm
 
 enum TreeNode {

@@ -1,4 +1,4 @@
-#!/usr/bin/env -S conlang repl(|v| parf(v))
+#!/usr/bin/env -S conlang repl(parf)
 
 fn repl(f: (str) -> str) {
     loop print("out: ", match get_line(" in: ") {
@@ -18,7 +18,7 @@ fn parf(string: str) -> f64 {
 
     enum State { Int, Dec, Exp };
     let state = State::Int;
-    for c in string match state, c {
+    for c in string.chars() match state, c {
         // Float ::= Int? ('.' Dec)? ('e' Exp)?
         // Int ::= '-'? ('0'..='9')*
         State::Int, '-' => sign *= -1.0;

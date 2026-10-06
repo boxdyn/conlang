@@ -1,3 +1,4 @@
+#!/usr/bin/env -S conlang Xorshift::new(get_time_micros()).maze(80, 24)
 //! Pseudo-random number generation using a xorshift algorithm
 
 struct Xorshift {
@@ -6,7 +7,7 @@ struct Xorshift {
 
 impl Xorshift {
     /// Constructs a new `Xorshift` with the provided `seed`
-    fn new(seed: u64) = Xorshift { state: seed };
+    fn new(seed: u64) = Self { state: seed };
 
     /// Advances to the next state
     fn next(self: &Xorshift) {
@@ -29,7 +30,7 @@ impl Xorshift {
 }
 
 // Prints a maze out of diagonal box drawing characters, ['╲', '╱']
-fn mazel(rng: &Xorshift, width: u64, height: u64) {
+fn maze(rng: &Xorshift, width: u64, height: u64) {
     let walls = ['\u{2571}', '\u{2572}'];
     rand_rect(rng, width, height, walls)
 }

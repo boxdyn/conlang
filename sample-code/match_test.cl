@@ -1,3 +1,4 @@
+#!/usr/bin/env -S conlang main()
 //! This is a Conlang library demonstrating `match`
 
 struct Student {
