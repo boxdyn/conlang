@@ -84,11 +84,11 @@ impl super::Callable for Builtin {
 /// };
 /// ```
 pub macro builtin(
-    $(#[doc = $($docs:tt)*])*
-    fn $name:ident ($($arg:pat),*$(,)?) $(@$env:tt)? $body:block
+    $(#[$($meta:tt)*])*
+    fn $name:ident ($($args:tt)*) $(@$env:tt)? $(-> $rety:ty)? $body:block
 ) {{
-    builtin_body!($(#[$($meta)*])* fn $name ($($args)*) $(@$env)? $body);
-    builtin_define!($(#[$($meta)*])* fn $name ($($args)*) $(@$env)? $body)
+    builtin_body!($(#[$($meta)*])* fn $name ($($args)*) $(@$env)? $(-> $rety)? $body);
+    builtin_define!($(#[$($meta)*])* fn $name ($($args)*) $(@$env)? $(-> $rety)? $body)
 }}
 
 /// Constructs an array of [Builtin]s from pseudo-function definitions.
@@ -446,6 +446,10 @@ pub const Math: &[Builtin] = &builtins![
 
 /// Associated [Builtin] functions for [ConValue::Int]s
 pub const IntMethods: &[Builtin] = &builtins! {
+    fn cmp(this, other) @env -> i128 {
+        this.take().cmp(other.take(), env)
+    }
+
     /// Computes `int` to the `power`th power
     fn pow(int, power) @env -> i128 {
         Ok(get_int(env, int, "i128")?.wrapping_pow(get_int(env, power, "i128")? as _))
@@ -512,6 +516,9 @@ pub const IntMethods: &[Builtin] = &builtins! {
 
 /// Associated [Builtin] functions for [ConValue::Float]s
 pub const FloatMethods: &[Builtin] = &builtins![
+    fn cmp(this, other) @env -> i128 {
+        this.take().cmp(other.take(), env)
+    }
     /// Transmutes `float` into [u64]
     fn to_bits(float) @env -> u64 {
         Ok(ConValue::Int(get_float(env, float)?.to_bits() as _))
@@ -555,6 +562,9 @@ pub const FloatMethods: &[Builtin] = &builtins![
 
 /// Associated [Builtin] functions for [ConValue::Char]s
 pub const CharMethods: &[Builtin] = &builtins![
+    fn cmp(this, other) @env -> i128 {
+        this.take().cmp(other.take(), env)
+    }
     fn is_ascii(c) @env -> bool { get_char(env, c).map(|c| c.is_ascii()) }
     fn is_numeric(c) @env  -> bool{ get_char(env, c).map(|c| c.is_numeric()) }
     fn is_alphabetic(c) @env -> bool { get_char(env, c).map(|c| c.is_alphabetic()) }
