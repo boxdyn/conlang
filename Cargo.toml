@@ -12,7 +12,7 @@ resolver = "2"
 
 [workspace.package]
 repository = "https://github.com/boxdyn/conlang"
-version = "0.11.0"
+version = "0.12.0"
 authors = ["John <j@soft.fish>"]
 edition = "2024"
 license = "MIT"
@@ -27,6 +27,7 @@ default-run = "conlang"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [dependencies]
 # cl-typeck = { path = "compiler/cl-typeck" }
