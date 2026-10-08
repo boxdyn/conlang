@@ -98,3 +98,35 @@ fn main() {
     println("\n};");
     println("\n\n/*\nrand: ", rand, "\n*/")
 }
+
+fn rust_main() {
+    let count = 0x8000;
+    let seed = 0~MTRand;
+    let rand = MTRand::new(seed);
+    print(
+        "/// MTRand Check for Rust",
+        "\nuse mt19937::MTRand;",
+        "\n",
+        "\nfn main() {",
+        "\n    let mut rand = MTRand::new(RANDOM_SEED);",
+        "\n    for (idx, exp) in NUMBERS.into_iter().enumerate() {",
+        "\n        let num = rand.get_u32();",
+        "\n        if num != exp {",
+        "\n            println!(\"Failed at index {idx}: {num} != {exp}\");",
+        "\n            break;",
+        "\n        }",
+        "\n    }",
+        "\n}",
+        "\n",
+        "\n/// The plando seed",
+        "\nconst RANDOM_SEED: u32 = ", hex(seed), ";",
+        "\n",
+        "\n/// The specially-chosen random numbers",
+        "\nstatic NUMBERS: [u32; ", hex(count), "] = [",
+    );
+    for i in 0..count match i & 7 {
+        0 => print("\n    ", rand.get_u32().hex(), ",");
+        _ => print(" ", rand.get_u32().hex(), ",");
+    }
+    println("\n];")
+}
