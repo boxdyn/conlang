@@ -5,6 +5,7 @@ use crate::{
     env::{Environment, Location},
     error::{Error, ErrorKind, IResult},
     interpret::{Interpret, todo},
+    typeinfo::Model,
 };
 use cl_ast::{
     At, Expr, Op,
@@ -161,9 +162,10 @@ impl Place {
                     place.clone().index(idx, from_end).get_mut(env)?
                 }
                 (_place, Projection::Index(_, _)) => Err(Error::NotIndexable())?,
-                (ConValue::Struct(_, values), Projection::DotSym(sym)) => {
-                    values.get_mut(sym).ok_or(Error::NotDefined(*sym))?
-                }
+                (ConValue::Struct(ty, values), Projection::DotSym(sym)) => match ty.to_ref() {
+                    Model::Struct(.., false) => values.entry(*sym).or_default(),
+                    _ => values.get_mut(sym).ok_or(Error::NotDefined(*sym))?,
+                },
                 (place, Projection::DotSym(name)) => {
                     Err(Error::TypeError(name, place.clone().type_of(env)))?
                 }
