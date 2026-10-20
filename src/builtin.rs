@@ -19,7 +19,7 @@ use std::{
 ///  ```rust,ignore
 #[doc = include_str!("preamble.cl")]
 /// ```
-const PREAMBLE: &str = include_str!("preamble.cl");
+pub const PREAMBLE: &str = include_str!("preamble.cl");
 
 pub fn get_env() -> Environment {
     let mut env = Environment::new();
