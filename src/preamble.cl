@@ -281,14 +281,12 @@ struct unstable_metaprogramming;
 impl unstable_metaprogramming {
     // TODO: give enums a parental relation
     const fn enum_impl(Enum) {
-        for Variant in Enum::VARIANTS
-            for key, value in Enum.module().mod_into_binds()
-                impl Variant { let Self = Enum; bind(key, value) }
+        for Self in Enum::VARIANTS
+            impl Self use Enum::*;
     }
     const fn spread(Type, types: [_]) {
-        for ty in types
-            for key, value in Type.module().mod_into_binds()
-                impl ty { bind(key, value) }
+        for Self in types
+            impl Self use Type::*;
     }
 }
 unstable_metaprogramming::enum_impl(Option);
