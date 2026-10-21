@@ -212,20 +212,18 @@ impl RangeExc {
     fn into_iter(&RangeExc(start, end)) = RangeExc::ExclusiveIter(start, end);
 }
 
-// TODO: type Array = [_];
-let Array = type_of([]);
-impl Array {
+impl [_] {
     /// An iterator over an array's contents
-    struct ArrayIter(Array, RangeExc::ExclusiveIter);
+    struct ArrayIter(Self, RangeExc::ExclusiveIter);
     Iterator::_derive(ArrayIter, {
-        fn next(self: &Array::ArrayIter) match self.1.next() {
+        fn next(self: &Self::ArrayIter) match self.1.next() {
             Some(index) => Some(self.0[index]);
             _ => None;
         }
     });
 
     /// Constructs an iterator over this array's contents
-    fn into_iter(self: &Array) = Array::ArrayIter(self, (0..self.len()).into_iter());
+    fn into_iter(self: &Self) = Self::ArrayIter(self, (0..self.len()).into_iter());
     let iter = into_iter;
 
     /// Computes the cartesian product of `selves` and `others`
@@ -279,18 +277,11 @@ impl Array {
 // TODO: Remove this when name resolution isn't fake
 struct unstable_metaprogramming;
 impl unstable_metaprogramming {
-    // TODO: give enums a parental relation
-    const fn enum_impl(Enum) {
-        for Self in Enum::VARIANTS
-            impl Self use Enum::*;
-    }
     const fn spread(Type, types: [_]) {
         for Self in types
             impl Self use Type::*;
     }
 }
-unstable_metaprogramming::enum_impl(Option);
-unstable_metaprogramming::enum_impl(Result);
 unstable_metaprogramming::spread(f64, [f32]);
 unstable_metaprogramming::spread(i128, [
     i8, i16, i32, i64,       isize,
