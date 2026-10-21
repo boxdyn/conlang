@@ -203,7 +203,6 @@ impl ConstEval for Expr {
                 Op::Geq => const_eval_bin(*op, ats),
                 Op::Gt => const_eval_bin(*op, ats),
                 Op::LogAnd => todo!("Consteval {op}"),
-                Op::LogXor => todo!("Consteval {op}"),
                 Op::LogOr => todo!("Consteval {op}"),
                 Op::Set => todo!("Consteval {op}"),
                 Op::MulSet => todo!("Consteval {op}"),

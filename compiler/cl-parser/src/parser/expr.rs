@@ -194,7 +194,6 @@ const fn from_infix(token: &Token, can_do: bool) -> PResult<(Ps, Prec)> {
         TKind::BarEq => (Ps::Op(Op::OrSet), Prec::Assign),
         TKind::Comma => (Ps::Op(Op::Tuple), Prec::Tuple),
         TKind::LCurly => (Ps::Make, Prec::Make),
-        TKind::XorXor => (Ps::Op(Op::LogXor), Prec::Logical),
         TKind::BarBar => (Ps::Op(Op::LogOr), Prec::LogOr),
         TKind::AmpAmp => (Ps::Op(Op::LogAnd), Prec::LogAnd),
         TKind::Lt => (Ps::Op(Op::Lt), Prec::Compare),

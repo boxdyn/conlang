@@ -185,7 +185,11 @@ impl Visit<'_, DefaultTypes> for Populator<'_, '_> {
     fn visit_matcharm(&mut self, item: &MatchArm<DefaultTypes>) -> Result<(), Self::Error> {
         let cl_ast::MatchArm(At(pat, span), expr) = item;
         println!("TODO: MatchArm patterns may bind multiple items:\n{span:?}: {pat} => {expr}");
-        Ok(())
+        self.new_entry(NodeKind::Scope)
+            .with_kind(NodeKind::Let, |scope| {
+                pat.visit_in(scope)?;
+                expr.visit_in(scope)
+            })
     }
 
     fn visit_use(&mut self, item: &Use<DefaultTypes>) -> Result<(), Self::Error> {

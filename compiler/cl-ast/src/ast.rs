@@ -215,8 +215,6 @@ pub enum Op {
 
     /// `Expr && Expr`
     LogAnd,
-    /// `Expr ^^ Expr`
-    LogXor,
     /// `Expr || Expr`
     LogOr,
 

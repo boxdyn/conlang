@@ -226,7 +226,7 @@ fn infer_expr_op(op: Op, exprs: &[At<Expr>], e: &mut InferenceEngine<'_, '_>) ->
 
             Ok(e.bool())
         }
-        (Op::LogAnd | Op::LogXor | Op::LogOr, [lhs, rhs]) => {
+        (Op::LogAnd | Op::LogOr, [lhs, rhs]) => {
             let lhs = lhs.infer(e)?;
             let rhs = rhs.infer(e)?;
             // TODO: clarify truthiness

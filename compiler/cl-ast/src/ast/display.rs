@@ -184,7 +184,6 @@ impl Display for Op {
             Op::Geq => " >= ",
             Op::Gt => " > ",
             Op::LogAnd => " && ",
-            Op::LogXor => " ^^ ",
             Op::LogOr => " || ",
             Op::Set => " = ",
             Op::MulSet => " *= ",
