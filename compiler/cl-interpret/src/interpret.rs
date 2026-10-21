@@ -408,6 +408,14 @@ impl Interpret for Bind<DefaultTypes> {
                         continue;
                     };
                     env.implement_raw(ty, name.0, id);
+                    match ty.to_ref() {
+                        Model::Enum(_, variants) => {
+                            for &(_, variant) in variants {
+                                env.implement_raw(variant, name.0, id);
+                            }
+                        }
+                        _ => {}
+                    }
                 }
             }
             Ok(ConValue::TypeInfo(ty))
