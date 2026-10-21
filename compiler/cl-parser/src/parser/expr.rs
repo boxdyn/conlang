@@ -259,7 +259,18 @@ impl<'t> Parse<'t> for Expr {
                 Ps::Lit => Expr::Lit(p.parse(())?),
                 Ps::Use => Expr::Use(p.consume().parse(())?),
                 Ps::Bind => Expr::Bind(p.parse(Prec::from_value(level))?),
-                Ps::For => parse_for(p, ())?,
+                Ps::For => Expr::Bind(Box::new(Bind(
+                    BindOp::For,
+                    p.consume().parse(PPrec::Tuple)?,
+                    vec![
+                        p.expect(TKind::In)?.parse(Prec::Logical.next())?,
+                        p.parse(Prec::Body.next())?,
+                        match p.next_if(TKind::Else).allow_eof()? {
+                            Some(Ok(_)) => p.parse(Prec::Body.next())?,
+                            _ => Expr::Omitted.at(p.span()),
+                        },
+                    ],
+                ))),
                 Ps::Match => Expr::Match(p.parse(())?),
                 Ps::Label => Expr::Label(p.parse(prec.next())?),
                 Ps::Lambda | Ps::Lambda0 => {
@@ -271,7 +282,7 @@ impl<'t> Parse<'t> for Expr {
                         .unwrap_or(At(Pat::Op(PatOp::Tuple, vec![]), span.merge(p.span())));
 
                     let rety = p
-                        .opt_if(PPrec::Fn, TKind::Arrow)?
+                        .opt_if(TKind::Arrow, PPrec::Fn)?
                         .unwrap_or(Pat::Ignore.at(p.span()));
 
                     Expr::Bind(Box::new(Bind(
@@ -410,7 +421,7 @@ fn parse_array(p: &mut Parser<'_>) -> PResult<Expr> {
 
     let prec = Prec::Tuple;
     let item = p.parse(prec.value())?;
-    let repeat = p.opt_if(prec.next(), TKind::Semi)?;
+    let repeat = p.opt_if(TKind::Semi, prec.next())?;
     p.expect(TKind::RBrack)?;
 
     Ok(match (repeat, item) {
@@ -465,52 +476,11 @@ impl<'t> Parse<'t> for MatchArm {
 
     fn parse(p: &mut Parser<'t>, _level: Self::Prec) -> PResult<Self>
     where Self: Sized {
-        // <T,*>
-        // let generics = match p.next_if(TKind::Lt)? {
-        //     Ok(_) => p.list(vec![], (), TKind::Comma, TKind::Gt)?,
-        //     Err(_) => vec![],
-        // };
-
-        // Pat
-        let pat = p.parse(PPrec::Min)?;
-        p.expect(TKind::FatArrow)?;
-        let body = p.parse(Prec::Body.value())?;
-
-        Ok(Self(pat, body))
+        Ok(Self(
+            p.parse(PPrec::Min)?,
+            p.expect(TKind::FatArrow)?.parse(Prec::Body.value())?,
+        ))
     }
-}
-
-/// Parses a `for` loop expression
-fn parse_for(p: &mut Parser<'_>, _level: ()) -> PResult<Expr> {
-    // for Pat
-    let pat = p.consume().parse(PPrec::Tuple)?;
-    // in Expr
-    let iter: At<Expr> = p.expect(TKind::In)?.parse(Prec::Logical.next())?;
-    // Expr
-    let pass: At<Expr> = p.parse(Prec::Body.next())?;
-    let pspan = pass.1;
-    // else Expr?
-    let fail = match p.next_if(TKind::Else).allow_eof()? {
-        Some(Ok(_)) => p.parse(Prec::Body.next())?,
-        _ => Expr::Omitted.at(pspan),
-    };
-    /*
-    TODO: desugar for into loop-match:
-    for `pat in `iter `pass else `fail
-    ==>
-    match (`iter).into_iter() {
-        #iter => loop match #iter.next() {
-            None => break `fail,
-            Some(`pat) => `pass,
-        },
-    }
-    */
-
-    Ok(Expr::Bind(Box::new(Bind(
-        BindOp::For,
-        pat,
-        vec![iter, pass, fail],
-    ))))
 }
 
 /// Returns the [BindOp], [pattern precedence](PPrec), [arrow TKind](TKind), [body presence](bool),
@@ -555,7 +525,7 @@ impl<'t> Parse<'t> for Bind {
             return Ok(Self(bind, pat, vec![]));
         };
 
-        // `=>` for match, `=` for `let`, `type`
+        // require `=` for `let`, `type`
         if let Some(equals) = equals {
             if p.next_if(equals).allow_eof()?.is_none_or(|v| v.is_err()) {
                 return Ok(Self(bind, pat, vec![]));
@@ -598,7 +568,7 @@ impl<'t> Parse<'t> for MakeArm {
                 .str()
                 .expect("Identifier should have String")
                 .into(),
-            p.opt_if(Prec::Tuple.next(), TKind::Colon)?,
+            p.opt_if(TKind::Colon, Prec::Tuple.next())?,
         ))
     }
 }

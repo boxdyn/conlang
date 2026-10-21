@@ -185,7 +185,7 @@ impl<'t> Parser<'t> {
     }
 
     /// Parses into an [`Option<P>`] if the next token is `next`
-    pub fn opt_if<P: Parse<'t>>(&mut self, level: P::Prec, next: TKind) -> PResult<Option<P>> {
+    pub fn opt_if<P: Parse<'t>>(&mut self, next: TKind, level: P::Prec) -> PResult<Option<P>> {
         Ok(match self.next_if(next)? {
             Ok(_) => Some(self.parse(level).no_eof()?),
             Err(_) => None,

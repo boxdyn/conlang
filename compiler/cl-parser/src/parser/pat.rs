@@ -264,7 +264,7 @@ fn parse_array_pat(p: &mut Parser<'_>) -> PResult<Pat> {
     }
 
     let item = p.parse(Prec::Tuple)?;
-    let repeat = p.opt_if(Prec::Tuple, TKind::Semi)?;
+    let repeat = p.opt_if(TKind::Semi, Prec::Tuple)?;
     p.expect(TKind::RBrack)?;
 
     Ok(match (repeat, item) {
