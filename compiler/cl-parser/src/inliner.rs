@@ -2,12 +2,11 @@
 
 use crate::{ParseError, Parser};
 use cl_ast::{
-    fold::{Fold, Foldable},
-    types::{Literal, Path as AstPath, Symbol},
+    fold::{Fold, Foldable, impl_default_fold},
+    types::Literal,
     *,
 };
 use cl_lexer::Lexer;
-use cl_structures::span::Span;
 use std::{
     convert::Infallible,
     path::{Path, PathBuf},
@@ -97,6 +96,8 @@ impl ModuleInliner {
 impl Fold<DefaultTypes> for ModuleInliner {
     type Error = Infallible;
 
+    impl_default_fold!(DefaultTypes, DefaultTypes);
+
     /// Traverses down the module tree, entering ever nested directories
     fn fold_bind(&mut self, bind: Bind<DefaultTypes>) -> Result<Bind<DefaultTypes>, Self::Error> {
         let Bind(BindOp::Mod, pat, exprs) = bind else {
@@ -137,26 +138,6 @@ impl Fold<DefaultTypes> for ModuleInliner {
 
         self.path.pop(); // cd ..
         out
-    }
-
-    fn fold_annotation(&mut self, span: Span) -> Result<Span, Self::Error> {
-        Ok(span)
-    }
-
-    fn fold_macro_id(&mut self, name: Symbol) -> Result<Symbol, Self::Error> {
-        Ok(name)
-    }
-
-    fn fold_symbol(&mut self, name: Symbol) -> Result<Symbol, Self::Error> {
-        Ok(name)
-    }
-
-    fn fold_path(&mut self, path: AstPath) -> Result<AstPath, Self::Error> {
-        Ok(path)
-    }
-
-    fn fold_literal(&mut self, lit: Literal) -> Result<Literal, Self::Error> {
-        Ok(lit)
     }
 }
 
