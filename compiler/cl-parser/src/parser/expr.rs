@@ -321,7 +321,11 @@ impl<'t> Parse<'t> for Expr {
                 Ps::Op(op @ (Op::Block | Op::Quote)) => {
                     Expr::Op(op, p.consume().opt(MIN, kind.flip())?.into_iter().collect())
                 }
-                Ps::Op(Op::Array) => parse_array(p)?,
+                Ps::Op(Op::Array) => match p.consume().opt(Prec::Do.value(), TKind::RBrack)? {
+                    Some(At(Expr::Op(Op::Do, ar), _)) => Expr::Op(Op::ArRep, ar),
+                    Some(At(Expr::Op(Op::Tuple, items), _)) => Expr::Op(Op::Array, items),
+                    other => Expr::Op(Op::Array, other.into_iter().collect()),
+                },
                 Ps::Op(Op::Group) => match p.consume().opt(MIN, kind.flip())? {
                     Some(value) => Expr::Op(Op::Group, vec![value]),
                     None => Expr::Op(Op::Tuple, vec![]),
@@ -410,25 +414,6 @@ impl<'t> Parse<'t> for Expr {
             Ok(head)
         })
     }
-}
-
-/// Parses an array with 0 or more elements, or an array-repetition
-fn parse_array(p: &mut Parser<'_>) -> PResult<Expr> {
-    if p.consume().peek()?.kind == TKind::RBrack {
-        p.consume();
-        return Ok(Expr::Op(Op::Array, vec![]));
-    }
-
-    let prec = Prec::Tuple;
-    let item = p.parse(prec.value())?;
-    let repeat = p.opt_if(TKind::Semi, prec.next())?;
-    p.expect(TKind::RBrack)?;
-
-    Ok(match (repeat, item) {
-        (Some(repeat), item) => Expr::Op(Op::ArRep, vec![item, repeat]),
-        (None, At(Expr::Op(Op::Tuple, items), _)) => Expr::Op(Op::Array, items),
-        (None, item) => Expr::Op(Op::Array, vec![item]),
-    })
 }
 
 impl<'t> Parse<'t> for Label {
