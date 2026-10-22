@@ -16,6 +16,7 @@
 use repline::prebaked::*;
 use std::{
     error::Error,
+    fmt::Write,
     io::{IsTerminal, stdin, stdout},
 };
 
@@ -63,7 +64,7 @@ fn pargs() -> Result<Args, Box<dyn Error>> {
             }
             line if let Ok(mode) = ParseMode::try_from(line) => parsing = mode,
             line if let Ok(mode) = Verbosity::try_from(line) => verbose = mode,
-            line if line.ends_with(".cl") => includes += &format!("mod \"{line}\";\n"),
+            line if line.ends_with(".cl") => writeln!(includes, "mod {line:?};")?,
             _ => entrypoint += &(arg + " "),
         }
     }
