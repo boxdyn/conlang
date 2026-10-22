@@ -9,10 +9,12 @@ use cl_ast::{
     visit::Walk,
 };
 use cl_interpret::{convalue::ConValue, env::Environment, interpret::Interpret};
-use cl_lexer::{EOF, LexError, Lexer};
+use cl_lexer::{
+    EOF, LexError, Lexer,
+    token::{TKind, Token},
+};
 use cl_parser::{PResultExt, Parse, ParseError, Parser, inliner::ModuleInliner};
 use cl_structures::span::Span;
-use cl_token::{TKind, Token};
 // use cl_typeck::Collector;
 use std::{error::Error, marker::PhantomData};
 

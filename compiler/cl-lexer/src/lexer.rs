@@ -1,8 +1,10 @@
 pub use cl_structures::intern::interned::Symbol;
 
-use crate::error::{LexFailure::*, *};
+use crate::{
+    error::{LexFailure::*, *},
+    token::*,
+};
 use cl_structures::span::Span;
-use cl_token::*;
 use std::{iter::Peekable, ops::Range, str::CharIndices};
 use unicode_ident::{is_xid_continue, is_xid_start};
 

@@ -1,7 +1,6 @@
 use super::pat::Prec as PatPrec;
-use cl_lexer::LexError;
+use cl_lexer::{LexError, TKind};
 use cl_structures::span::Span;
-use cl_token::TKind;
 use std::{error::Error, fmt::Display};
 
 /// All the ways a [Parser](crate::parser::Parser) can fail
@@ -51,7 +50,6 @@ impl ParseError {
         }
     }
 }
-
 
 pub use ParseError::EOF;
 

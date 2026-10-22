@@ -5,7 +5,7 @@ use cl_ast::{
     types::{Literal, Path},
     *,
 };
-use cl_token::{TKind, Token};
+use cl_lexer::token::{TKind, Token};
 
 /// Precedence levels of value and type pattern expressions.
 ///

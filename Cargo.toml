@@ -3,7 +3,6 @@ members = [
     "compiler/cl-typeck",
     "compiler/cl-interpret",
     "compiler/cl-structures",
-    "compiler/cl-token",
     "compiler/cl-ast",
     "compiler/cl-parser",
     "compiler/cl-lexer",
@@ -33,7 +32,6 @@ license.workspace = true
 # cl-typeck = { path = "compiler/cl-typeck" }
 cl-interpret = { path = "compiler/cl-interpret" }
 cl-structures = { path = "compiler/cl-structures" }
-cl-token = { path = "compiler/cl-token" }
 cl-ast = { path = "compiler/cl-ast" }
 cl-parser = { path = "compiler/cl-parser" }
 cl-lexer = { path = "compiler/cl-lexer" }

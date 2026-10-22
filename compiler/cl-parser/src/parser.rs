@@ -7,9 +7,11 @@ pub mod pat;
 pub mod error;
 
 use cl_ast::{types::*, *};
-use cl_lexer::{LexError, LexFailure, Lexer};
+use cl_lexer::{
+    LexError, LexFailure, Lexer,
+    token::{Lexeme, TKind, Token},
+};
 use cl_structures::span::Span;
-use cl_token::{Lexeme, TKind, Token};
 pub use error::{EOF, PResult, PResultExt, ParseError, no_eof};
 
 /// Parse an expression from a [Parser]'s token stream at a given precedence level

@@ -1,8 +1,9 @@
 //! # Token
 //!
 //! Stores a component of a file as a [Lexeme], [TKind], and [struct@Span]
-#![warn(clippy::all)]
+//!
 //! The Token defines an interface between lexer and parser
+#![warn(clippy::all)]
 
 use cl_structures::span::Span;
 

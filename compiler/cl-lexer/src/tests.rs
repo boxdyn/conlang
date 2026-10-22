@@ -1,5 +1,4 @@
-use crate::Lexer;
-use cl_token::*;
+use crate::{Lexer, token::*};
 
 macro_rules! test_tkind {
     ($($f:ident {$($test:expr => $expect:expr),*$(,)?})*) => {$(

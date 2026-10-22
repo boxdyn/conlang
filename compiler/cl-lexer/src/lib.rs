@@ -11,8 +11,7 @@
 //! ```rust
 //! # use cl_lexer::LexError;
 //! # fn main() -> Result<(), LexError> {
-//! use cl_lexer::{Lexer, Symbol};
-//! use cl_token::{Token, Lexeme, TKind};
+//! use cl_lexer::{Lexer, Symbol, token::{Token, Lexeme, TKind};
 //!
 //! let sample_text = r#"
 //!     "This is a string\n"
@@ -77,9 +76,12 @@ pub mod error;
 
 pub mod lexer;
 
+pub mod token;
+
 pub use crate::{
     error::{EOF, LexError, LexFailure},
     lexer::{Lexer, Symbol},
+    token::{TKind, Token},
 };
 
 #[cfg(test)]

@@ -5,7 +5,7 @@ use cl_ast::{
     types::{Literal, Path},
     *,
 };
-use cl_token::{Lexeme, TKind, Token};
+use cl_lexer::token::{Lexeme, TKind, Token};
 
 /// Organizes the precedence hierarchy for syntactic elements
 // Safety invariant: Prec variants are C-like and contiguous
