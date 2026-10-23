@@ -592,8 +592,14 @@ pub const StringMethods: &[Builtin] = &builtins![
         get_str(env, string).map(|s| s.len() as Integer)
     }
 
+    fn get(string, index) @env -> u8 {
+        let index = get_int(env, index, "usize")? as usize;
+        let string = get_str(env, string)?.as_bytes();
+        env.to_convalue_option(string.get(index).map(|&v| ConValue::Int(v as _)))
+    }
+
     /// Converts `string` into an array of chars
-    fn chars(string) @env -> [char] {
+    fn to_char_array(string) @env -> [char] {
         Ok(ConValue::Array(get_str(env, string)?.chars().map(Into::into).collect()))
     }
 ];
@@ -608,6 +614,17 @@ pub const ArrayMethods: &[Builtin] = &builtins! {
             ConValue::Array(arr) => arr.len() as Integer,
             other => Err(Error::TypeError("[_]", other.type_of(env)))?,
         })
+    }
+
+    /// Returns the value at position
+    fn get(array, index) @env -> _ {
+        let array = array.take();
+        let index = get_int(env, index, "usize")? as usize;
+        let ConValue::Array(array) = array.dereference_in(env)? else {
+            Err(Error::TypeError("[_]", array.type_of(env)))?
+        };
+        let value = array.get(index).cloned();
+        env.to_convalue_option(value)
     }
 
     /// Pushes an `item` onto the top of an array (by reference)
@@ -659,7 +676,7 @@ fn get_char(env: &mut Environment, value: &ConValue) -> IResult<char> {
     Ok(v)
 }
 
-fn get_str<'e>(env: &'e mut Environment, value: &'e ConValue) -> IResult<&'e str> {
+fn get_str<'e>(env: &'e Environment, value: &'e ConValue) -> IResult<&'e str> {
     Ok(match value.dereference_in(env)? {
         ConValue::Str(s) => s.to_ref(),
         ConValue::String(s) => s.as_ref(),
