@@ -34,6 +34,7 @@ pub struct FnInner {
 
 /// Represents a block of code which persists inside the Interpreter
 #[derive(Clone, Debug)]
+#[repr(transparent)]
 pub struct Function {
     /// Stores the contents of the function declaration
     decl: Rc<FnInner>,

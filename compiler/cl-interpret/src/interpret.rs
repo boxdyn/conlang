@@ -16,7 +16,7 @@ use cl_ast::{
     types::{Literal, Path, Symbol},
     *,
 };
-use std::{collections::HashMap, iter, mem::take, rc::Rc};
+use std::{collections::HashMap, iter, mem::take};
 
 #[expect(unused, reason = "To be reintroduced later")]
 macro trace($($t:tt)*) {{
@@ -465,7 +465,7 @@ impl Interpret for Bind<DefaultTypes> {
             (BindOp::Type, _, []) => cl_todo!("type {pat}"),
             (BindOp::Type, _, [body]) => cl_todo!("type {pat} = {body}"),
             (BindOp::Fn, _, [_]) => {
-                let func = Rc::new(Function::new(self, env.get_module()));
+                let func = Function::new(self, env.get_module());
                 if let Some(name) = func.name() {
                     env.bind(name, ConValue::Function(func.clone()))
                 }

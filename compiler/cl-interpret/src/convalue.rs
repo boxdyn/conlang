@@ -77,7 +77,7 @@ pub enum ConValue {
     /// A quoted expression
     Quote(Box<At<Expr>>),
     /// A callable thing
-    Function(Rc<Function>),
+    Function(Function),
     /// A built-in function
     Builtin(&'static Builtin),
     /// The definition of a type, by index
