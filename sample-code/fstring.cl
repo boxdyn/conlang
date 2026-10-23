@@ -4,7 +4,7 @@
 #[rustfmt::skip]
 fn f(__fmt: &str) -> &str {
     let __out, __expr, __label, __depth = "", "", "", 0;
-    for __c in chars(__fmt) {
+    for __c in __fmt.chars() {
         match __c {
             '{' => {
                 __depth += 1;

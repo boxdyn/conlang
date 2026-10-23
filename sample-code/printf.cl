@@ -25,15 +25,14 @@ fn format_bool(stream: &fn(char), arg: bool) = {
 /// Base formatting functionality: outputs a formatted char sequence,
 /// one at a time, to the `stream`.
 fn vformat(stream: &fn(char), format: str, args: (..)) {
-    let buf = format.chars();
-    fn take() = if let [chr, ..rest] = buf Some(buf = rest; chr) else None;
     fn arg() {
         let arg, ..rest = args else panic("Not enough args for ", format);
         args = rest;
         arg
     }
-    loop match take() {
-        Some('%') => match take() {
+    let buf = format.chars();
+    loop match buf.next() {
+        Some('%') => match buf.next() {
             Some('%') => stream('%');
             // TODO: float formatting
             Some('s') => for c in (arg() as str).chars() stream(c);

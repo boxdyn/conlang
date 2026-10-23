@@ -111,7 +111,7 @@ fn pre_bp(op: char) -> i32 {
 
 fn main() loop {
     let line = get_line("calc > ");
-    let expr, rest = line.chars().parse(0);
+    let expr, rest = line.to_char_array().parse(0);
 
     println(fmt_expr(expr), " -> ", execute(expr));
 }

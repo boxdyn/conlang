@@ -36,7 +36,7 @@ enum Brainfuck {
 
 fn compile(program: str) -> [Brainfuck] {
     let stack, fucks = [], [];
-    for c in program.chars() fucks.join(match c {
+    for c in program fucks.join(match c {
         '>' => Brainfuck::Right(1);
         '<' => Brainfuck::Left(1);
         '+' => Brainfuck::Inc(1);
@@ -78,7 +78,7 @@ fn run(fucks: &[Brainfuck], ..input: [char]) {
     let pc = -1;
     let input = match input {
         [..chars] => chars;
-        string => string.chars();
+        string => string.into_iter().Array::collect();
     };
 
     while (pc += 1; pc < fucks.len()) match fucks[pc] {
@@ -88,7 +88,7 @@ fn run(fucks: &[Brainfuck], ..input: [char]) {
         Brainfuck::Dec(n) => tape[head] = (tape[head] - n) as u8;
         Brainfuck::Out(n) => for _ in 0..n putchar(tape[head] as char);
         Brainfuck::In => tape[head] = loop match input {
-            [] => (input = get_line("  , ").chars(); input.push('\0'));
+            [] => (input = get_line("  , ").to_char_array(); input.push('\0'));
             [first, ..rest] => (input = rest; break first as u8);
         }
         Brainfuck::Jz(goto) => if tape[head] == 0 { pc = goto }

@@ -7,7 +7,7 @@ fn in_range(this: &Ord, min: Ord, max: Ord) -> bool {
 
 fn frequency(s: str) -> [i32; 128] {
     let letters = [0; 128];
-    for letter in s.chars() {
+    for letter in s {
         if letter.in_range(' ', letters.len() as char) {
             letters[letter as i32] += 1;
         }
