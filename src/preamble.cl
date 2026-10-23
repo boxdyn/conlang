@@ -193,7 +193,7 @@ impl RangeInc {
     Iterator::_derive(InclusiveIter, {
         fn next(self: &RangeInc::InclusiveIter) = if self.0 > self.1 None else {
             let out = self.0;
-            self.0 += 1;
+            self.0 = out + 1;
             Some(out)
         }
     });
@@ -205,25 +205,26 @@ impl RangeExc {
     Iterator::_derive(ExclusiveIter, {
         fn next(self: &RangeExc::ExclusiveIter) = if self.0 >= self.1 None else {
             let out = self.0;
-            self.0 += 1;
+            self.0 = out + 1;
             Some(out)
         }
     });
     fn into_iter(&RangeExc(start, end)) = RangeExc::ExclusiveIter(start, end);
 }
 
-impl [_] {
+let Array = impl [_] {
     /// An iterator over an array's contents
-    struct ArrayIter(Self, RangeExc::ExclusiveIter);
+    struct ArrayIter(Self, usize);
     Iterator::_derive(ArrayIter, {
-        fn next(self: &Self::ArrayIter) match self.1.next() {
-            Some(index) => Some(self.0[index]);
-            _ => None;
+        fn next(self: &Self::ArrayIter) -> Option<u8> {
+            let index = self.1;
+            self.1 = index + 1;
+            self.0.get(index)
         }
     });
 
     /// Constructs an iterator over this array's contents
-    fn into_iter(self: &Self) = Self::ArrayIter(self, (0..self.len()).into_iter());
+    fn into_iter(self: &Self) = Self::ArrayIter(self, 0);
     let iter = into_iter;
 
     /// Computes the cartesian product of `selves` and `others`
