@@ -442,6 +442,19 @@ pub const Math: &[Builtin] = &builtins![
             .map(|dur| ConValue::Int(dur.as_micros() as _))
             .map_err(|e| error_format!("{e}"))
     }
+
+    /// Runs `function()` `iteration` times, returning the average time taken in seconds
+    fn runtime_of(iterations, function) @env -> f64 {
+        use std::time::Instant;
+        let mut average = 0.0;
+        let iterations = get_int(env, iterations, "usize")? as usize;
+        for _ in 0..iterations {
+            let earlier = Instant::now();
+            function.call(env, vec![])?;
+            average += Instant::now().duration_since(earlier).as_secs_f64();
+        }
+        Ok(average / iterations as f64)
+    }
 ];
 
 /// Associated [Builtin] functions for [ConValue::Int]s
