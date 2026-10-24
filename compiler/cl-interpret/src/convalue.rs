@@ -391,8 +391,7 @@ bin_ops! {
     ] else (a, idx) => Err(Error::TypeError(format!("{}.index({idx})", a.type_of(env)), idx.type_of(env)))?;
     Ord: cmp = [
         (a, b) if a.is_primitive() => ConValue::Int(a.internal_compare(&b, env)?),
-        // always defer to internal_compare on failure
-    ] else (a, b) => Err(Error::TypeError(a.type_of(env), b.type_of(env)))?;
+    ] else (a, b) => ConValue::Int(a.internal_compare(&b, env)?);
     Mul: mul = [
         (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_mul(b)),

@@ -13,6 +13,7 @@ use crate::{
     typeinfo::{Model, Type},
 };
 use cl_ast::{
+    fmt::FmtAdapter,
     types::{Literal, Path, Symbol},
     *,
 };
@@ -28,22 +29,26 @@ macro trace($($t:tt)*) {{
 
 /// Turns a `todo!` invocation into an [Error::Panic]
 pub macro cl_todo {
-    () => {
+    () => {{
+        std::hint::cold_path();
         Err(Error::Panic(format!("Not yet implemented (at {}:{}:{})", file!(), line!(), column!())))
-    },
-    ($($t:tt)*) => {
+    }},
+    ($($t:tt)*) => {{
+        std::hint::cold_path();
         Err(Error::Panic(format!("Not yet implemented: {} (at {}:{}:{})", format_args!($($t)*), file!(), line!(), column!())))
-    }
+    }}
 }
 
 /// Turns an `unimplemented!` invocation into an [Error::Panic]
 pub macro cl_unimplemented {
-    () => {
+    () => {{
+        std::hint::cold_path();
         Err(Error::Panic(format!("Not implemented (at {}:{}:{})", file!(), line!(), column!())))
-    },
-    ($($t:tt)*) => {
+    }},
+    ($($t:tt)*) => {{
+        std::hint::cold_path();
         Err(Error::Panic(format!("Not implemented: {} (at {}:{}:{})", format_args!($($t)*), file!(), line!(), column!())))
-    }
+    }}
 }
 
 pub use self::{cl_todo as todo, cl_unimplemented as unimplemented};
@@ -892,11 +897,8 @@ impl Match for (PatOp, &[At<Pat>]) {
     fn matches<'env>(&self, value: ConValue, in_env: &mut MatchEnv<'env>) -> IResult<bool> {
         match self {
             (PatOp::MetaInner | PatOp::MetaOuter, [_doc, pat]) => pat.matches(value, in_env),
-            (PatOp::MetaInner | PatOp::MetaOuter, _) => unimplemented!(),
             (PatOp::Pub, [pat]) => pat.matches(value, &mut in_env.public()),
-            (PatOp::Pub, _) => unimplemented!(),
             (PatOp::Mut, [pat]) => pat.matches(value, &mut in_env.mutable()),
-            (PatOp::Mut, _) => unimplemented!(),
             (PatOp::Ref, [pat]) => match value {
                 ConValue::Ref(place) => {
                     let value = place.get(in_env.env)?.clone();
@@ -905,8 +907,6 @@ impl Match for (PatOp, &[At<Pat>]) {
                 // Auto-referencing in patterns..?
                 other => pat.matches(other, in_env),
             },
-            (PatOp::Ref, _) => unimplemented!("Ref patterns!"),
-            (PatOp::Ptr, _) => todo!("Raw pointer/deref patterns?"),
             (PatOp::Rest, []) => Ok(true),
             // Rest pattern with const value is upper-bounded exclusive range
             (PatOp::Rest, [At(Pat::Value(end), span)]) => end
@@ -915,7 +915,6 @@ impl Match for (PatOp, &[At<Pat>]) {
                 .truthy(in_env.env)
                 .map_err(|e| e.with_span(*span)),
             (PatOp::Rest, [rest]) => rest.matches(value, in_env),
-            (PatOp::Rest, _) => unimplemented!("rest pattern with more than one arg"),
 
             // RangeEx pattern with const value is lower-bounded exclusive ranges
             (PatOp::RangeEx, [At(Pat::Value(start), span)]) => start
@@ -933,7 +932,6 @@ impl Match for (PatOp, &[At<Pat>]) {
                     .gt(&value, in_env.env)?
                     .truthy(in_env.env)
                     .map_err(|e| e.with_span(*esp))?),
-            (PatOp::RangeEx, pats) => todo!("RangeEx patterns: {pats:?}"),
             (PatOp::RangeIn, [At(Pat::Value(start), ssp), At(Pat::Value(end), esp)]) => Ok(start
                 .interpret(in_env.env)?
                 .lt_eq(&value, in_env.env)?
@@ -944,20 +942,19 @@ impl Match for (PatOp, &[At<Pat>]) {
                     .gt_eq(&value, in_env.env)?
                     .truthy(in_env.env)
                     .map_err(|e| e.with_span(*esp))?),
-            (PatOp::RangeIn, pats) => todo!("Range patterns: {pats:?}"),
             (PatOp::Record, pats) => match_pat_for_struct(pats, value, in_env),
-            (PatOp::Tuple, pats) => match value {
-                ConValue::Unit if pats.is_empty() => Ok(true),
-                ConValue::Tuple(values) => (SliceMode::Tuple, *pats).matches(values, in_env),
-                _ => Ok(false),
-            },
-            (PatOp::Slice, pats) => match value {
-                ConValue::Array(values) => (SliceMode::Slice, *pats).matches(values, in_env),
-                _ => todo!("Match {pats:?} against {value}"),
-            },
-            (PatOp::ArRep, _) => todo!(),
+            (PatOp::Tuple, pats) if let ConValue::Unit = value => Ok(pats.is_empty()),
+            (PatOp::Tuple, pats) if let ConValue::Tuple(values) = value => {
+                (SliceMode::Tuple, *pats).matches(values, in_env)
+            }
+            (PatOp::Tuple, _) => Ok(false),
+            (PatOp::Slice, pats) if let ConValue::Array(values) = value => {
+                (SliceMode::Slice, *pats).matches(values, in_env)
+            }
+            (PatOp::ArRep, [pat, rep]) if let ConValue::Array(_) = value => {
+                todo!("Array repetition pattern: [{pat}; {rep}] on {value:?}")
+            }
             (PatOp::Typed, [pat, _ty @ ..]) => pat.matches(value, in_env),
-            (PatOp::Typed, _) => todo!(),
             (PatOp::TypePrefixed, [At(Pat::Value(e), sp), pat]) => {
                 let ty = match e.interpret(in_env.env)? {
                     ConValue::TypeInfo(ty) => ty,
@@ -997,13 +994,9 @@ impl Match for (PatOp, &[At<Pat>]) {
                 }
                 _ => pat.matches(value, in_env),
             },
-            (PatOp::TypePrefixed, _) => todo!("TypePrefixed {self:?}"),
             (PatOp::PostfixGeneric, [pat, _subs @ ..]) => pat.matches(value, in_env),
-            (PatOp::PostfixGeneric, _) => todo!(),
             (PatOp::PrefixGeneric, [_subs @ .., pat]) => pat.matches(value, in_env),
-            (PatOp::PrefixGeneric, _) => todo!(),
             (PatOp::Fn, [args, _]) => args.matches(value, in_env),
-            (PatOp::Fn, _) => todo!(),
             (PatOp::Guard, [pat, At(Pat::Value(cond), csp)]) => {
                 let _ = pat.matches(value, in_env)? || return Ok(false);
                 let mut scope = in_env.env.with_frame("guard", take(in_env.bind), None);
@@ -1012,7 +1005,6 @@ impl Match for (PatOp, &[At<Pat>]) {
                 *in_env.bind = scope.pop_values().unwrap_or_default();
                 Ok(value)
             }
-            (PatOp::Guard, _) => unimplemented!("Nonbinary guard patterns!"),
             &(PatOp::Alt, alts) => {
                 let mut bind = HashMap::new();
                 for alt in alts {
@@ -1024,6 +1016,10 @@ impl Match for (PatOp, &[At<Pat>]) {
                 }
                 Ok(false)
             }
+            &(op, pats) => unimplemented!(
+                "match {op:?}{} against {value}",
+                std::fmt::from_fn(|f| f.list_wrap("(", pats, ", ", ")"))
+            ),
         }
     }
 }
@@ -1102,6 +1098,9 @@ impl Match<Box<[ConValue]>> for (SliceMode, &[At<Pat>]) {
         let Some(At(rest_pat @ Pat::Op(PatOp::Rest, rests), rspan)) = pats.next() else {
             return Ok(values.next().is_none());
         };
+
+        // Most slice-patterns (i.e. function signatures) don't have rest-patterns in them.
+        std::hint::cold_path();
 
         // Match backward until we find a rest pattern
         let mut values = values.rev();
