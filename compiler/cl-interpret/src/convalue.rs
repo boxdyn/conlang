@@ -150,6 +150,29 @@ impl ConValue {
         }
     }
 
+    pub fn is_primitive(&self) -> bool {
+        match self {
+            ConValue::Unit => true,
+            ConValue::Int(_) => true,
+            ConValue::Float(_) => true,
+            ConValue::Bool(_) => true,
+            ConValue::Char(_) => true,
+            ConValue::Str(_) => true,
+            ConValue::String(_) => true,
+            ConValue::Ref(_) => true,
+            ConValue::Slice(_, _, _) => true,
+            ConValue::Array(_) => true,
+            ConValue::Tuple(_) => true,
+            ConValue::Quote(_) => true,
+            ConValue::Function(_) => true,
+            ConValue::Builtin(_) => true,
+            ConValue::Struct(_, _) => false,
+            ConValue::TupleStruct(_, _) => false,
+            ConValue::TypeInfo(_) => false,
+            ConValue::Module(_) => false,
+        }
+    }
+
     pub fn type_of(&self, env: &Environment) -> Type {
         fn type_of_place(place: &Place, env: &Environment) -> Type {
             place
@@ -291,7 +314,6 @@ impl ConValue {
                 if let ty = a.type_of(env)
                     && let Ok(f) = env.get_impl(ty, env.kw.cmp) =>
             {
-                println!("Calling {f} with {a}, {b}");
                 match f.call(env, vec![a.clone(), b.clone()])? {
                     ConValue::Int(i) => i,
                     other => Err(Error::TypeError("{integer}", other.type_of(env)))?,
@@ -368,13 +390,9 @@ bin_ops! {
         }
     ] else (a, idx) => Err(Error::TypeError(format!("{}.index({idx})", a.type_of(env)), idx.type_of(env)))?;
     Ord: cmp = [
-        (a, b) if let ty = a.type_of(env)
-            && let Ok(f) = env.get_impl(ty, env.kw.cmp) => {
-            println!("Calling {f} with {a}, {b}");
-            f.call(env, vec![a, b])?
-        }
-        (a, b) => ConValue::Int(a.internal_compare(&b, env)? as _),
-    ]
+        (a, b) if a.is_primitive() => ConValue::Int(a.internal_compare(&b, env)?),
+        // always defer to internal_compare on failure
+    ] else (a, b) => Err(Error::TypeError(a.type_of(env), b.type_of(env)))?;
     Mul: mul = [
         (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_mul(b)),
@@ -443,17 +461,21 @@ bin_ops! {
 /// Implements unary operators for [ConValue]
 ///
 /// Performs autodereference on self, and dispatches by [Type] for ADTs
-macro un_ops(with $env:ident: Environment; $($trait:ty: $fn:ident = [$($match:tt)*])*) {
+macro un_ops(with $env:ident: Environment; $(
+    $trait:ty: $fn:ident = [$($match:tt)*]
+        $(else $other: pat => $expr: expr;)?
+)*) {
     $(impl ConValue {
         #[doc = concat!["Implements the [`", stringify!($trait), "`] operator"]]
         pub fn $fn(self, $env: &mut Environment) -> IResult<Self> {
             Ok(match self {
                 ConValue::Ref(place) => place.get($env)?.clone().$fn($env)?,
+                $($match)*
                 v if let ty = v.type_of($env)
                   && let Ok(f) = $env.get_impl(ty, $env.kw.$fn) => {
                     f.call($env, vec![v])?
                 }
-                $($match)*
+                $($other => $expr)?
             })
         }
     })*
@@ -465,14 +487,12 @@ un_ops! {
         ConValue::Unit => ConValue::Unit,
         ConValue::Int(v) => ConValue::Int(-v),
         ConValue::Float(v) => ConValue::Float(-v),
-        other => Err(Error::TypeError("Neg", other.type_of(env)))?,
-    ]
+    ] else other => Err(Error::TypeError("Neg", other.type_of(env)))?;
     Not: not = [
         ConValue::Unit => ConValue::Unit,
         ConValue::Int(v) => ConValue::Int(!v),
         ConValue::Bool(v) => ConValue::Bool(!v),
-        other => Err(Error::TypeError("Not", other.type_of(env)))?,
-    ]
+    ] else other => Err(Error::TypeError("Not", other.type_of(env)))?;
 }
 
 impl std::fmt::Display for ConValue {
