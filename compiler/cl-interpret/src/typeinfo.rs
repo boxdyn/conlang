@@ -10,6 +10,7 @@ use crate::{
     convalue::{ConValue, Integer},
     env::Environment,
     error::{Error, IResult},
+    reserved_words::ReservedWords,
 };
 
 pub type TypeId = usize;
@@ -221,36 +222,36 @@ impl Model {
         Ok(ConValue::Struct(self.already_interned(), Box::new(members)))
     }
     #[rustfmt::skip]
-    pub fn defaults() -> Vec<(&'static str, Self)> {
+    pub fn defaults(kw: &ReservedWords) -> Vec<(Symbol, Self)> {
         let any = Model::Any.intern();
         let types = [
-            ("_", Model::Any),
-            ("fn", Model::Function),
-            ("unit", Model::Unit(None, None, 0)),
-            ("bool", Model::Bool),
-            ("char", Model::Char),
-            ("str", Model::Str),
-            ("never", Model::Never),
-            ("f32", Model::Float{size: size_of::<f32>()}),
-            ("f64", Model::Float{size: size_of::<f64>()}),
-            ("i8", make_int!(i8, true)),
-            ("i16", make_int!(i16, true)),
-            ("i32", make_int!(i32, true)),
-            ("i64", make_int!(i64, true)),
-            ("i128", make_int!(i128, true)),
-            ("isize", make_int!(isize, true)),
-            ("int", make_int!(isize, true)),
-            ("u8", make_int!(u8, false)),
-            ("u16", make_int!(u16, false)),
-            ("u32", make_int!(u32, false)),
-            ("u64", make_int!(u64, false)),
-            ("u128", make_int!(u128, false)),
-            ("usize", make_int!(usize, false)),
-            ("uint", make_int!(usize, false)),
-            ("RangeExc", Model::Tuple(Some("RangeExc".into()), None, [any, any].into())),
-            ("RangeInc", Model::Tuple(Some("RangeInc".into()), None, [any, any].into())),
-            ("RangeTo", Model::Tuple(Some("RangeTo".into()), None, [any].into())),
-            ("RangeToInc", Model::Tuple(Some("RangeToInc".into()), None, [any].into())),
+            (kw.underscore, Model::Any),
+            (kw.kw_fn, Model::Function),
+            (kw.unit, Model::Unit(None, None, 0)),
+            (kw.bool, Model::Bool),
+            (kw.char, Model::Char),
+            (kw.str, Model::Str),
+            (kw.never, Model::Never),
+            (kw.f32, Model::Float{size: size_of::<f32>()}),
+            (kw.f64, Model::Float{size: size_of::<f64>()}),
+            (kw.i8, make_int!(i8, true)),
+            (kw.i16, make_int!(i16, true)),
+            (kw.i32, make_int!(i32, true)),
+            (kw.i64, make_int!(i64, true)),
+            (kw.i128, make_int!(i128, true)),
+            (kw.isize, make_int!(isize, true)),
+            (kw.int, make_int!(isize, true)),
+            (kw.u8, make_int!(u8, false)),
+            (kw.u16, make_int!(u16, false)),
+            (kw.u32, make_int!(u32, false)),
+            (kw.u64, make_int!(u64, false)),
+            (kw.u128, make_int!(u128, false)),
+            (kw.usize, make_int!(usize, false)),
+            (kw.uint, make_int!(usize, false)),
+            (kw.RangeExc, Model::Tuple(Some(kw.RangeExc), None, [any, any].into())),
+            (kw.RangeInc, Model::Tuple(Some(kw.RangeInc), None, [any, any].into())),
+            (kw.RangeTo, Model::Tuple(Some(kw.RangeTo), None, [any].into())),
+            (kw.RangeToInc, Model::Tuple(Some(kw.RangeToInc), None, [any].into())),
         ];
         types.into()
     }

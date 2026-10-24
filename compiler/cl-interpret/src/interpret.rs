@@ -245,19 +245,19 @@ impl Interpret for (Op, &[At<Expr>]) {
 
             // Range operators
             (Op::RangeEx, [lhs, rhs]) => Ok(ConValue::TupleStruct(
-                env.get_type_or_err("RangeExc".into())?,
+                env.get_type_or_err(env.kw.RangeExc)?,
                 Box::new([lhs.interpret(env)?, rhs.interpret(env)?]),
             )),
             (Op::RangeIn, [lhs, rhs]) => Ok(ConValue::TupleStruct(
-                env.get_type_or_err("RangeInc".into())?,
+                env.get_type_or_err(env.kw.RangeInc)?,
                 Box::new([lhs.interpret(env)?, rhs.interpret(env)?]),
             )),
             (Op::RangeEx, [rhs]) => Ok(ConValue::TupleStruct(
-                env.get_type_or_err("RangeTo".into())?,
+                env.get_type_or_err(env.kw.RangeTo)?,
                 Box::new([rhs.interpret(env)?]),
             )),
             (Op::RangeIn, [rhs]) => Ok(ConValue::TupleStruct(
-                env.get_type_or_err("RangeToInc".into())?,
+                env.get_type_or_err(env.kw.RangeToInc)?,
                 Box::new([rhs.interpret(env)?]),
             )),
 
@@ -364,24 +364,25 @@ impl Interpret for Bind<DefaultTypes> {
         let Bind(op, pat, exprs) = self;
 
         fn module(pat: &At<Pat>, body: &At<Expr>, env: &mut Environment) -> IResult<ConValue> {
+            let (kw_self, kw_super) = (env.kw.kw_self, env.kw.kw_super);
             let (name, model) = bind_struct(pat.value(), env)?;
             let ty = model.intern();
             if env
-                .get("modules_enabled".into())
+                .get(env.kw.modules_enabled)
                 .and_then(|v| v.truthy(env))
                 .is_ok_and(|v| v)
             {
                 let m = env.get_module();
                 let mut scope = env.frame(ty.name(), Some(pat.1), Some(ty));
-                scope.bind("self", ty);
-                scope.bind("super", if let Some(m) = m { m } else { ty });
+                scope.bind(kw_self, ty);
+                scope.bind(kw_super, if let Some(m) = m { m } else { ty });
                 body.interpret(&mut scope)?;
                 if let Some(values) = scope.pop_into_globals() {
                     for (name, value) in values {
                         let Location::Global(id) = value else {
                             continue;
                         };
-                        env.implement_raw(ty, name.0, id);
+                        env.implement_raw(ty, name, id);
                     }
                 }
                 if let Some(name) = name {
@@ -394,10 +395,11 @@ impl Interpret for Bind<DefaultTypes> {
         }
 
         fn implement(pat: &At<Pat>, body: &At<Expr>, env: &mut Environment) -> IResult<ConValue> {
+            let kw_selfty = env.kw.kw_Self;
             let (name, model) = bind_struct(pat.value(), env)?;
             let ty = model.intern();
             let mut scope = env.frame(ty.name(), Some(pat.1), Some(ty));
-            scope.bind_global("Self", ty);
+            scope.bind_global(kw_selfty, ty);
             if let Some(name) = name {
                 scope.bind_global(name, ty);
             }
@@ -407,11 +409,11 @@ impl Interpret for Bind<DefaultTypes> {
                     let Location::Global(id) = value else {
                         continue;
                     };
-                    env.implement_raw(ty, name.0, id);
+                    env.implement_raw(ty, name, id);
                     match ty.to_ref() {
                         Model::Enum(_, variants) => {
                             for &(_, variant) in variants {
-                                env.implement_raw(variant, name.0, id);
+                                env.implement_raw(variant, name, id);
                             }
                         }
                         _ => {}
@@ -524,13 +526,9 @@ impl Interpret for Use {
 
             match tree {
                 Use::Glob => {
-                    for (k, v) in env
-                        .impls
-                        .get(&ty)
-                        .ok_or(Error::TypeError("impls", ty))?
-                        .clone()
-                    {
-                        env.bind_raw(k.into(), Location::Global(v));
+                    let impls = env.impls.get(&ty).ok_or(Error::TypeError("impls", ty))?;
+                    for (k, v) in impls.clone() {
+                        env.bind_raw(k, Location::Global(v));
                     }
                     Ok(())
                 }
@@ -694,7 +692,8 @@ fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)
                     }
                     if let (Some(name), model) = bind_struct(member.value(), env)? {
                         let ti: Option<Type> = find_interned_type(&model);
-                        members.push((name, ti.unwrap_or(env.get_type("_".into()).unwrap())));
+                        members
+                            .push((name, ti.unwrap_or(env.get_type(env.kw.underscore).unwrap())));
                     }
                 }
                 Ok((

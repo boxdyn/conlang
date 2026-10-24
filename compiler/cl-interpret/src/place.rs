@@ -31,12 +31,12 @@ impl Callable for Place {
     fn call(&self, env: &mut Environment, args: Vec<ConValue>) -> IResult<ConValue> {
         match self.get(env)? {
             ConValue::Struct(ty, _) | ConValue::TupleStruct(ty, _) => {
-                let func = env.get_impl(*ty, "call".into())?;
+                let func = env.get_impl(*ty, env.kw.call)?;
                 let mut self_args = vec![ConValue::Ref(self.clone())];
                 self_args.extend(args);
                 func.call(env, self_args)
             }
-            module @ ConValue::Module(m) => match m.get(&"call".into()) {
+            module @ ConValue::Module(m) => match m.get(&env.kw.call) {
                 Some(func) => func.clone().call(env, args),
                 None => Err(Error::NotCallable(module.clone())),
             },
@@ -133,8 +133,8 @@ impl Place {
     pub fn dot_idx(self, idx: usize) -> Self {
         self.with(Projection::DotIdx(idx))
     }
-    pub fn dot_sym(self, sym: impl Into<Symbol>) -> Self {
-        self.with(Projection::DotSym(sym.into()))
+    pub fn dot_sym(self, sym: Symbol) -> Self {
+        self.with(Projection::DotSym(sym))
     }
 
     pub fn get_mut<'e>(&self, env: &'e mut Environment) -> IResult<&'e mut ConValue> {

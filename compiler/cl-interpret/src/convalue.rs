@@ -15,7 +15,7 @@ use super::{
     error::{Error, IResult},
     function::Function,
 };
-use std::{collections::HashMap, ops::*, rc::Rc};
+use std::{collections::HashMap, ops::*};
 
 /*
 A Value can be:
@@ -101,7 +101,7 @@ impl Callable for ConValue {
                 let id = env.stack_alloc(self.clone())?;
                 Place::from_index(id).call(env, args)
             }
-            Self::Module(m) => match m.get(&"call".into()) {
+            Self::Module(m) => match m.get(&env.kw.call) {
                 Some(func) => func.call(env, args),
                 None => Err(Error::NotCallable(self.clone())),
             },
@@ -250,7 +250,7 @@ macro cmp (with $env:ident; $($fn:ident: $op:tt);*$(;)?) {$(
     /// TODO: Remove when functions are implemented:
     ///       Desugar into function calls
     pub fn $fn(&self, other: &Self, $env: &mut Environment) -> IResult<Self> {
-        Ok(ConValue::Bool(self.compare(other, $env)? $op 0))
+        Ok(ConValue::Bool(self.internal_compare(other, $env)? $op 0))
     }
 )*}
 impl ConValue {
@@ -263,7 +263,7 @@ impl ConValue {
         gt_eq: >=;
         gt: >;
     }
-    pub fn compare(&self, other: &Self, env: &mut Environment) -> IResult<Integer> {
+    pub fn internal_compare(&self, other: &Self, env: &mut Environment) -> IResult<Integer> {
         use std::cmp::Ord;
         Ok(match (self, other) {
             (Self::Unit, Self::Unit) => 0,
@@ -279,7 +279,7 @@ impl ConValue {
             (Self::String(a), Self::String(b)) => a.cmp(b) as _,
             (Self::Array(a), Self::Array(b)) | (Self::Tuple(a), Self::Tuple(b)) => {
                 for (a, b) in a.iter().zip(b.iter()) {
-                    match a.compare(b, env)? {
+                    match a.internal_compare(b, env)? {
                         0 => continue,
                         res => return Ok(res),
                     }
@@ -287,15 +287,18 @@ impl ConValue {
                 a.len().cmp(&b.len()) as _
             }
             (Self::TypeInfo(a), Self::TypeInfo(b)) => a.cmp(b) as _,
-            (
-                // TODO: extend me if more things get added to `bin_ops!`
-                ConValue::Ref(..)
-                | ConValue::Struct(..)
-                | ConValue::TupleStruct(..)
-                | ConValue::TypeInfo(..),
-                _,
-            ) => match self.clone().cmp(other.clone(), env)? {
-                ConValue::Int(v) => v,
+            (a, b)
+                if let ty = a.type_of(env)
+                    && let Ok(f) = env.get_impl(ty, env.kw.cmp) =>
+            {
+                println!("Calling {f} with {a}, {b}");
+                match f.call(env, vec![a.clone(), b.clone()])? {
+                    ConValue::Int(i) => i,
+                    other => Err(Error::TypeError("{integer}", other.type_of(env)))?,
+                }
+            }
+            (ConValue::Ref(place), b) => match place.get(env)?.clone().cmp(b.clone(), env)? {
+                ConValue::Int(i) => i,
                 other => Err(Error::TypeError("{integer}", other.type_of(env)))?,
             },
             (a, b) => Err(Error::TypeError(
@@ -309,18 +312,22 @@ impl ConValue {
 /// Implements binary operators for [ConValue]
 ///
 /// Performs autodereference on self, and dispatches by [Type] for ADTs
-macro bin_ops(with $env:ident: Environment; $($trait:ty: $fn:ident = [$($match:tt)*])*) {
+macro bin_ops(with $env:ident: Environment; $(
+    $trait:ty: $fn:ident = [$($match:tt)*]
+        $(else $other: pat => $expr: expr;)?
+)*) {
     $(impl ConValue {
         #[doc = concat!["Implements the [`", stringify!($trait), "`] operator"]]
         pub fn $fn(self, rhs: Self, $env: &mut Environment) -> IResult<Self> {
             Ok(match (self, rhs) {
                 (ConValue::Ref(place), b) => place.get($env)?.clone().$fn(b, $env)?,
-                | (a @ ConValue::Struct(ty, _), b)
-                | (a @ ConValue::TupleStruct(ty, _), b)
-                | (a @ ConValue::TypeInfo(ty), b) => {
-                    $env.get_impl(ty, stringify!($fn).into())?.call($env, vec![a, b])?
-                }
                 $($match)*
+                #[allow(unreachable_patterns)]
+                (a, b) if let ty = a.type_of($env)
+                  && let Ok(f) = $env.get_impl(ty, $env.kw.$fn) => {
+                    f.call($env, vec![a, b])?
+                }
+                $($other => $expr)?
             })
         }
     })*
@@ -359,33 +366,34 @@ bin_ops! {
                 Err(Error::OobIndex(index - start, len - start))?
             }
         }
-        (a, idx) => Err(Error::TypeError(format!("{}.index({idx})", a.type_of(env)), idx.type_of(env)))?,
-    ]
+    ] else (a, idx) => Err(Error::TypeError(format!("{}.index({idx})", a.type_of(env)), idx.type_of(env)))?;
     Ord: cmp = [
-        (a, b) => ConValue::Int(a.compare(&b, env)? as _),
+        (a, b) if let ty = a.type_of(env)
+            && let Ok(f) = env.get_impl(ty, env.kw.cmp) => {
+            println!("Calling {f} with {a}, {b}");
+            f.call(env, vec![a, b])?
+        }
+        (a, b) => ConValue::Int(a.internal_compare(&b, env)? as _),
     ]
     Mul: mul = [
         (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_mul(b)),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a * b),
-        (a, b) => Err(Error::TypeError(a.type_of(env), b.type_of(env)))?
-    ]
+    ] else (a, b) => Err(Error::TypeError(a.type_of(env), b.type_of(env)))?;
     Div: div = [
         (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.checked_div(b).unwrap_or_else(|| {
             eprintln!("Warning: Divide by zero in {a} / {b}"); a
         })),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a / b),
-        (a, b) => Err(Error::TypeError(a.type_of(env), b.type_of(env)))?
-    ]
+    ] else (a, b) => Err(Error::TypeError(a.type_of(env), b.type_of(env)))?;
     Rem: rem = [
         (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.checked_rem(b).unwrap_or_else(|| {
             println!("Warning: Divide by zero in {a} % {b}"); a
         })),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a % b),
-        (a, b) => Err(Error::TypeError(a.type_of(env), b.type_of(env)))?
-    ]
+    ] else (a, b) => Err(Error::TypeError(a.type_of(env), b.type_of(env)))?;
     Add: add = [
         (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_add(b)),
@@ -399,44 +407,37 @@ bin_ops! {
         (ConValue::Char(a), ConValue::Char(b)) => {
             ConValue::String([a, b].into_iter().collect::<String>())
         }
-        (a, b) => Err(Error::TypeError(a.type_of(env), b.type_of(env)))?
-    ]
+    ] else (a, b) => Err(Error::TypeError(a.type_of(env), b.type_of(env)))?;
     Sub: sub = [
         (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_sub(b)),
         (ConValue::Float(a), ConValue::Float(b)) => ConValue::Float(a - b),
-        (a, b) => Err(Error::TypeError(a.type_of(env), b.type_of(env)))?
-    ]
+    ] else (a, b) => Err(Error::TypeError(a.type_of(env), b.type_of(env)))?;
     Shl: shl = [
         (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_shl(b as _)),
         (a, ConValue::Int(_)) => Err(Error::TypeError("Shl", a.type_of(env)))?,
-        (_, b) => Err(Error::TypeError("i32", b.type_of(env)))?
-    ]
+    ] else (_, b) => Err(Error::TypeError("i32", b.type_of(env)))?;
     Shr: shr = [
         (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_shr(b as _)),
         (a, ConValue::Int(_)) => Err(Error::TypeError("Shr", a.type_of(env)))?,
-        (_, b) => Err(Error::TypeError("i32", b.type_of(env)))?
-    ]
+    ] else (_, b) => Err(Error::TypeError("i32", b.type_of(env)))?;
     BitAnd: and = [
         (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a & b),
         (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a & b),
-        (a, b) => Err(Error::TypeError(a.type_of(env), b.type_of(env)))?
-    ]
+    ] else (a, b) => Err(Error::TypeError(a.type_of(env), b.type_of(env)))?;
     BitOr: or = [
         (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a | b),
         (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a | b),
-        (a, b) => Err(Error::TypeError(a.type_of(env), b.type_of(env)))?
-    ]
+    ] else (a, b) => Err(Error::TypeError(a.type_of(env), b.type_of(env)))?;
     BitXor: xor = [
         (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a ^ b),
         (ConValue::Bool(a), ConValue::Bool(b)) => ConValue::Bool(a ^ b),
-        (a, b) => Err(Error::TypeError(a.type_of(env), b.type_of(env)))?
-    ]
+    ] else (a, b) => Err(Error::TypeError(a.type_of(env), b.type_of(env)))?;
 }
 
 /// Implements unary operators for [ConValue]
@@ -448,10 +449,9 @@ macro un_ops(with $env:ident: Environment; $($trait:ty: $fn:ident = [$($match:tt
         pub fn $fn(self, $env: &mut Environment) -> IResult<Self> {
             Ok(match self {
                 ConValue::Ref(place) => place.get($env)?.clone().$fn($env)?,
-                v @ ( ConValue::Struct(ty, _)
-                    | ConValue::TupleStruct(ty, _)
-                    | ConValue::TypeInfo(ty)) => {
-                    $env.get_impl(ty, stringify!($fn).into())?.call($env, vec![v])?
+                v if let ty = v.type_of($env)
+                  && let Ok(f) = $env.get_impl(ty, $env.kw.$fn) => {
+                    f.call($env, vec![v])?
                 }
                 $($match)*
             })
@@ -529,16 +529,6 @@ macro from ($($T:ty => $v:expr),*$(,)?) {
         fn from(value: $T) -> Self { $v(value.into()) }
     })*
 }
-impl From<&Symbol> for ConValue {
-    fn from(value: &Symbol) -> Self {
-        ConValue::Str(*value)
-    }
-}
-impl From<Rc<Symbol>> for ConValue {
-    fn from(value: Rc<Symbol>) -> Self {
-        ConValue::Str(value.0.into())
-    }
-}
 from! {
     Integer => ConValue::Int,
     f64 => ConValue::Float,
@@ -567,13 +557,3 @@ impl From<&[ConValue]> for ConValue {
         }
     }
 }
-
-pub macro cvstruct (
-    $Name:ident {
-        $($member:ident : $expr:expr),*
-    }
-) {{
-    let mut members = HashMap::new();
-    $(members.insert(stringify!($member).into(), ($expr).into());)*
-    ConValue::Struct(Box::new((stringify!($Name).into(), members)))
-}}

@@ -78,7 +78,13 @@ impl super::Callable for Builtin {
 ///         eprintln!("my_builtin({b}, ..)");
 ///         match rest {
 ///             [] => Ok(ConValue::Unit),
-///             _ => my_builtin(env, rest), // Can be called as a normal function!
+///             // Can be called as a normal function!
+///             _ => my_builtin(
+///                 env,
+///                 rest.into_iter()
+///                     .map(std::mem::take)
+///                     .collect(),
+///             )
 ///         }
 ///     }
 /// };
@@ -105,7 +111,13 @@ pub macro builtin(
 ///         eprintln!("my_builtin({b}, ..)");
 ///         match rest {
 ///             [] => Ok(ConValue::Unit),
-///             _ => my_builtin(env, rest), // Can be called as a normal function!
+///             // Can be called as a normal function!
+///             _ => my_builtin(
+///                 env,
+///                 rest.into_iter()
+///                     .map(std::mem::take)
+///                     .collect(),
+///             )
 ///         }
 ///     }
 /// };
@@ -324,8 +336,7 @@ pub const Builtins: &[Builtin] = &builtins![
         };
         Ok(ConValue::Module(Box::new(
             impls.iter().map(|(&k, v)| (
-                k.into(),
-                env.get_id(Location::Global(*v)).cloned().unwrap_or_default()
+                k, env.get_id(Location::Global(*v)).cloned().unwrap_or_default()
             )).collect()
         )))
     }
@@ -429,7 +440,7 @@ pub const Math: &[Builtin] = &builtins![
     fn not(tail) @env -> Self { tail.take().not(env) }
 
     /// Compares two values
-    fn cmp(head, tail) @env { head.compare(tail, env) }
+    fn cmp(head, tail) @env { head.take().cmp(tail.take(), env) }
 
     /// Does the opposite of `&`
     fn deref(tail) @env -> _ {

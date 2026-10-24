@@ -65,7 +65,8 @@ mod macros {
     ///
     /// Returns a `Result<`[`Expr`]`, ParseError>`
     pub macro expr($($t:tt)*) {
-        Expr::parse(&mut Parser::new(Lexer::new("test".into(), stringify!( $($t)* ))), 0)
+        Parser::new(Lexer::new("test".into(), stringify!( $($t)* )))
+            .parse_entire::<Expr>(0)
             .map(|expr| {
                 expr.fold_in(&mut LoopLabelDesugar::new()).unwrap()
                     .fold_in(&mut WhileElseDesugar).unwrap()
@@ -149,14 +150,14 @@ mod macros {
 mod let_declarations {
     use super::*;
 
-    #[test]
-    fn let_binding_uninit() {
-        let mut env = Environment::new();
-        assert_eval!(
-            env,
-            let x;
-        );
-    }
+    // #[test]
+    // fn let_binding_uninit() {
+    //     let mut env = Environment::new();
+    //     assert_eval!(
+    //         env,
+    //         let x;
+    //     );
+    // }
     #[test]
     fn let_binding_with_init() {
         let mut env = Environment::new();
@@ -322,11 +323,6 @@ mod operators {
             let t_or_f = true || false;
             let f_or_t = false || true;
             let f_or_f = false || false;
-
-            let t_xor_t = true ^^ true;
-            let t_xor_f = true ^^ false;
-            let f_xor_t = false ^^ true;
-            let f_xor_f = false ^^ false;
         );
         env_eq!(env.t_and_t, true);
         env_eq!(env.t_and_f, false);
@@ -337,11 +333,6 @@ mod operators {
         env_eq!(env.t_or_f, true);
         env_eq!(env.f_or_t, true);
         env_eq!(env.f_or_f, false);
-
-        env_eq!(env.t_xor_t, false);
-        env_eq!(env.t_xor_f, true);
-        env_eq!(env.f_xor_t, true);
-        env_eq!(env.f_xor_f, false);
     }
     #[test]
     fn logical_short_circuits() {

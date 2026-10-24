@@ -17,6 +17,8 @@ pub trait Callable {
     fn name(&self) -> Option<Sym>;
 }
 
+pub mod reserved_words;
+
 pub mod typeinfo;
 
 pub mod place;

@@ -5,6 +5,7 @@ use super::{
     builtin::*,
     convalue::ConValue,
     error::{Error, IResult},
+    reserved_words::ReservedWords,
     typeinfo::{self, Model, Type},
 };
 use cl_ast::{fmt::FmtAdapter, types::Symbol};
@@ -75,7 +76,8 @@ pub struct Environment {
     globals: Vec<ConValue>,
     frames: Vec<EnvFrame>,
     types: HashMap<Symbol, Type>,
-    pub(crate) impls: HashMap<typeinfo::Type, HashMap<&'static str, u32>>,
+    pub(crate) impls: HashMap<typeinfo::Type, HashMap<Symbol, u32>>,
+    pub(crate) kw: Box<ReservedWords>,
 }
 
 impl Display for Environment {
@@ -117,8 +119,8 @@ impl Display for Environment {
 impl Default for Environment {
     fn default() -> Self {
         let mut this = Self::no_builtins();
-        for (ident, model) in Model::defaults() {
-            let value = this.def_type(ident.into(), model.intern());
+        for (ident, model) in Model::defaults(&this.kw) {
+            let value = this.def_type(ident, model.intern());
             this.bind_global(ident, ConValue::TypeInfo(value));
         }
         let slice_or_array = Model::Slice(Model::Any.already_interned()).intern();
@@ -145,6 +147,7 @@ impl Environment {
             frames: vec![EnvFrame::default()],
             types: HashMap::new(),
             impls: HashMap::new(),
+            kw: Box::new(ReservedWords::new()),
         }
     }
 
@@ -171,16 +174,12 @@ impl Environment {
     }
 
     /// Binds a value to the given name in the current scope.
-    pub fn bind(&mut self, name: impl Into<Symbol>, value: impl Into<ConValue>) {
-        self.insert(
-            name.into(),
-            value.into(),
-            self.get_direct_ancestor().is_some(),
-        );
+    pub fn bind(&mut self, name: Symbol, value: impl Into<ConValue>) {
+        self.insert(name, value.into(), self.get_direct_ancestor().is_some());
     }
 
-    pub fn bind_global(&mut self, name: impl Into<Symbol>, value: impl Into<ConValue>) {
-        self.insert(name.into(), value.into(), true);
+    pub fn bind_global(&mut self, name: Symbol, value: impl Into<ConValue>) {
+        self.insert(name, value.into(), true);
     }
 
     /// Binds a `name` to a raw `id` value in the current scope
@@ -192,13 +191,13 @@ impl Environment {
     }
 
     /// Adds an implementation (associated value) to a [Type]
-    pub fn implement(&mut self, ty: Type, name: &'static str, value: ConValue) {
+    pub fn implement(&mut self, ty: Type, name: Symbol, value: ConValue) {
         let loc = self.globals.len() as _;
         self.globals.push(value);
         self.implement_raw(ty, name, loc);
     }
 
-    pub fn implement_raw(&mut self, ty: Type, name: &'static str, loc: u32) {
+    pub fn implement_raw(&mut self, ty: Type, name: Symbol, loc: u32) {
         self.impls.entry(ty).or_default().entry(name).or_insert(loc);
     }
 
@@ -211,7 +210,7 @@ impl Environment {
     }
 
     pub(crate) fn get_impl_id(&self, ty: Type, name: Symbol) -> Option<Location> {
-        if let Some(value) = self.impls.get(&ty).and_then(|map| map.get(name.to_ref())) {
+        if let Some(value) = self.impls.get(&ty).and_then(|map| map.get(&name)) {
             return Some(Location::Global(*value));
         }
 
@@ -278,7 +277,7 @@ impl Environment {
     /// Adds "intrinsics" (associated builtin functions) to a [Type]
     pub fn add_methods(&mut self, ty: Type, builtins: &'static [Builtin]) -> &mut Self {
         for builtin in builtins {
-            self.implement(ty, builtin.name, builtin.into());
+            self.implement(ty, builtin.name.into(), builtin.into());
         }
         self
     }
@@ -400,9 +399,9 @@ impl Environment {
     pub fn to_convalue_option(&self, opt: Option<ConValue>) -> IResult<ConValue> {
         match opt {
             Some(value) => self
-                .get_type_or_err("Some".into())?
+                .get_type_or_err(self.kw.Some)?
                 .make_tuple(Box::new([value])),
-            None => Ok(ConValue::TypeInfo(self.get_type_or_err("None".into())?)),
+            None => Ok(ConValue::TypeInfo(self.get_type_or_err(self.kw.None)?)),
         }
     }
 
@@ -410,10 +409,10 @@ impl Environment {
     pub fn to_convalue_result(&self, opt: Result<ConValue, ConValue>) -> IResult<ConValue> {
         match opt {
             Ok(value) => self
-                .get_type_or_err("Ok".into())?
+                .get_type_or_err(self.kw.Ok)?
                 .make_tuple(Box::new([value])),
             Err(value) => self
-                .get_type_or_err("Err".into())?
+                .get_type_or_err(self.kw.Err)?
                 .make_tuple(Box::new([value])),
         }
     }
