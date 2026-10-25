@@ -141,7 +141,9 @@ impl Iterator<T> {
 
     /// Counts the items in this iterator
     fn count(self) -> usize {
-        self.fold(0, |count, _| count + 1)
+        let count = 0;
+        while let Some(value) = self.next() count += 1;
+        count
     }
 
     /// An Iterator which calls a function on each value
