@@ -296,25 +296,23 @@ impl str {
     Iterator::_derive(Chars, {
         /// Decodes Unicode codepoints in a UTF-8-encoded `str`
         fn next(self: &str::Chars) -> Option<char> = (
-            let byte = self.0.get(self.1)?;
-            self.1 += 1;
-            let out, count = if byte & 0x80 == 0x00 return Some(byte as char)
-                else if byte & 0xe0 == 0xc0 byte & 0x1f, 1  // 1 continuation
-                else if byte & 0xf0 == 0xe0 byte & 0x0f, 2  // 2 continuations
-                else if byte & 0xf8 == 0xf0 byte & 0x07, 3  // 3 continuations
-                else return None;                           // invalid utf-8
-
-            // FIXME: place projection is expensive
             let text, index = self.0, self.1;
-            defer self.1 = index;  // stupid
-
-            while count {
-                byte = text.get(index)?;
-                if byte & 0xc0 != 0x80 return None;         // continuation
-                index += 1;
-                out = (out << 6) | (byte & 0x3f);
-                count -= 1;
+            let byte = text.get(index)?;
+            let out, remaining = match byte {
+                ..0x80 => (self.1 += 1; return Some(byte as char));
+                ..0xc0 => (self.1 += 1; return None);    // continuation
+                ..0xe0 => (self.1 += 2; byte & 0x1f, 1); // 2 bytes
+                ..0xf0 => (self.1 += 3; byte & 0x0f, 2); // 3 bytes
+                ..0xf8 => (self.1 += 4; byte & 0x07, 3); // 4 bytes
+                _ => return None;                        // invalid
             }
+            while remaining do (
+                remaining -= 1;
+                index += 1;
+                byte = text.get(index)?;
+                let 0x80..0xc0 = byte else return None; // continuation
+                out = out << 6 | (byte & 0x3f);
+            );
             Some(out as char)
         )
     });
