@@ -71,10 +71,6 @@ impl Error {
     pub fn TypeError(want: impl ToString, got: Type) -> Self {
         Self { kind: ErrorKind::TypeError(want.to_string(), got), span: None }
     }
-    /// In clause of For loop didn't yield a Range
-    pub const fn NotIterable() -> Self {
-        Self { kind: ErrorKind::NotIterable, span: None }
-    }
     /// A value could not be indexed
     pub const fn NotIndexable() -> Self {
         Self { kind: ErrorKind::NotIndexable, span: None }
@@ -150,8 +146,6 @@ pub enum ErrorKind {
     /// Type incompatibility
     // TODO: store the type information in this error
     TypeError(String, Type),
-    /// In clause of For loop didn't yield a Range
-    NotIterable,
     /// A value could not be indexed
     NotIndexable,
     /// An array index went out of bounds
@@ -192,7 +186,6 @@ impl std::fmt::Display for ErrorKind {
             ErrorKind::TypeError(want, got) => {
                 write!(f, "Incompatible types: wanted {want}, got {got}")
             }
-            ErrorKind::NotIterable => "`in` clause of `for` loop did not yield an iterable".fmt(f),
             ErrorKind::NotIndexable => {
                 write!(f, "expression cannot be indexed")
             }
