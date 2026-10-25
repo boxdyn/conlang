@@ -306,9 +306,9 @@ impl str {
                 _ => return None;                     // invalid
             }
             let text, index = self.0, self.1;
-            if byte >= 0xf0 out = out << 6 | (text.get(index - 3)? & 0x3f);
-            if byte >= 0xe0 out = out << 6 | (text.get(index - 2)? & 0x3f);
-            if byte >= 0xc0 out = out << 6 | (text.get(index - 1)? & 0x3f);
+            if (byte >= 0xf0) out = out << 6 | (text.get(index - 3)? & 0x3f);
+            if (byte >= 0xe0) out = out << 6 | (text.get(index - 2)? & 0x3f);
+            if (byte >= 0xc0) out = out << 6 | (text.get(index - 1)? & 0x3f);
             Some(out as char)
         )
     });
