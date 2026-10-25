@@ -48,9 +48,16 @@ impl std::fmt::Display for Backtrace<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut count = 0;
         for EnvFrame { name, span, .. } in self.frames.iter().rev() {
-            if let (Some(name), Some(span)) = (name, span) {
-                writeln!(f, "{count:>4}: {name} [{span}]")?;
-                count += 1;
+            match (name, span) {
+                (Some(name), Some(span)) => {
+                    writeln!(f, "{count:>4}: {name} [{span}]")?;
+                    count += 1;
+                }
+                (Some(name), None) if f.alternate() => {
+                    writeln!(f, "{count:>4}: {name}")?;
+                    count += 1;
+                }
+                _ => {}
             }
         }
         Ok(())
