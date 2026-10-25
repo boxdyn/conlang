@@ -76,10 +76,7 @@ fn run(fucks: &[Brainfuck], ..input: [char]) {
     let tape = [0; 0x1000000];
     let head = tape.len() / 2;
     let pc = -1;
-    let input = match input {
-        [..chars] => chars;
-        string => string.into_iter().Array::collect();
-    };
+    let input = input.into_iter().Array::collect();
 
     while (pc += 1; pc < fucks.len()) match fucks[pc] {
         Brainfuck::Right(n) => head += n;
