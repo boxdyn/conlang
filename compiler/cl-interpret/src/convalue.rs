@@ -61,8 +61,6 @@ pub enum ConValue {
     String(String),
     /// A reference
     Ref(Place),
-    /// A reference to an array
-    Slice(Place, usize, usize),
     /// An Array
     Array(Box<[ConValue]>),
     /// A tuple
@@ -136,7 +134,6 @@ impl ConValue {
             | Self::Char(_)
             | Self::Str(_) => true,
             Self::Ref(_) => true,
-            Self::Slice(_, _, _) => true,
             Self::Quote(_) => true,
             Self::Function(_) => true,
             Self::Builtin(_) => true,
@@ -160,7 +157,6 @@ impl ConValue {
             ConValue::Str(_) => true,
             ConValue::String(_) => true,
             ConValue::Ref(_) => true,
-            ConValue::Slice(_, _, _) => true,
             ConValue::Array(_) => true,
             ConValue::Tuple(_) => true,
             ConValue::Quote(_) => true,
@@ -190,7 +186,6 @@ impl ConValue {
             Self::Str(_) => Model::Str.already_interned(),
             Self::String(_) => Model::Str.already_interned(),
             Self::Ref(place) => Model::Ref(type_of_place(place, env)).intern(),
-            Self::Slice(place, _, _) => Model::Slice(type_of_place(place, env)).intern(),
             Self::Array(arr) if !arr.is_empty() => Model::Slice(arr[0].type_of(env)).intern(),
             Self::Array(_) => Model::Slice(Model::Any.already_interned()).intern(),
             Self::Tuple(vs) => {
@@ -372,22 +367,6 @@ bin_ops! {
             .get(index as usize)
             .cloned()
             .ok_or(Error::OobIndex(index as usize, arr.len()))?,
-        (ConValue::Slice(place, start, len), ConValue::Int(index)) if index > 0 => {
-            let index = start + index as usize;
-            if index < len {
-                ConValue::Ref(place.index(index, false))
-            } else {
-                Err(Error::OobIndex(index, len))?
-            }
-        }
-        (ConValue::Slice(place, start, len), ConValue::Int(index)) => {
-            let index = start + len - index as usize;
-            if index < len {
-                ConValue::Ref(place.index(index, false))
-            } else {
-                Err(Error::OobIndex(index - start, len - start))?
-            }
-        }
     ] else (a, idx) => Err(Error::TypeError(format!("{}.index({idx})", a.type_of(env)), idx.type_of(env)))?;
     Ord: cmp = [
         (a, b) if a.is_primitive() => ConValue::Int(a.internal_compare(&b, env)?),
@@ -496,16 +475,26 @@ un_ops! {
 
 impl std::fmt::Display for ConValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use std::sync::LazyLock;
+        static INT_FORMAT: LazyLock<String> =
+            LazyLock::new(|| std::env::var("CONLANG_INT").unwrap_or_default());
         match self {
             ConValue::Unit => "Unit".fmt(f),
-            ConValue::Int(v) => v.fmt(f),
+            ConValue::Int(v) => match INT_FORMAT.as_str() {
+                "b" => write!(f, "{v:b}"),
+                "o" => write!(f, "{v:o}"),
+                "x" => write!(f, "{v:x}"),
+                "#b" => write!(f, "{v:#08b}"),
+                "#o" => write!(f, "{v:#03o}"),
+                "#x" => write!(f, "{v:#02x}"),
+                _ => v.fmt(f),
+            },
             ConValue::Float(v) => v.fmt(f),
             ConValue::Bool(v) => v.fmt(f),
             ConValue::Char(v) => v.fmt(f),
             ConValue::Str(v) => v.fmt(f),
             ConValue::String(v) => v.fmt(f),
             ConValue::Ref(v) => write!(f, "&<{}>", v),
-            ConValue::Slice(id, start, len) => write!(f, "&<{id}>[{start}..{len}]"),
             ConValue::Array(array) => f.delimit('[', ']').list(array, ", "),
             ConValue::Tuple(tuple) => f.delimit('(', ')').list(tuple, ", "),
             ConValue::TupleStruct(id, tuple) => f

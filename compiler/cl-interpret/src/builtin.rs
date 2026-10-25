@@ -12,7 +12,6 @@ use crate::{
 };
 use std::{
     io::{Write, stdout},
-    mem::take,
     vec,
 };
 
@@ -295,18 +294,10 @@ pub const Builtins: &[Builtin] = &builtins![
             ConValue::Unit => 0,
             ConValue::Str(s) => s.chars().count() as _,
             ConValue::String(s) => s.chars().count() as _,
-            &ConValue::Slice(_, start, end) => end as Integer - start as Integer,
             ConValue::Array(arr) => arr.len() as _,
             ConValue::Tuple(t) => t.len() as _,
             other => Err(Error::TypeError("A type with a length", other.type_of(env)))?,
         })
-    }
-
-    fn slice(ConValue::Ref(index), ConValue::Int(start), ConValue::Int(end)) -> [_] {
-        match (*start, *end) {
-            (0.., 0..) if start <= end => Ok(ConValue::Slice(take(index), *start as _, (*end - *start) as _)),
-            _ => Err(error_format!("Bad index: {index}[{start}, {end}]"))
-        }
     }
 
     /// Invokes a function with the given arguments
@@ -656,13 +647,6 @@ pub const ArrayMethods: &[Builtin] = &builtins! {
         *array = items.into_boxed_slice();
 
         env.to_convalue_option(out)
-    }
-
-    fn slice(ConValue::Ref(index), ConValue::Int(start), ConValue::Int(end)) -> [_] {
-        match (*start, *end) {
-            (0.., 0..) if start <= end => Ok(ConValue::Slice(take(index), *start as _, (*end - *start) as _)),
-            _ => Err(error_format!("Bad index: {index}[{start}, {end}]"))
-        }
     }
 };
 

@@ -155,12 +155,6 @@ impl Place {
                     let idx = if from_end { len - idx } else { idx };
                     arr.get_mut(idx).ok_or_else(|| Error::OobIndex(idx, len))?
                 }
-                (ConValue::Slice(place, start, len), &Projection::Index(idx, from_end)) => {
-                    if *start + idx >= *len {
-                        Err(Error::OobIndex(idx, *len))?
-                    };
-                    place.clone().index(idx, from_end).get_mut(env)?
-                }
                 (_place, Projection::Index(_, _)) => Err(Error::NotIndexable())?,
                 (ConValue::Struct(ty, values), Projection::DotSym(sym)) => match ty.to_ref() {
                     Model::Struct(.., false) => values.entry(*sym).or_default(),
@@ -198,10 +192,6 @@ impl Place {
                     let len = arr.len();
                     let idx = if from_end { len.wrapping_sub(idx) } else { idx };
                     arr.get(idx).ok_or(Error::OobIndex(idx, len))?
-                }
-                (ConValue::Slice(place, start, len), &Projection::Index(idx, from_end)) => {
-                    let idx = if from_end { len.wrapping_sub(idx) } else { idx };
-                    place.clone().index(start + idx, false).get(env)?
                 }
                 (_place, Projection::Index(_, _)) => todo!("Index {self}")?,
                 (ConValue::Struct(_, values), Projection::DotSym(sym)) => {
