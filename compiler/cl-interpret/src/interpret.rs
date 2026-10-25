@@ -822,7 +822,8 @@ impl Interpret for cl_ast::ast::Match<DefaultTypes> {
         for MatchArm(pat, expr) in arms {
             let mut bind = HashMap::new();
             if pat.matches(scrutinee.clone(), &mut MatchEnv::new(env, &mut bind))? {
-                return expr.interpret(&mut env.with_frame("match-arm", bind, None));
+                let mut scope = env.with_frame("match-arm", bind, None);
+                return expr.interpret(&mut scope);
             }
         }
         Err(Error::MatchNonexhaustive(scrutinee))
@@ -911,10 +912,10 @@ impl Match for (PatOp, &[At<Pat>]) {
             // Rest pattern with const value is upper-bounded exclusive range
             (PatOp::Rest, [At(Pat::Value(end), span)]) => end
                 .interpret(in_env.env)?
-                .lt_eq(&value, in_env.env)?
+                .gt(&value, in_env.env)?
                 .truthy(in_env.env)
                 .map_err(|e| e.with_span(*span)),
-            (PatOp::Rest, [rest]) => rest.matches(value, in_env),
+            (PatOp::Rest, [rest]) => dbg!(rest.matches(value, in_env)),
 
             // RangeEx pattern with const value is lower-bounded exclusive ranges
             (PatOp::RangeEx, [At(Pat::Value(start), span)]) => start
@@ -1088,15 +1089,19 @@ impl Match<Box<[ConValue]>> for (SliceMode, &[At<Pat>]) {
         let mut pats = pats.iter().peekable();
         while let Some(pat) = pats.peek()
             && !matches!(pat, At(Pat::Op(PatOp::Rest, _), ..))
-            && let Some(value) = values.next()
         {
-            let _ = pat.matches(value, in_env)? || return Ok(false);
+            match values.next() {
+                Some(value) => pat.matches(value, in_env)? || return Ok(false),
+                None => return Ok(false),
+            };
             pats.next();
         }
 
         // Capture the "rest pattern", which will hold the rest of the args
-        let Some(At(rest_pat @ Pat::Op(PatOp::Rest, rests), rspan)) = pats.next() else {
-            return Ok(values.next().is_none());
+        let (rest_pat, rests, rspan) = match pats.next() {
+            Some(At(rest_pat @ Pat::Op(PatOp::Rest, rests), rspan)) => (rest_pat, rests, rspan),
+            Some(_) => return Ok(false),
+            _ => return Ok(values.next().is_none()),
         };
 
         // Most slice-patterns (i.e. function signatures) don't have rest-patterns in them.
@@ -1107,8 +1112,10 @@ impl Match<Box<[ConValue]>> for (SliceMode, &[At<Pat>]) {
         let mut pats = pats.rev().peekable();
         while let Some(pat) = pats.peek()
             && !matches!(pat, At(Pat::Op(PatOp::Rest, _), ..))
-            && let Some(value) = values.next()
         {
+            let Some(value) = values.next() else {
+                return Ok(false);
+            };
             let _ = pat.matches(value, in_env)? || return Ok(false);
             pats.next();
         }
