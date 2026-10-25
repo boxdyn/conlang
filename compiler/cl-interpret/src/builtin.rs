@@ -140,16 +140,16 @@ macro builtin_body(
     #[doc = stringify!(builtin fn $name($($arg),*) $(-> $rety)?)]
     /// ```
     fn $name(_env: &mut Environment, mut _args: Vec<ConValue>) -> IResult<ConValue> {
-        // Set up the builtin! environment
-        $(#[allow(unused)]let $env = _env;)?
         // Allow for single argument `fn foo(args @ ..)` pattern
         #[allow(clippy::redundant_at_rest_pattern, irrefutable_let_patterns)]
         let [$($arg),*] = _args.as_mut_slice() else {
-            Err($crate::error::Error::TypeError(
+            Err(Error::TypeError(
                 concat!("(", $(stringify!($arg,),)* ")"),
-                $crate::typeinfo::Model::Any.intern()
+                ConValue::Tuple(_args.into()).type_of(_env),
             ))?
         };
+        // Set up the builtin! environment
+        $(#[allow(unused)]let $env = _env;)?
         $body.map(Into::into)
     }
 }
