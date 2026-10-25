@@ -294,25 +294,21 @@ impl str {
     /// An [Iterator] over the chars in a `str`
     struct Chars(&str, usize);
     Iterator::_derive(Chars, {
-        /// Decodes Unicode codepoints in a UTF-8-encoded `str`
+        /// Decodes Unicode codepoints in a UTF-8-encoded `str`, ignoring errors
         fn next(self: &str::Chars) -> Option<char> = (
-            let text, index = self.0, self.1;
-            let byte = text.get(index)?;
-            let out, remaining = match byte {
+            let byte = self.0.get(self.1)?;
+            let out = match byte {
                 ..0x80 => (self.1 += 1; return Some(byte as char));
-                ..0xc0 => (self.1 += 1; return None);    // continuation
-                ..0xe0 => (self.1 += 2; byte & 0x1f, 1); // 2 bytes
-                ..0xf0 => (self.1 += 3; byte & 0x0f, 2); // 3 bytes
-                ..0xf8 => (self.1 += 4; byte & 0x07, 3); // 4 bytes
-                _ => return None;                        // invalid
+                ..0xc0 => (self.1 += 1; return None); // continuation
+                ..0xe0 => (self.1 += 2; byte & 0x1f); // 2 bytes
+                ..0xf0 => (self.1 += 3; byte & 0x0f); // 3 bytes
+                ..0xf8 => (self.1 += 4; byte & 0x07); // 4 bytes
+                _ => return None;                     // invalid
             }
-            while remaining do (
-                remaining -= 1;
-                index += 1;
-                byte = text.get(index)?;
-                let 0x80..0xc0 = byte else return None; // continuation
-                out = out << 6 | (byte & 0x3f);
-            );
+            let text, index = self.0, self.1;
+            if byte >= 0xf0 out = out << 6 | (text.get(index - 3)? & 0x3f);
+            if byte >= 0xe0 out = out << 6 | (text.get(index - 2)? & 0x3f);
+            if byte >= 0xc0 out = out << 6 | (text.get(index - 1)? & 0x3f);
             Some(out as char)
         )
     });
