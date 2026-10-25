@@ -589,12 +589,16 @@ pub const CharMethods: &[Builtin] = &builtins![
 
 /// Associated [Builtin] functions for [ConValue::Str]s and [ConValue::String]s
 pub const StringMethods: &[Builtin] = &builtins![
+    fn cmp(this, other) @env -> i128 {
+        this.take().cmp(other.take(), env)
+    }
+
     /// Returns the length of the input str as a [ConValue::Int]
     fn len(string) @env -> i128 {
         get_str(env, string).map(|s| s.len() as Integer)
     }
 
-    fn get(string, index) @env -> u8 {
+    fn get(string, index) @env -> Option<u8> {
         let index = get_int(env, index, "usize")? as usize;
         let string = get_str(env, string)?.as_bytes();
         env.to_convalue_option(string.get(index).map(|&v| ConValue::Int(v as _)))
@@ -610,6 +614,10 @@ pub const StringMethods: &[Builtin] = &builtins![
 
 /// Associated [Builtin] functions for [ConValue::Array] and [ConValue::Slice]
 pub const ArrayMethods: &[Builtin] = &builtins! {
+    fn cmp(this, other) @env -> i128 {
+        this.take().cmp(other.take(), env)
+    }
+
     /// Returns the length of the input list as a [ConValue::Int]
     fn len(array) @env -> i128 {
         Ok(match array.dereference_in(env)? {
@@ -619,7 +627,7 @@ pub const ArrayMethods: &[Builtin] = &builtins! {
     }
 
     /// Returns the value at position
-    fn get(array, index) @env -> _ {
+    fn get(array, index) @env -> Option<_> {
         let array = array.take();
         let index = get_int(env, index, "usize")? as usize;
         let ConValue::Array(array) = array.dereference_in(env)? else {
