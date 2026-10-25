@@ -887,7 +887,10 @@ impl Match for Pat {
             }
             Self::Value(at) => {
                 let truth = at.interpret(in_env.env)?;
-                truth.eq(&value, in_env.env)?.truthy(in_env.env)
+                truth
+                    .eq(&value, in_env.env)
+                    .and_then(|c| c.truthy(in_env.env))
+                    .or_else(|_| Ok(false)) // TODO: propagate errors
             }
             Self::Op(pat_op, pats) => (*pat_op, &pats[..]).matches(value, in_env),
         }
@@ -915,7 +918,7 @@ impl Match for (PatOp, &[At<Pat>]) {
                 .gt(&value, in_env.env)?
                 .truthy(in_env.env)
                 .map_err(|e| e.with_span(*span)),
-            (PatOp::Rest, [rest]) => dbg!(rest.matches(value, in_env)),
+            (PatOp::Rest, [rest]) => rest.matches(value, in_env),
 
             // RangeEx pattern with const value is lower-bounded exclusive ranges
             (PatOp::RangeEx, [At(Pat::Value(start), span)]) => start
