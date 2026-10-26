@@ -87,11 +87,12 @@ impl<A: AstTypes> Fold<A, A> for WhileElseDesugar {
 ///
 /// // output:
 /// match Iter.into_iter() {
-///     $iter => 'for loop
+///     $iter => loop
 ///         if let Some(Pat) = $iter.next()
 ///             Pass
 ///         else
 ///             break Fail
+/// }
 /// ```
 pub struct ForElseDesugar<A: AstTypes> {
     /// The [`AstTypes::Path`] to [`Option::Some`]

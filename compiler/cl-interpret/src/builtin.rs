@@ -687,13 +687,13 @@ pub const StringMethods: &[Builtin] = &builtins![
 
 // TODO: BoolMethods, TupleMethods
 
-/// Associated [Builtin] functions for [ConValue::Array] and [ConValue::Slice]
+/// Associated [`Builtin`] functions for [`ConValue::Array`]
 pub const ArrayMethods: &[Builtin] = &builtins! {
     fn cmp(this, other) @env -> i128 {
         this.take().cmp(other.take(), env)
     }
 
-    /// Returns the length of the input list as a [ConValue::Int]
+    /// Returns the length of the input list as a [`ConValue::Int`]
     fn len(array) @env -> i128 {
         Ok(match array.dereference_in(env)? {
             ConValue::Array(arr) => arr.len() as Integer,

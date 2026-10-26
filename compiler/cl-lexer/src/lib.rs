@@ -1,7 +1,7 @@
 //! A lobster
 //!
-//! The [Lexer] takes an input text and carves it up into [Tokens](cl_token::Token)
-//! which hold a [Lexeme](cl_token::Lexeme), [Token Kind](cl_token::TKind), and
+//! The [Lexer] takes an input text and carves it up into [Tokens](token::Token)
+//! which hold a [Lexeme](token::Lexeme), [Token Kind](token::TKind), and
 //! [Span](struct@cl_structures::span::Span).
 //!
 //! You can create a new [Lexer] with [Lexer::new], and pull a token with [Lexer::scan].
@@ -10,8 +10,7 @@
 //!
 //! ```rust
 //! # use cl_lexer::LexError;
-//! # fn main() -> Result<(), LexError> {
-//! use cl_lexer::{Lexer, Symbol, token::{Token, Lexeme, TKind};
+//! use cl_lexer::{Lexer, Symbol, token::{Token, Lexeme, TKind}};
 //!
 //! let sample_text = r#"
 //!     "This is a string\n"
@@ -68,8 +67,7 @@
 //!
 //! assert!(lexer.scan().is_err());
 //!
-//! # Ok(())
-//! # }
+//! # Ok::<(), LexError>(())
 //! ```
 
 pub mod error;

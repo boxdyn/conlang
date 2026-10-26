@@ -17,17 +17,17 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-/// The cooked result of [Frame::pop_values]
+/// The cooked result of [`Frame::pop_values`]
 pub type StackFrame = HashMap<Symbol, ConValue>;
 
-/// The raw binds of an [EnvFrame]
+/// The raw binds of an [`EnvFrame`]
 pub type StackBinds = HashMap<Symbol, Location>;
 
 #[derive(Clone, Debug, Default)]
-pub(crate) struct EnvFrame {
-    /// The name of this [EnvFrame], if one exists
+pub struct EnvFrame {
+    /// The name of this [`EnvFrame`], if one exists
     pub name: Option<&'static str>,
-    /// The [Span] associated with this [EnvFrame], if one exists
+    /// The [`struct@Span`] associated with this [`EnvFrame`], if one exists
     pub span: Option<Span>,
     /// The length of the array when this stack frame was constructed
     pub base: usize,
@@ -392,17 +392,17 @@ impl Environment {
         ty
     }
 
-    /// Gets the builtin [Type] with the given `name`
+    /// Gets the builtin [`Type`] with the given `name`
     pub fn get_type(&self, name: Symbol) -> Option<Type> {
         self.types.get(&name).copied()
     }
 
-    /// Gets the builtin [Type] with the given name, or produces [Error::NotDefined]
+    /// Gets the builtin [`Type`] with the given name, or produces [`Error::NotDefined`]
     pub fn get_type_or_err(&self, name: Symbol) -> IResult<Type> {
         self.get_type(name).ok_or(Error::NotDefined(name))
     }
 
-    /// Converts an [Option<ConValue>] into a [ConValue] representing an [Option]
+    /// Converts an [`Option<ConValue>`] into a [`ConValue`] representing an [`Option`]
     pub fn to_convalue_option(&self, opt: Option<ConValue>) -> IResult<ConValue> {
         match opt {
             Some(value) => self
@@ -412,7 +412,7 @@ impl Environment {
         }
     }
 
-    /// Converts a [Result<ConValue, ConValue>] into a [ConValue] representing an [Result]
+    /// Converts a [`Result<ConValue, ConValue>`] into a [`ConValue`] representing an [`Result`]
     pub fn to_convalue_result(&self, opt: Result<ConValue, ConValue>) -> IResult<ConValue> {
         match opt {
             Ok(value) => self
@@ -424,22 +424,16 @@ impl Environment {
         }
     }
 
-    /// Inserts a new [ConValue] into this [Environment]
+    /// Inserts a new [`ConValue`] into this [`Environment`]
     pub fn insert(&mut self, name: Symbol, value: ConValue, global: bool) {
-        if global {
-            if self
-                .bind_raw(name, Location::Global(self.globals.len() as _))
-                .is_some()
-            {
-                self.globals.push(value);
-            }
-        } else {
-            if self
-                .bind_raw(name, Location::Stack(self.values.len() as _))
-                .is_some()
-            {
-                self.values.push(value);
-            }
+        let location = match global {
+            true => Location::Global(self.globals.len() as _),
+            false => Location::Stack(self.values.len() as _),
+        };
+        self.bind_raw(name, location).expect("Bind should not fail");
+        match global {
+            true => self.globals.push(value),
+            false => self.values.push(value),
         }
     }
 
