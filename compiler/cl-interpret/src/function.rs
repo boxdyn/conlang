@@ -47,7 +47,7 @@ impl Function {
             && let [body] = exprs.as_slice()
         {
             let mut free = BTreeSet::new();
-            Lifter::new(&mut free).visit(decl);
+            Captor::new(&mut free).visit(decl);
             let decl = FnInner {
                 pat: pat.clone(),
                 body: body.clone(),
@@ -155,23 +155,24 @@ impl std::fmt::Display for Function {
     }
 }
 
+/// Finds free variables in an expression
 #[derive(Debug)]
-struct Lifter<'u> {
+struct Captor<'u> {
     free: &'u mut BTreeSet<Sym>,
     bound: BTreeSet<Sym>,
 }
-impl<'u> Lifter<'u> {
+impl<'u> Captor<'u> {
     pub fn new(free: &'u mut BTreeSet<Sym>) -> Self {
         Self { free, bound: BTreeSet::new() }
     }
-    pub fn enter<'v>(&'v mut self) -> Lifter<'v> {
+    pub fn enter<'v>(&'v mut self) -> Captor<'v> {
         let Self { free: upvars, bound: unfree } = self;
-        Lifter { free: upvars, bound: unfree.clone() }
+        Captor { free: upvars, bound: unfree.clone() }
     }
 
-    pub fn scope<'v, R>(&'v mut self, f: impl FnOnce(&mut Lifter<'v>) -> R) -> R {
+    pub fn scope<'v, R>(&'v mut self, f: impl FnOnce(&mut Captor<'v>) -> R) -> R {
         let Self { free, bound } = self;
-        f(&mut Lifter { free, bound: bound.clone() })
+        f(&mut Captor { free, bound: bound.clone() })
     }
 
     pub fn user<'v>(&'v mut self) -> Marker<'v, 'u> {
@@ -193,7 +194,7 @@ impl<'u> Lifter<'u> {
     }
 }
 
-impl Visit<'_, DefaultTypes> for Lifter<'_> {
+impl Visit<'_, DefaultTypes> for Captor<'_> {
     type Error = !;
 
     fn visit_path(&mut self, path: &'_ cl_ast::types::Path) -> Result<(), Self::Error> {
@@ -207,9 +208,9 @@ impl Visit<'_, DefaultTypes> for Lifter<'_> {
         match item {
             Pat::Name(bound) => self.bind(*bound),
             // TODO: Proper use of `user` in record patterns
-            Pat::Op(PatOp::Fn, pats) if let [args, rety] = &pats[..] => {
-                self.visit(args)?;
-                self.user().visit(rety)
+            Pat::Op(PatOp::Fn, pats) if let [args, _rety] = &pats[..] => {
+                self.visit(args)
+                // self.user().visit(rety)
             }
             Pat::Op(PatOp::Record, pats) => self.visit(pats),
             Pat::Op(PatOp::Typed, pats) if let [pat, ty] = &pats[..] => {
@@ -258,7 +259,7 @@ impl Visit<'_, DefaultTypes> for Lifter<'_> {
 
 /// Forcibly `mark`s usage of any symbol
 #[derive(Debug)]
-struct Marker<'l, 'u>(&'l mut Lifter<'u>);
+struct Marker<'l, 'u>(&'l mut Captor<'u>);
 impl Visit<'_, DefaultTypes> for Marker<'_, '_> {
     type Error = !;
 
