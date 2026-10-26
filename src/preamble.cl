@@ -17,17 +17,16 @@ mod preamble {
 /// Within the body of a function which returns a fallible value,
 /// you may use the postifx `?` (`Try`) operator to return errors
 /// to your caller.
-/// 
+///
 /// Internally, `Try` is transformed into a call to `.try()` as follows:
 /// ```conlang
 /// let x = could_fail()?;
-/// 
+///
 /// // de-sugars to
 /// let x = match could_fail().try() { // inserted call to try
 ///     Tried::Take(t) => t;           // Take value completes the expression
 ///     Tried::Return(r) => return r;  // Return value bubbles up to caller
 /// };
-/// 
 /// ```
 enum Tried<T, R> { Take(T), Return(R) };
 impl Tried<T, R> {
