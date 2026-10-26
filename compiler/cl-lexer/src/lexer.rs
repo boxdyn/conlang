@@ -281,7 +281,6 @@ impl<'t> Lexer<'t> {
                 "static" => TKind::Static,
                 "struct" => TKind::Struct,
                 "true" => TKind::True,
-                "try" => TKind::Try,
                 "type" => TKind::Type,
                 "use" => TKind::Use,
                 "while" => TKind::While,

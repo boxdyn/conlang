@@ -13,6 +13,7 @@ reserve_words! {
         kw_self: "self",
         kw_Self: "Self",
         kw_super: "super",
+        kw_try: "try",
 
         // data structures
         kw_fn: "fn";
@@ -37,10 +38,15 @@ reserve_words! {
         u128,
         usize,
         uint,
+        Result,
         Ok,
         Err,
+        Option,
         Some,
         None,
+        Tried,
+        Take,
+        Return,
         RangeInc,
         RangeExc,
         RangeTo,

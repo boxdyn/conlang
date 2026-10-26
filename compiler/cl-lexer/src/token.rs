@@ -103,7 +103,6 @@ pub enum TKind {
     Static,
     Struct,
     True,
-    Try,
     Type,
     Underscore,
     Use,

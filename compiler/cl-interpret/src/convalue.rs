@@ -125,6 +125,37 @@ impl ConValue {
         std::mem::take(self)
     }
 
+    /// Implements the overloadable `?` operator
+    pub fn try_hard(self, env: &mut Environment) -> IResult<Self> {
+        /// Special-case the builtin try-able data structures nominally, cuz it's fast
+        fn be_lazy(value: ConValue) -> IResult<Result<ConValue, ConValue>> {
+            let (ty, mut vs) = match value {
+                ConValue::TupleStruct(ty, vs) if vs.len() == 1 => (ty, vs),
+                ConValue::TypeInfo(ty) if let "None" = ty.name() => Err(Error::Return(value))?,
+                _ => return Ok(Err(value)),
+            };
+            match ty.name() {
+                // Tried::{Take, Return}
+                "Take" => return Ok(Ok(vs[0].take())),
+                "Return" => return Err(Error::Return(vs[0].take())),
+                // Option::{Some, None}
+                "Some" => return Ok(Ok(vs[0].take())),
+                "None" => return Err(Error::Return(ConValue::TypeInfo(ty))),
+                // Result::{Ok, Err}
+                "Ok" => return Ok(Ok(vs[0].take())),
+                "Err" => return Err(Error::Return(ConValue::TupleStruct(ty, vs))),
+                _ => Ok(Err(ConValue::TupleStruct(ty, vs))),
+            }
+        }
+
+        be_lazy(self)?.or_else(|e| {
+            let ty = e.type_of(env);
+            let try_harder = env.get_impl(ty, env.kw.kw_try)?;
+            be_lazy(try_harder.call(env, vec![e])?)?
+                .map_err(|e| Error::TypeError("enum Tried", e.type_of(env)))
+        })
+    }
+
     pub fn is_cheap_to_copy(&self) -> bool {
         match self {
             Self::Unit
