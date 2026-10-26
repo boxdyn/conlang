@@ -443,13 +443,13 @@ bin_ops! {
     Shl: shl = [
         (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_shl(b as _)),
-        (a, ConValue::Int(_)) => Err(Error::TypeError("Shl", a.type_of(env)))?,
-    ] else (_, b) => Err(Error::TypeError("i32", b.type_of(env)))?;
+        (ConValue::Int(_), b) => Err(Error::TypeError("i32", b.type_of(env)))?,
+    ] else (a, _) => Err(Error::TypeError("Shl", a.type_of(env)))?;
     Shr: shr = [
         (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a.wrapping_shr(b as _)),
-        (a, ConValue::Int(_)) => Err(Error::TypeError("Shr", a.type_of(env)))?,
-    ] else (_, b) => Err(Error::TypeError("i32", b.type_of(env)))?;
+        (ConValue::Int(_), b) => Err(Error::TypeError("i32", b.type_of(env)))?,
+    ] else (a, _) => Err(Error::TypeError("Shr", a.type_of(env)))?;
     BitAnd: and = [
         (ConValue::Unit, ConValue::Unit) => ConValue::Unit,
         (ConValue::Int(a), ConValue::Int(b)) => ConValue::Int(a & b),
