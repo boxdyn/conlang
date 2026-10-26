@@ -56,22 +56,20 @@ mod macros {
 
     use super::*;
 
-    pub fn test_eval_expr(block: &Expr, env: &mut Environment) -> IResult<()> {
-        block.interpret(env)?;
-        Ok(())
+    pub fn test_eval_expr(block: &Expr, env: &mut Environment) -> IResult<ConValue> {
+        block.interpret(env)
     }
 
     /// Stringifies, lexes, and parses everything you give to it
     ///
-    /// Returns a `Result<`[`Expr`]`, ParseError>`
+    /// Returns [`Expr`]
     pub macro expr($($t:tt)*) {
         Parser::new(Lexer::new("test".into(), stringify!( $($t)* )))
             .parse_entire::<Expr>(0)
-            .map(|expr| {
-                expr.fold_in(&mut LoopLabelDesugar::new()).unwrap()
-                    .fold_in(&mut WhileElseDesugar).unwrap()
-                    .fold_in(&mut ForElseDesugar::new()).unwrap()
-            })
+            .expect("Conlang code should parse correctly!")
+            .fold_in(&mut LoopLabelDesugar::new()).unwrap()
+            .fold_in(&mut WhileElseDesugar).unwrap()
+            .fold_in(&mut ForElseDesugar::new()).unwrap()
     }
 
     /// Evaluates a block of code in the given environment
@@ -85,9 +83,7 @@ mod macros {
     /// )
     /// ```
     pub macro eval($env: path, $($t:tt)*) {{
-        test_eval_expr(&expr!($($t)*)
-            .expect("code passed to eval! should parse correctly"),
-            &mut $env)
+        test_eval_expr(&expr!($($t)*), &mut $env)
     }}
 
     /// Evaluates a block of code in the given environment, expecting the interpreter to succeed
@@ -101,8 +97,13 @@ mod macros {
     /// )
     /// ```
     pub macro assert_eval($($t:tt)*) {
-        eval!($($t)*)
-            .expect(stringify!($($t)* should execute correctly))
+        match eval!($($t)*) {
+            Ok(v) => v,
+            Err(e) => panic!(
+                "\x1b[31mThe following code:\x1b[m\n```conlang\n{}\n```\n\x1b[31mfailed with error:\x1b[m\n{e}\n\n{e:?}\n",
+                stringify!($($t)*)
+            ),
+        }
     }
 
     /// Evaluates a block of code in the given environment, expecting the interpreter to fail
@@ -572,4 +573,169 @@ fn test_template() {
     let mut env = Default::default();
     assert_eval!(env,);
     //env_eq!(, );
+}
+
+mod operator_overloads {
+    use std::assert_matches;
+
+    use super::*;
+
+    fn setup() -> Environment {
+        let mut env = Default::default();
+        assert_eval!(env,
+            struct MyInt(i32);
+
+            impl MyInt fn cmp(self, other: MyInt) = self.0.cmp(other.0);
+
+            // Subsequent tests rely on .cmp operator overloads
+            if (MyInt(1) == MyInt(2)) panic("comparison is broken");
+            if (MyInt(2) == MyInt(1)) panic("comparison is broken");
+            if (MyInt(1) != MyInt(1)) panic("comparison is broken");
+
+            // Panics if `a` is not equal to `b`
+            fn assert_eq<T: cmp>(a: T, b: T)
+                if (a != b) panic(a, " != ", b);
+        );
+        env
+    }
+
+    #[test]
+    fn neg() {
+        let mut env = setup();
+        assert_eval!(env,
+            impl MyInt fn neg(&MyInt(self)) = MyInt(-self);
+            assert_eq(MyInt(-10), -MyInt(10));
+        );
+    }
+
+    #[test]
+    fn not() {
+        let mut env = setup();
+        assert_eval!(env,
+            impl MyInt fn not(&MyInt(self)) = MyInt(!self);
+            assert_eq(MyInt(!10), !MyInt(10));
+        );
+    }
+
+    // binary operators
+    #[test]
+    fn mul() {
+        let mut env = setup();
+        assert_eval!(env,
+            impl MyInt fn mul(&MyInt(self), MyInt(other)) = MyInt(self * other);
+            assert_eq(MyInt(200), MyInt(10) * MyInt(20));
+        );
+    }
+
+    #[test]
+    fn div() {
+        let mut env = setup();
+        assert_eval!(env,
+            impl MyInt fn div(&MyInt(self), MyInt(other)) = MyInt(self / other);
+            assert_eq(MyInt(2), MyInt(20) / MyInt(10));
+        );
+    }
+
+    #[test]
+    fn rem() {
+        let mut env = setup();
+        assert_eval!(env,
+            impl MyInt fn rem(&MyInt(self), MyInt(other)) = MyInt(self % other);
+            assert_eq(MyInt(0), MyInt(0) % MyInt(4));
+            assert_eq(MyInt(1), MyInt(1) % MyInt(4));
+            assert_eq(MyInt(2), MyInt(2) % MyInt(4));
+            assert_eq(MyInt(3), MyInt(3) % MyInt(4));
+            assert_eq(MyInt(0), MyInt(4) % MyInt(4));
+        );
+    }
+
+    #[test]
+    fn add() {
+        let mut env = setup();
+        assert_eval!(env,
+            impl MyInt fn add(&MyInt(self), MyInt(other)) = MyInt(self + other);
+            assert_eq(MyInt(30), MyInt(10) + MyInt(20));
+        );
+    }
+    #[test]
+    fn sub() {
+        let mut env = setup();
+        assert_eval!(env,
+            impl MyInt fn sub(&MyInt(self), MyInt(other)) = MyInt(self - other);
+            assert_eq(MyInt(19), MyInt(40) - MyInt(21));
+        );
+    }
+
+    #[test]
+    fn shl() {
+        let mut env = setup();
+        assert_eval!(env,
+            impl MyInt fn shl(&MyInt(self), other: u32) = MyInt(self << other);
+            assert_eq(MyInt(0b101000), MyInt(0b101) << 3);
+        );
+    }
+
+    #[test]
+    fn shr() {
+        let mut env = setup();
+        assert_eval!(env,
+            impl MyInt fn shr(&MyInt(self), other: u32) = MyInt(self >> other);
+            assert_eq(MyInt(0b101), MyInt(0b101000) >> 3);
+        );
+    }
+
+    #[test]
+    fn and() {
+        let mut env = setup();
+        assert_eval!(env,
+            impl MyInt fn and(&MyInt(self), MyInt(other)) = MyInt(self & other);
+            assert_eq(MyInt(0b1000), MyInt(0b1100) & MyInt(0b1010));
+        );
+    }
+
+    #[test]
+    fn or() {
+        let mut env = setup();
+        assert_eval!(env,
+            impl MyInt fn or(&MyInt(self), MyInt(other)) = MyInt(self | other);
+            assert_eq(MyInt(0b1110), MyInt(0b1100) | MyInt(0b1010));
+        );
+    }
+
+    #[test]
+    fn xor() {
+        let mut env = setup();
+        assert_eval!(env,
+            impl MyInt fn xor(&MyInt(self), MyInt(other)) = MyInt(self ^ other);
+            assert_eq(MyInt(0b0110), MyInt(0b1100) ^ MyInt(0b1010));
+        );
+    }
+
+    #[test]
+    fn r#try() {
+        let mut env = setup();
+        assert_eval!(env,
+            // excerpt from `src/preamble.cl`: required for try operator
+            enum Tried<T, R> { Take(T), Return(R) };
+
+            // Tries the integer, unwrapping it if positive or returning it if negative
+            impl MyInt fn try(MyInt(self)) -> Tried<i32, i32> = match self {
+                ..0 => Tried::Return(self);
+                _ => Tried::Take(self);
+            }
+
+            fn returns_negative_one() -> i32 {
+                MyInt(-1)?;
+                0
+            }
+
+            fn returns_zero() -> i32 {
+                MyInt(1)?;
+                0
+            }
+
+            assert_eq(returns_negative_one(), -1);
+            assert_eq(returns_zero(), 0);
+        );
+    }
 }

@@ -395,49 +395,124 @@ pub const Builtins: &[Builtin] = &builtins![
 
 pub const Math: &[Builtin] = &builtins![
     /// Multiplication `a * b`
+    ///
+    /// The infix `*` operator is defined in terms of this function:
+    /// ```conlang
+    /// a * b => a.mul(b)
+    /// ```
     fn mul(lhs, rhs) @env -> Self { lhs.take().mul(rhs.take(), env) }
 
     /// Division `a / b`
+    ///
+    /// The infix `/` operator is defined in terms of this function:
+    /// ```conlang
+    /// a / b => a.div(b)
+    /// ```
     fn div(lhs, rhs) @env -> Self { lhs.take().div(rhs.take(), env) }
 
     /// Remainder `a % b`
+    ///
+    /// The infix `%` operator is defined in terms of this function:
+    /// ```conlang
+    /// a % b => a.rem(b)
+    /// ```
     fn rem(lhs, rhs) @env -> Self { lhs.take().rem(rhs.take(), env) }
 
     /// Addition `a + b`
+    ///
+    /// The infix `+` operator is defined in terms of this function:
+    /// ```conlang
+    /// a + b => a.add(b)
+    /// ```
     fn add(lhs, rhs) @env -> Self { lhs.take().add(rhs.take(), env) }
 
     /// Subtraction `a - b`
+    ///
+    /// The infix `-` operator is defined in terms of this function:
+    /// ```conlang
+    /// a - b => a.sub(b)
+    /// ```
     fn sub(lhs, rhs) @env -> Self { lhs.take().sub(rhs.take(), env) }
 
     /// Shift Left `a << b`
+    ///
+    /// The infix `<<` operator is defined in terms of this function:
+    /// ```conlang
+    /// a << b => a.shl(b)
+    /// ```
     fn shl(lhs, rhs) @env -> Self { lhs.take().shl(rhs.take(), env) }
 
     /// Shift Right `a >> b`
+    ///
+    /// The infix `>>` operator is defined in terms of this function:
+    /// ```conlang
+    /// a >> b => a.shr(b)
+    /// ```
     fn shr(lhs, rhs) @env -> Self { lhs.take().shr(rhs.take(), env) }
 
     /// Bitwise And `a & b`
+    ///
+    /// The infix `&` operator is defined in terms of this function:
+    /// ```conlang
+    /// a & b => a.and(b)
+    /// ```
     fn and(lhs, rhs) @env -> Self { lhs.take().and(rhs.take(), env) }
 
     /// Bitwise Or `a | b`
+    ///
+    /// The infix `|` operator is defined in terms of this function:
+    /// ```conlang
+    /// a | b => a.or(b)
+    /// ```
     fn or(lhs, rhs) @env -> Self { lhs.take().or(rhs.take(), env) }
 
     /// Bitwise Exclusive Or `a ^ b`
+    ///
+    /// The infix `^` operator is defined in terms of this function:
+    /// ```conlang
+    /// a ^ b => a.xor(b)
+    /// ```
     fn xor(lhs, rhs) @env -> Self { lhs.take().xor(rhs.take(), env) }
 
-    /// Negates the ConValue
+    /// Negation `-a`
+    ///
+    /// The prefix `-` operator is defined in terms of this function:
+    /// ```conlang
+    /// !a => a.neg()
+    /// ```
     fn neg(tail) @env -> Self { tail.take().neg(env) }
 
-    /// Inverts the ConValue
+    /// Inversion `!a`
+    ///
+    /// The prefix `!` operator is defined in terms of this function:
+    /// ```conlang
+    /// !a => a.not()
+    /// ```
     fn not(tail) @env -> Self { tail.take().not(env) }
 
-    /// Compares two values
-    fn cmp(head, tail) @env { head.take().cmp(tail.take(), env) }
+    /// Value-to-value Comparison
+    ///
+    /// If `lhs < rhs`, the result is less than 0
+    /// If `lhs == rhs`, the result is 0
+    /// If `lhs > rhs`, the result is greater than 0
+    ///
+    /// Six comparison operators are defined in terms of this function:
+    /// ```conlang
+    /// a <  b => a.cmp(b) <  0
+    /// a <= b => a.cmp(b) <= 0
+    /// a == b => a.cmp(b) == 0
+    /// a != b => a.cmp(b) != 0
+    /// a >= b => a.cmp(b) >= 0
+    /// a >  b => a.cmp(b) >  0
+    /// ```
+    fn cmp(lhs, rhs) @env -> i32 { lhs.take().cmp(rhs.take(), env) }
 
     /// Does the opposite of `&`
     fn deref(tail) @env -> _ {
         Ok(tail.dereference_in(env)?.clone())
     }
 
+    /// Gets the current time in integer microseconds since unix epoch
     fn get_time_micros() @env -> i128 {
         std::time::SystemTime::now()
             .duration_since(std::time::SystemTime::UNIX_EPOCH)

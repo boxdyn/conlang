@@ -351,7 +351,7 @@ macro assign_modify($target:ident . $op:ident ($value:ident, $env: ident)) {{
 impl Interpret for Label<DefaultTypes> {
     fn interpret(&self, env: &mut Environment) -> IResult<ConValue> {
         let Self(label, expr) = self;
-        expr.interpret(&mut env.frame(label.to_ref(), None, None))
+        expr.interpret(&mut env.frame(label.to_ref(), Some(expr.1), None))
             .or_else(|e| e.catch_a_break(label.to_ref()))
     }
 }
