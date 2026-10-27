@@ -348,32 +348,6 @@ pub const Builtins: &[Builtin] = &builtins![
         Ok(value.dereference_in(env)?.type_of(env))
     }
 
-    /// Gets the underlying `mod` for type `ty`
-    fn captures(func) @env -> [str] {
-        let ConValue::Function(func) = func.dereference_in(env)? else {
-            return Err(Error::TypeError("fn", func.type_of(env)))
-        };
-        Ok(ConValue::Array(
-            func.captures()
-                .iter()
-                .copied()
-                .map(ConValue::Str)
-                .collect()
-        ))
-    }
-
-    /// Gets the underlying `mod` for type `ty`
-    fn upvars(func) @env -> Module {
-        let ConValue::Function(func) = func.dereference_in(env)? else {
-            return Err(Error::TypeError("fn", func.type_of(env)))
-        };
-        Ok(ConValue::Module(Box::new(
-            func.upvars().borrow().0.iter().map(|(&name, &idx)| {
-                (name, env.get_id(idx).cloned().unwrap_or_default())
-            }).collect()
-        )))
-    }
-
     /// Executes the provided `lambda` with `args`, and halts stack unwinding
     fn catch_panic(lambda, args @ ..) @env -> Result<_, _> {
         let out = match lambda.call(env, args.to_vec()) {
@@ -732,6 +706,46 @@ pub const ArrayMethods: &[Builtin] = &builtins! {
         env.to_convalue_option(out)
     }
 };
+
+pub const FuncMethods: &[Builtin] = &builtins![
+    /// Gets the underlying `mod` for type `ty`
+    fn captures(func) @env -> [str] {
+        let ConValue::Function(func) = func.dereference_in(env)? else {
+            return Err(Error::TypeError("fn", func.type_of(env)))
+        };
+        Ok(ConValue::Array(
+            func.captures()
+                .iter()
+                .copied()
+                .map(ConValue::Str)
+                .collect()
+        ))
+    }
+
+    /// Gets the underlying `mod` for type `ty`
+    fn upvars(func) @env -> Module {
+        let ConValue::Function(func) = func.dereference_in(env)? else {
+            return Err(Error::TypeError("fn", func.type_of(env)))
+        };
+        Ok(ConValue::Module(Box::new(
+            func.upvars().borrow().0.iter().map(|(&name, &idx)| {
+                (name, env.get_id(idx).cloned().unwrap_or_default())
+            }).collect()
+        )))
+    }
+
+    /// Gets the [`upvars`] of this func by reference
+    fn references(func) @env -> Module {
+        let ConValue::Function(func) = func.dereference_in(env)? else {
+            return Err(Error::TypeError("fn", func.type_of(env)))
+        };
+        Ok(ConValue::Module(Box::new(
+            func.upvars().borrow().0.iter().map(|(&name, &idx)| {
+                (name, ConValue::Ref(Place::from_index(idx)))
+            }).collect()
+        )))
+    }
+];
 
 fn get_float(env: &mut Environment, value: &ConValue) -> IResult<f64> {
     let &ConValue::Float(f) = value.dereference_in(env)? else {

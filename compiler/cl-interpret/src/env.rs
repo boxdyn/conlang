@@ -137,6 +137,7 @@ impl Default for Environment {
             .add_methods(Model::default_integer(), IntMethods)
             .add_methods(Model::Str.already_interned(), StringMethods)
             .add_methods(Model::Char.already_interned(), CharMethods)
+            .add_methods(Model::Function.already_interned(), FuncMethods)
             .add_methods(slice_or_array, ArrayMethods);
         this
     }
