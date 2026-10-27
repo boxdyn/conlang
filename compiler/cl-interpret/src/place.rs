@@ -157,7 +157,7 @@ impl Place {
                 }
                 (_place, Projection::Index(_, _)) => Err(Error::NotIndexable())?,
                 (ConValue::Struct(ty, values), Projection::DotSym(sym)) => match ty.to_ref() {
-                    Model::Struct(.., false) => values.entry(*sym).or_default(),
+                    Model::Struct { exhaustive: false, .. } => values.entry(*sym).or_default(),
                     _ => values.get_mut(sym).ok_or(Error::NotDefined(*sym))?,
                 },
                 (place, Projection::DotSym(name)) => {

@@ -669,26 +669,30 @@ fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)
             (PatOp::RangeEx, [..]) => todo!("RangeEx in bind_struct_op?"),
             (PatOp::RangeIn, [..]) => todo!("RangeIn in bind_struct_op?"),
             (PatOp::Record, elements) => {
-                let mut members = Vec::new();
+                let mut fields = Vec::new();
                 let mut exhaustive = true;
-                for member in elements.iter() {
-                    if let Pat::Op(PatOp::Rest, _) = member.value() {
+                for field in elements.iter() {
+                    if let Pat::Op(PatOp::Rest, _) = field.value() {
                         exhaustive = false;
                         continue;
                     }
-                    if let (Some(name), model) = bind_struct(member.value(), env)? {
+                    if let (Some(name), model) = bind_struct(field.value(), env)? {
                         let ti: Option<Type> = find_interned_type(&model);
-                        members
-                            .push((name, ti.unwrap_or(env.get_type(env.kw.underscore).unwrap())));
+                        fields.push((name, ti.unwrap_or(env.get_type(env.kw.underscore).unwrap())));
                     }
                 }
                 Ok((
                     None,
-                    Model::Struct(None, None, members.into_boxed_slice(), exhaustive),
+                    Model::Struct {
+                        name: None,
+                        parent: None,
+                        fields: fields.into_boxed_slice(),
+                        exhaustive,
+                    },
                 ))
             }
             (PatOp::Tuple, elements) => {
-                let members = elements
+                let fields = elements
                     .iter()
                     .map(|pat| {
                         let (_, model) = bind_struct_op(
@@ -699,7 +703,8 @@ fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)
                         Ok(model.intern())
                     })
                     .collect::<IResult<_>>()?;
-                Ok((None, Model::Tuple(None, None, members)))
+                let model = Model::Tuple { name: None, parent: None, fields };
+                Ok((None, model))
             }
             (PatOp::Typed, [name, ty]) => {
                 let (name, _) = bind_struct(name.value(), env)?;
@@ -724,7 +729,10 @@ fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)
         Pat::MetId(_) => todo!("Pat::MetId in struct binding")?,
         Pat::Name(name) => match env.get(*name) {
             Ok(ConValue::TypeInfo(t)) => (Some(*name), t.to_ref().clone()),
-            _ => (Some(*name), Model::Unit(Some(*name), None, 0)),
+            _ => (
+                Some(*name),
+                Model::Unit { name: Some(*name), parent: None, value: 0 },
+            ),
         },
         Pat::Value(at) => match at.interpret(env)? {
             ConValue::TypeInfo(t) => (None, t.to_ref().clone()),
@@ -762,7 +770,9 @@ fn bind_enum(pat: &Pat, env: &mut Environment) -> IResult<ConValue> {
         for (idx, pat) in pats.iter().enumerate() {
             if let (Some(name), model) = bind_struct(pat.value(), &mut scope)? {
                 let model = match model {
-                    Model::Unit(name, parent, _) => Model::Unit(name, parent, idx),
+                    Model::Unit { name, parent, value: _ } => {
+                        Model::Unit { name, parent, value: idx }
+                    }
                     _ => model,
                 };
                 let typeid = scope.def_type(name, model.intern());
@@ -1048,7 +1058,7 @@ fn match_pat_for_struct<'env>(
     };
 
     let exhaustive = match ty.to_ref() {
-        &Model::Struct(_, _, _, exhaustive) => exhaustive,
+        &Model::Struct { exhaustive, .. } => exhaustive,
         _ => false,
     };
 
