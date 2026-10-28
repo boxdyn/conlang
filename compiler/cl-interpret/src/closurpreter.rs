@@ -2,7 +2,7 @@
 
 use crate::{
     Callable,
-    convalue::ConValue,
+    convalue::{ConValue, Integer},
     env::{Environment, Location},
     error::{Error, ErrorKind, IResult},
     function::Captor,
@@ -16,12 +16,18 @@ use std::{
     collections::{BTreeSet, HashMap},
     iter,
     rc::Rc,
+    sync::Arc,
 };
 
 pub type CallableFn =
     Box<dyn Fn(Clunktion, &mut Environment, Vec<ConValue>) -> IResult<ConValue> + 'static>;
-pub type Plexpr = Box<dyn Fn(&mut Environment) -> IResult<Place> + 'static>;
 
+/// The inner portion of a [Clunktion]
+///
+/// This holds the information required to call a [CallableFn]:
+/// - the [CallableFn] itself
+/// - the [Symbol]s it captures
+/// - the [Location] of those captures, once known
 pub struct Clunk {
     pub ast: At<Expr>,
     pub expr: CallableFn,
@@ -51,9 +57,6 @@ impl Clunktion {
 
     pub fn mark(&self, env: &Environment) -> IResult<()> {
         if let Ok(upvars) = self.0.upvars.try_borrow_mut().as_deref_mut() {
-            // if upvars.1 == 0 {
-            //     upvars.1 = env.frame_depth();
-            // }
             if upvars.2.is_none() {
                 upvars.2 = env.get_module();
             }
@@ -86,9 +89,7 @@ impl Clunktion {
             let Ok(id) = env.id_of(name) else {
                 continue;
             };
-            if let Location::Stack(id) = id
-                && id as usize >= frame_top
-            {
+            if matches!(id, Location::Stack(id) if id as usize >= frame_top) {
                 continue;
             }
             self_upvars.entry(name).or_insert(id);
@@ -112,49 +113,126 @@ impl Callable for Clunktion {
     }
 }
 
+pub struct ScopeFrame {
+    /// The bodies of `defer` exprs seen in this scope
+    pub deferred: Vec<At<Expr>>,
+    pub stack_allocations: usize,
+    pub names: HashMap<Symbol, Location>,
+}
+
+pub struct Scopes {
+    pub stack: Vec<ScopeFrame>,
+    pub bodies: Vec<OwnClexpr>,
+}
+
 // this could likely be allocated as &'arena dyn Fn(&mut Environment)... + 'arena
-pub type Clexpr = Box<dyn Fn(&mut Environment) -> IResult<ConValue>>;
+pub type Clexpr = dyn Fn(&mut Environment) -> IResult<ConValue>;
+pub type OwnClexpr = Box<Clexpr>;
+pub type Plexpr = Box<dyn Fn(&mut Environment) -> IResult<Place> + 'static>;
 
-// TODO: static name binding is easy here!
-
-pub fn compile(expr: &At<Expr>) -> IResult<Clexpr> {
+pub fn compile(expr: &At<Expr>) -> IResult<OwnClexpr> {
     compile_inner(expr).map_err(|e| e.with_span(expr.1))
 }
 
-fn compile_inner(expr: &At<Expr>) -> IResult<Clexpr> {
-    let compute: Clexpr = match expr.value() {
+fn compile_inner(expr: &At<Expr>) -> IResult<OwnClexpr> {
+    let compute: OwnClexpr = match expr.inner().value() {
         // TODO: don't clone?
         _ if let Some(place) = compile_place(expr)? => Box::new(move |e| place(e)?.get(e).cloned()),
         Expr::Omitted => Box::new(|_| Ok(ConValue::Unit)),
         Expr::Id(path) => compile_path(&path.parts, expr),
         Expr::MetId(_) => unimplemented!("Expr::MetId"),
-        Expr::Lit(lit) => match lit {
-            &Literal::Bool(b) => Box::new(move |_| Ok(ConValue::Bool(b))),
-            &Literal::Char(c) => Box::new(move |_| Ok(ConValue::Char(c))),
-            &Literal::Int(i, _) => Box::new(move |_| Ok(ConValue::Int(i as _))),
-            Literal::Str(s) => {
-                let s = Symbol::from(s.as_str());
-                Box::new(move |_| Ok(ConValue::Str(s)))
-            }
-        },
+        Expr::Lit(lit) => compile_lit(lit, expr)?,
         Expr::Use(tree) => compile_use(tree, expr)?,
         Expr::Bind(bind) => compile_bind(bind, expr)?,
         Expr::Make(make) => compile_make(make, expr)?,
         Expr::Match(mtch) => compile_match(mtch, expr)?,
-        Expr::Label(label) => {
-            let Label(label, body) = label.as_ref();
-            let label = label.to_ref();
-            let body = compile(body)?;
-            Box::new(move |e| body(e).or_else(|err| err.catch_a_break(label)))
-        }
+        Expr::Label(label) => compile_label(label, expr)?,
         Expr::Op(op, exprs) => compile_op(*op, exprs, expr)?,
     };
-    // compute
-    let span = expr.1;
-    Ok(Box::new(move |e| compute(e).map_err(|e| e.with_span(span))))
+
+    Ok(compute)
+    // let span = expr.1;
+    // Ok(Box::new(move |e| compute(e).map_err(|e| e.with_span(span))))
 }
 
-pub fn compile_use(tree: &Use, _within: &At<Expr>) -> IResult<Clexpr> {
+pub fn compile_place(value: &At<Expr>) -> IResult<Option<Plexpr>> {
+    Ok(match value.value() {
+        Expr::Id(Path { parts }) if let &[name] = parts.as_slice() => {
+            Some(Box::new(move |e| Ok(Place::from_index(e.id_of(name)?))))
+        }
+        Expr::Op(op, exprs) => match (op, exprs.as_slice()) {
+            (Op::Group, [e]) => compile_place(e)?,
+            (Op::MetaInner | Op::MetaOuter, [_, e]) => compile_place(e)?,
+            (Op::Pub, [e]) => compile_place(e)?,
+            (Op::Identity, [e]) => compile_place(e)?,
+            (Op::Index, [place, idx]) if let Some(place) = compile_place(place)? => {
+                let index = compile(idx)?;
+                Some(Box::new(move |e| match index(e)? {
+                    ConValue::Int(i @ ..0) => Ok(place(e)?.index(-i as _, true)),
+                    ConValue::Int(i @ 0..) => Ok(place(e)?.index(i as _, false)),
+                    other => Err(Error::TypeError("{integer}", other.type_of(e))),
+                }))
+            }
+            (Op::Const | Op::Static, _) => None,
+            (Op::Dot, &[ref place, At(Expr::Lit(Literal::Int(i, _)), _)]) => {
+                let Some(place) = compile_place(place)? else {
+                    return Ok(None);
+                };
+                Some(Box::new(move |e| Ok(place(e)?.dot_idx(i as _))))
+            }
+            (Op::Dot, [place, At(Expr::Id(path), _)]) if path.parts.len() == 1 => {
+                let Some(place) = compile_place(place)? else {
+                    return Ok(None);
+                };
+                let name = path.parts[0];
+                Some(Box::new(move |e| Ok(place(e)?.dot_sym(name))))
+            }
+            (Op::Deref, [ptr]) => {
+                let ptr = compile(ptr)?;
+                Some(Box::new(move |e| match ptr(e)? {
+                    ConValue::Ref(place) => Ok(place),
+                    other => Err(Error::TypeError("&", other.type_of(e))),
+                }))
+            }
+            _ => None,
+        },
+        _ => None,
+    })
+}
+
+fn compile_path(parts: &[Symbol], _within: &At<Expr>) -> OwnClexpr {
+    match parts {
+        &[name] => Box::new(move |e| e.get(name)),
+        &[first, ref rest @ ..] => {
+            let mut resolve: OwnClexpr = Box::new(move |e| e.get(first));
+            for &name in rest {
+                resolve = Box::new(move |e| match resolve(e)? {
+                    ConValue::TypeInfo(ty) => e.get_impl(ty, name),
+                    value => cl_todo!("{value}::{name}")?,
+                })
+            }
+            resolve
+        }
+        [] => unimplemented!("Empty paths"),
+    }
+}
+
+pub fn compile_lit(lit: &Literal, _within: &At<Expr>) -> IResult<OwnClexpr> {
+    Ok(match lit {
+        &Literal::Bool(b) => Box::new(move |_| Ok(ConValue::Bool(b))),
+        &Literal::Char(c) => Box::new(move |_| Ok(ConValue::Char(c))),
+        &Literal::Int(i, _) => {
+            let i = i as Integer;
+            Box::new(move |_| Ok(ConValue::Int(i)))
+        }
+        Literal::Str(s) => {
+            let s = Symbol::from(s.as_str());
+            Box::new(move |_| Ok(ConValue::Str(s)))
+        }
+    })
+}
+
+pub fn compile_use(tree: &Use, _within: &At<Expr>) -> IResult<OwnClexpr> {
     type UseTy = Box<dyn Fn(&mut Environment, Type) -> IResult<()>>;
     fn compile_use_ty(tree: &Use, _within: &At<Expr>) -> UseTy {
         fn bind(e: &mut Environment, ty: Type, from: Symbol, to: Symbol) -> IResult<()> {
@@ -234,75 +312,239 @@ pub fn compile_use(tree: &Use, _within: &At<Expr>) -> IResult<Clexpr> {
     })
 }
 
-pub fn compile_place(value: &At<Expr>) -> IResult<Option<Plexpr>> {
-    Ok(match value.value() {
-        Expr::Id(path) => {
-            let Path { parts } = path;
-            let [name] = parts[..] else { return Ok(None) };
-            Some(Box::new(move |e| Ok(Place::from_index(e.id_of(name)?))))
+fn compile_bind(bind: &Bind, within: &At<Expr>) -> IResult<OwnClexpr> {
+    let Bind(op, pat, exprs) = bind;
+    let exprs = exprs.as_slice();
+    Ok(match (op, pat, exprs) {
+        (BindOp::Let, _, []) => cl_todo!("let {pat}")?,
+        (BindOp::Let, _, [scrutinee]) => {
+            let scrutinee = compile(scrutinee)?;
+            let (it_matches, then_bind) = compile_let_pattern(pat)?;
+            match compile_guard_patterns(pat)? {
+                Some(try_guards) => Box::new(move |e| {
+                    let value = scrutinee(e)?;
+                    if it_matches(e, &value)? {
+                        // TODO: Frame.forget() to merge frames
+                        let mut scope = e.frame("if_guard", None, None);
+                        then_bind(&mut scope, value);
+                        if try_guards(&mut scope)? {
+                            scope.forget();
+                            return Ok(ConValue::Bool(true));
+                        }
+                    }
+                    Ok(ConValue::Bool(false))
+                }),
+                None => Box::new(move |e| {
+                    let value = scrutinee(e)?;
+                    let success = it_matches(e, &value)?;
+                    if success {
+                        then_bind(e, value);
+                    }
+                    Ok(ConValue::Bool(success))
+                }),
+            }
         }
-        Expr::Op(op, exprs) => match (op, exprs.as_slice()) {
-            (Op::Group, [e]) => compile_place(e)?,
-            (Op::MetaInner | Op::MetaOuter, [_, e]) => compile_place(e)?,
-            (Op::Index, [place, idx]) if let Some(place) = compile_place(place)? => {
-                let index = compile(idx)?;
-                Some(Box::new(move |e| match index(e)? {
-                    ConValue::Int(i @ ..0) => Ok(place(e)?.index(-i as _, true)),
-                    ConValue::Int(i @ 0..) => Ok(place(e)?.index(i as _, false)),
-                    other => Err(Error::TypeError("{integer}", other.type_of(e))),
-                }))
+        (BindOp::Let, _, [scrutinee, default]) => {
+            let (scrutinee, default) = (compile(scrutinee)?, compile(default)?);
+            let (it_matches, then_bind) = compile_let_pattern(pat)?;
+            match compile_guard_patterns(pat)? {
+                Some(guards) => Box::new(move |e| {
+                    let value = scrutinee(e)?;
+                    if it_matches(e, &value)? {
+                        // TODO: Frame.forget() to merge frames
+                        then_bind(e, value);
+                        if guards(e)? {
+                            return Ok(ConValue::Unit);
+                        }
+                    }
+                    let value = default(e)?;
+                    if it_matches(e, &value)? {
+                        then_bind(e, value);
+                        if guards(e)? {
+                            return Ok(ConValue::Unit);
+                        }
+                    } else {
+                        Err(Error::MatchNonexhaustive(value))?
+                    }
+
+                    Err(Error::Panic("oops".into()))
+                }),
+                None => Box::new(move |e| {
+                    let value = scrutinee(e)?;
+                    if it_matches(e, &value)? {
+                        then_bind(e, value);
+                        return Ok(ConValue::Unit);
+                    }
+                    let value = default(e)?;
+                    if it_matches(e, &value)? {
+                        then_bind(e, value);
+                        return Ok(ConValue::Unit);
+                    }
+                    Err(Error::MatchNonexhaustive(value))
+                }),
             }
-            (Op::Pub, [e]) => compile_place(e)?,
-            (Op::Const | Op::Static, _) => None,
-            (Op::Dot, &[ref place, At(Expr::Lit(Literal::Int(i, _)), _)]) => {
-                let Some(place) = compile_place(place)? else {
-                    return Ok(None);
-                };
-                Some(Box::new(move |e| Ok(place(e)?.dot_idx(i as _))))
+        }
+        (BindOp::Type, _, []) => cl_todo!("type {pat}")?,
+        (BindOp::Type, _, [alias]) => cl_todo!("type {pat} = {alias}")?,
+        (BindOp::Fn, pat, [body]) => {
+            // TODO: captures?
+            let body_span = body.1;
+            let body = match body.inner() {
+                At(Expr::Op(Op::Block, b), _) if let [body] = b.as_slice() => body,
+                _ => body,
+            };
+            let body = compile(body)?;
+            let inner_pat = pat.0.inner();
+            let (it_matches, then_bind) = let_inner_pattern(inner_pat)?;
+            if compile_guard_patterns(pat)?.is_some() {
+                cl_todo!("Guard patterns on function args")?
             }
-            (Op::Dot, [place, At(Expr::Id(path), _)]) if path.parts.len() == 1 => {
-                let Some(place) = compile_place(place)? else {
-                    return Ok(None);
-                };
-                let name = path.parts[0];
-                Some(Box::new(move |e| Ok(place(e)?.dot_sym(name))))
+
+            let body: CallableFn = Box::new(move |f, e, args| {
+                let upvars = f.0.upvars.borrow();
+                let mut scope = e.frame("captures", Some(body_span), upvars.2);
+                drop(upvars);
+
+                let mut scope = scope.frame("body", Some(body_span), None);
+                let args = ConValue::Tuple(args);
+                if !it_matches(&mut scope, &args)? {
+                    Err(Error::Panic("args failed".into()))?
+                }
+                then_bind(&mut scope, args);
+
+                match body(&mut scope) {
+                    Err(Error { kind: ErrorKind::Panic(e, depth), span }) => {
+                        println!("{depth:>4}: at {}", span.unwrap_or(body_span));
+                        Err(Error { kind: ErrorKind::Panic(e, depth + 1), span: None })
+                    }
+                    Err(Error { kind: ErrorKind::Return(value), .. }) => Ok(value),
+                    other => other,
+                }
+            });
+
+            let clunk = Clunktion::new(within.clone(), body);
+
+            match pat.0.name() {
+                Some(name) => Box::new(move |e| {
+                    clunk.mark(e)?;
+                    e.bind(name, ConValue::Clunktion(clunk.clone()));
+                    Ok(ConValue::Clunktion(clunk.clone()))
+                }),
+                None => Box::new(move |_| Ok(ConValue::Clunktion(clunk.clone()))),
             }
-            (Op::Identity, [e]) => compile_place(e)?,
-            (Op::Refer, _) => None,
-            (Op::Deref, [ptr]) => {
-                let ptr = compile(ptr)?;
-                Some(Box::new(move |e| match ptr(e)? {
-                    ConValue::Ref(place) => Ok(place),
-                    other => Err(Error::TypeError("&", other.type_of(e))),
-                }))
-            }
-            _ => None,
-        },
-        _ => None,
+        }
+        // TODO: perform a naming pass, then do this
+        (BindOp::Mod, _, [body]) => compile_impl(pat, body, false)?,
+        (BindOp::Impl, _, [body]) => compile_impl(pat, body, true)?,
+        (BindOp::Impl, _, []) => compile_impl(pat, &Expr::Omitted.at(within.1), true)?,
+        (BindOp::Struct, _, []) => {
+            let pat = pat.clone();
+            Box::new(move |e| match bind_struct(pat.value(), e)? {
+                (Some(name), ty) => {
+                    let deftype = e.def_type(name, ty.intern());
+                    e.bind(name, ConValue::TypeInfo(deftype));
+                    Ok(ConValue::TypeInfo(deftype))
+                }
+                (None, ty) => Ok(ConValue::TypeInfo(ty.intern())),
+            })
+        }
+        (BindOp::Enum, &At(Pat::Name(name), _), []) => {
+            let never = Model::Never.intern();
+            Box::new(move |e| {
+                e.def_type(name, never);
+                e.bind(name, never);
+                Ok(ConValue::TypeInfo(never))
+            })
+        }
+        (BindOp::Enum, _, []) => {
+            let pat = pat.value().clone();
+            Box::new(move |e| bind_enum(&pat, e))
+        }
+        _ => unimplemented!("{bind}"),
     })
 }
 
-fn compile_path(parts: &[Symbol], _within: &At<Expr>) -> Clexpr {
-    match parts {
-        &[name] => Box::new(move |e| e.get(name)),
-        &[first, ref rest @ ..] => {
-            let mut resolve: Clexpr = Box::new(move |e| e.get(first));
-            for &name in rest {
-                resolve = Box::new(move |e| match resolve(e)? {
-                    ConValue::TypeInfo(ty) => e.get_impl(ty, name),
-                    value => cl_todo!("{value}::{name}")?,
-                })
-            }
-            resolve
+fn compile_impl(pat: &At<Pat>, body: &At<Expr>, is_impl: bool) -> IResult<OwnClexpr> {
+    fn find_body(body: &At<Expr>) -> &At<Expr> {
+        let At(Expr::Op(op, exprs), _) = body else {
+            return body;
+        };
+        match (op, exprs.as_slice()) {
+            (Op::Block, [body]) => body,
+            (Op::Pub | Op::Group, [body]) => find_body(body),
+            (Op::MetaInner | Op::MetaOuter, [_, body]) => find_body(body),
+            _ => body,
         }
-        [] => unimplemented!("Empty paths"),
+    }
+    let body = find_body(body);
+    let body = compile(body)?;
+    let pat = pat.clone();
+    if is_impl {
+        Ok(Box::new(move |e: &mut Environment| {
+            let selfty = e.kw.kw_Self;
+            let (name, model) = bind_struct(pat.value(), e)?;
+            let ty = model.intern(); // TODO: bad
+            let mut scope = e.frame(ty.name(), Some(pat.1), Some(ty));
+            let bound = scope.bind_global(selfty, ty);
+            if let Some(name) = name {
+                scope.bind_raw(name, bound);
+            }
+            body(&mut scope)?;
+            if let Some(values) = scope.pop_into_globals() {
+                for (name, value) in values {
+                    if let Location::Global(loc) = value {
+                        e.implement_raw(ty, name, loc);
+                        if let Model::Enum(_, variants) = ty.to_ref() {
+                            for &(_, variant) in variants {
+                                e.implement_raw(variant, name, loc);
+                            }
+                        }
+                        match e.get_id(value).expect("Just bound") {
+                            ConValue::Clunktion(c) => c.clone().capture(e)?,
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            Ok(ConValue::TypeInfo(ty))
+        }))
+    } else {
+        Ok(Box::new(move |e| {
+            let (kw_self, kw_super) = (e.kw.kw_self, e.kw.kw_super);
+            let (name, model) = bind_struct(pat.value(), e)?;
+            let ty = model.intern();
+            let upper = e.get_module();
+            let me = e
+                .get(e.kw.modules_enabled)
+                .and_then(|v| v.truthy(e))
+                .unwrap_or(false);
+            if !me {
+                return body(e);
+            };
+
+            let mut scope = e.frame(ty.name(), Some(pat.1), Some(ty));
+            scope.bind(kw_self, ty);
+            scope.bind(kw_super, if let Some(m) = upper { m } else { ty });
+            body(&mut scope)?;
+            if let Some(values) = scope.pop_into_globals() {
+                for (name, value) in values {
+                    if let Location::Global(id) = value {
+                        e.implement_raw(ty, name, id);
+                    }
+                }
+            }
+            if let Some(name) = name {
+                e.bind(name, ConValue::TypeInfo(ty));
+            }
+            Ok(ConValue::TypeInfo(ty))
+        }))
     }
 }
 
-fn compile_make(make: &Make, _within: &At<Expr>) -> IResult<Clexpr> {
+fn compile_make(make: &Make, _within: &At<Expr>) -> IResult<OwnClexpr> {
     let Make(ty, arm_exprs) = make;
     let ty = compile(ty)?;
-    let mut arms: Vec<(Symbol, Clexpr)> = vec![];
+    let mut arms: Vec<(Symbol, OwnClexpr)> = vec![];
     for &MakeArm(name, ref value) in arm_exprs {
         arms.push(match value {
             Some(value) => (name, compile(value)?),
@@ -324,7 +566,7 @@ fn compile_make(make: &Make, _within: &At<Expr>) -> IResult<Clexpr> {
     }))
 }
 
-fn compile_match(mtch: &Match, _within: &At<Expr>) -> IResult<Clexpr> {
+fn compile_match(mtch: &Match, _within: &At<Expr>) -> IResult<OwnClexpr> {
     let Match(scrutinee, match_arms) = mtch;
     let scrutinee = compile(scrutinee)?;
     let mut matchers = vec![];
@@ -378,7 +620,16 @@ fn compile_match(mtch: &Match, _within: &At<Expr>) -> IResult<Clexpr> {
     }))
 }
 
-fn compile_op(op: Op, exprs: &[At<Expr>], _within: &At<Expr>) -> IResult<Clexpr> {
+fn compile_label(label: &Label, _within: &At<Expr>) -> IResult<OwnClexpr> {
+    let Label(label, body) = label;
+    let label = label.to_ref();
+    let body = compile(body)?;
+    Ok(Box::new(move |e| {
+        body(e).or_else(|err| err.catch_a_break(label))
+    }))
+}
+
+fn compile_op(op: Op, exprs: &[At<Expr>], _within: &At<Expr>) -> IResult<OwnClexpr> {
     Ok(match (op, exprs) {
         (Op::Do, []) => Box::new(|_| Ok(ConValue::Unit)),
         (Op::Do, [discard @ .., ret]) => {
@@ -785,226 +1036,6 @@ macro assign_modify($place:ident . $op:ident ($value:ident)) {{
     })
 }}
 
-fn compile_bind(bind: &Bind, within: &At<Expr>) -> IResult<Clexpr> {
-    let Bind(op, pat, exprs) = bind;
-    let exprs = exprs.as_slice();
-    Ok(match (op, pat, exprs) {
-        (BindOp::Let, _, []) => cl_todo!("let {pat}")?,
-        (BindOp::Let, _, [scrutinee]) => {
-            let scrutinee = compile(scrutinee)?;
-            let (it_matches, then_bind) = compile_let_pattern(pat)?;
-            match compile_guard_patterns(pat)? {
-                Some(try_guards) => Box::new(move |e| {
-                    let value = scrutinee(e)?;
-                    if it_matches(e, &value)? {
-                        // TODO: Frame.forget() to merge frames
-                        let mut scope = e.frame("if_guard", None, None);
-                        then_bind(&mut scope, value);
-                        if try_guards(&mut scope)? {
-                            scope.forget();
-                            return Ok(ConValue::Bool(true));
-                        }
-                    }
-                    Ok(ConValue::Bool(false))
-                }),
-                None => Box::new(move |e| {
-                    let value = scrutinee(e)?;
-                    let success = it_matches(e, &value)?;
-                    if success {
-                        then_bind(e, value);
-                    }
-                    Ok(ConValue::Bool(success))
-                }),
-            }
-        }
-        (BindOp::Let, _, [scrutinee, default]) => {
-            let (scrutinee, default) = (compile(scrutinee)?, compile(default)?);
-            let (it_matches, then_bind) = compile_let_pattern(pat)?;
-            match compile_guard_patterns(pat)? {
-                Some(guards) => Box::new(move |e| {
-                    let value = scrutinee(e)?;
-                    if it_matches(e, &value)? {
-                        // TODO: Frame.forget() to merge frames
-                        then_bind(e, value);
-                        if guards(e)? {
-                            return Ok(ConValue::Unit);
-                        }
-                    }
-                    let value = default(e)?;
-                    if it_matches(e, &value)? {
-                        then_bind(e, value);
-                        if guards(e)? {
-                            return Ok(ConValue::Unit);
-                        }
-                    }
-
-                    Err(Error::Panic("oops".into()))
-                }),
-                None => Box::new(move |e| {
-                    let value = scrutinee(e)?;
-                    if it_matches(e, &value)? {
-                        then_bind(e, value);
-                        return Ok(ConValue::Unit);
-                    }
-                    let value = default(e)?;
-                    if it_matches(e, &value)? {
-                        then_bind(e, value);
-                        return Ok(ConValue::Unit);
-                    }
-                    Err(Error::Panic("oops".into()))
-                }),
-            }
-        }
-        (BindOp::Type, _, []) => cl_todo!("type {pat}")?,
-        (BindOp::Type, _, [alias]) => cl_todo!("type {pat} = {alias}")?,
-        (BindOp::Fn, pat, [body]) => {
-            // TODO: captures?
-            let body_span = body.1;
-            let body = compile(body)?;
-            let inner_pat = pat.0.inner();
-            let (it_matches, then_bind) = let_inner_pattern(inner_pat)?;
-            if compile_guard_patterns(pat)?.is_some() {
-                cl_todo!("Guard patterns on function args")?
-            }
-
-            let body: CallableFn = Box::new(move |f, e, args| {
-                let args = ConValue::Tuple(args);
-
-                let upvars = f.0.upvars.borrow();
-                let mut scope = e.frame("captures", Some(body_span), upvars.2);
-                let mut scope = scope.frame("body", Some(body_span), None);
-
-                if !it_matches(&mut scope, &args)? {
-                    Err(Error::Panic("args failed".into()))?
-                }
-                drop(upvars);
-
-                then_bind(&mut scope, args);
-                match body(&mut scope) {
-                    Err(Error { kind: ErrorKind::Panic(e, depth), span }) => {
-                        println!("{depth:>4}: at {}", span.unwrap_or(body_span));
-                        Err(Error { kind: ErrorKind::Panic(e, depth + 1), span: None })
-                    }
-                    Err(Error { kind: ErrorKind::Return(value), .. }) => Ok(value),
-                    other => other,
-                }
-            });
-
-            let clunk = Clunktion::new(within.clone(), body);
-
-            match pat.0.name() {
-                Some(name) => Box::new(move |e| {
-                    clunk.mark(e)?;
-                    e.bind(name, ConValue::Clunktion(clunk.clone()));
-                    Ok(ConValue::Clunktion(clunk.clone()))
-                }),
-                None => Box::new(move |_| Ok(ConValue::Clunktion(clunk.clone()))),
-            }
-        }
-        // TODO: perform a naming pass, then do this
-        (BindOp::Mod, _, [body]) => compile_impl(pat, body, false)?,
-        (BindOp::Impl, _, [body]) => compile_impl(pat, body, true)?,
-        (BindOp::Impl, _, []) => compile_impl(pat, &Expr::Omitted.at(within.1), true)?,
-        (BindOp::Struct, _, []) => {
-            let pat = pat.clone();
-            Box::new(move |e| match bind_struct(pat.value(), e)? {
-                (Some(name), ty) => {
-                    let deftype = e.def_type(name, ty.intern());
-                    e.bind(name, ConValue::TypeInfo(deftype));
-                    Ok(ConValue::TypeInfo(deftype))
-                }
-                (None, ty) => Ok(ConValue::TypeInfo(ty.intern())),
-            })
-        }
-        (BindOp::Enum, &At(Pat::Name(name), _), []) => {
-            let never = Model::Never.intern();
-            Box::new(move |e| {
-                e.def_type(name, never);
-                e.bind(name, never);
-                Ok(ConValue::TypeInfo(never))
-            })
-        }
-        (BindOp::Enum, _, []) => {
-            let pat = pat.value().clone();
-            Box::new(move |e| bind_enum(&pat, e))
-        }
-        _ => unimplemented!("{bind}"),
-    })
-}
-
-fn compile_impl(pat: &At<Pat>, body: &At<Expr>, is_impl: bool) -> IResult<Clexpr> {
-    fn find_body(body: &At<Expr>) -> &At<Expr> {
-        let At(Expr::Op(op, exprs), _) = body else {
-            return body;
-        };
-        match (op, exprs.as_slice()) {
-            (Op::Block, [body]) => body,
-            (Op::Pub | Op::Group, [body]) => find_body(body),
-            (Op::MetaInner | Op::MetaOuter, [_, body]) => find_body(body),
-            _ => body,
-        }
-    }
-    let body = find_body(body);
-    let body = compile(body)?;
-    let pat = pat.clone();
-    if is_impl {
-        Ok(Box::new(move |e: &mut Environment| {
-            let selfty = e.kw.kw_Self;
-            let (name, model) = bind_struct(pat.value(), e)?;
-            let ty = model.intern(); // TODO: bad
-            let mut scope = e.frame(ty.name(), Some(pat.1), Some(ty));
-            let bound = scope.bind_global(selfty, ty);
-            if let Some(name) = name {
-                scope.bind_raw(name, bound);
-            }
-            body(&mut scope)?;
-            if let Some(values) = scope.pop_into_globals() {
-                for (name, value) in values {
-                    if let Location::Global(loc) = value {
-                        e.implement_raw(ty, name, loc);
-                        if let Model::Enum(_, variants) = ty.to_ref() {
-                            for &(_, variant) in variants {
-                                e.implement_raw(variant, name, loc);
-                            }
-                        }
-                    }
-                }
-            }
-            Ok(ConValue::TypeInfo(ty))
-        }))
-    } else {
-        Ok(Box::new(move |e| {
-            let (kw_self, kw_super) = (e.kw.kw_self, e.kw.kw_super);
-            let (name, model) = bind_struct(pat.value(), e)?;
-            let ty = model.intern();
-            let upper = e.get_module();
-            let me = e
-                .get(e.kw.modules_enabled)
-                .and_then(|v| v.truthy(e))
-                .unwrap_or(false);
-            if !me {
-                return body(e);
-            };
-
-            let mut scope = e.frame(ty.name(), Some(pat.1), Some(ty));
-            scope.bind(kw_self, ty);
-            scope.bind(kw_super, if let Some(m) = upper { m } else { ty });
-            body(&mut scope)?;
-            if let Some(values) = scope.pop_into_globals() {
-                for (name, value) in values {
-                    if let Location::Global(id) = value {
-                        e.implement_raw(ty, name, id);
-                    }
-                }
-            }
-            if let Some(name) = name {
-                e.bind(name, ConValue::TypeInfo(ty));
-            }
-            Ok(ConValue::TypeInfo(ty))
-        }))
-    }
-}
-
 // /// PATTERN MATCHING CODE BELOW /// //
 
 // step 1: determine whether the value matches
@@ -1255,7 +1286,7 @@ fn let_inner_pattern(pat: &Pat) -> IResult<(Matcher, Binder)> {
             }
             (PatOp::TypePrefixed, &[At(Pat::Name(ty), _), ref pat]) => {
                 let (matcher, binder) = compile_let_pattern(pat)?;
-                let ty: Clexpr = Box::new(move |e| e.get(ty));
+                let ty: OwnClexpr = Box::new(move |e| e.get(ty));
                 got(
                     move |e, v| match ty(e)? {
                         ConValue::TypeInfo(ty) => match v {

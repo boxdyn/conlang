@@ -242,6 +242,24 @@ pub enum Op {
     OrSet,
 }
 
+impl<A: AstTypes> At<Expr<A>, A> {
+    pub const fn inner(&self) -> &Self {
+        let Expr::Op(op, exprs) = &self.0 else {
+            return self;
+        };
+        match (op, exprs.as_slice()) {
+            (Op::Group, [body]) => body.inner(),
+            (Op::MetaInner, [_, body]) => body.inner(),
+            (Op::MetaOuter, [_, body]) => body.inner(),
+            (Op::Pub, [body]) => body.inner(),
+            (Op::Const, [body]) => body.inner(),
+            (Op::Static, [body]) => body.inner(),
+            (Op::Identity, [body]) => body.inner(),
+            _ => self,
+        }
+    }
+}
+
 impl<A: AstTypes> Expr<A> {
     /// Attaches this [Expr] to an [At] node with the provided [AstTypes::Annotation].
     pub const fn at(self, annotation: A::Annotation) -> At<Expr<A>, A> {
