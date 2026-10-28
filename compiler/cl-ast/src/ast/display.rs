@@ -104,6 +104,11 @@ impl<A: AstTypes> Display for Expr<A> {
             Self::Op(Op::Quote, exprs) => f.delimit("`", "`").list(exprs, ", "),
             Self::Op(Op::Group, exprs) => f.delimit("(", ")").list(exprs, ", "),
             Self::Op(op @ (Op::MetaInner | Op::MetaOuter), exprs) => match &exprs[..] {
+                [At(Expr::Lit(meta), _), expr @ ..] => match op {
+                    Op::MetaInner => f.delimit(fmt!("//! {meta}\n"), "").list(expr, ","),
+                    Op::MetaOuter => f.delimit(fmt!("/// {meta}\n"), "").list(expr, ","),
+                    _ => f.delimit(fmt!("{op}[{meta}]\n"), "").list(expr, ","),
+                },
                 [meta, expr @ ..] => f.delimit(fmt!("{op}[{meta}]\n"), "").list(expr, ","),
                 [] => write!(f, "{op}[]"),
             },
