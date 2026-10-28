@@ -775,11 +775,12 @@ fn compile_op(op: Op, exprs: &[At<Expr>], _within: &At<Expr>) -> IResult<Clexpr>
 macro assign_modify($place:ident . $op:ident ($value:ident)) {{
     let value = compile($value)?;
     let Some(place) = compile_place($place)? else {
-        cl_todo!("make_place({})", $place)?
+        Err(Error::NotPlace().with_span($place.1))?
     };
     Box::new(move |e| {
         let place = place(e)?;
-        *place.get_mut(e)? = place.get_mut(e)?.take().$op(value(e)?, e)?;
+        let value = value(e)?;
+        *place.get_mut(e)? = place.get_mut(e)?.take().$op(value, e)?;
         Ok(ConValue::Unit)
     })
 }}
