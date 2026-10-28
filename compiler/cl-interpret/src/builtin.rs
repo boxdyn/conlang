@@ -304,7 +304,7 @@ pub const Builtins: &[Builtin] = &builtins![
     fn invoke(function, args) @env -> R {
         match args.take() {
             ConValue::Unit => function.call(env, vec![]),
-            ConValue::Array(args) | ConValue::Tuple(args) => function.call(env, args.into_vec()),
+            ConValue::Array(args) | ConValue::Tuple(args) => function.call(env, args),
             value => function.call(env, vec![value]),
         }
     }
@@ -689,9 +689,7 @@ pub const ArrayMethods: &[Builtin] = &builtins! {
     /// Pushes an `item` onto the top of an array (by reference)
     fn push(array_by_ref, item) @env {
         let array = get_array_by_ref(env, array_by_ref)?;
-        let mut items = std::mem::take(array).into_vec();
-        items.push(item.take());
-        *array = items.into_boxed_slice();
+        array.push(item.take());
 
         Ok(ConValue::Unit)
     }
@@ -699,9 +697,7 @@ pub const ArrayMethods: &[Builtin] = &builtins! {
     /// Pops an item off the top of an array (by reference)
     fn pop(array_by_ref) @env -> Option<_> {
         let array = get_array_by_ref(env, array_by_ref)?;
-        let mut items = std::mem::take(array).into_vec();
-        let out = items.pop();
-        *array = items.into_boxed_slice();
+        let out = array.pop();
 
         env.to_convalue_option(out)
     }
@@ -779,7 +775,7 @@ fn get_str<'e>(env: &'e Environment, value: &'e ConValue) -> IResult<&'e str> {
 fn get_array_by_ref<'e>(
     env: &'e mut Environment,
     value: &ConValue,
-) -> IResult<&'e mut Box<[ConValue]>> {
+) -> IResult<&'e mut Vec<ConValue>> {
     let ConValue::Ref(place) = value else {
         Err(Error::TypeError("&[_]", value.type_of(env)))?
     };

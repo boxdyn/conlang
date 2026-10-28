@@ -62,14 +62,14 @@ pub enum ConValue {
     /// A reference
     Ref(Place),
     /// An Array
-    Array(Box<[ConValue]>),
+    Array(Vec<ConValue>),
     /// A tuple
-    Tuple(Box<[ConValue]>),
+    Tuple(Vec<ConValue>),
     // TODO: Instead of storing the identifier, store the index of the struct module
     /// A value of a product type
     Struct(Type, Box<HashMap<Symbol, ConValue>>),
     /// A value of a product type with anonymous members
-    TupleStruct(Type, Box<[ConValue]>),
+    TupleStruct(Type, Vec<ConValue>),
     /// An entire namespace
     Module(Box<HashMap<Symbol, ConValue>>),
     /// A quoted expression
@@ -393,16 +393,11 @@ macro bin_ops(with $env:ident: Environment; $(
 bin_ops! {
     with env: Environment;
     Index: index = [
-        (ConValue::Str(string), ConValue::Int(index)) => string
-            .chars()
-            .nth(index as _)
-            .map(ConValue::Char)
-            .ok_or(Error::OobIndex(index as usize, string.chars().count()))?,
-        (ConValue::String(string), ConValue::Int(index)) => string
-            .chars()
-            .nth(index as _)
-            .map(ConValue::Char)
-            .ok_or(Error::OobIndex(index as usize, string.chars().count()))?,
+        (ConValue::Array(arr), ConValue::Int(index @ ..0)) => {
+            arr.get(arr.len().wrapping_add_signed(index as _))
+                .cloned()
+                .ok_or(Error::OobIndex(arr.len().wrapping_add_signed(index as _), arr.len()))?
+        }
         (ConValue::Array(arr), ConValue::Int(index)) => arr
             .get(index as usize)
             .cloned()

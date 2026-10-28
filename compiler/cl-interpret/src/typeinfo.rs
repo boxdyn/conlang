@@ -204,7 +204,7 @@ impl Model {
         }
     }
 
-    pub fn make_tuple(&self, values: Box<[ConValue]>) -> IResult<ConValue> {
+    pub fn make_tuple(&self, values: Vec<ConValue>) -> IResult<ConValue> {
         match self {
             Model::Any => Ok(ConValue::TupleStruct(self.already_interned(), values)),
             Model::Tuple { fields, .. } if fields.len() != values.len() => {
@@ -282,9 +282,9 @@ impl Model {
             (Model::Unit { .. }, "SIZE") => ConValue::Int(0),
             (Model::Unit { .. }, _) => Err(Error::NotDefined(attr))?,
             (Model::Tuple { fields: items, .. }, "ARITY") => ConValue::Int(items.len() as _),
-            (Model::Tuple { fields: items, .. }, "TYPES") => ConValue::Tuple(
-                Vec::from_iter(items.iter().copied().map(ConValue::TypeInfo)).into_boxed_slice(),
-            ),
+            (Model::Tuple { fields: items, .. }, "TYPES") => ConValue::Tuple(Vec::from_iter(
+                items.iter().copied().map(ConValue::TypeInfo),
+            )),
             (Model::Struct { fields: items, .. }, "NAMES") => {
                 ConValue::Array(items.iter().map(|(n, _)| ConValue::Str(*n)).collect())
             }
@@ -328,7 +328,7 @@ macro make_int($T:ty, $signed: expr) {
 
 impl Callable for Model {
     fn call(&self, _env: &mut Environment, args: Vec<ConValue>) -> IResult<ConValue> {
-        self.make_tuple(args.into())
+        self.make_tuple(args)
     }
 
     fn name(&self) -> Option<Symbol> {

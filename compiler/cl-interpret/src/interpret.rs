@@ -111,19 +111,17 @@ impl Interpret for (Op, &[At<Expr>]) {
             },
             (Op::Block, []) => Ok(ConValue::Unit),
             (Op::Block, [expr]) => expr.interpret(&mut env.frame("block", Some(expr.1), None)),
-            (Op::Array, []) => Ok(ConValue::Array(Box::new([]))),
+            (Op::Array, []) => Ok(ConValue::Array(vec![])),
             (Op::Array, exprs) => Ok(ConValue::Array(
                 exprs
                     .iter()
                     .map(|e| e.interpret(env))
-                    .collect::<Result<Box<_>, _>>()?,
+                    .collect::<Result<Vec<_>, _>>()?,
             )),
             (Op::ArRep, [v, rep]) => {
                 let v = v.interpret(env)?;
                 match rep.interpret(env)? {
-                    ConValue::Int(rep) => {
-                        Ok(ConValue::Array(vec![v; rep as usize].into_boxed_slice()))
-                    }
+                    ConValue::Int(rep) => Ok(ConValue::Array(vec![v; rep as usize])),
                     rep => Err(Error::TypeError("int", rep.type_of(env))),
                 }
             }
@@ -133,7 +131,7 @@ impl Interpret for (Op, &[At<Expr>]) {
                 exprs
                     .iter()
                     .map(|e| e.interpret(env))
-                    .collect::<Result<Box<_>, _>>()?,
+                    .collect::<Result<Vec<_>, _>>()?,
             )),
             (Op::MetaInner, [_, expr]) => expr.interpret(env),
             (Op::MetaOuter, [_, expr]) => expr.interpret(env),
@@ -145,7 +143,7 @@ impl Interpret for (Op, &[At<Expr>]) {
                     .or_else(|_| expr.interpret(env))?;
                 match arg.interpret(env)? {
                     ConValue::Unit => callee.call(env, vec![]),
-                    ConValue::Tuple(args) => callee.call(env, args.into_vec()),
+                    ConValue::Tuple(args) => callee.call(env, args),
                     arg => callee.call(env, vec![arg]),
                 }
             }
@@ -243,19 +241,19 @@ impl Interpret for (Op, &[At<Expr>]) {
             // Range operators
             (Op::RangeEx, [lhs, rhs]) => Ok(ConValue::TupleStruct(
                 env.get_type_or_err(env.kw.RangeExc)?,
-                Box::new([lhs.interpret(env)?, rhs.interpret(env)?]),
+                vec![lhs.interpret(env)?, rhs.interpret(env)?],
             )),
             (Op::RangeIn, [lhs, rhs]) => Ok(ConValue::TupleStruct(
                 env.get_type_or_err(env.kw.RangeInc)?,
-                Box::new([lhs.interpret(env)?, rhs.interpret(env)?]),
+                vec![lhs.interpret(env)?, rhs.interpret(env)?],
             )),
             (Op::RangeEx, [rhs]) => Ok(ConValue::TupleStruct(
                 env.get_type_or_err(env.kw.RangeTo)?,
-                Box::new([rhs.interpret(env)?]),
+                vec![rhs.interpret(env)?],
             )),
             (Op::RangeIn, [rhs]) => Ok(ConValue::TupleStruct(
                 env.get_type_or_err(env.kw.RangeToInc)?,
-                Box::new([rhs.interpret(env)?]),
+                vec![rhs.interpret(env)?],
             )),
 
             // Unary operators
@@ -461,7 +459,7 @@ impl Interpret for Bind<DefaultTypes> {
             (BindOp::Fn, _, [_]) => {
                 let func = Function::new(self, env.get_module());
                 if let Some(name) = func.name() {
-                    env.bind(name, ConValue::Function(func.clone()))
+                    env.bind(name, ConValue::Function(func.clone()));
                 }
                 func.lift_upvars(env);
                 Ok(ConValue::Function(func))
@@ -1085,8 +1083,8 @@ enum SliceMode {
     Tuple,
 }
 
-impl Match<Box<[ConValue]>> for (SliceMode, &[At<Pat>]) {
-    fn matches<'env>(&self, values: Box<[ConValue]>, in_env: &mut MatchEnv<'env>) -> IResult<bool> {
+impl Match<Vec<ConValue>> for (SliceMode, &[At<Pat>]) {
+    fn matches<'env>(&self, values: Vec<ConValue>, in_env: &mut MatchEnv<'env>) -> IResult<bool> {
         let (mode, pats) = self;
 
         // Match forward until we find a rest pattern

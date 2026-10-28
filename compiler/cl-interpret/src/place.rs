@@ -89,7 +89,7 @@ impl Place {
             (Op::Dot, [place, At(Expr::Id(path), _)]) if path.parts.len() == 1 => {
                 Ok(Self::new(place.value(), env)?.dot_sym(path.parts[0]))
             }
-            (Op::Deref, [expr]) if expr.value().is_place() => match expr.interpret(env)? {
+            (Op::Deref, [expr]) => match expr.interpret(env)? {
                 ConValue::Ref(ref r) => {
                     let mut r = r;
                     loop {
@@ -99,7 +99,7 @@ impl Place {
                         r = place;
                     }
                 }
-                _ => Err(Error::NotPlace()),
+                other => Err(Error::TypeError("&_", other.type_of(env))),
             },
             _ => Err(Error::NotPlace()),
         }

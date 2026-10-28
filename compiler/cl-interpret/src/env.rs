@@ -182,12 +182,12 @@ impl Environment {
     }
 
     /// Binds a value to the given name in the current scope.
-    pub fn bind(&mut self, name: Symbol, value: impl Into<ConValue>) {
-        self.insert(name, value.into(), self.get_direct_ancestor().is_some());
+    pub fn bind(&mut self, name: Symbol, value: impl Into<ConValue>) -> Location {
+        self.insert(name, value.into(), self.get_direct_ancestor().is_some())
     }
 
-    pub fn bind_global(&mut self, name: Symbol, value: impl Into<ConValue>) {
-        self.insert(name, value.into(), true);
+    pub fn bind_global(&mut self, name: Symbol, value: impl Into<ConValue>) -> Location {
+        self.insert(name, value.into(), true)
     }
 
     /// Binds a `name` to a raw `id` value in the current scope
@@ -406,9 +406,7 @@ impl Environment {
     /// Converts an [`Option<ConValue>`] into a [`ConValue`] representing an [`Option`]
     pub fn to_convalue_option(&self, opt: Option<ConValue>) -> IResult<ConValue> {
         match opt {
-            Some(value) => self
-                .get_type_or_err(self.kw.Some)?
-                .make_tuple(Box::new([value])),
+            Some(value) => self.get_type_or_err(self.kw.Some)?.make_tuple(vec![value]),
             None => Ok(ConValue::TypeInfo(self.get_type_or_err(self.kw.None)?)),
         }
     }
@@ -416,17 +414,13 @@ impl Environment {
     /// Converts a [`Result<ConValue, ConValue>`] into a [`ConValue`] representing an [`Result`]
     pub fn to_convalue_result(&self, opt: Result<ConValue, ConValue>) -> IResult<ConValue> {
         match opt {
-            Ok(value) => self
-                .get_type_or_err(self.kw.Ok)?
-                .make_tuple(Box::new([value])),
-            Err(value) => self
-                .get_type_or_err(self.kw.Err)?
-                .make_tuple(Box::new([value])),
+            Ok(value) => self.get_type_or_err(self.kw.Ok)?.make_tuple(vec![value]),
+            Err(value) => self.get_type_or_err(self.kw.Err)?.make_tuple(vec![value]),
         }
     }
 
     /// Inserts a new [`ConValue`] into this [`Environment`]
-    pub fn insert(&mut self, name: Symbol, value: ConValue, global: bool) {
+    pub fn insert(&mut self, name: Symbol, value: ConValue, global: bool) -> Location {
         let location = match global {
             true => Location::Global(self.globals.len() as _),
             false => Location::Stack(self.values.len() as _),
@@ -436,6 +430,7 @@ impl Environment {
             true => self.globals.push(value),
             false => self.values.push(value),
         }
+        location
     }
 
     /// Allocates a local variable
@@ -505,6 +500,23 @@ impl<'scope> Frame<'scope> {
             out.insert(k, self.get_id_mut(v).map(take)?);
         }
         Some(out)
+    }
+
+    pub fn forget(mut self) -> Option<()> {
+        let length = self.values.len();
+        let frame = self.frames.pop()?;
+        for (k, v) in frame.binds {
+            self.bind_raw(k, v);
+        }
+        for e in frame.defer {
+            self.defer(e); // always succeeds if there is a frame
+        }
+
+        // push a dummy frame to restore our invariants
+        let dummy = EnvFrame { base: length, binds: HashMap::new(), defer: vec![], ..frame };
+        self.frames.push(dummy);
+
+        Some(())
     }
 }
 
