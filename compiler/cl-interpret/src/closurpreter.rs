@@ -51,9 +51,9 @@ impl Clunktion {
 
     pub fn mark(&self, env: &Environment) -> IResult<()> {
         if let Ok(upvars) = self.0.upvars.try_borrow_mut().as_deref_mut() {
-            if upvars.1 == 0 {
-                upvars.1 = env.frame_depth();
-            }
+            // if upvars.1 == 0 {
+            //     upvars.1 = env.frame_depth();
+            // }
             if upvars.2.is_none() {
                 upvars.2 = env.get_module();
             }
@@ -332,11 +332,25 @@ fn compile_match(mtch: &Match, _within: &At<Expr>) -> IResult<Clexpr> {
     let mut guard_clauses = vec![];
     let mut and_run = vec![];
     for MatchArm(pat, expr) in match_arms {
-        let (matcher, binder) = compile_let_pattern(pat)?;
-        matchers.push(matcher);
-        then_bind.push(binder);
-        guard_clauses.push(compile_guard_patterns(pat)?);
-        and_run.push(compile(expr)?);
+        // TODO: refactor pattern matching to allow nested alts
+        match pat {
+            At(Pat::Op(PatOp::Alt, alts), _) => {
+                for pat in alts {
+                    let (matcher, binder) = compile_let_pattern(pat)?;
+                    matchers.push(matcher);
+                    then_bind.push(binder);
+                    guard_clauses.push(compile_guard_patterns(pat)?);
+                    and_run.push(compile(expr)?);
+                }
+            }
+            pat => {
+                let (matcher, binder) = compile_let_pattern(pat)?;
+                matchers.push(matcher);
+                then_bind.push(binder);
+                guard_clauses.push(compile_guard_patterns(pat)?);
+                and_run.push(compile(expr)?);
+            }
+        }
     }
 
     Ok(Box::new(move |e| {
@@ -857,10 +871,7 @@ fn compile_bind(bind: &Bind, within: &At<Expr>) -> IResult<Clexpr> {
 
                 let upvars = f.0.upvars.borrow();
                 let mut scope = e.frame("captures", Some(body_span), upvars.2);
-                // let mut scope = scope.frame("args", Some(body_span), upvars.2);
-                for (&name, &id) in upvars.0.iter() {
-                    scope.bind_raw(name, id);
-                }
+                let mut scope = scope.frame("body", Some(body_span), None);
 
                 if !it_matches(&mut scope, &args)? {
                     Err(Error::Panic("args failed".into()))?
@@ -882,8 +893,8 @@ fn compile_bind(bind: &Bind, within: &At<Expr>) -> IResult<Clexpr> {
 
             match pat.0.name() {
                 Some(name) => Box::new(move |e| {
+                    clunk.mark(e)?;
                     e.bind(name, ConValue::Clunktion(clunk.clone()));
-                    clunk.capture(e)?;
                     Ok(ConValue::Clunktion(clunk.clone()))
                 }),
                 None => Box::new(move |_| Ok(ConValue::Clunktion(clunk.clone()))),
@@ -1065,7 +1076,12 @@ fn let_inner_pattern(pat: &Pat) -> IResult<(Matcher, Binder)> {
         ),
         Pat::Value(value) => {
             let value = compile(value)?;
-            just_match(move |e, v| value(e)?.eq(v, e)?.truthy(e))
+            just_match(move |e, v| {
+                value(e)?
+                    .eq(v, e)
+                    .and_then(|v| v.truthy(e))
+                    .or_else(|_| Ok(false))
+            })
         }
         Pat::Op(pat_op, pats) => match (pat_op, pats.as_slice()) {
             (PatOp::MetaInner, [_, pat]) => compile_let_pattern(pat)?,
