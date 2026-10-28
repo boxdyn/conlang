@@ -1385,11 +1385,10 @@ fn slice_or_tuple_pat(slice: bool, pats: &[At<Pat>]) -> IResult<(Matcher, Binder
             for (pat, value) in forward_binders.iter().zip(values.by_ref()) {
                 pat(e, value);
             }
-            let mut values = values.rev();
             for (pat, value) in reverse_binders.iter().zip(values.by_ref().rev()) {
                 pat(e, value);
             }
-            rest_binder(e, to_collection(values.into_inner().collect()))
+            rest_binder(e, to_collection(values.collect()))
         },
     ))
 }
