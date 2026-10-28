@@ -633,7 +633,7 @@ fn find_interned_type(model: &Model) -> Option<Type> {
 }
 
 // TODO: these functions should return typeinfos
-fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)> {
+pub(crate) fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)> {
     fn bind_struct_op(
         op: PatOp,
         pats: &[At<Pat>],
@@ -740,7 +740,7 @@ fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)
     })
 }
 
-fn bind_enum(pat: &Pat, env: &mut Environment) -> IResult<ConValue> {
+pub(crate) fn bind_enum(pat: &Pat, env: &mut Environment) -> IResult<ConValue> {
     let name = pat
         .name()
         .ok_or_else(|| Error::PatFailed(Box::new(pat.clone())))?;

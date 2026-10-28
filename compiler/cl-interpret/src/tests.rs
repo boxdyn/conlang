@@ -9,6 +9,8 @@ use cl_lexer::Lexer;
 use cl_parser::Parser;
 pub use macros::*;
 
+use crate::closurpreter::compile;
+
 mod macros {
     //! Useful macros for parsing Conlang
     //!
@@ -56,8 +58,9 @@ mod macros {
 
     use super::*;
 
-    pub fn test_eval_expr(block: &Expr, env: &mut Environment) -> IResult<ConValue> {
-        block.interpret(env)
+    pub fn test_eval_expr(block: &At<Expr>, env: &mut Environment) -> IResult<ConValue> {
+        compile(block)?(env)
+        // block.interpret(env)
     }
 
     /// Stringifies, lexes, and parses everything you give to it
@@ -65,7 +68,7 @@ mod macros {
     /// Returns [`Expr`]
     pub macro expr($($t:tt)*) {
         Parser::new(Lexer::new("test".into(), stringify!( $($t)* )))
-            .parse_entire::<Expr>(0)
+            .parse_entire::<At<Expr>>(0)
             .expect("Conlang code should parse correctly!")
             .fold_in(&mut LoopLabelDesugar::new()).unwrap()
             .fold_in(&mut WhileElseDesugar).unwrap()

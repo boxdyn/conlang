@@ -741,6 +741,20 @@ pub const FuncMethods: &[Builtin] = &builtins![
             }).collect()
         )))
     }
+
+    fn is_builtin(func) @env -> bool {
+        Ok(match func.dereference_in(env)? {
+            ConValue::Builtin(_) => true,
+            _ => false
+        })
+    }
+
+    fn is_clunk(func) @env -> bool {
+        Ok(match func.dereference_in(env)? {
+            ConValue::Clunktion(_) => true,
+            _ => false
+        })
+    }
 ];
 
 fn get_float(env: &mut Environment, value: &ConValue) -> IResult<f64> {

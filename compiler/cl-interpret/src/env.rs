@@ -159,6 +159,13 @@ impl Environment {
         }
     }
 
+    pub fn prefer_fallback(&self) -> bool {
+        let Ok(v) = self.get(self.kw.fallback_interpreter) else {
+            return false;
+        };
+        v.truthy(self).unwrap_or(false)
+    }
+
     /// The depth of the stack, in stack frames
     pub fn frame_depth(&self) -> usize {
         self.frames.len()

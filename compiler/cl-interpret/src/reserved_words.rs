@@ -54,6 +54,7 @@ reserve_words! {
 
         // temporary soft keywords
         modules_enabled,
+        fallback_interpreter,
         SIGNED,
         SIZE,
         BITS,

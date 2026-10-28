@@ -157,7 +157,7 @@ impl std::fmt::Display for Function {
 
 /// Finds free variables in an expression
 #[derive(Debug)]
-struct Captor<'u> {
+pub(crate) struct Captor<'u> {
     free: &'u mut BTreeSet<Sym>,
     bound: BTreeSet<Sym>,
 }
@@ -259,7 +259,7 @@ impl Visit<'_, DefaultTypes> for Captor<'_> {
 
 /// Forcibly `mark`s usage of any symbol
 #[derive(Debug)]
-struct Marker<'l, 'u>(&'l mut Captor<'u>);
+pub(crate) struct Marker<'l, 'u>(&'l mut Captor<'u>);
 impl Visit<'_, DefaultTypes> for Marker<'_, '_> {
     type Error = !;
 

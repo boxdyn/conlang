@@ -5,7 +5,8 @@ use cl_ast::{
     fold::Foldable,
 };
 use cl_interpret::{
-    builtin::builtins, convalue::ConValue, env::Environment, error::Error, interpret::Interpret,
+    builtin::builtins, closurpreter::compile, convalue::ConValue, env::Environment, error::Error,
+    interpret::Interpret,
 };
 use cl_lexer::Lexer;
 use cl_parser::Parser;
@@ -91,17 +92,22 @@ pub fn get_env() -> Environment {
             fs::write(path, data).map_err(Error::BuiltinError)
         }
     });
+
     match Parser::new(Lexer::new("preamble.cl".into(), PREAMBLE))
         .parse::<At<Expr>>(0)
         .map(|v| v.fold_in(&mut LoopLabelDesugar::new()).unwrap())
         .map(|v| v.fold_in(&mut WhileElseDesugar).unwrap())
         .map(|v| v.fold_in(&mut ForElseDesugar::new()).unwrap())
+        .as_ref()
+        .map(compile)
     {
-        Ok(code) => match code.interpret(&mut env) {
+        Ok(Ok(code)) => match code(&mut env) {
             Ok(_) => {}
             Err(Error { kind, span: Some(span) }) => pretty_error(span, PREAMBLE, kind),
             Err(e) => println!("{e}"),
         },
+        Ok(Err(e)) if let Some(span) = e.span => pretty_error(span, PREAMBLE, e),
+        Ok(Err(e)) => println!("{e}"),
         Err(e) => pretty_error(e.span(), PREAMBLE, e),
     };
     env

@@ -35,5 +35,7 @@ pub mod env;
 
 pub mod error;
 
+pub mod closurpreter;
+
 #[cfg(test)]
 mod tests;

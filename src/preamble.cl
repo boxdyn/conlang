@@ -10,6 +10,9 @@
 /// Enables the unstable module system
 let modules_enabled = true;
 
+/// Re-enables the fallback interpreter
+let fallback_interpreter = false;
+
 mod preamble {
 
 /// # The `Try` Operator (`?`)
