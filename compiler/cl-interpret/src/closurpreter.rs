@@ -153,12 +153,12 @@ fn compile_inner(expr: &At<Expr>) -> IResult<OwnClexpr> {
         Expr::Op(op, exprs) => compile_op(*op, exprs, expr)?,
     };
 
-    Ok(compute)
-    // let span = expr.1;
-    // Ok(Box::new(move |e| compute(e).map_err(|e| e.with_span(span))))
+    // Ok(compute)
+    let span = expr.1;
+    Ok(Box::new(move |e| compute(e).map_err(|e| e.with_span(span))))
 }
 
-pub fn compile_place(value: &At<Expr>) -> IResult<Option<Plexpr>> {
+fn compile_place(value: &At<Expr>) -> IResult<Option<Plexpr>> {
     Ok(match value.value() {
         Expr::Id(Path { parts }) if let &[name] = parts.as_slice() => {
             Some(Box::new(move |e| Ok(Place::from_index(e.id_of(name)?))))
@@ -220,7 +220,7 @@ fn compile_path(parts: &[Symbol], _within: &At<Expr>) -> OwnClexpr {
     }
 }
 
-pub fn compile_lit(lit: &Literal, _within: &At<Expr>) -> IResult<OwnClexpr> {
+fn compile_lit(lit: &Literal, _within: &At<Expr>) -> IResult<OwnClexpr> {
     Ok(match lit {
         &Literal::Bool(b) => Box::new(move |_| Ok(ConValue::Bool(b))),
         &Literal::Char(c) => Box::new(move |_| Ok(ConValue::Char(c))),
@@ -235,7 +235,7 @@ pub fn compile_lit(lit: &Literal, _within: &At<Expr>) -> IResult<OwnClexpr> {
     })
 }
 
-pub fn compile_use(tree: &Use, _within: &At<Expr>) -> IResult<OwnClexpr> {
+fn compile_use(tree: &Use, _within: &At<Expr>) -> IResult<OwnClexpr> {
     type UseTy = Box<dyn Fn(&mut Environment, Type) -> IResult<()>>;
     fn compile_use_ty(tree: &Use, _within: &At<Expr>) -> UseTy {
         fn bind(e: &mut Environment, ty: Type, from: Symbol, to: Symbol) -> IResult<()> {
@@ -392,16 +392,13 @@ fn compile_bind(bind: &Bind, within: &At<Expr>) -> IResult<OwnClexpr> {
         (BindOp::Fn, pat, [body]) => {
             // TODO: captures?
             let body_span = body.1;
-            let body = match body.inner() {
-                At(Expr::Op(Op::Block, b), _) if let [body] = b.as_slice() => body,
-                _ => body,
-            };
-            let body = compile(body)?;
+            let body = compile(unblock(body))?;
             let inner_pat = pat.0.inner();
             let (it_matches, then_bind) = let_inner_pattern(inner_pat)?;
             if compile_guard_patterns(pat)?.is_some() {
                 cl_todo!("Guard patterns on function args")?
             }
+            let diagnostic_pat = pat.clone();
 
             let body: CallableFn = Box::new(move |f, e, args| {
                 let upvars = f.0.upvars.borrow();
@@ -411,7 +408,7 @@ fn compile_bind(bind: &Bind, within: &At<Expr>) -> IResult<OwnClexpr> {
                 let mut scope = scope.frame("body", Some(body_span), None);
                 let args = ConValue::Tuple(args);
                 if !it_matches(&mut scope, &args)? {
-                    Err(Error::Panic("args failed".into()))?
+                    Err(Error::Panic(format!("{diagnostic_pat} failed for {args}")))?
                 }
                 then_bind(&mut scope, args);
 
@@ -468,19 +465,7 @@ fn compile_bind(bind: &Bind, within: &At<Expr>) -> IResult<OwnClexpr> {
 }
 
 fn compile_impl(pat: &At<Pat>, body: &At<Expr>, is_impl: bool) -> IResult<OwnClexpr> {
-    fn find_body(body: &At<Expr>) -> &At<Expr> {
-        let At(Expr::Op(op, exprs), _) = body else {
-            return body;
-        };
-        match (op, exprs.as_slice()) {
-            (Op::Block, [body]) => body,
-            (Op::Pub | Op::Group, [body]) => find_body(body),
-            (Op::MetaInner | Op::MetaOuter, [_, body]) => find_body(body),
-            _ => body,
-        }
-    }
-    let body = find_body(body);
-    let body = compile(body)?;
+    let body = compile(unblock(body))?;
     let pat = pat.clone();
     if is_impl {
         Ok(Box::new(move |e: &mut Environment| {
@@ -593,7 +578,7 @@ fn compile_match(mtch: &Match, _within: &At<Expr>) -> IResult<OwnClexpr> {
                 matchers.push(matcher);
                 then_bind.push(binder);
                 guard_clauses.push(compile_guard_patterns(pat)?);
-                and_run.push(compile(expr)?);
+                and_run.push(compile(unblock(expr))?);
             }
         }
     }
@@ -632,7 +617,14 @@ fn compile_label(label: &Label, _within: &At<Expr>) -> IResult<OwnClexpr> {
     }))
 }
 
-fn compile_op(op: Op, exprs: &[At<Expr>], _within: &At<Expr>) -> IResult<OwnClexpr> {
+fn unblock(expr: &At<Expr>) -> &At<Expr> {
+    match expr.inner() {
+        At(Expr::Op(Op::Block, body), _) if let [body] = &body[..] => body,
+        body => body,
+    }
+}
+
+fn compile_op(op: Op, exprs: &[At<Expr>], within: &At<Expr>) -> IResult<OwnClexpr> {
     Ok(match (op, exprs) {
         (Op::Do, []) => Box::new(|_| Ok(ConValue::Unit)),
         (Op::Do, [discard @ .., ret]) => {
@@ -656,7 +648,7 @@ fn compile_op(op: Op, exprs: &[At<Expr>], _within: &At<Expr>) -> IResult<OwnClex
         (Op::Block, []) => Box::new(|_| Ok(ConValue::Unit)),
         (Op::Block, [expr]) => {
             let body_span = expr.1;
-            let body = compile(expr)?;
+            let body = compile(unblock(expr))?;
             Box::new(move |e| body(&mut e.frame("block", Some(body_span), None)))
         }
         (Op::Array, []) => Box::new(|_| Ok(ConValue::Array(vec![]))),
@@ -732,7 +724,7 @@ fn compile_op(op: Op, exprs: &[At<Expr>], _within: &At<Expr>) -> IResult<OwnClex
         }
         (Op::Loop, [body]) => {
             let span = body.1;
-            let body = compile(body)?;
+            let body = compile(unblock(body))?;
             Box::new(move |e| {
                 loop {
                     match body(&mut e.frame("loop", Some(span), None)) {
@@ -743,25 +735,45 @@ fn compile_op(op: Op, exprs: &[At<Expr>], _within: &At<Expr>) -> IResult<OwnClex
             })
         }
         (Op::If, [cond, pass, fail]) => {
-            let (cond, pass, fail) = (compile(cond)?, compile(pass)?, compile(fail)?);
-            Box::new(move |e| if cond(e)?.truthy(e)? { pass(e) } else { fail(e) })
+            let span = within.1;
+            // if there's a block around cond, it's for good reason
+            let cond = compile(cond)?;
+            // the two branches will get cleaned up by the implicit `frame`
+            let pass = compile(unblock(pass))?;
+            let fail = compile(unblock(fail))?;
+            Box::new(move |e| {
+                let scope = &mut e.frame("if", Some(span), None);
+                if cond(scope)?.truthy(scope)? {
+                    pass(scope)
+                } else {
+                    fail(scope) // technically incorrect but w/e
+                }
+            })
         }
         (Op::Defer, _) => cl_todo!("defer in the interpreter's 'compiler'")?,
         (Op::Break, [At(Expr::Label(label), _)]) => {
-            let Label(label, body) = label.as_ref();
-            let body = compile(body)?;
-            let label = label.to_ref();
-            Box::new(move |e| Err(Error::BreakLabel(label, body(e)?)))
+            let Label(name, body) = label.as_ref();
+            // `break 'foo body` -> !, so we don't need to frame `body`
+            let body = compile(unblock(body))?;
+            let label = name.to_ref();
+            Box::new(move |e| {
+                Err(Error::BreakLabel(
+                    label,
+                    body(&mut e.frame(label, None, None))?,
+                ))
+            })
         }
         (Op::Break, [body]) => {
-            let body = compile(body)?;
+            // `break body` -> !, so we don't need to frame `body`
+            let body = compile(unblock(body))?;
             Box::new(move |e| Err(Error::Break(body(e)?)))
         }
         (Op::Return, [body]) => {
-            let body = compile(body)?;
+            // `return body` -> !, so we don't need to frame `body`
+            let body = compile(unblock(body))?;
             Box::new(move |e| Err(Error::Return(body(e)?)))
         }
-        (Op::Continue, _) => Box::new(|_| Err(Error::Continue())),
+        (Op::Continue, []) => Box::new(|_| Err(Error::Continue())),
         (Op::Dot, [object, At(Expr::Op(Op::Call, args), _)]) => match args.as_slice() {
             // Case 1: A path with one part can be looked up as a member function
             [
@@ -821,7 +833,7 @@ fn compile_op(op: Op, exprs: &[At<Expr>], _within: &At<Expr>) -> IResult<OwnClex
                     }
                 }
             }
-            _ => cl_todo!("{_within}")?,
+            _ => cl_todo!("{within}")?,
         },
         (
             Op::Dot,
@@ -839,7 +851,7 @@ fn compile_op(op: Op, exprs: &[At<Expr>], _within: &At<Expr>) -> IResult<OwnClex
         (Op::Dot, [scrutinee, At(Expr::Id(path), _)]) if path.parts.len() == 1 => {
             cl_todo!("{scrutinee}.{}", path.parts[0])?
         }
-        (Op::Dot, _) => cl_todo!(".")?,
+        (Op::Dot, _) => cl_todo!("Dot: {within}")?,
         (Op::RangeEx, [rhs]) => {
             let rhs = compile(rhs)?;
             Box::new(move |e| {
@@ -1095,7 +1107,11 @@ fn just_match(
 }
 
 fn compile_let_pattern(pat: &At<Pat>) -> IResult<(Matcher, Binder)> {
-    let_inner_pattern(&pat.0)
+    let pat_span = pat.1;
+    let (matcher, binder) = let_inner_pattern(&pat.0).map_err(|e| e.with_span(pat_span))?;
+    let matcher: Matcher =
+        Box::new(move |e, value| matcher(e, value).map_err(|e| e.with_span(pat_span)));
+    Ok((matcher, binder))
 }
 
 fn let_inner_pattern(pat: &Pat) -> IResult<(Matcher, Binder)> {
