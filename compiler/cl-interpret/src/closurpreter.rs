@@ -16,7 +16,6 @@ use std::{
     collections::{BTreeSet, HashMap},
     iter,
     rc::Rc,
-    sync::Arc,
 };
 
 pub type CallableFn =
@@ -39,7 +38,11 @@ pub struct Clunk {
 pub struct Clunktion(Rc<Clunk>);
 impl std::fmt::Debug for Clunktion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("Clunktion").field(&self.0.ast).finish()
+        f.debug_struct("Clunktion")
+            .field("ast", &self.0.ast)
+            .field("captures", &self.0.captures)
+            .field("upvars", &self.0.upvars)
+            .finish_non_exhaustive()
     }
 }
 impl Clunktion {
