@@ -143,11 +143,11 @@ impl<'t> Parse<'t> for Pat {
             }
             Prefix::Parens => match p.consume().opt(Prec::Min, kind.flip())? {
                 // TODO: this sometimes strips parens where parens are necessary.
-                Some(At(pat @ Pat::Op(PatOp::Alt | PatOp::Tuple, _), _)) => pat,
+                Some(At(pat @ Pat::Op(PatOp::Alt | PatOp::Tuple | PatOp::Guard, _), _)) => pat,
                 Some(At(other, span)) => Pat::Op(PatOp::Tuple, vec![other.at(span)]),
                 None => Pat::Op(PatOp::Tuple, vec![]),
             },
-            Prefix::Op(op @ (PatOp::Record | PatOp::Tuple)) => Pat::Op(
+            Prefix::Op(op @ PatOp::Record) => Pat::Op(
                 op,
                 p.consume()
                     .list(vec![], Prec::Tuple.next(), TKind::Comma, kind.flip())?,
@@ -226,11 +226,16 @@ impl<'t> Parse<'t> for Pat {
                     Some(_prec) => add_typeprefix(p, head.at(span), prec)?,
                     _ => break,
                 },
-                PatOp::Tuple => Pat::Op(
-                    op,
-                    p.consume()
-                        .list_bare(vec![head.at(span)], prec.next(), kind)?,
-                ),
+                PatOp::Tuple => {
+                    let mut elems = vec![head.at(span)];
+                    while p.next_if(kind)?.is_ok() {
+                        match p.peek()?.kind {
+                            TKind::RParen | TKind::RBrack | TKind::RCurly => break,
+                            _ => elems.push(p.parse(prec.next()).no_eof()?),
+                        }
+                    }
+                    Pat::Op(PatOp::Tuple, elems)
+                }
                 PatOp::Fn => Pat::Op(op, vec![head.at(span), p.consume().parse(prec)?]),
                 _ => Pat::Op(op, vec![head.at(span), p.consume().parse(prec.next())?]),
             }
@@ -251,10 +256,13 @@ fn prefix_level(pat: &Pat, level: Prec, tok: &Token) -> Option<Prec> {
 
 fn add_typeprefix(p: &mut Parser<'_>, name: At<Pat>, level: Prec) -> PResult<Pat> {
     let At(name, span) = name;
-    Ok(Pat::Op(
-        PatOp::TypePrefixed,
-        vec![name.at(span.merge(p.span())), p.parse(level)?],
-    ))
+    let span = span.merge(p.span());
+    let At(body, body_span): At<At<Pat>> = p.parse(level)?;
+    let body = match body.value().inner() {
+        Pat::Op(PatOp::Tuple | PatOp::Record | PatOp::Fn, _) => body,
+        _ => Pat::Op(PatOp::Tuple, vec![body]).at(body_span),
+    };
+    Ok(Pat::Op(PatOp::TypePrefixed, vec![name.at(span), body]))
 }
 
 fn parse_array_pat(p: &mut Parser<'_>) -> PResult<Pat> {
