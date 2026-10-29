@@ -252,8 +252,6 @@ impl<A: AstTypes> At<Expr<A>, A> {
             (Op::MetaInner, [_, body]) => body.inner(),
             (Op::MetaOuter, [_, body]) => body.inner(),
             (Op::Pub, [body]) => body.inner(),
-            (Op::Const, [body]) => body.inner(),
-            (Op::Static, [body]) => body.inner(),
             (Op::Identity, [body]) => body.inner(),
             _ => self,
         }
