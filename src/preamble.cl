@@ -139,7 +139,7 @@ impl Iterator<T> {
             // consuming methods
             foreach, any_of, all_of, first_where, fold, count,
             // iterator adapters
-            inspect, map, filter, filter_map,
+            inspect, map, filter, filter_map, zip, zip_longest,
         }
     };
 
@@ -200,8 +200,21 @@ impl Iterator<T> {
     /// An Iterator which both filters and maps values according to a predicate
     struct FilterMap<T, U>(&Self, fn(T) -> Option<U>);
     /// Returns an iterator which both filters and maps values according to `f`
-    fn filter_map(self, f: fn(T) -> Option<U>) -> FilterMap<T, U> =
-        FilterMap(self, f);
+    fn filter_map(self, f: fn(T) -> Option<U>) -> FilterMap<T, U> = FilterMap(self, f);
+
+    /// An Iterator which yields elements from two iterators in parallel
+    /// until either of them returns `None`
+    struct Zip<T, U>(&Self, Iterator<U>);
+    /// Returns an iterator which yields elements from two iterators in parallel
+    /// until either of them returns `None`
+    fn zip<U>(self, other: Iterator<U>) -> Zip<T, U> = Zip(self, other.into_iter());
+
+    /// An Iterator which yields optional elements from two iterators in parallel
+    /// until both of them return `None`
+    struct ZipLongest<T, U>(&Self, Iterator<U>);
+    /// Returns an iterator which yields optional elements from two iterators in parallel
+    /// until both of them return `None`
+    fn zip_longest<T, U>(self, other: Iterator<U>) -> ZipLongest<T, U> = ZipLongest(self, other);
 }
 
 Iterator::_derive(Iterator::Inspect, {
@@ -223,6 +236,18 @@ Iterator::_derive(Iterator::FilterMap, {
     fn next(self: &Iterator::FilterMap) = while let Some(value) = self.0.next() {
         if let Some(value) = (self.1)(value) break Some(value);
     } else None
+});
+Iterator::_derive(Iterator::Zip, {
+    fn next(self: &Iterator::Zip) = Some((self.0.next()?, self.1.next()?))
+});
+Iterator::_derive(Iterator::ZipLongest, {
+    fn next(self: &Iterator::ZipLongest<T, U>) -> Option<(Option<T>, Option<U>)> {
+        let a = self.0.next();
+        let b = self.1.next();
+        if let Some(_) = a || let Some(_) = b {
+            Some((a, b))
+        } else None
+    }
 });
 
 
@@ -331,7 +356,7 @@ impl str {
     struct Chars(&str, usize);
     Iterator::_derive(Chars, {
         /// Decodes Unicode codepoints in a UTF-8-encoded `str`, ignoring errors
-        fn next(self: &str::Chars) -> Option<char> = (
+        fn next(self: &str::Chars) -> Option<char> {
             let byte = self.0.get(self.1)?;
             let out = match byte {
                 ..0x80 => (self.1 += 1; return Some(byte as char));
@@ -346,7 +371,7 @@ impl str {
             if (byte >= 0xe0) out = out << 6 | (text.get(index - 2)? & 0x3f);
             if (byte >= 0xc0) out = out << 6 | (text.get(index - 1)? & 0x3f);
             Some(out as char)
-        )
+        }
     });
 
     /// Returns an [Iterator] over the [Chars] in `self`
