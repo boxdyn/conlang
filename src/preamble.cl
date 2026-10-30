@@ -355,7 +355,7 @@ impl str {
     Iterator::_derive(Bytes, {
         fn next(self: &str::Bytes) -> Option<u8> {
             let index = self.1;
-            self.1 = index + 1;
+            self.1 += 1;
             self.0.get(index)
         }
     });
