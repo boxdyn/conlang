@@ -706,40 +706,50 @@ pub const ArrayMethods: &[Builtin] = &builtins! {
 pub const FuncMethods: &[Builtin] = &builtins![
     /// Gets the underlying `mod` for type `ty`
     fn captures(func) @env -> [str] {
-        let ConValue::Function(func) = func.dereference_in(env)? else {
-            return Err(Error::TypeError("fn", func.type_of(env)))
-        };
-        Ok(ConValue::Array(
-            func.captures()
-                .iter()
-                .copied()
-                .map(ConValue::Str)
-                .collect()
-        ))
+        match func.dereference_in(env)? {
+            ConValue::Function(func) => Ok(ConValue::Array(
+                func.captures().iter().copied().map(ConValue::Str).collect()
+            )),
+            ConValue::Clunktion(func) => Ok(ConValue::Array(
+                func.inner().captures.iter().copied().map(ConValue::Str).collect()
+            )),
+            _ => Err(Error::TypeError("fn", func.type_of(env)))
+        }
     }
 
     /// Gets the underlying `mod` for type `ty`
     fn upvars(func) @env -> Module {
-        let ConValue::Function(func) = func.dereference_in(env)? else {
-            return Err(Error::TypeError("fn", func.type_of(env)))
-        };
-        Ok(ConValue::Module(Box::new(
-            func.upvars().borrow().0.iter().map(|(&name, &idx)| {
-                (name, env.get_id(idx).cloned().unwrap_or_default())
-            }).collect()
-        )))
+        match func.dereference_in(env)? {
+            ConValue::Function(func) => Ok(ConValue::Module(Box::new(
+                func.upvars().borrow().0.iter().map(|(&name, &idx)| {
+                    (name, env.get_id(idx).cloned().unwrap_or_default())
+                }).collect()
+            ))),
+            ConValue::Clunktion(func) => Ok(ConValue::Module(Box::new(
+                func.inner().upvars.borrow().0.iter().map(|(&name, &idx)| {
+                    (name, env.get_id(idx).cloned().unwrap_or_default())
+                }).collect()
+            ))),
+            _ => Err(Error::TypeError("fn", func.type_of(env))),
+        }
     }
 
     /// Gets the [`upvars`] of this func by reference
     fn references(func) @env -> Module {
-        let ConValue::Function(func) = func.dereference_in(env)? else {
-            return Err(Error::TypeError("fn", func.type_of(env)))
-        };
-        Ok(ConValue::Module(Box::new(
-            func.upvars().borrow().0.iter().map(|(&name, &idx)| {
-                (name, ConValue::Ref(Place::from_index(idx)))
-            }).collect()
-        )))
+
+        match func.dereference_in(env)? {
+            ConValue::Function(func) => Ok(ConValue::Module(Box::new(
+                func.upvars().borrow().0.iter().map(|(&name, &idx)| {
+                    (name, ConValue::Ref(Place::from_index(idx)))
+                }).collect()
+            ))),
+            ConValue::Clunktion(func) => Ok(ConValue::Module(Box::new(
+                func.inner().upvars.borrow().0.iter().map(|(&name, &idx)| {
+                    (name, ConValue::Ref(Place::from_index(idx)))
+                }).collect()
+            ))),
+            _ => Err(Error::TypeError("fn", func.type_of(env))),
+        }
     }
 
     fn is_builtin(func) @env -> bool {
