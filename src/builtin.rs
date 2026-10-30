@@ -6,7 +6,6 @@ use cl_ast::{
 };
 use cl_interpret::{
     builtin::builtins, closurpreter::compile, convalue::ConValue, env::Environment, error::Error,
-    interpret::Interpret,
 };
 use cl_lexer::Lexer;
 use cl_parser::Parser;
@@ -30,12 +29,13 @@ pub fn get_env() -> Environment {
             let string = match string.dereference_in(env)? {
                 ConValue::Str(string) => string.to_ref(),
                 ConValue::String(string) => string.as_str(),
+                ConValue::Quote(quote) => return compile(quote)?(env),
                 _ => Err(Error::TypeError("str", string.type_of(env)))?
             };
 
             match Parser::new(Lexer::new("eval".into(), string)).parse::<At<Expr>>(0).map(inline_modules) {
                 Err(e) => Ok(ConValue::String(format!("{e}"))),
-                Ok(v) => v.interpret(env),
+                Ok(code) => compile(&code)?(env),
             }
         }
 

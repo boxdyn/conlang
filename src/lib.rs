@@ -8,9 +8,7 @@ use cl_ast::{
     macro_matcher::{Match, Subst},
     visit::Walk,
 };
-use cl_interpret::{
-    closurpreter::compile, convalue::ConValue, env::Environment, interpret::Interpret,
-};
+use cl_interpret::{closurpreter::compile, convalue::ConValue, env::Environment};
 use cl_lexer::{
     EOF, LexError, Lexer,
     token::{TKind, Token},
@@ -203,11 +201,7 @@ pub fn run<'env: 't, 't>(
             .fold_in(&mut ForElseDesugar::new())
             .map_err(|e| e.to_string())?;
         let code = inline_modules(code);
-        let res = if env.prefer_fallback() {
-            code.interpret(env)
-        } else {
-            compile(&code)?(env)
-        };
+        let res = compile(&code)?(env);
 
         match (res, verbose) {
             (Err(Error { span: Some(span), kind }), _) => {
