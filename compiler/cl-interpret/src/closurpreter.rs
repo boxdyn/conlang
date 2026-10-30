@@ -144,7 +144,7 @@ pub fn compile(expr: &At<Expr>) -> IResult<OwnClexpr> {
 fn compile_inner(expr: &At<Expr>) -> IResult<OwnClexpr> {
     let compute: OwnClexpr = match expr.inner().value() {
         // TODO: don't clone?
-        _ if let Some(place) = compile_place(expr)? => Box::new(move |e| place(e)?.get(e).cloned()),
+        _ if let Some(place) = compile_get(expr)? => Box::new(move |e| place(e).cloned()),
         Expr::Omitted => Box::new(|_| Ok(ConValue::Unit)),
         Expr::Id(path) => compile_path(&path.parts, expr),
         Expr::MetId(_) => unimplemented!("Expr::MetId"),
@@ -162,6 +162,7 @@ fn compile_inner(expr: &At<Expr>) -> IResult<OwnClexpr> {
     Ok(Box::new(move |e| compute(e).map_err(|e| e.with_span(span))))
 }
 
+/// Compiles a function which constructs a [Place]
 fn compile_place(value: &At<Expr>) -> IResult<Option<Plexpr>> {
     Ok(match value.value() {
         Expr::Id(Path { parts }) if let &[name] = parts.as_slice() => {
@@ -207,9 +208,193 @@ fn compile_place(value: &At<Expr>) -> IResult<Option<Plexpr>> {
     })
 }
 
+/// A function which performs the [Place::get_mut] algorithm
+type GetMut = Box<dyn Fn(&mut Environment) -> IResult<&mut ConValue>>;
+/// Performs the [Place::get_mut] algorithm without constructing an intermediate [Place]
+fn compile_get_mut(expr: &At<Expr>) -> IResult<Option<GetMut>> {
+    Ok(match expr.inner().value() {
+        Expr::Id(Path { parts }) if let &[name] = parts.as_slice() => Some(Box::new(move |e| {
+            e.get_id_mut(e.id_of(name)?).ok_or(Error::NotDefined(name))
+        })),
+        Expr::Op(op, exprs) => match (op, exprs.as_slice()) {
+            (Op::Index, [place, idx]) if let Some(place) = compile_get_mut(place)? => {
+                let index = compile(idx)?;
+                Some(Box::new(move |e| {
+                    let index = index(e)?;
+                    let mut refmut = place(e)?;
+                    while let ConValue::Ref(place) = refmut {
+                        refmut = place.clone().get_mut(e)?;
+                    }
+                    match (refmut, index) {
+                        (ConValue::Array(arr), ConValue::Int(i @ ..0)) => {
+                            let len = arr.len();
+                            let idx = len.wrapping_add_signed(i as _) as usize;
+                            arr.get_mut(idx).ok_or(Error::OobIndex(idx as _, len as _))
+                        }
+                        (ConValue::Array(arr), ConValue::Int(idx @ 0..)) => {
+                            let len = arr.len();
+                            let idx = idx as usize;
+                            arr.get_mut(idx).ok_or(Error::OobIndex(idx, len))
+                        }
+                        (other, _) => Err(Error::TypeError("Index", other.clone().type_of(e))),
+                    }
+                }))
+            }
+            (Op::Dot, &[ref place, At(Expr::Lit(Literal::Int(i, _)), _)]) => {
+                let Some(place) = compile_get_mut(place)? else {
+                    return Ok(None);
+                };
+                Some(Box::new(move |e| {
+                    let mut refmut = place(e)?;
+                    while let ConValue::Ref(place) = refmut {
+                        refmut = place.clone().get_mut(e)?;
+                    }
+                    match refmut {
+                        ConValue::Tuple(values) | ConValue::TupleStruct(_, values) => {
+                            let len = values.len();
+                            let idx = i as usize;
+                            values.get_mut(idx).ok_or(Error::OobIndex(idx, len))
+                        }
+                        other => todo!("{other}"),
+                    }
+                }))
+            }
+            (Op::Dot, [place, At(Expr::Id(path), _)]) if path.parts.len() == 1 => {
+                let Some(place) = compile_get_mut(place)? else {
+                    return Ok(None);
+                };
+                let name = path.parts[0];
+                Some(Box::new(move |e| {
+                    let mut refmut = place(e)?;
+                    while let ConValue::Ref(place) = refmut {
+                        refmut = place.clone().get_mut(e)?;
+                    }
+                    match refmut {
+                        ConValue::Struct(ty, values) => match ty.to_ref() {
+                            Model::Struct { exhaustive: false, .. } => {
+                                Ok(values.entry(name).or_default())
+                            }
+                            _ => values.get_mut(&name).ok_or(Error::NotDefined(name)),
+                        },
+                        other => Err(Error::TypeError(name, other.clone().type_of(e))),
+                    }
+                }))
+            }
+            (Op::Deref, [ptr]) => {
+                let ptr = compile(ptr)?;
+                Some(Box::new(move |e| match ptr(e)? {
+                    ConValue::Ref(place) => {
+                        let mut refmut = place.get_mut(e)?;
+                        while let ConValue::Ref(place) = refmut {
+                            refmut = place.clone().get_mut(e)?;
+                        }
+                        Ok(refmut)
+                    }
+                    other => Err(Error::TypeError("&", other.type_of(e))),
+                }))
+            }
+            _ => None,
+        },
+        _ => None,
+    })
+}
+
+/// A function which performs the [Place::get] algorithm (more or less)
+type Get = Box<dyn Fn(&mut Environment) -> IResult<&ConValue>>;
+/// Performs the [Place::get] algorithm without constructing an intermediate [Place]
+fn compile_get(expr: &At<Expr>) -> IResult<Option<Get>> {
+    Ok(match expr.inner().value() {
+        Expr::Id(Path { parts }) if let &[name] = parts.as_slice() => Some(Box::new(move |e| {
+            let mut ptr = e.get_id(e.id_of(name)?).ok_or(Error::NotDefined(name))?;
+            while let ConValue::Ref(place) = ptr {
+                ptr = place.clone().get(e)?;
+            }
+            Ok(ptr)
+        })),
+        Expr::Op(op, exprs) => match (op, exprs.as_slice()) {
+            (Op::Index, [place, idx]) if let Some(place) = compile_get(place)? => {
+                let index = compile(idx)?;
+                Some(Box::new(move |e| {
+                    let index = index(e)?;
+                    let mut ptr = place(e)?;
+                    while let ConValue::Ref(place) = ptr {
+                        ptr = place.clone().get(e)?;
+                    }
+                    match (ptr, index) {
+                        (ConValue::Array(arr), ConValue::Int(i @ ..0)) => {
+                            let len = arr.len();
+                            let idx = len.wrapping_add_signed(i as _) as usize;
+                            arr.get(idx).ok_or(Error::OobIndex(idx, len))
+                        }
+                        (ConValue::Array(arr), ConValue::Int(idx @ 0..)) => {
+                            let len = arr.len();
+                            let idx = idx as usize;
+                            arr.get(idx).ok_or(Error::OobIndex(idx, len))
+                        }
+                        (other, _) => Err(Error::TypeError("Index", other.clone().type_of(e))),
+                    }
+                }))
+            }
+            (Op::Dot, &[ref place, At(Expr::Lit(Literal::Int(i, _)), _)]) => {
+                let Some(place) = compile_get(place)? else {
+                    return Ok(None);
+                };
+                Some(Box::new(move |e| {
+                    let mut ptr = place(e)?;
+                    while let ConValue::Ref(place) = ptr {
+                        ptr = place.clone().get(e)?;
+                    }
+                    match ptr {
+                        ConValue::Tuple(values) | ConValue::TupleStruct(_, values) => {
+                            let len = values.len();
+                            let idx = i as usize;
+                            values.get(idx).ok_or(Error::OobIndex(idx, len))
+                        }
+                        other => todo!("{other}"),
+                    }
+                }))
+            }
+            (Op::Dot, [place, At(Expr::Id(path), _)]) if path.parts.len() == 1 => {
+                let Some(place) = compile_get(place)? else {
+                    return Ok(None);
+                };
+                let name = path.parts[0];
+                Some(Box::new(move |e| {
+                    let mut ptr = place(e)?;
+                    while let ConValue::Ref(place) = ptr {
+                        ptr = place.clone().get(e)?;
+                    }
+
+                    match ptr {
+                        ConValue::Struct(_, values) => {
+                            values.get(&name).ok_or(Error::NotDefined(name))
+                        }
+                        other => Err(Error::TypeError(name, other.clone().type_of(e))),
+                    }
+                }))
+            }
+            (Op::Deref, [ptr]) => {
+                let ptr = compile(ptr)?;
+                Some(Box::new(move |e| match ptr(e)? {
+                    ConValue::Ref(place) => {
+                        let mut ptr = place.get(e)?;
+                        while let ConValue::Ref(place) = ptr {
+                            ptr = place.get(e)?;
+                        }
+                        Ok(ptr)
+                    }
+                    other => Err(Error::TypeError("&", other.type_of(e))),
+                }))
+            }
+            _ => None,
+        },
+        _ => None,
+    })
+}
+
+/// A function which resolves to an object at a path
 fn compile_path(parts: &[Symbol], _within: &At<Expr>) -> OwnClexpr {
     match parts {
-        &[name] => Box::new(move |e| e.get(name)),
         &[first, ref rest @ ..] => {
             let mut resolve: OwnClexpr = Box::new(move |e| e.get(first));
             for &name in rest {
@@ -224,6 +409,7 @@ fn compile_path(parts: &[Symbol], _within: &At<Expr>) -> OwnClexpr {
     }
 }
 
+/// Constructs a function which yields a constant [Literal] value
 fn compile_lit(lit: &Literal, _within: &At<Expr>) -> IResult<OwnClexpr> {
     Ok(match lit {
         &Literal::Bool(b) => Box::new(move |_| Ok(ConValue::Bool(b))),
@@ -239,6 +425,7 @@ fn compile_lit(lit: &Literal, _within: &At<Expr>) -> IResult<OwnClexpr> {
     })
 }
 
+/// Constructs a function which performs [Use]-importing in an [Environment]
 fn compile_use(tree: &Use, _within: &At<Expr>) -> IResult<OwnClexpr> {
     type UseTy = Box<dyn Fn(&mut Environment, Type) -> IResult<()>>;
     fn compile_use_ty(tree: &Use, _within: &At<Expr>) -> UseTy {
@@ -319,6 +506,7 @@ fn compile_use(tree: &Use, _within: &At<Expr>) -> IResult<OwnClexpr> {
     })
 }
 
+/// Constructs a function which [Bind]s a set of items in the [Environment]
 fn compile_bind(bind: &Bind, within: &At<Expr>) -> IResult<OwnClexpr> {
     let Bind(op, pat, exprs) = bind;
     let exprs = exprs.as_slice();
@@ -897,6 +1085,7 @@ fn compile_op(op: Op, exprs: &[At<Expr>], within: &At<Expr>) -> IResult<OwnClexp
         (Op::Refer, [body]) if let Some(place) = compile_place(body)? => {
             Box::new(move |e| Ok(ConValue::Ref(place(e)?)))
         }
+        (Op::Refer, [body]) => Err(Error::NotPlace().with_span(body.1))?,
         (Op::Deref, _) => cl_todo!()?,
         (Op::Mul, [lhs, rhs]) => {
             let (lhs, rhs) = (compile(lhs)?, compile(rhs)?);
@@ -980,8 +1169,8 @@ fn compile_op(op: Op, exprs: &[At<Expr>], within: &At<Expr>) -> IResult<OwnClexp
             type SetFn = Box<dyn Fn(&mut Environment, ConValue) -> IResult<()>>;
             fn set_pattern(place: &At<Expr>) -> IResult<SetFn> {
                 Ok(match place {
-                    place if let Some(place) = compile_place(place)? => {
-                        Box::new(move |e, value| Ok(*(place(e)?.get_mut(e)?) = value))
+                    place if let Some(place) = compile_get_mut(place)? => {
+                        Box::new(move |e, value| Ok(*place(e)? = value))
                     }
                     At(Expr::Op(Op::Group, places), _) if let [place] = &places[..] => {
                         set_pattern(place)?
@@ -1045,13 +1234,12 @@ fn compile_op(op: Op, exprs: &[At<Expr>], within: &At<Expr>) -> IResult<OwnClexp
 
 macro assign_modify($place:ident . $op:ident ($value:ident)) {{
     let value = compile($value)?;
-    let Some(place) = compile_place($place)? else {
+    let Some(place) = compile_get_mut($place)? else {
         Err(Error::NotPlace().with_span($place.1))?
     };
     Box::new(move |e| {
-        let place = place(e)?;
         let value = value(e)?;
-        *place.get_mut(e)? = place.get_mut(e)?.take().$op(value, e)?;
+        *place(e)? = place(e)?.take().$op(value, e)?;
         Ok(ConValue::Unit)
     })
 }}
