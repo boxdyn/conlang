@@ -39,6 +39,7 @@ impl Tried<T, R> {
 
 enum Option<T> { Some(T), None };
 use Option::{Some, None};
+
 impl Option {
     fn is_some(&self) -> bool = let Option::Some(_) = self;
     fn is_none(&self: &Self) -> bool = let Option::None = self;
@@ -53,8 +54,18 @@ impl Option {
     }
     /// Implements the `try` (`?`) operator on Options.
     fn try(self) -> Tried<T, Option<!>> = match self {
-        Some(t) => Tried::Take(t);
-        None => Tried::Return(None);
+        Option::Some(taken) => Tried::Take(taken);
+        Option::None => Tried::Return(None);
+    }
+    /// Returns `Result::Err(error)` if `self` is not `Some(value)`
+    fn ok_or<E>(self, error: E) -> Result<T, E> = match self {
+        Option::Some(value) => Ok(value);
+        Option::None => Err(error);
+    }
+    /// Returns `Result::Err(error())` if `self` is not `Some(value)`
+    fn ok_or_else<E>(self, error: fn() -> E) = match self {
+        Option::Some(value) => Ok(value);
+        Option::None => Err(error());
     }
 }
 
@@ -366,10 +377,9 @@ impl str {
                 ..0xf8 => (self.1 += 4; byte & 0x07); // 4 bytes
                 _ => return None;                     // invalid
             }
-            let text, index = self.0, self.1;
-            if (byte >= 0xf0) out = out << 6 | (text.get(index - 3)? & 0x3f);
-            if (byte >= 0xe0) out = out << 6 | (text.get(index - 2)? & 0x3f);
-            if (byte >= 0xc0) out = out << 6 | (text.get(index - 1)? & 0x3f);
+            if (byte >= 0xf0) out = out << 6 | (self.0.get(self.1 - 3)? & 0x3f);
+            if (byte >= 0xe0) out = out << 6 | (self.0.get(self.1 - 2)? & 0x3f);
+            if (byte >= 0xc0) out = out << 6 | (self.0.get(self.1 - 1)? & 0x3f);
             Some(out as char)
         }
     });
