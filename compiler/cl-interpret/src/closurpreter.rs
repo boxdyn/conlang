@@ -6,7 +6,7 @@ use crate::{
     env::{Environment, Location},
     error::{Error, ErrorKind, IResult},
     function::Captor,
-    interpret::{bind_enum, bind_struct, cl_todo},
+    interpret::{bind_enum, bind_struct, cl_todo, cl_unimplemented},
     place::Place,
     typeinfo::{Model, Type},
 };
@@ -1336,66 +1336,77 @@ fn let_inner_pattern(pat: &Pat) -> IResult<(Matcher, Binder)> {
 
 fn slice_or_tuple_pat(slice: bool, pats: &[At<Pat>]) -> IResult<(Matcher, Binder)> {
     // Match forward until we find a rest pattern
-    let mut forward_matchers = vec![];
-    let mut forward_binders = vec![];
+    let mut match_head = vec![];
+    let mut bind_head = vec![];
 
     let mut pats = pats.iter().peekable();
     while let Some(pat) = pats.peek()
         && !matches!(pat, At(Pat::Op(PatOp::Rest, _), ..))
     {
         let (m, b) = compile_let_pattern(pat)?;
-        forward_matchers.push(m);
-        forward_binders.push(b);
+        match_head.push(m);
+        bind_head.push(b);
         pats.next();
     }
 
-    // TODO: account for ..10 patterns
-
     // Capture the "rest pattern", which will hold the rest of the args
-    let (rest_pat, rspan) = match pats.next() {
-        Some(pat @ At(Pat::Op(PatOp::Rest, _), rspan)) => (pat, rspan),
-        None => {
-            return Ok(got(
-                move |e, value| {
-                    let values = match value {
-                        ConValue::Array(values) if slice => values,
-                        ConValue::Tuple(values) if !slice => values,
-                        ConValue::TupleStruct(_, values) if !slice => values,
-                        _ => return Ok(false),
-                    };
-                    if values.len() != forward_matchers.len() {
-                        return Ok(false);
-                    };
-                    for (pat, value) in forward_matchers.iter().zip(values.into_iter()) {
-                        let _ = pat(e, value)? || return Ok(false);
-                    }
-
-                    Ok(true)
+    let Some(rest_pat @ At(Pat::Op(PatOp::Rest, rpats), rspan)) = pats.next() else {
+        // We only have to match forward!
+        let len = match_head.len();
+        let matcher = move |e: &mut Environment, values: &[ConValue]| -> IResult<bool> {
+            let mut values = values.iter();
+            for (pat, value) in match_head.iter().zip(values.by_ref()) {
+                let _ = pat(e, value)? || return Ok(false);
+            }
+            Ok(true)
+        };
+        let binder = move |e: &mut Environment, values: Vec<ConValue>| {
+            let mut values = values.into_iter();
+            for (pat, value) in bind_head.iter().zip(values.by_ref()) {
+                pat(e, value);
+            }
+        };
+        return Ok(match slice {
+            true => got(
+                move |e, value| match value {
+                    ConValue::Array(values) if len <= values.len() => matcher(e, values),
+                    _ => Ok(false),
                 },
                 move |e, value| match value {
-                    ConValue::Array(vs) | ConValue::Tuple(vs) | ConValue::TupleStruct(_, vs) => {
-                        for (pat, value) in forward_binders.iter().zip(vs) {
-                            pat(e, value);
-                        }
-                    }
-                    _ => unreachable!("Cannot match {value} against list pattern!"),
+                    ConValue::Array(values) => binder(e, values),
+                    _ => unreachable!("Cannot match {value} against slice pattern!"),
                 },
-            ));
-        }
-        _ => unreachable!(),
+            ),
+            false => got(
+                move |e, value| match value {
+                    ConValue::Tuple(values) if len <= values.len() => matcher(e, values),
+                    ConValue::TupleStruct(_, values) if len <= values.len() => matcher(e, values),
+                    _ => Ok(false),
+                },
+                move |e, value| match value {
+                    ConValue::Tuple(vs) | ConValue::TupleStruct(_, vs) => binder(e, vs),
+                    _ => unreachable!("Cannot match {value} against tuple pattern!"),
+                },
+            ),
+        });
+    };
+
+    // If the subpattern is anything other than a wildcard, we'd have to clone elements :(
+    let ([] | [At(Pat::Name(_), _)]) = rpats.as_slice() else {
+        cl_unimplemented!("Rest pattern {rest_pat}")?
     };
 
     // Match backward until we find a rest pattern
-    let mut reverse_matchers = vec![];
-    let mut reverse_binders = vec![];
+    let mut match_tail = vec![];
+    let mut bind_tail = vec![];
 
     let mut pats = pats.rev().peekable();
     while let Some(pat) = pats.peek()
         && !matches!(pat, At(Pat::Op(PatOp::Rest, _), ..))
     {
         let (m, b) = compile_let_pattern(pat)?;
-        reverse_matchers.push(m);
-        reverse_binders.push(b);
+        match_tail.push(m);
+        bind_tail.push(b);
         pats.next();
     }
     if let Some(At(second_rest, r2span)) = pats.next() {
@@ -1408,42 +1419,50 @@ fn slice_or_tuple_pat(slice: bool, pats: &[At<Pat>]) -> IResult<(Matcher, Binder
 
     let (_rest_matcher, rest_binder) = compile_let_pattern(rest_pat)?;
     let to_collection = if slice { ConValue::Array } else { ConValue::Tuple };
+    let len = match_head.len() + match_tail.len();
 
-    Ok(got(
-        move |e, value| {
-            let values = match value {
-                ConValue::Array(values) if slice => values,
-                ConValue::Tuple(values) if !slice => values,
-                ConValue::TupleStruct(_, values) if !slice => values,
-                _ => return Ok(false),
-            };
-            if values.len() < forward_matchers.len() + reverse_matchers.len() {
-                return Ok(false);
-            };
-            let mut values = values.iter();
-            for (pat, value) in forward_matchers.iter().zip(values.by_ref()) {
-                let _ = pat(e, value)? || return Ok(false);
-            }
-            for (pat, value) in reverse_matchers.iter().zip(values.by_ref().rev()) {
-                let _ = pat(e, value)? || return Ok(false);
-            }
-            // TODO: check rest pattern!
+    let matcher = move |e: &mut Environment, values: &[ConValue]| -> IResult<bool> {
+        let mut values = values.iter();
+        for (pat, value) in match_head.iter().zip(values.by_ref()) {
+            let _ = pat(e, value)? || return Ok(false);
+        }
+        for (pat, value) in match_tail.iter().zip(values.by_ref().rev()) {
+            let _ = pat(e, value)? || return Ok(false);
+        }
+        Ok(true)
+    };
+    let binder = move |e: &mut Environment, values: Vec<ConValue>| {
+        let mut values = values.into_iter();
+        for (pat, value) in bind_head.iter().zip(values.by_ref()) {
+            pat(e, value);
+        }
+        for (pat, value) in bind_tail.iter().zip(values.by_ref().rev()) {
+            pat(e, value);
+        }
+        rest_binder(e, to_collection(values.collect()))
+    };
 
-            Ok(true)
-        },
-        move |e, value| {
-            let (ConValue::Array(vs) | ConValue::Tuple(vs) | ConValue::TupleStruct(_, vs)) = value
-            else {
-                unreachable!("Cannot match {value} against list pattern!")
-            };
-            let mut values = vs.into_iter();
-            for (pat, value) in forward_binders.iter().zip(values.by_ref()) {
-                pat(e, value);
-            }
-            for (pat, value) in reverse_binders.iter().zip(values.by_ref().rev()) {
-                pat(e, value);
-            }
-            rest_binder(e, to_collection(values.collect()))
-        },
-    ))
+    Ok(match slice {
+        true => got(
+            move |e, value| match value {
+                ConValue::Array(values) if len <= values.len() => matcher(e, values),
+                _ => Ok(false),
+            },
+            move |e, value| match value {
+                ConValue::Array(values) => binder(e, values),
+                _ => unreachable!("Cannot match {value} against slice pattern!"),
+            },
+        ),
+        false => got(
+            move |e, value| match value {
+                ConValue::Tuple(values) if len <= values.len() => matcher(e, values),
+                ConValue::TupleStruct(_, values) if len <= values.len() => matcher(e, values),
+                _ => Ok(false),
+            },
+            move |e, value| match value {
+                ConValue::Tuple(vs) | ConValue::TupleStruct(_, vs) => binder(e, vs),
+                _ => unreachable!("Cannot match {value} against tuple pattern!"),
+            },
+        ),
+    })
 }
