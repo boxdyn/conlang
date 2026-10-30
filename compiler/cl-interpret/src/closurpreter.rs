@@ -58,6 +58,10 @@ impl Clunktion {
         }))
     }
 
+    pub fn inner(&self) -> &Clunk {
+        &self.0
+    }
+
     pub fn mark(&self, env: &Environment) -> IResult<()> {
         if let Ok(upvars) = self.0.upvars.try_borrow_mut().as_deref_mut() {
             if upvars.2.is_none() {
@@ -610,10 +614,11 @@ fn compile_match(mtch: &Match, _within: &At<Expr>) -> IResult<OwnClexpr> {
 
 fn compile_label(label: &Label, _within: &At<Expr>) -> IResult<OwnClexpr> {
     let Label(label, body) = label;
+    let span = body.1;
     let label = label.to_ref();
-    let body = compile(body)?;
+    let body = compile(unblock(body))?;
     Ok(Box::new(move |e| {
-        body(e).or_else(|err| err.catch_a_break(label))
+        body(&mut e.frame(label, Some(span), None)).or_else(|err| err.catch_a_break(label))
     }))
 }
 
