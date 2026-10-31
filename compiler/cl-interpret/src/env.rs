@@ -218,6 +218,9 @@ impl Environment {
 
     /// Gets a previously-[implement](Self::implement)ed item, by-value, copying if necessary.
     pub fn get_impl(&self, ty: Type, name: Symbol) -> IResult<ConValue> {
+        if name == self.kw.kw_Self {
+            return Ok(ConValue::TypeInfo(ty));
+        }
         if let Some(id) = self.get_impl_id(ty, name) {
             return self.get_id(id).cloned().ok_or(Error::NotDefined(name));
         }
@@ -316,10 +319,11 @@ impl Environment {
     pub fn with_frame<'e>(
         &'e mut self,
         name: &'static str,
+        span: Option<Span>,
         frame: StackFrame,
         module: Option<Type>,
     ) -> Frame<'e> {
-        let mut scope = self.frame(name, None, module);
+        let mut scope = self.frame(name, span, module);
         for (k, v) in frame {
             scope.insert(k, v, false);
         }
@@ -333,13 +337,12 @@ impl Environment {
     pub fn with_raw_frame<'e>(
         &'e mut self,
         name: &'static str,
-        frame: &HashMap<Symbol, Location>,
+        span: Option<Span>,
+        frame: HashMap<Symbol, Location>,
         module: Option<Type>,
     ) -> Frame<'e> {
-        let mut scope = self.frame(name, None, module);
-        for (&k, &v) in frame {
-            scope.bind_raw(k, v);
-        }
+        let mut scope = self.frame(name, span, module);
+        scope.frames.last_mut().unwrap().binds = frame;
         scope
     }
 
@@ -365,12 +368,11 @@ impl Environment {
     /// Resolves the index associated with a [Symbol]
     pub fn id_of(&self, name: Symbol) -> IResult<Location> {
         for EnvFrame { binds, module, .. } in self.frames.iter().rev() {
-            if let Some(module) = module
-                && let Some(id) = self.get_impl_id(*module, name)
-            {
+            if let Some(id) = binds.get(&name).copied() {
                 return Ok(id);
             }
-            if let Some(id) = binds.get(&name).copied() {
+            let Some(module) = module else { continue };
+            if let Some(id) = self.get_impl_id(*module, name) {
                 return Ok(id);
             }
         }
