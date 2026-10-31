@@ -202,7 +202,7 @@ pub fn run<'env: 't, 't>(
 
         match (res, verbose) {
             (Err(Error { span: Some(span), kind }), _) => {
-                pretty_error(span, document, kind);
+                println!("{}", pretty_error(span, document, kind));
             }
             (Err(error), _) => {
                 println!("\x1b[31m{error}");
