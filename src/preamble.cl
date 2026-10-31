@@ -389,21 +389,6 @@ impl str {
     let into_iter = chars;
 }
 
-// TODO: Remove this when name resolution isn't fake
-struct unstable_metaprogramming;
-impl unstable_metaprogramming {
-    const fn spread(Type, types: [_]) {
-        for Self in types
-            impl Self use Type::*;
-    }
-}
-unstable_metaprogramming::spread(f64, [f32]);
-unstable_metaprogramming::spread(i128, [
-    i8, i16, i32, i64,       isize,
-    u8, u16, u32, u64, u128, usize,
-]);
-
-
 /// Returns the larger of `a` and `b`
 pub fn max<T: Cmp>(a: T, b: T) -> T = if a < b b else a;
 
