@@ -280,6 +280,7 @@ impl<'t> Lexer<'t> {
                 "return" => TKind::Return,
                 "static" => TKind::Static,
                 "struct" => TKind::Struct,
+                "trait" => TKind::Trait,
                 "true" => TKind::True,
                 "type" => TKind::Type,
                 "use" => TKind::Use,

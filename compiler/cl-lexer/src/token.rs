@@ -102,6 +102,7 @@ pub enum TKind {
     Return,
     Static,
     Struct,
+    Trait,
     True,
     Type,
     Underscore,
