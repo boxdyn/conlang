@@ -149,8 +149,10 @@ impl Iterator<T> {
             into_iter,
             // consuming methods
             foreach, any_of, all_of, first_where, fold, count,
+            is_sorted,
             // iterator adapters
             inspect, map, filter, filter_map, zip, zip_longest,
+            take,
         }
     };
 
@@ -193,6 +195,16 @@ impl Iterator<T> {
         count
     }
 
+    /// Consumes the remainder of this iterator, returning whether
+    /// they were ascending order
+    fn is_sorted(self) -> bool {
+        let Some(mut prev) = self.next() else return true;
+        while let Some(next) = self.next() {
+            if prev > next break false;
+            prev = next;
+        } else true
+    }
+
     /// An Iterator which calls a function on each value
     struct Inspect<T>(&Self, fn(&T));
     /// Returns an iterator which calls `f` on every value
@@ -225,7 +237,12 @@ impl Iterator<T> {
     struct ZipLongest<T, U>(&Self, Iterator<U>);
     /// Returns an iterator which yields optional elements from two iterators in parallel
     /// until both of them return `None`
-    fn zip_longest<T, U>(self, other: Iterator<U>) -> ZipLongest<T, U> = ZipLongest(self, other);
+    fn zip_longest<T, U>(self, other: Iterator<U>) -> ZipLongest<T, U> = ZipLongest(self, other.into_iter());
+
+    /// An Iterator which yields at most `count` elements.
+    struct Take(&Self, usize, usize);
+    /// Returns an iterator which yields at most `count` elements.
+    fn take(self, count: usize) -> Take<T> = Take(self, 0, count);
 }
 
 Iterator::_derive(Iterator::Inspect, {
@@ -259,6 +276,13 @@ Iterator::_derive(Iterator::ZipLongest, {
             Some((a, b))
         } else None
     }
+});
+Iterator::_derive(Iterator::Take, {
+    fn next(self: &Iterator::Take<T>) = if self.1 < self.2 {
+        let out = self.0.next()?;
+        self.1 += 1;
+        Some(out)
+    } else None
 });
 
 
@@ -300,6 +324,11 @@ let Array = impl [_] {
     /// Constructs an iterator over this array's contents
     fn into_iter(self: &Self) = Self::ArrayIter(self, 0);
     let iter = into_iter;
+
+    /// Determines whether the elements of `self` are in ascending order
+    fn is_sorted(self: &Self) = for i in 1..self.len() {
+        if self[i-1] > self[i] break false
+    } else true;
 
     /// Computes the cartesian product of `selves` and `others`
     fn cartesian<T>(selves: &[T], others: &[T]) -> [[T; 2]] {
