@@ -136,30 +136,24 @@ impl f64 {
 }
 
 /// TODO: real interfaces
+struct IntoIterator<T>;
+impl IntoIterator<T> {
+    /// Produces an Iterator instance from `self`
+    fn into_iter(self: &Self) -> Iterator<T>;
+}
+
 struct Iterator<T>;
 impl Iterator<T> {
+    /// All iterators<T> implement IntoIterator<T>
+    impl IntoIterator<T> for Iterator<T>
+        /// Produces an Iterator instance from `self`
+        fn into_iter(&self) -> Self = self;
+
     // Required methods:
     /// Produces the next item, or `None`
     fn next(self: &Self) -> Option<T>;
 
-    /// Implements the Iterator interface for a type
-    const fn _derive(T: Type, next: fn(&T) -> Option<_>) impl T use {
-        next,
-        Iterator::{
-            into_iter,
-            // consuming methods
-            foreach, any_of, all_of, first_where, fold, count,
-            is_sorted,
-            // iterator adapters
-            inspect, map, filter, filter_map, zip, zip_longest,
-            take,
-        }
-    };
-
-    // "Provided" methods:
-    /// Produces an Iterator instance from `self`
-    fn into_iter(&self) -> Iterator<T> = self;
-
+    // Provided methods:
     /// Consumes the Iterator, calling `f` on each item
     fn foreach(self, f: fn(T) -> ())
         while let Some(value) = self.next() f(value);
@@ -245,30 +239,35 @@ impl Iterator<T> {
     fn take(self, count: usize) -> Take<T> = Take(self, 0, count);
 }
 
-Iterator::_derive(Iterator::Inspect, {
+impl Iterator<T> for Iterator::Inspect<T> {
     fn next(self: &Iterator::Inspect) = match self.0.next() {
         Some(value) => Some((self.1)(&value); value);
         _ => None;
     }
-});
-Iterator::_derive(Iterator::Map, {
+}
+
+impl Iterator<U> for Iterator::Map<T, U> {
     fn next(self: &Iterator::Map) = Some((self.1)(self.0.next()?))
-});
-Iterator::_derive(Iterator::Filter, {
+}
+
+impl Iterator<T> for Iterator::Filter<T> {
     fn next(self: &Iterator::Filter) = loop {
         let Some(value) = self.0.next() else break None;
         if (self.1)(value) break Some(value);
     }
-});
-Iterator::_derive(Iterator::FilterMap, {
+}
+
+impl Iterator<U> for Iterator::FilterMap<T, U> {
     fn next(self: &Iterator::FilterMap) = while let Some(value) = self.0.next() {
         if let Some(value) = (self.1)(value) break Some(value);
-    } else None
-});
-Iterator::_derive(Iterator::Zip, {
+    } else None;
+}
+
+impl Iterator<(T, U)> for Iterator::Zip<T, U> {
     fn next(self: &Iterator::Zip) = Some((self.0.next()?, self.1.next()?))
-});
-Iterator::_derive(Iterator::ZipLongest, {
+}
+
+impl Iterator<(Option<T>, Option<U>)> for Iterator::ZipLongest {
     fn next(self: &Iterator::ZipLongest<T, U>) -> Option<(Option<T>, Option<U>)> {
         let a = self.0.next();
         let b = self.1.next();
@@ -276,55 +275,60 @@ Iterator::_derive(Iterator::ZipLongest, {
             Some((a, b))
         } else None
     }
-});
-Iterator::_derive(Iterator::Take, {
+}
+
+impl Iterator for Iterator::Take {
     fn next(self: &Iterator::Take<T>) = if self.1 < self.2 {
         let out = self.0.next()?;
         self.1 += 1;
         Some(out)
     } else None
-});
+}
 
 
-impl RangeInc {
+impl IntoIterator<usize> for RangeInc {
     struct InclusiveIter(usize, usize);
-    Iterator::_derive(InclusiveIter, {
+    impl Iterator<usize> for InclusiveIter {
         fn next(self: &RangeInc::InclusiveIter) = if self.0 > self.1 None else {
             let out = self.0;
             self.0 = out + 1;
             Some(out)
         }
-    });
+    }
 
     fn into_iter(&RangeInc(start, end)) = RangeInc::InclusiveIter(start, end);
 }
-impl RangeExc {
+impl IntoIterator<usize> for RangeExc {
     struct ExclusiveIter(usize, usize);
-    Iterator::_derive(ExclusiveIter, {
+    impl Iterator<usize> for ExclusiveIter {
         fn next(self: &RangeExc::ExclusiveIter) = if self.0 >= self.1 None else {
             let out = self.0;
             self.0 = out + 1;
             Some(out)
         }
-    });
+    }
+
     fn into_iter(&RangeExc(start, end)) = RangeExc::ExclusiveIter(start, end);
 }
 
-let Array = impl [_] {
+impl IntoIterator<T> for Array<T> {
     /// An iterator over an array's contents
     struct ArrayIter(Self, usize);
-    Iterator::_derive(ArrayIter, {
+    impl Iterator<_> for ArrayIter {
         fn next(self: &Self::ArrayIter) -> Option<u8> {
             let index = self.1;
             self.1 = index + 1;
             self.0.get(index)
         }
-    });
+    }
 
     /// Constructs an iterator over this array's contents
     fn into_iter(self: &Self) = Self::ArrayIter(self, 0);
     let iter = into_iter;
 
+}
+
+impl Array {
     /// Determines whether the elements of `self` are in ascending order
     fn is_sorted(self: &Self) = for i in 1..self.len() {
         if self[i-1] > self[i] break false
@@ -381,20 +385,23 @@ let Array = impl [_] {
 impl str {
     /// An [Iterator] over the bytes in a `str`
     struct Bytes(&str, usize);
-    Iterator::_derive(Bytes, {
+
+    impl Iterator<u8> for Bytes {
         fn next(self: &str::Bytes) -> Option<u8> {
             let index = self.1;
             self.1 += 1;
             self.0.get(index)
         }
-    });
+    }
 
     /// Returns an [Iterator] over the [Bytes] in `self`
     fn bytes(self: &str) = str::Bytes(self, 0);
+}
 
+impl IntoIterator<char> for str {
     /// An [Iterator] over the chars in a `str`
     struct Chars(&str, usize);
-    Iterator::_derive(Chars, {
+    impl Iterator<char> for Chars {
         /// Decodes Unicode codepoints in a UTF-8-encoded `str`, ignoring errors
         fn next(self: &str::Chars) -> Option<char> {
             let byte = self.0.get(self.1)?;
@@ -411,7 +418,7 @@ impl str {
             if (byte >= 0xc0) out = out << 6 | (self.0.get(self.1 - 1)? & 0x3f);
             Some(out as char)
         }
-    });
+    }
 
     /// Returns an [Iterator] over the [Chars] in `self`
     fn chars(self: &str) = str::Chars(self, 0);

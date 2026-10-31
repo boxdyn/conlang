@@ -714,14 +714,9 @@ fn compile_mod(pat: &At<Pat>, body: &At<Expr>) -> IResult<OwnClexpr> {
 
 fn compile_impl(pat: &At<Pat>, body: &At<Expr>) -> IResult<OwnClexpr> {
     let (trait_imports, pat) = match pat.value().inner() {
-        Pat::Op(PatOp::TraitFor, pats) if let [name, ty] = &pats[..] => match name.value() {
-            // TODO: struct_binds at compile time
-            pat if let Some(name) = pat.name() => (
-                Some(compile_use(&Use::Path(name, Box::new(Use::Glob)), body)?),
-                ty.clone(),
-            ),
-            _ => cl_todo!("{name} for {ty}")?,
-        },
+        Pat::Op(PatOp::TraitFor, pats) if let [name, ty] = &pats[..] => {
+            (Some(name.clone()), ty.clone())
+        }
         _ => (None, pat.clone()),
     };
     let body = compile(unblock(body))?;
@@ -729,14 +724,26 @@ fn compile_impl(pat: &At<Pat>, body: &At<Expr>) -> IResult<OwnClexpr> {
         let (_name, model) = struct_binds(pat.value(), e)?;
         let ty = model.intern(); // TODO: bad
         let mut scope = e.frame(ty.name(), Some(pat.1), Some(ty));
-        // import "trait items" from another module
-        if let Some(import) = &trait_imports {
-            import(&mut scope)?;
-        }
         // if there is no Self (which is the case for builtins) add one
         let kw_selfty = scope.kw.kw_Self;
         if scope.get_impl_id(ty, kw_selfty).is_none() {
             scope.implement(ty, kw_selfty, ConValue::TypeInfo(ty));
+        }
+        // import "trait items" from another module
+        if let Some(import) = &trait_imports
+            && let Ok((_, import)) = struct_binds(import.value(), &mut scope)
+            && let Some(impls) = scope.impls.get(&import.intern())
+        {
+            for (&name, &id) in impls.clone().iter() {
+                scope.bind_raw(name, Location::Global(id));
+            }
+        }
+        // TODO: this is pretty wasteful, and is just here to keep
+        // any imported names from shadowing inherent impls
+        if let Some(impls) = scope.impls.get(&ty) {
+            for (&name, &id) in impls.clone().iter() {
+                scope.bind_raw(name, Location::Global(id));
+            }
         }
         body(&mut scope)?;
         if let Some(values) = scope.pop_into_globals() {

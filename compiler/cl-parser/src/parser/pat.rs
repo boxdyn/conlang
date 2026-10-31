@@ -237,7 +237,9 @@ impl<'t> Parse<'t> for Pat {
                     }
                     Pat::Op(PatOp::Tuple, elems)
                 }
-                PatOp::Fn => Pat::Op(op, vec![head.at(span), p.consume().parse(prec)?]),
+                PatOp::Fn | PatOp::TraitFor => {
+                    Pat::Op(op, vec![head.at(span), p.consume().parse(prec)?])
+                }
                 _ => Pat::Op(op, vec![head.at(span), p.consume().parse(prec.next())?]),
             }
         }
