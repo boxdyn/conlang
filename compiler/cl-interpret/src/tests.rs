@@ -1,5 +1,5 @@
 #![allow(unused_imports)]
-use crate::{Interpret, convalue::ConValue, env::Environment};
+use crate::{convalue::ConValue, env::Environment};
 use cl_ast::{
     desugar::while_else::{ForElseDesugar, LoopLabelDesugar, WhileElseDesugar},
     fold::Foldable,

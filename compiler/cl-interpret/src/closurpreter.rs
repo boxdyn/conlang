@@ -5,120 +5,13 @@ use crate::{
     convalue::{ConValue, Integer},
     env::{Environment, Location},
     error::{Error, ErrorKind, IResult},
-    function::Captor,
+    function::{CallableFn, Clunktion},
     interpret::{cl_todo, cl_unimplemented, enum_binds, struct_binds},
     place::Place,
     typeinfo::{Model, Type},
 };
-use cl_ast::{types::*, visit::Visit, *};
-use std::{
-    cell::RefCell,
-    collections::{BTreeSet, HashMap},
-    iter,
-    rc::Rc,
-};
-
-pub type CallableFn =
-    Box<dyn Fn(Clunktion, &mut Environment, Vec<ConValue>) -> IResult<ConValue> + 'static>;
-
-/// The inner portion of a [Clunktion]
-///
-/// This holds the information required to call a [CallableFn]:
-/// - the [CallableFn] itself
-/// - the [Symbol]s it captures
-/// - the [Location] of those captures, once known
-pub struct Clunk {
-    pub ast: At<Expr>,
-    pub expr: CallableFn,
-    pub captures: BTreeSet<Symbol>,
-    pub upvars: RefCell<(HashMap<Symbol, Location>, usize, Option<Type>)>,
-}
-
-#[derive(Clone)]
-pub struct Clunktion(Rc<Clunk>);
-impl std::fmt::Debug for Clunktion {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Clunktion")
-            .field("ast", &self.0.ast)
-            .field("captures", &self.0.captures)
-            .field("upvars", &self.0.upvars)
-            .finish_non_exhaustive()
-    }
-}
-impl Clunktion {
-    pub fn new(ast: At<Expr>, expr: CallableFn) -> Self {
-        let mut captures = Default::default();
-        Captor::new(&mut captures).visit(&ast);
-
-        Self(Rc::new(Clunk {
-            expr,
-            ast,
-            captures,
-            upvars: Default::default(),
-        }))
-    }
-
-    pub fn inner(&self) -> &Clunk {
-        &self.0
-    }
-
-    pub fn mark(&self, env: &Environment) -> IResult<()> {
-        if let Ok(upvars) = self.0.upvars.try_borrow_mut().as_deref_mut() {
-            if upvars.2.is_none() {
-                upvars.2 = env.get_direct_ancestor();
-            }
-            self.capture_inner(env, upvars)?;
-        }
-        Ok(())
-    }
-
-    pub fn capture(&self, env: &Environment) -> IResult<()> {
-        if let Ok(upvars) = self.0.upvars.try_borrow_mut().as_deref_mut() {
-            self.capture_inner(env, upvars)?;
-        }
-        Ok(())
-    }
-
-    fn capture_inner(
-        &self,
-        env: &Environment,
-        upvars: &mut (HashMap<Symbol, Location>, usize, Option<Type>),
-    ) -> IResult<()> {
-        let (self_upvars, depth, _module) = upvars;
-        if self_upvars.len() >= self.0.captures.len() {
-            return Ok(());
-        }
-        let frame_top = env
-            .get_frame(*depth + 1)
-            .map(|frame| frame.base)
-            .unwrap_or_else(|| env.stack_depth());
-        for &name in self.0.captures.iter() {
-            let Ok(id) = env.id_of(name) else {
-                continue;
-            };
-            if matches!(id, Location::Stack(id) if id as usize >= frame_top) {
-                continue;
-            }
-            self_upvars.entry(name).or_insert(id);
-        }
-        Ok(())
-    }
-}
-impl std::fmt::Display for Clunktion {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.ast.fmt(f)
-    }
-}
-impl Callable for Clunktion {
-    fn call(&self, env: &mut Environment, args: Vec<ConValue>) -> IResult<ConValue> {
-        self.capture(env)?;
-        (self.0.expr)(self.clone(), env, args)
-    }
-
-    fn name(&self) -> Option<Symbol> {
-        None
-    }
-}
+use cl_ast::{types::*, *};
+use std::{collections::HashMap, iter};
 
 pub struct ScopeFrame {
     /// The bodies of `defer` exprs seen in this scope

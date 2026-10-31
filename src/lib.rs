@@ -186,10 +186,7 @@ pub fn run<'env: 't, 't>(
         let color_tag = (idx + 5) % 6 + 31;
         let code = match parser.parse::<At<Expr>>(0).allow_eof() {
             Ok(Some(code)) => code,
-            Err(e) => {
-                pretty_error(e.span(), document, e);
-                break;
-            }
+            Err(e) => Err(pretty_error(e.span(), document, e))?,
             _ => break,
         };
         // TODO: perform loop desugaring in one meta-pass
@@ -200,7 +197,7 @@ pub fn run<'env: 't, 't>(
             .map_err(|e| e.to_string())?
             .fold_in(&mut ForElseDesugar::new())
             .map_err(|e| e.to_string())?;
-        let code = inline_modules(code);
+
         let res = compile(&code)?(env);
 
         match (res, verbose) {
@@ -273,7 +270,7 @@ where
         }
         for (path, err) in parse_errs {
             match std::fs::read_to_string(&path) {
-                Ok(text) => pretty_error(err.span(), &text, err),
+                Ok(text) => println!("{}", pretty_error(err.span(), &text, err)),
                 Err(_) => println!("{}: {err}", path.display()),
             }
         }
@@ -282,18 +279,18 @@ where
     At(expr, span)
 }
 
-pub fn pretty_error(span: Span, text: &str, error: impl std::fmt::Display) {
+pub fn pretty_error(span: Span, text: &str, error: impl std::fmt::Display) -> String {
     let Span { path, .. } = span;
     match std::fs::read_to_string(path.0) {
         Ok(text) => {
             let ((line, col), _) = span.to_line_col(&text);
-            println!("{path}:{line}:{col}: {error}");
+            format!("{path}:{line}:{col}: {error}")
         }
         Err(_) if text.len() >= span.tail as _ => {
             let ((line, col), _) = span.to_line_col(text);
-            println!("{path}:{line}:{col}: {error}");
+            format!("{path}:{line}:{col}: {error}")
         }
-        Err(_) => println!("{error}"),
+        Err(_) => format!("{error}"),
     }
 }
 

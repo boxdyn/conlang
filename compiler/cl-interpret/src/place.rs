@@ -3,14 +3,11 @@ use crate::{
     Callable,
     convalue::ConValue,
     env::{Environment, Location},
-    error::{Error, ErrorKind, IResult},
-    interpret::{Interpret, todo},
+    error::{Error, IResult},
+    interpret::todo,
     typeinfo::Model,
 };
-use cl_ast::{
-    At, Expr, Op,
-    types::{Literal, Symbol},
-};
+use cl_ast::types::Symbol;
 use std::fmt::Display;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -50,72 +47,6 @@ impl Callable for Place {
 }
 
 impl Place {
-    /// Creates a new [Place] [Projection] expression from an [Expr].
-    ///
-    /// If a place-projection can't be constructed, returns [Error::NotPlace].
-    pub fn new(value: &Expr, env: &mut Environment) -> IResult<Self> {
-        // base case
-        if let Expr::Id(names) = value
-            && let &[name] = names.parts.as_slice()
-        {
-            return Ok(Self { place: env.id_of(name)?, projections: vec![] });
-        };
-        let Expr::Op(op, exprs) = value else {
-            return Err(Error::NotPlace());
-        };
-
-        match (op, exprs.as_slice()) {
-            (Op::Block | Op::Group | Op::MetaInner | Op::MetaOuter | Op::Pub, [expr]) => {
-                Self::new(expr.value(), env)
-            }
-            (Op::Index, [place, idx]) => {
-                let place = Self::new(place.value(), env)?;
-                // this may be surprising, as it evaluates an arbitrary expression!!!
-                match idx.interpret(env)? {
-                    ConValue::Int(idx @ ..0) => Ok(place.index(-idx as usize, true)),
-                    ConValue::Int(idx @ 0..) => Ok(place.index(idx as usize, false)),
-                    ConValue::TupleStruct(t, ref arr)
-                        if let ([ConValue::Int(start), ConValue::Int(end)], "RangeExc") =
-                            (&arr[..], t.0.name()) =>
-                    {
-                        todo!("Projection::Slice ({start}, {end})")
-                    }
-                    err => Err(Error::TypeError("int", err.type_of(env)))?,
-                }
-            }
-            (Op::Dot, [place, At(Expr::Lit(Literal::Int(idx, _)), _)]) => {
-                Ok(Self::new(place.value(), env)?.dot_idx(*idx as _))
-            }
-            (Op::Dot, [place, At(Expr::Id(path), _)]) if path.parts.len() == 1 => {
-                Ok(Self::new(place.value(), env)?.dot_sym(path.parts[0]))
-            }
-            (Op::Deref, [expr]) => match expr.interpret(env)? {
-                ConValue::Ref(ref r) => {
-                    let mut r = r;
-                    loop {
-                        let Ok(ConValue::Ref(place)) = r.get(env) else {
-                            break Ok(r.clone());
-                        };
-                        r = place;
-                    }
-                }
-                other => Err(Error::TypeError("&_", other.type_of(env))),
-            },
-            _ => Err(Error::NotPlace()),
-        }
-    }
-
-    /// Creates a new [Place] if this [Expr] is a place expression,
-    /// otherwise allocates a new temporary and returns a Place-reference to it.
-    pub fn new_or_temporary(value: &Expr, env: &mut Environment) -> IResult<Self> {
-        let new = Self::new(value, env);
-        if let Err(Error { kind: ErrorKind::NotPlace, .. }) = new {
-            let value = value.interpret(env)?;
-            return Ok(Self::from_index(env.stack_alloc(value)?));
-        }
-        new
-    }
-
     pub fn from_index(index: Location) -> Self {
         Self { place: index, projections: vec![] }
     }

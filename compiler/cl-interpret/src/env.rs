@@ -1,14 +1,15 @@
 //! Lexical & non-lexical [scoping](Environment) for variables, and [Backtrace] support
 
 use super::{
-    Callable, Interpret,
+    Callable,
     builtin::*,
+    closurpreter::compile,
     convalue::ConValue,
     error::{Error, IResult},
     reserved_words::ReservedWords,
     typeinfo::{Model, Type},
 };
-use cl_ast::{fmt::FmtAdapter, types::Symbol};
+use cl_ast::{At, Expr, fmt::FmtAdapter, types::Symbol};
 use cl_structures::span::Span;
 use std::{
     collections::HashMap,
@@ -36,7 +37,7 @@ pub struct EnvFrame {
     /// A type whose namespace we're executing in
     pub module: Option<Type>,
     /// A list of deferred instructions to run on scope exit
-    pub defer: Vec<cl_ast::Expr>,
+    pub defer: Vec<At<Expr>>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -113,7 +114,6 @@ impl Display for Environment {
                 };
                 match value {
                     Some(ConValue::TypeInfo(t)) => writeln!(f, "type {t}"),
-                    Some(ConValue::Function(v)) => writeln!(f, "fn {}", v.pat()),
                     Some(value) => writeln!(f, "{value}"),
                     None => writeln!(f, "ERROR: {name}'s address blows the stack!"),
                 }?
@@ -199,13 +199,6 @@ impl Environment {
         }
     }
 
-    pub fn prefer_fallback(&self) -> bool {
-        let Ok(v) = self.get(self.kw.fallback_interpreter) else {
-            return false;
-        };
-        v.truthy(self).unwrap_or(false)
-    }
-
     /// The depth of the stack, in stack frames
     pub fn frame_depth(&self) -> usize {
         self.frames.len()
@@ -221,7 +214,7 @@ impl Environment {
     }
 
     /// Defers an expression until the end of scope. The expression must not fail..?
-    pub fn defer(&mut self, expr: cl_ast::Expr) -> Option<()> {
+    pub fn defer(&mut self, expr: At<Expr>) -> Option<()> {
         let EnvFrame { name: _, span: _, base: _, binds: _, module: _, defer } =
             self.frames.last_mut()?;
         defer.push(expr);
@@ -353,8 +346,7 @@ impl Environment {
     fn prep_methods(&mut self, methods: &'static [Builtin]) -> HashMap<Symbol, u32> {
         let mut map = HashMap::new();
         for builtin in methods {
-            let loc = self.bind_global(builtin.name.into(), ConValue::Builtin(builtin));
-            let Location::Global(loc) = loc else {
+            let Location::Global(loc) = self.global_alloc(ConValue::Builtin(builtin)) else {
                 unreachable!();
             };
             map.insert(Symbol::from(builtin.name), loc);
@@ -600,7 +592,7 @@ impl Drop for Frame<'_> {
         if let Some(EnvFrame { base, defer, .. }) = self.frames.last_mut() {
             let (base, deferred) = (*base, take(defer));
             for defer in deferred.iter().rev() {
-                if let Err(e) = defer.interpret(self) {
+                if let Err(e) = compile(defer).and_then(|defer| defer(self)) {
                     println!("Error during scope cleanup: {e}")
                 }
             }

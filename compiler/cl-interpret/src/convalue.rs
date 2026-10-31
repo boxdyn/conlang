@@ -5,17 +5,14 @@ use cl_ast::{At, Expr, fmt::FmtAdapter, types::Symbol};
 use cl_structures::intern::interned::Interned;
 
 use crate::{
-    closurpreter::Clunktion,
+    Callable, Environment,
+    builtin::Builtin,
+    error::{Error, IResult},
+    function::Clunktion,
     place::Place,
     typeinfo::{Model, Type},
 };
 
-use super::{
-    Callable, Environment,
-    builtin::Builtin,
-    error::{Error, IResult},
-    function::Function,
-};
 use std::{collections::HashMap, ops::*};
 
 /*
@@ -75,8 +72,6 @@ pub enum ConValue {
     Module(Box<HashMap<Symbol, ConValue>>),
     /// A quoted expression
     Quote(Box<At<Expr>>),
-    /// A callable thing
-    Function(Function),
     /// A closure-function
     Clunktion(Clunktion),
     /// A built-in function
@@ -88,15 +83,13 @@ pub enum ConValue {
 impl Callable for ConValue {
     fn name(&self) -> Option<Symbol> {
         match self {
-            ConValue::Function(func) => func.name(),
-            // ConValue::Closure(func) => func.name(),
+            ConValue::Clunktion(func) => func.name(),
             ConValue::Builtin(func) => func.name(),
             _ => None,
         }
     }
     fn call(&self, env: &mut Environment, args: Vec<ConValue>) -> IResult<ConValue> {
         let out = match self {
-            Self::Function(func) => func.call(env, args),
             Self::Clunktion(clunk) => clunk.call(env, args),
             Self::Builtin(func) => func.call(env, args),
             Self::Struct(..) | Self::TupleStruct(..) => {
@@ -170,7 +163,6 @@ impl ConValue {
             | Self::Str(_) => true,
             Self::Ref(_) => true,
             Self::Quote(_) => true,
-            Self::Function(_) => true,
             Self::Clunktion(_) => true,
             Self::Builtin(_) => true,
             Self::TypeInfo(_) => true,
@@ -196,7 +188,6 @@ impl ConValue {
             ConValue::Array(_) => true,
             ConValue::Tuple(_) => true,
             ConValue::Quote(_) => true,
-            ConValue::Function(_) => true,
             ConValue::Clunktion(_) => true,
             ConValue::Builtin(_) => true,
             ConValue::Struct(_, _) => false,
@@ -235,7 +226,6 @@ impl ConValue {
             Self::TupleStruct(ty, _) => *ty,
             Self::Module(_) => Model::Any.already_interned(),
             Self::Quote(_) => Model::Any.already_interned(),
-            Self::Function(_) => Model::Function.already_interned(),
             Self::Clunktion(_) => Model::Function.already_interned(),
             Self::Builtin(_) => Model::Function.already_interned(),
             Self::TypeInfo(ty) => *ty,
@@ -567,7 +557,6 @@ impl std::fmt::Display for ConValue {
             }
             ConValue::Quote(q) => write!(f, "`{q}`"),
             ConValue::Clunktion(func) => func.fmt(f),
-            ConValue::Function(func) => func.fmt(f),
             ConValue::Builtin(func) => func.fmt(f),
             ConValue::TypeInfo(ty) => ty.fmt(f),
         }
@@ -589,7 +578,7 @@ from! {
     &str => ConValue::Str,
     At<Expr> => ConValue::Quote,
     String => ConValue::String,
-    Function => ConValue::Function,
+    Clunktion => ConValue::Clunktion,
     Vec<ConValue> => ConValue::Tuple,
     &'static Builtin => ConValue::Builtin,
     Type => ConValue::TypeInfo,

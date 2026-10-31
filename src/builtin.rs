@@ -103,12 +103,14 @@ pub fn get_env() -> Environment {
     {
         Ok(Ok(code)) => match code(&mut env) {
             Ok(_) => {}
-            Err(Error { kind, span: Some(span) }) => pretty_error(span, PREAMBLE, kind),
+            Err(Error { kind, span: Some(span) }) => {
+                println!("{}", pretty_error(span, PREAMBLE, kind))
+            }
             Err(e) => println!("{e}"),
         },
-        Ok(Err(e)) if let Some(span) = e.span => pretty_error(span, PREAMBLE, e),
+        Ok(Err(e)) if let Some(span) = e.span => println!("{}", pretty_error(span, PREAMBLE, e)),
         Ok(Err(e)) => println!("{e}"),
-        Err(e) => pretty_error(e.span(), PREAMBLE, e),
+        Err(e) => println!("{}", pretty_error(e.span(), PREAMBLE, e)),
     };
     env
 }

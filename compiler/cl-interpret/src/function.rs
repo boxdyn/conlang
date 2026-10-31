@@ -1,173 +1,132 @@
 //! Represents a [block of code](Function) which lives inside the Interpreter
 
-use crate::{
-    env::Location,
-    error::ErrorKind,
-    interpret::{Match, MatchEnv},
-    typeinfo::Type,
-};
+use crate::{env::Location, typeinfo::Type};
 
-use super::{Callable, ConValue, Environment, Error, IResult, Interpret};
+use super::{Callable, ConValue, Environment, IResult};
 use cl_ast::{
     At, Bind, BindOp, DefaultTypes, Expr, Op, Pat, PatOp,
-    fmt::FmtAdapter,
-    types::Symbol as Sym,
+    types::Symbol,
     visit::{Visit, Walk},
 };
-use cl_structures::span::Span;
 use std::{
     cell::RefCell,
     collections::{BTreeSet, HashMap},
     rc::Rc,
 };
 
-type Upvars = HashMap<Sym, Location>;
+pub type CallableFn =
+    Box<dyn Fn(Clunktion, &mut Environment, Vec<ConValue>) -> IResult<ConValue> + 'static>;
 
-#[derive(Clone, Debug)]
-pub struct FnInner {
-    pat: At<Pat>,
-    body: At<Expr>,
-    module: Option<Type>,
-    captures: BTreeSet<Sym>,
-    upvars: RefCell<(Upvars, usize)>,
+/// The inner portion of a [Clunktion]
+///
+/// This holds the information required to call a [CallableFn]:
+/// - the [CallableFn] itself
+/// - the [Symbol]s it captures
+/// - the [Location] of those captures, once known
+pub struct Clunk {
+    pub ast: At<Expr>,
+    pub expr: CallableFn,
+    pub captures: BTreeSet<Symbol>,
+    pub upvars: RefCell<(HashMap<Symbol, Location>, usize, Option<Type>)>,
 }
 
-/// Represents a block of code which persists inside the Interpreter
-#[derive(Clone, Debug)]
-#[repr(transparent)]
-pub struct Function {
-    /// Stores the contents of the function declaration
-    decl: Rc<FnInner>,
-}
+#[derive(Clone)]
+pub struct Clunktion(Rc<Clunk>);
 
-impl Function {
-    pub fn new(decl: &Bind, module: Option<Type>) -> Self {
-        // let upvars = collect_upvars(decl, env);
-        if let Bind(BindOp::Fn, pat, exprs) = decl
-            && let [body] = exprs.as_slice()
-        {
-            let mut free = BTreeSet::new();
-            Captor::new(&mut free).visit(decl);
-            let decl = FnInner {
-                pat: pat.clone(),
-                body: body.clone(),
-                module,
-                captures: free,
-                upvars: Default::default(),
+impl Clunktion {
+    pub fn new(ast: At<Expr>, expr: CallableFn) -> Self {
+        let mut captures = Default::default();
+        Captor::new(&mut captures).visit(&ast);
+
+        Self(Rc::new(Clunk {
+            expr,
+            ast,
+            captures,
+            upvars: Default::default(),
+        }))
+    }
+
+    pub fn inner(&self) -> &Clunk {
+        &self.0
+    }
+
+    pub fn mark(&self, env: &Environment) -> IResult<()> {
+        if let Ok(upvars) = self.0.upvars.try_borrow_mut().as_deref_mut() {
+            if upvars.2.is_none() {
+                upvars.2 = env.get_direct_ancestor();
+            }
+            self.capture_inner(env, upvars)?;
+        }
+        Ok(())
+    }
+
+    pub fn capture(&self, env: &Environment) -> IResult<()> {
+        if let Ok(upvars) = self.0.upvars.try_borrow_mut().as_deref_mut() {
+            self.capture_inner(env, upvars)?;
+        }
+        Ok(())
+    }
+
+    fn capture_inner(
+        &self,
+        env: &Environment,
+        upvars: &mut (HashMap<Symbol, Location>, usize, Option<Type>),
+    ) -> IResult<()> {
+        let (self_upvars, depth, _module) = upvars;
+        if self_upvars.len() >= self.0.captures.len() {
+            return Ok(());
+        }
+        let frame_top = env
+            .get_frame(*depth + 1)
+            .map(|frame| frame.base)
+            .unwrap_or_else(|| env.stack_depth());
+        for &name in self.0.captures.iter() {
+            let Ok(id) = env.id_of(name) else {
+                continue;
             };
-            Self { decl: decl.into() }
-        } else {
-            unimplemented!()
-        }
-    }
-    pub fn pat(&self) -> &At<Pat> {
-        &self.decl.pat
-    }
-    pub fn body(&self) -> &At<Expr> {
-        &self.decl.body
-    }
-    pub fn span(&self) -> Span {
-        self.decl.body.1
-    }
-    pub fn module(&self) -> Option<Type> {
-        self.decl.module
-    }
-    pub fn captures(&self) -> &BTreeSet<Sym> {
-        &self.decl.captures
-    }
-    pub fn upvars(&self) -> &RefCell<(Upvars, usize)> {
-        &self.decl.upvars
-    }
-    pub fn lift_upvars(&self, env: &Environment) {
-        // TODO: is this optional and/or necessary?
-        if let Ok((self_upvars, depth)) = self.upvars().try_borrow_mut().as_deref_mut()
-            && self_upvars.len() < self.captures().len() // test for missing captures
-            && env.frame_depth() >= *depth
-        {
-            let frame_top = env
-                .get_frame(*depth + 1)
-                .map(|frame| frame.base)
-                .unwrap_or_else(|| env.stack_depth());
-            for &name in self.captures() {
-                let Ok(id) = env.id_of(name) else {
-                    continue;
-                };
-                if let Location::Stack(id) = id
-                    && id as usize >= frame_top
-                {
-                    continue;
-                }
-                self_upvars.entry(name).or_insert(id);
+            if matches!(id, Location::Stack(id) if id as usize >= frame_top) {
+                continue;
             }
+            self_upvars.entry(name).or_insert(id);
         }
+        Ok(())
     }
 }
-
-impl Callable for Function {
-    fn name(&self) -> Option<Sym> {
-        fn get_name(pat: &Pat) -> Option<Sym> {
-            match pat {
-                Pat::Name(name) => Some(*name),
-                Pat::Op(PatOp::Tuple | PatOp::Slice | PatOp::Fn, _) => None,
-                Pat::Op(_op, pats) => pats.iter().find_map(|At(pat, ..)| get_name(pat)),
-                _ => None,
-            }
-        }
-        get_name(self.decl.pat.value())
-    }
+impl Callable for Clunktion {
     fn call(&self, env: &mut Environment, args: Vec<ConValue>) -> IResult<ConValue> {
-        self.lift_upvars(env);
-        let args = ConValue::Tuple(args.into());
+        self.capture(env)?;
+        (self.0.expr)(self.clone(), env, args)
+    }
 
-        let pat = self.pat();
-        let mut bindings = HashMap::new();
-        pat.matches(args, &mut MatchEnv::new(env, &mut bindings))?;
-
-        let mut scope = env.with_raw_frame(
-            "captures",
-            None,
-            self.upvars().borrow().0.clone(),
-            self.module(),
-        );
-        let mut scope = scope.with_frame(
-            self.name().map(|name| name.to_ref()).unwrap_or("closure"),
-            Some(self.span()),
-            bindings,
-            None,
-        );
-        match self.body().interpret(&mut scope) {
-            Err(Error { kind: ErrorKind::Panic(e, depth), span }) => {
-                println!("{depth:>4}: {pat} at {}", span.unwrap_or(self.span()));
-                Err(Error { kind: ErrorKind::Panic(e, depth + 1), span: None })
-            }
-            Err(Error { kind: ErrorKind::Return(value), .. }) => Ok(value),
-            other => other,
-        }
+    fn name(&self) -> Option<Symbol> {
+        None
     }
 }
 
-impl std::fmt::Display for Function {
+impl std::fmt::Debug for Clunktion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (pat, At(expr, ..), captures) = (self.pat(), self.body(), self.captures());
-        if !captures.is_empty() {
-            f.delimit("// captures: ", "\n").list(captures, ", ")?;
-        }
-        write!(f, "fn {pat}")?;
-        match expr {
-            Expr::Op(Op::Block, ..) => write!(f, " {expr}"),
-            _ => write!(f, " = {expr}"),
-        }
+        f.debug_struct("Clunktion")
+            .field("ast", &self.0.ast)
+            .field("captures", &self.0.captures)
+            .field("upvars", &self.0.upvars)
+            .finish_non_exhaustive()
+    }
+}
+
+impl std::fmt::Display for Clunktion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.ast.fmt(f)
     }
 }
 
 /// Finds free variables in an expression
 #[derive(Debug)]
 pub(crate) struct Captor<'u> {
-    free: &'u mut BTreeSet<Sym>,
-    bound: BTreeSet<Sym>,
+    free: &'u mut BTreeSet<Symbol>,
+    bound: BTreeSet<Symbol>,
 }
 impl<'u> Captor<'u> {
-    pub fn new(free: &'u mut BTreeSet<Sym>) -> Self {
+    pub fn new(free: &'u mut BTreeSet<Symbol>) -> Self {
         Self { free, bound: BTreeSet::new() }
     }
     pub fn enter<'v>(&'v mut self) -> Captor<'v> {
@@ -184,7 +143,7 @@ impl<'u> Captor<'u> {
         Marker(self)
     }
 
-    pub fn mark(&mut self, name: Sym) -> Result<(), !> {
+    pub fn mark(&mut self, name: Symbol) -> Result<(), !> {
         let Self { free, bound } = self;
         if !bound.contains(&name) {
             free.insert(name);
@@ -192,7 +151,7 @@ impl<'u> Captor<'u> {
         Ok(())
     }
 
-    pub fn bind(&mut self, name: Sym) -> Result<(), !> {
+    pub fn bind(&mut self, name: Symbol) -> Result<(), !> {
         let Self { bound, .. } = self;
         bound.insert(name);
         Ok(())
@@ -268,7 +227,7 @@ pub(crate) struct Marker<'l, 'u>(&'l mut Captor<'u>);
 impl Visit<'_, DefaultTypes> for Marker<'_, '_> {
     type Error = !;
 
-    fn visit_symbol(&mut self, name: &'_ Sym) -> Result<(), Self::Error> {
+    fn visit_symbol(&mut self, name: &'_ Symbol) -> Result<(), Self::Error> {
         self.0.mark(*name)
     }
 

@@ -1,12 +1,11 @@
 //! Walks a Conlang AST, interpreting it as a program.
 #![warn(clippy::all)]
-#![feature(decl_macro, rev_into_inner)]
+#![feature(decl_macro)]
 
 use cl_ast::types::Symbol as Sym;
 use convalue::ConValue;
 use env::Environment;
-use error::{Error, ErrorKind, IResult};
-use interpret::Interpret;
+use error::{Error, IResult};
 
 /// Callable types can be called from within a Conlang program
 pub trait Callable {
