@@ -395,6 +395,7 @@ impl Display for PatOp {
             Self::Tuple => ", ",
             Self::Slice => ", ",
             Self::ArRep => "; ",
+            Self::TraitFor => " for ",
             Self::Typed => ": ",
             Self::PostfixGeneric => "T<>",
             Self::PrefixGeneric => "<>T",

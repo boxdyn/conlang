@@ -421,6 +421,8 @@ pub enum PatOp {
     Slice,
     /// Matches a constant-size slice with repeating elements
     ArRep,
+    /// Types an `impl Trait for Type` block
+    TraitFor,
     /// Matches a struct member or types a value: `x: T`
     Typed,
     /// Types a prefix-annotated structure `T(..)`, `R{..}`

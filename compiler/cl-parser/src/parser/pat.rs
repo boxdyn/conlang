@@ -111,6 +111,7 @@ fn from_infix(token: &Token) -> Option<(PatOp, Prec)> {
         TKind::DotDot => (PatOp::RangeEx, Prec::Range),
         TKind::DotDotEq => (PatOp::RangeIn, Prec::Range),
         TKind::If => (PatOp::Guard, Prec::Typed),
+        TKind::For => (PatOp::TraitFor, Prec::Fn),
         TKind::LCurly => (PatOp::TypePrefixed, Prec::Typed),
         TKind::LBrack => (PatOp::TypePrefixed, Prec::Fn),
         TKind::LParen => (PatOp::TypePrefixed, Prec::Fn),
