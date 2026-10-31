@@ -6,7 +6,7 @@ use super::{
     convalue::ConValue,
     error::{Error, IResult},
     reserved_words::ReservedWords,
-    typeinfo::{self, Model, Type},
+    typeinfo::{Model, Type},
 };
 use cl_ast::{fmt::FmtAdapter, types::Symbol};
 use cl_structures::span::Span;
@@ -83,7 +83,7 @@ pub struct Environment {
     globals: Vec<ConValue>,
     frames: Vec<EnvFrame>,
     types: HashMap<Symbol, Type>,
-    pub(crate) impls: HashMap<typeinfo::Type, HashMap<Symbol, u32>>,
+    pub(crate) impls: HashMap<Type, HashMap<Symbol, u32>>,
     pub(crate) kw: Box<ReservedWords>,
 }
 
@@ -126,19 +126,57 @@ impl Display for Environment {
 impl Default for Environment {
     fn default() -> Self {
         let mut this = Self::no_builtins();
+        this.add_builtins(Builtins).add_builtins(Math);
+        let int_methods = this.prep_methods(IntMethods);
+        let float_methods = this.prep_methods(FloatMethods);
+        let bool_methods = this.prep_methods(BoolMethods);
+        let char_methods = this.prep_methods(CharMethods);
+        let str_methods = this.prep_methods(StringMethods);
+        let any_methods = this.prep_methods(AnyMethods);
+        let unit_or_tup_methods = this.prep_methods(UnitOrTupleMethods);
+        let array_methods = this.prep_methods(ArrayMethods);
+        let func_methods = this.prep_methods(FuncMethods);
+
         for (ident, model) in Model::defaults(&this.kw) {
-            let value = this.def_type(ident, model.intern());
-            this.bind_global(ident, ConValue::TypeInfo(value));
+            let ty = this.def_type(ident, model.intern());
+            this.bind_global(ident, ConValue::TypeInfo(ty));
+            match ty.to_ref() {
+                &Model::Integer { signed, size, min, max } => {
+                    this.add_methods(ty, &int_methods);
+                    this.implement(ty, this.kw.SIGNED, ConValue::Bool(signed));
+                    this.implement(ty, this.kw.SIZE, ConValue::Int(size as _));
+                    this.implement(ty, this.kw.BITS, ConValue::Int((size * 8) as _));
+                    this.implement(ty, this.kw.MIN, ConValue::Int(min as _));
+                    this.implement(ty, this.kw.MAX, ConValue::Int(max as _));
+                }
+                &Model::Float { size } => {
+                    this.implement(ty, this.kw.SIZE, ConValue::Int(size as _));
+                    this.implement(ty, this.kw.BITS, ConValue::Int((size * 8) as _));
+                    this.add_methods(ty, &float_methods);
+                }
+                Model::Bool => {
+                    this.implement(ty, this.kw.SIZE, ConValue::Int(size_of::<bool>() as _));
+                    this.add_methods(ty, &bool_methods);
+                }
+                Model::Char => {
+                    this.implement(ty, this.kw.SIZE, ConValue::Int(size_of::<char>() as _));
+                    this.add_methods(ty, &char_methods);
+                }
+                Model::Str => {
+                    this.add_methods(ty, &str_methods);
+                }
+                Model::Any => this.add_methods(ty, &any_methods),
+                Model::Slice(_) => this.add_methods(ty, &array_methods),
+                Model::Function => this.add_methods(ty, &func_methods),
+                Model::Unit { name: None, .. } => this.add_methods(ty, &unit_or_tup_methods),
+                Model::Unit { .. } => {}
+                Model::Never => {}
+                Model::Tuple { .. } => {}
+                Model::Struct { .. } => {}
+                Model::Enum(..) => {}
+                Model::Ref(..) => {}
+            };
         }
-        let slice_or_array = Model::Slice(Model::Any.already_interned()).intern();
-        this.add_builtins(Builtins)
-            .add_builtins(Math)
-            .add_methods(Model::default_float(), FloatMethods)
-            .add_methods(Model::default_integer(), IntMethods)
-            .add_methods(Model::Str.already_interned(), StringMethods)
-            .add_methods(Model::Char.already_interned(), CharMethods)
-            .add_methods(Model::Function.already_interned(), FuncMethods)
-            .add_methods(slice_or_array, ArrayMethods);
         this
     }
 }
@@ -205,11 +243,28 @@ impl Environment {
         Some(())
     }
 
+    /// Binds a [Type] to a name in the builtin-types scope
+    pub fn def_type(&mut self, name: Symbol, ty: Type) -> Type {
+        self.types.insert(name, ty);
+        ty
+    }
+
+    /// Gets the builtin [`Type`] with the given `name`
+    pub fn get_type(&self, name: Symbol) -> Option<Type> {
+        self.types.get(&name).copied()
+    }
+
+    /// Gets the builtin [`Type`] with the given name, or produces [`Error::NotDefined`]
+    pub fn get_type_or_err(&self, name: Symbol) -> IResult<Type> {
+        self.get_type(name).ok_or(Error::NotDefined(name))
+    }
+
     /// Adds an implementation (associated value) to a [Type]
-    pub fn implement(&mut self, ty: Type, name: Symbol, value: ConValue) {
+    pub fn implement(&mut self, ty: Type, name: Symbol, value: ConValue) -> Location {
         let loc = self.globals.len() as _;
         self.globals.push(value);
         self.implement_raw(ty, name, loc);
+        Location::Global(loc)
     }
 
     pub fn implement_raw(&mut self, ty: Type, name: Symbol, loc: u32) {
@@ -292,12 +347,24 @@ impl Environment {
         self
     }
 
-    /// Adds "intrinsics" (associated builtin functions) to a [Type]
-    pub fn add_methods(&mut self, ty: Type, builtins: &'static [Builtin]) -> &mut Self {
-        for builtin in builtins {
-            self.implement(ty, builtin.name.into(), builtin.into());
+    /// Prepares (binds) [Builtin] functions, so they can be reused
+    fn prep_methods(&mut self, methods: &'static [Builtin]) -> HashMap<Symbol, u32> {
+        let mut map = HashMap::new();
+        for builtin in methods {
+            let loc = self.bind_global(builtin.name.into(), ConValue::Builtin(builtin));
+            let Location::Global(loc) = loc else {
+                unreachable!();
+            };
+            map.insert(Symbol::from(builtin.name), loc);
         }
-        self
+        map
+    }
+
+    /// Adds "intrinsics" (associated builtin functions) to a [Type]
+    fn add_methods(&mut self, ty: Type, methods: &HashMap<Symbol, u32>) {
+        for (&name, &loc) in methods.iter() {
+            self.implement_raw(ty, name, loc);
+        }
     }
 
     /// Enters a nested scope, returning a [`Frame`] stack-guard.
@@ -394,22 +461,6 @@ impl Environment {
             Location::Stack(id) => self.values.get_mut(id as usize),
             Location::Global(id) => self.globals.get_mut(id as usize),
         }
-    }
-
-    /// Binds a [Type] to a name in the builtin-types scope
-    pub fn def_type(&mut self, name: Symbol, ty: Type) -> Type {
-        self.types.insert(name, ty);
-        ty
-    }
-
-    /// Gets the builtin [`Type`] with the given `name`
-    pub fn get_type(&self, name: Symbol) -> Option<Type> {
-        self.types.get(&name).copied()
-    }
-
-    /// Gets the builtin [`Type`] with the given name, or produces [`Error::NotDefined`]
-    pub fn get_type_or_err(&self, name: Symbol) -> IResult<Type> {
-        self.get_type(name).ok_or(Error::NotDefined(name))
     }
 
     /// Converts an [`Option<ConValue>`] into a [`ConValue`] representing an [`Option`]

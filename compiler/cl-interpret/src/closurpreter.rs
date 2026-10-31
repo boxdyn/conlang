@@ -6,7 +6,7 @@ use crate::{
     env::{Environment, Location},
     error::{Error, ErrorKind, IResult},
     function::Captor,
-    interpret::{bind_enum, bind_struct, cl_todo, cl_unimplemented},
+    interpret::{cl_todo, cl_unimplemented, enum_binds, struct_binds},
     place::Place,
     typeinfo::{Model, Type},
 };
@@ -65,7 +65,7 @@ impl Clunktion {
     pub fn mark(&self, env: &Environment) -> IResult<()> {
         if let Ok(upvars) = self.0.upvars.try_borrow_mut().as_deref_mut() {
             if upvars.2.is_none() {
-                upvars.2 = env.get_module();
+                upvars.2 = env.get_direct_ancestor();
             }
             self.capture_inner(env, upvars)?;
         }
@@ -593,8 +593,9 @@ fn compile_bind(bind: &Bind, within: &At<Expr>) -> IResult<OwnClexpr> {
             let diagnostic_pat = pat.clone();
 
             let body: CallableFn = Box::new(move |f, e, args| {
-                let upvars = f.0.upvars.borrow();
-                let mut scope = e.frame("captures", Some(body_span), upvars.2);
+                let upvars = f.inner().upvars.borrow();
+                let mut scope =
+                    e.with_raw_frame("captures", Some(body_span), upvars.0.clone(), upvars.2);
                 drop(upvars);
 
                 let mut scope = scope.frame("body", Some(body_span), None);
@@ -626,15 +627,17 @@ fn compile_bind(bind: &Bind, within: &At<Expr>) -> IResult<OwnClexpr> {
             }
         }
         // TODO: perform a naming pass, then do this
-        (BindOp::Mod, _, [body]) => compile_impl(pat, body, false)?,
-        (BindOp::Impl, _, [body]) => compile_impl(pat, body, true)?,
-        (BindOp::Impl, _, []) => compile_impl(pat, &Expr::Omitted.at(within.1), true)?,
+        (BindOp::Mod, _, [body]) => compile_mod(pat, body)?,
+        (BindOp::Impl, _, [body]) => compile_impl(pat, body)?,
+        (BindOp::Impl, _, []) => compile_impl(pat, &Expr::Omitted.at(within.1))?,
         (BindOp::Struct, _, []) => {
             let pat = pat.clone();
-            Box::new(move |e| match bind_struct(pat.value(), e)? {
+            Box::new(move |e| match struct_binds(pat.value(), e)? {
                 (Some(name), ty) => {
                     let deftype = e.def_type(name, ty.intern());
-                    e.bind(name, ConValue::TypeInfo(deftype));
+                    if let Location::Global(loc) = e.bind(name, ConValue::TypeInfo(deftype)) {
+                        e.implement_raw(deftype, e.kw.kw_Self, loc);
+                    }
                     Ok(ConValue::TypeInfo(deftype))
                 }
                 (None, ty) => Ok(ConValue::TypeInfo(ty.intern())),
@@ -643,82 +646,103 @@ fn compile_bind(bind: &Bind, within: &At<Expr>) -> IResult<OwnClexpr> {
         (BindOp::Enum, &At(Pat::Name(name), _), []) => {
             let never = Model::Never.intern();
             Box::new(move |e| {
-                e.def_type(name, never);
-                e.bind(name, never);
+                let deftype = e.def_type(name, never);
+                if let Location::Global(loc) = e.bind(name, ConValue::TypeInfo(deftype)) {
+                    e.implement_raw(deftype, e.kw.kw_Self, loc);
+                }
                 Ok(ConValue::TypeInfo(never))
             })
         }
         (BindOp::Enum, _, []) => {
             let pat = pat.value().clone();
-            Box::new(move |e| bind_enum(&pat, e))
+            Box::new(move |e| {
+                let (name, variants) = enum_binds(&pat, e)?;
+                let deftype = Model::Enum(name, variants.into_boxed_slice()).intern();
+                e.def_type(name, deftype);
+                if let Location::Global(loc) = e.bind(name, ConValue::TypeInfo(deftype)) {
+                    e.implement_raw(deftype, name, loc);
+                    e.implement_raw(deftype, e.kw.kw_Self, loc);
+
+                    if let Model::Enum(_, variants) = deftype.to_ref() {
+                        for &(variant_name, variant) in variants {
+                            e.implement(deftype, variant_name, ConValue::TypeInfo(variant));
+                            e.implement_raw(variant, name, loc);
+                            e.implement_raw(variant, e.kw.kw_Self, loc);
+                        }
+                    }
+                }
+                Ok(ConValue::TypeInfo(deftype))
+            })
         }
         _ => unimplemented!("{bind}"),
     })
 }
 
-fn compile_impl(pat: &At<Pat>, body: &At<Expr>, is_impl: bool) -> IResult<OwnClexpr> {
+fn compile_mod(pat: &At<Pat>, body: &At<Expr>) -> IResult<OwnClexpr> {
     let body = compile(unblock(body))?;
     let pat = pat.clone();
-    if is_impl {
-        Ok(Box::new(move |e: &mut Environment| {
-            let selfty = e.kw.kw_Self;
-            let (name, model) = bind_struct(pat.value(), e)?;
-            let ty = model.intern(); // TODO: bad
-            let mut scope = e.frame(ty.name(), Some(pat.1), Some(ty));
-            let bound = scope.bind_global(selfty, ty);
-            if let Some(name) = name {
-                scope.bind_raw(name, bound);
-            }
-            body(&mut scope)?;
-            if let Some(values) = scope.pop_into_globals() {
-                for (name, value) in values {
-                    if let Location::Global(loc) = value {
-                        e.implement_raw(ty, name, loc);
-                        if let Model::Enum(_, variants) = ty.to_ref() {
-                            for &(_, variant) in variants {
-                                e.implement_raw(variant, name, loc);
-                            }
-                        }
-                        match e.get_id(value).expect("Just bound") {
-                            ConValue::Clunktion(c) => c.clone().capture(e)?,
-                            _ => {}
-                        }
-                    }
-                }
-            }
-            Ok(ConValue::TypeInfo(ty))
-        }))
-    } else {
-        Ok(Box::new(move |e| {
-            let (kw_self, kw_super) = (e.kw.kw_self, e.kw.kw_super);
-            let (name, model) = bind_struct(pat.value(), e)?;
-            let ty = model.intern();
-            let upper = e.get_module();
-            let me = e
-                .get(e.kw.modules_enabled)
-                .and_then(|v| v.truthy(e))
-                .unwrap_or(false);
-            if !me {
-                return body(e);
-            };
+    Ok(Box::new(move |e| {
+        let (kw_self, kw_super) = (e.kw.kw_self, e.kw.kw_super);
+        let (name, model) = struct_binds(pat.value(), e)?;
+        let ty = model.intern();
+        let upper = e.get_module();
+        let me = e
+            .get(e.kw.modules_enabled)
+            .and_then(|v| v.truthy(e))
+            .unwrap_or(false);
+        if !me {
+            return body(e);
+        };
 
-            let mut scope = e.frame(ty.name(), Some(pat.1), Some(ty));
-            scope.bind(kw_self, ty);
-            scope.bind(kw_super, if let Some(m) = upper { m } else { ty });
-            body(&mut scope)?;
-            if let Some(values) = scope.pop_into_globals() {
-                for (name, value) in values {
-                    if let Location::Global(id) = value {
-                        e.implement_raw(ty, name, id);
+        let mut scope = e.frame(ty.name(), Some(pat.1), Some(ty));
+        scope.bind(kw_self, ty);
+        scope.bind(kw_super, if let Some(m) = upper { m } else { ty });
+        body(&mut scope)?;
+        if let Some(values) = scope.pop_into_globals() {
+            for (name, value) in values {
+                if let Location::Global(id) = value {
+                    e.implement_raw(ty, name, id);
+                }
+            }
+        }
+        if let Some(name) = name {
+            e.bind(name, ConValue::TypeInfo(ty));
+        }
+        Ok(ConValue::TypeInfo(ty))
+    }))
+}
+
+fn compile_impl(pat: &At<Pat>, body: &At<Expr>) -> IResult<OwnClexpr> {
+    let body = compile(unblock(body))?;
+    let pat = pat.clone();
+    Ok(Box::new(move |e: &mut Environment| {
+        let (_name, model) = struct_binds(pat.value(), e)?;
+        let ty = model.intern(); // TODO: bad
+        let mut scope = e.frame(ty.name(), Some(pat.1), Some(ty));
+        let kw_selfty = scope.kw.kw_Self;
+        // if there is no Self (which is the case for builtins) add one
+        if scope.get_impl_id(ty, kw_selfty).is_none() {
+            scope.implement(ty, kw_selfty, ConValue::TypeInfo(ty));
+        }
+        body(&mut scope)?;
+        if let Some(values) = scope.pop_into_globals() {
+            for (name, value) in values {
+                if let Location::Global(loc) = value {
+                    e.implement_raw(ty, name, loc);
+                    if let Model::Enum(_, variants) = ty.to_ref() {
+                        for &(_, variant) in variants {
+                            e.implement_raw(variant, name, loc);
+                        }
+                    }
+                    match e.get_id(value).expect("Just bound") {
+                        ConValue::Clunktion(c) => c.clone().capture(e)?,
+                        _ => {}
                     }
                 }
             }
-            if let Some(name) = name {
-                e.bind(name, ConValue::TypeInfo(ty));
-            }
-            Ok(ConValue::TypeInfo(ty))
-        }))
-    }
+        }
+        Ok(ConValue::TypeInfo(ty))
+    }))
 }
 
 fn compile_make(make: &Make, _within: &At<Expr>) -> IResult<OwnClexpr> {

@@ -360,7 +360,7 @@ impl Interpret for Bind<DefaultTypes> {
 
         fn module(pat: &At<Pat>, body: &At<Expr>, env: &mut Environment) -> IResult<ConValue> {
             let (kw_self, kw_super) = (env.kw.kw_self, env.kw.kw_super);
-            let (name, model) = bind_struct(pat.value(), env)?;
+            let (name, model) = struct_binds(pat.value(), env)?;
             let ty = model.intern();
             if env
                 .get(env.kw.modules_enabled)
@@ -391,7 +391,7 @@ impl Interpret for Bind<DefaultTypes> {
 
         fn implement(pat: &At<Pat>, body: &At<Expr>, env: &mut Environment) -> IResult<ConValue> {
             let kw_selfty = env.kw.kw_Self;
-            let (name, model) = bind_struct(pat.value(), env)?;
+            let (name, model) = struct_binds(pat.value(), env)?;
             let ty = model.intern();
             let mut scope = env.frame(ty.name(), Some(pat.1), Some(ty));
             scope.bind_global(kw_selfty, ty);
@@ -478,7 +478,7 @@ impl Interpret for Bind<DefaultTypes> {
             }
             (BindOp::Impl, _, [body]) => implement(pat, body, env),
             (BindOp::Struct, pat, []) => {
-                let (name, model) = bind_struct(pat, env)?;
+                let (name, model) = struct_binds(pat, env)?;
                 Ok(ConValue::TypeInfo(if let Some(name) = name {
                     let typeid = env.def_type(name, model.intern());
                     env.bind(name, ConValue::TypeInfo(typeid));
@@ -492,7 +492,13 @@ impl Interpret for Bind<DefaultTypes> {
                 env.bind(*name, ConValue::TypeInfo(typeid));
                 Ok(ConValue::TypeInfo(typeid))
             }
-            (BindOp::Enum, pat, []) => bind_enum(pat, env),
+            (BindOp::Enum, pat, []) => {
+                let (name, typeid) = enum_binds(pat, env)?;
+                let typeid =
+                    env.def_type(name, Model::Enum(name, typeid.into_boxed_slice()).intern());
+                env.bind(name, ConValue::TypeInfo(typeid));
+                Ok(ConValue::TypeInfo(typeid))
+            }
             (BindOp::For, _, [iter, pass, fail]) => {
                 unimplemented!("`for {pat} in {iter} {pass} else {fail}` needs desugar!")
             }
@@ -633,24 +639,24 @@ fn find_interned_type(model: &Model) -> Option<Type> {
 }
 
 // TODO: these functions should return typeinfos
-pub(crate) fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)> {
+pub(crate) fn struct_binds(pat: &Pat, env: &mut Environment) -> IResult<(Option<Sym>, Model)> {
     fn bind_struct_op(
         op: PatOp,
         pats: &[At<Pat>],
         env: &mut Environment,
     ) -> IResult<(Option<Sym>, Model)> {
         match (op, pats) {
-            (PatOp::MetaOuter | PatOp::MetaInner, [_doc, pat]) => bind_struct(pat.value(), env),
-            (PatOp::Pub | PatOp::Mut, [expr]) => bind_struct(expr.value(), env),
+            (PatOp::MetaOuter | PatOp::MetaInner, [_doc, pat]) => struct_binds(pat.value(), env),
+            (PatOp::Pub | PatOp::Mut, [expr]) => struct_binds(expr.value(), env),
             (PatOp::Ref, [pat]) => {
-                let (name, ty) = bind_struct(pat.value(), env)?;
+                let (name, ty) = struct_binds(pat.value(), env)?;
                 match find_interned_type(&ty) {
                     Some(ty) => Ok((name, Model::Ref(ty))),
                     None => todo!("Ref {pat} in bind_struct_op?"),
                 }
             }
             (PatOp::Slice, [pat]) => {
-                let (name, ty) = bind_struct(pat.value(), env)?;
+                let (name, ty) = struct_binds(pat.value(), env)?;
                 match find_interned_type(&ty) {
                     Some(ty) => Ok((name, Model::Slice(ty))),
                     None => todo!("Ref {pat} in bind_struct_op?"),
@@ -674,7 +680,7 @@ pub(crate) fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<S
                         exhaustive = false;
                         continue;
                     }
-                    if let (Some(name), model) = bind_struct(field.value(), env)? {
+                    if let (Some(name), model) = struct_binds(field.value(), env)? {
                         let ti: Option<Type> = find_interned_type(&model);
                         fields.push((name, ti.unwrap_or(env.get_type(env.kw.underscore).unwrap())));
                     }
@@ -705,18 +711,18 @@ pub(crate) fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<S
                 Ok((None, model))
             }
             (PatOp::Typed, [name, ty]) => {
-                let (name, _) = bind_struct(name.value(), env)?;
-                let (_, ty) = bind_struct(ty.value(), env)?;
+                let (name, _) = struct_binds(name.value(), env)?;
+                let (_, ty) = struct_binds(ty.value(), env)?;
                 Ok((name, ty))
             }
-            (PatOp::TypePrefixed, [name, ty]) => match bind_struct(ty.value(), env)? {
+            (PatOp::TypePrefixed, [name, ty]) => match struct_binds(ty.value(), env)? {
                 (None, model) if let Some(name) = name.value().name() => {
                     Ok((Some(name), model.with_name(name)))
                 }
                 (None, model) => Ok((None, model)),
                 (Some(name), model) => todo!("Typeprefixed {name} :: {model:?}"),
             },
-            (PatOp::PostfixGeneric, [first, ..]) => bind_struct(first.value(), env),
+            (PatOp::PostfixGeneric, [first, ..]) => struct_binds(first.value(), env),
             (PatOp::Fn, [..]) => Ok((None, Model::Function)),
             _ => todo!("{op:?} ({pats:?})"),
         }
@@ -740,7 +746,7 @@ pub(crate) fn bind_struct(pat: &Pat, env: &mut Environment) -> IResult<(Option<S
     })
 }
 
-pub(crate) fn bind_enum(pat: &Pat, env: &mut Environment) -> IResult<ConValue> {
+pub(crate) fn enum_binds(pat: &Pat, env: &mut Environment) -> IResult<(Sym, Vec<(Sym, Type)>)> {
     let name = pat
         .name()
         .ok_or_else(|| Error::PatFailed(Box::new(pat.clone())))?;
@@ -766,7 +772,7 @@ pub(crate) fn bind_enum(pat: &Pat, env: &mut Environment) -> IResult<ConValue> {
             _ => {}
         }
         for (idx, pat) in pats.iter().enumerate() {
-            if let (Some(name), model) = bind_struct(pat.value(), &mut scope)? {
+            if let (Some(name), model) = struct_binds(pat.value(), &mut scope)? {
                 let model = match model {
                     Model::Unit { name, parent, value: _ } => {
                         Model::Unit { name, parent, value: idx }
@@ -781,12 +787,7 @@ pub(crate) fn bind_enum(pat: &Pat, env: &mut Environment) -> IResult<ConValue> {
         todo!("Bind other enum: {pat:?}")?
     };
 
-    let typeid = env.def_type(
-        name,
-        Model::Enum(name, variants.into_boxed_slice()).intern(),
-    );
-    env.bind(name, ConValue::TypeInfo(typeid));
-    Ok(ConValue::TypeInfo(typeid))
+    Ok((name, variants))
 }
 
 impl Interpret for Make<DefaultTypes> {
@@ -822,7 +823,7 @@ impl Interpret for cl_ast::ast::Match<DefaultTypes> {
         for MatchArm(pat, expr) in arms {
             let mut bind = HashMap::new();
             if pat.matches(scrutinee.clone(), &mut MatchEnv::new(env, &mut bind))? {
-                let mut scope = env.with_frame("match-arm", bind, None);
+                let mut scope = env.with_frame("match-arm", Some(expr.1), bind, None);
                 return expr.interpret(&mut scope);
             }
         }
@@ -1003,7 +1004,9 @@ impl Match for (PatOp, &[At<Pat>]) {
             (PatOp::Fn, [args, _]) => args.matches(value, in_env),
             (PatOp::Guard, [pat, At(Pat::Value(cond), csp)]) => {
                 let _ = pat.matches(value, in_env)? || return Ok(false);
-                let mut scope = in_env.env.with_frame("guard", take(in_env.bind), None);
+                let mut scope = in_env
+                    .env
+                    .with_frame("guard", None, take(in_env.bind), None);
                 let value = cond.interpret(&mut scope)?;
                 let value = value.truthy(&scope).map_err(|e| e.with_span(*csp))?;
                 *in_env.bind = scope.pop_values().unwrap_or_default();

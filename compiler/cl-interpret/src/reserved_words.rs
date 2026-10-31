@@ -38,6 +38,7 @@ reserve_words! {
         u128,
         usize,
         uint,
+        Array,
         Result,
         Ok,
         Err,

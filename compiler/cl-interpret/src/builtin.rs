@@ -9,8 +9,10 @@ use crate::{
     env::{Environment, Location},
     error::{Error, ErrorKind, IResult},
     place::Place,
+    typeinfo::Type,
 };
 use std::{
+    collections::HashMap,
     io::{Write, stdout},
     vec,
 };
@@ -317,19 +319,26 @@ pub const Builtins: &[Builtin] = &builtins![
 
     /// Gets the underlying `mod` for type `ty`
     fn module(ty) @env -> Module {
-        let ty = ty.dereference_in(env)?;
-        let ty = match ty {
+        fn chain(env: &mut Environment, ty: Type, out: &mut HashMap<Symbol, ConValue>) -> IResult<()>{
+            if let Some(parent) = ty.parent() {
+                chain(env, parent, out)?;
+            }
+            if let Some(impls) = env.impls.get(&ty) {
+                let impls = impls.iter().map(|(&k, &v)| -> IResult<(Symbol, ConValue)> {
+                    Ok((k, Place::from_index(Location::Global(v)).get(env)?.clone()))
+                }).collect::<Result<Vec<_>, _>>()?;
+                out.extend(impls);
+            }
+            Ok(())
+        }
+
+        let ty = match ty.dereference_in(env)? {
             ConValue::TypeInfo(ty) => *ty,
             other => other.type_of(env),
         };
-        let Some(impls) = env.impls.get(&ty) else {
-            return Ok(ConValue::Module(Default::default()));
-        };
-        Ok(ConValue::Module(Box::new(
-            impls.iter().map(|(&k, v)| (
-                k, env.get_id(Location::Global(*v)).cloned().unwrap_or_default()
-            )).collect()
-        )))
+        let mut out = std::collections::HashMap::new();
+        chain(env, ty, &mut out)?;
+        Ok(ConValue::Module(Box::new(out)))
     }
 
     fn mod_into_binds(module) @env -> [(str, _)] {
@@ -624,6 +633,8 @@ pub const FloatMethods: &[Builtin] = &builtins![
     }
 ];
 
+pub const BoolMethods: &[Builtin] = &[];
+
 /// Associated [Builtin] functions for [ConValue::Char]s
 pub const CharMethods: &[Builtin] = &builtins![
     fn cmp(this, other) @env -> i128 {
@@ -659,7 +670,17 @@ pub const StringMethods: &[Builtin] = &builtins![
     }
 ];
 
-// TODO: BoolMethods, TupleMethods
+pub const AnyMethods: &[Builtin] = &builtins! {};
+
+pub const UnitOrTupleMethods: &[Builtin] = &builtins! {
+    fn len(tuple) @env -> i128 {
+        Ok(match tuple.dereference_in(env)? {
+            ConValue::Unit => 0 as Integer,
+            ConValue::Tuple(arr) => arr.len() as Integer,
+            other => Err(Error::TypeError("[_]", other.type_of(env)))?,
+        })
+    }
+};
 
 /// Associated [`Builtin`] functions for [`ConValue::Array`]
 pub const ArrayMethods: &[Builtin] = &builtins! {

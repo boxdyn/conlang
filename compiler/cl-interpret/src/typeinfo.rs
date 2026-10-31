@@ -192,6 +192,9 @@ impl Model {
             Model::Unit { parent: Some(parent), .. } => Some(*parent),
             Model::Unit { parent: None, .. } => None,
             Model::Tuple { parent: Some(parent), .. } => Some(*parent),
+            Model::Tuple { name: None, .. } => {
+                Some(Model::Unit { name: None, parent: None, value: 0 }.intern())
+            }
             Model::Tuple { parent: None, .. } => None,
             Model::Struct { parent: Some(parent), .. } => Some(*parent),
             Model::Struct { parent: None, .. } => None,
@@ -259,6 +262,7 @@ impl Model {
             (kw.u128, make_int!(u128, false)),
             (kw.usize, make_int!(usize, false)),
             (kw.uint, make_int!(usize, false)),
+            (kw.Array, Model::Slice(any)),
             (kw.RangeExc, Model::Tuple { name: Some(kw.RangeExc), parent: None, fields: [any, any].into() }),
             (kw.RangeInc, Model::Tuple { name: Some(kw.RangeInc), parent: None, fields: [any, any].into() }),
             (kw.RangeTo, Model::Tuple { name: Some(kw.RangeTo), parent: None, fields: [any].into() }),
@@ -279,7 +283,8 @@ impl Model {
             (Model::Bool, "SIZE") => ConValue::Int(size_of::<bool>() as _),
             (Model::Char, "SIZE") => ConValue::Int(size_of::<char>() as _),
             (Model::Never, _) => Err(Error::NotDefined(attr))?,
-            (Model::Unit { .. }, "SIZE") => ConValue::Int(0),
+            (Model::Unit { name: None, .. }, "ARITY") => ConValue::Int(0),
+            (Model::Unit { name: None, .. }, "TYPES") => ConValue::Tuple(vec![]),
             (Model::Unit { .. }, _) => Err(Error::NotDefined(attr))?,
             (Model::Tuple { fields: items, .. }, "ARITY") => ConValue::Int(items.len() as _),
             (Model::Tuple { fields: items, .. }, "TYPES") => ConValue::Tuple(Vec::from_iter(

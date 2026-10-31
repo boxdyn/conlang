@@ -123,11 +123,16 @@ impl Callable for Function {
         let mut bindings = HashMap::new();
         pat.matches(args, &mut MatchEnv::new(env, &mut bindings))?;
 
-        let mut scope = env.with_raw_frame("captures", &self.upvars().borrow().0, self.module());
-        let mut scope = scope.with_frame("args", bindings, None);
-        let mut scope = scope.frame(
+        let mut scope = env.with_raw_frame(
+            "captures",
+            None,
+            self.upvars().borrow().0.clone(),
+            self.module(),
+        );
+        let mut scope = scope.with_frame(
             self.name().map(|name| name.to_ref()).unwrap_or("closure"),
             Some(self.span()),
+            bindings,
             None,
         );
         match self.body().interpret(&mut scope) {
