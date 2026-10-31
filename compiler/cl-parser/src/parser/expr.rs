@@ -140,7 +140,8 @@ fn from_prefix(token: &Token) -> PResult<(Ps, Prec)> {
         | TKind::Let
         | TKind::Type
         | TKind::Struct
-        | TKind::Enum => (Ps::Bind, Prec::Body),
+        | TKind::Enum
+        | TKind::Trait => (Ps::Bind, Prec::Body),
 
         TKind::Loop => (Ps::Op(Op::Loop), Prec::Body),
         TKind::If => (Ps::Op(Op::If), Prec::Body),
@@ -479,6 +480,7 @@ fn from_bind(p: &mut Parser<'_>) -> PResult<(BindOp, PPrec, Option<TKind>, bool,
         TKind::Type =>   (BindOp::Type,   PPrec::Alt,   Some(TKind::Eq),    true,       false),
         TKind::Struct => (BindOp::Struct, PPrec::Tuple, None,               false,      false),
         TKind::Enum =>   (BindOp::Enum,   PPrec::Tuple, None,               false,      false),
+        TKind::Trait =>  (BindOp::Trait,  PPrec::Fn,    None,               true,       false),
         TKind::Fn =>     (BindOp::Fn,     PPrec::Fn,    None,               true,       false),
         TKind::Mod =>    (BindOp::Mod,    PPrec::Max,   None,               true,       false),
         TKind::Impl =>   (BindOp::Impl,   PPrec::Fn,    None,               true,       false),

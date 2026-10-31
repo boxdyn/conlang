@@ -104,6 +104,7 @@ impl Visit<'_, DefaultTypes> for Populator<'_, '_> {
             BindOp::Mod => NodeKind::Module,
             BindOp::Impl => NodeKind::Impl,
             BindOp::Type => NodeKind::Type,
+            BindOp::Trait => NodeKind::Type,
             BindOp::Struct => NodeKind::Type,
             BindOp::Enum => NodeKind::Type,
             BindOp::For => NodeKind::Scope,

@@ -365,6 +365,8 @@ pub enum BindOp {
     Mod,
     /// An `impl Pat Expr` binding
     Impl,
+    /// A trait definition
+    Trait,
     /// A struct definition
     Struct,
     /// An enum definition

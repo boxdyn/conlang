@@ -245,9 +245,10 @@ impl<A: AstTypes> Display for Bind<A> {
         op.fmt(f)?;
         match (op, exprs.as_slice()) {
             (_, [At(Expr::Omitted, _)]) => write!(f, "{pat}"),
-            (BindOp::Fn | BindOp::Mod | BindOp::Impl, [At(Expr::Op(Op::Block, _), _)]) => {
-                f.delimit(fmt!("{pat} "), "").list(exprs, ",!? ")
-            }
+            (
+                BindOp::Fn | BindOp::Mod | BindOp::Impl | BindOp::Trait,
+                [At(Expr::Op(Op::Block, _), _)],
+            ) => f.delimit(fmt!("{pat} "), "").list(exprs, ",!? "),
             (BindOp::Fn, _) => f.delimit(fmt!("{pat} = "), "").list(exprs, ""),
             (BindOp::Mod | BindOp::Impl, _) => f.delimit(fmt!("{pat} "), "").list(exprs, "!?;"),
             (BindOp::Struct | BindOp::Enum, _) => match pat.value() {
@@ -284,6 +285,7 @@ impl Display for BindOp {
             Self::Type => "type ",
             Self::Struct => "struct ",
             Self::Enum => "enum ",
+            Self::Trait => "trait ",
             Self::Fn => "fn ",
             Self::Mod => "mod ",
             Self::Impl => "impl ",

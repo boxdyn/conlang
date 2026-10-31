@@ -239,14 +239,14 @@ impl Visit<'_, DefaultTypes> for Captor<'_> {
         let Bind(op, pat, exprs) = item;
         match op {
             BindOp::Let | BindOp::Type => item.children(self),
-            BindOp::Fn if let Some(name) = pat.value().name() => {
+            BindOp::Fn | BindOp::Trait if let Some(name) = pat.value().name() => {
                 self.bound.insert(name);
                 self.scope(|scope| {
                     scope.visit(pat)?;
                     scope.visit(exprs)
                 })
             }
-            BindOp::Fn => self.scope(|scope| {
+            BindOp::Fn | BindOp::Trait => self.scope(|scope| {
                 scope.visit(pat)?;
                 scope.visit(exprs)
             }),

@@ -237,7 +237,7 @@ impl<'t> fold::Fold<DefaultTypes, ScopedAst> for Scoper<'t> {
                 let exprs = self.block(Inner, "enum body?", |block| block.fold(exprs))?;
                 Ok(Bind(BindOp::Enum, pat, exprs))
             }
-            op @ (BindOp::Type) => self.block(Outer, "type", |block| {
+            op @ (BindOp::Type | BindOp::Trait) => self.block(Outer, "type", |block| {
                 let pat = block.fold(pat)?;
                 let exprs = block.block(Inner, "type body", |block| block.fold(exprs))?;
                 Ok(Bind(op, pat, exprs))
