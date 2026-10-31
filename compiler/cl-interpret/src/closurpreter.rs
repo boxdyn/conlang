@@ -713,14 +713,28 @@ fn compile_mod(pat: &At<Pat>, body: &At<Expr>) -> IResult<OwnClexpr> {
 }
 
 fn compile_impl(pat: &At<Pat>, body: &At<Expr>) -> IResult<OwnClexpr> {
+    let (trait_imports, pat) = match pat.value().inner() {
+        Pat::Op(PatOp::TraitFor, pats) if let [name, ty] = &pats[..] => match name.value() {
+            // TODO: struct_binds at compile time
+            pat if let Some(name) = pat.name() => (
+                Some(compile_use(&Use::Path(name, Box::new(Use::Glob)), body)?),
+                ty.clone(),
+            ),
+            _ => cl_todo!("{name} for {ty}")?,
+        },
+        _ => (None, pat.clone()),
+    };
     let body = compile(unblock(body))?;
-    let pat = pat.clone();
     Ok(Box::new(move |e: &mut Environment| {
         let (_name, model) = struct_binds(pat.value(), e)?;
         let ty = model.intern(); // TODO: bad
         let mut scope = e.frame(ty.name(), Some(pat.1), Some(ty));
-        let kw_selfty = scope.kw.kw_Self;
+        // import "trait items" from another module
+        if let Some(import) = &trait_imports {
+            import(&mut scope)?;
+        }
         // if there is no Self (which is the case for builtins) add one
+        let kw_selfty = scope.kw.kw_Self;
         if scope.get_impl_id(ty, kw_selfty).is_none() {
             scope.implement(ty, kw_selfty, ConValue::TypeInfo(ty));
         }

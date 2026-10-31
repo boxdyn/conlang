@@ -139,7 +139,9 @@ impl Default for Environment {
 
         for (ident, model) in Model::defaults(&this.kw) {
             let ty = this.def_type(ident, model.intern());
-            this.bind_global(ident, ConValue::TypeInfo(ty));
+            if let Location::Global(loc) = this.bind_global(ident, ConValue::TypeInfo(ty)) {
+                this.implement_raw(ty, this.kw.kw_Self, loc);
+            }
             match ty.to_ref() {
                 &Model::Integer { signed, size, min, max } => {
                     this.add_methods(ty, &int_methods);
