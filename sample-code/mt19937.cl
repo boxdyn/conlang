@@ -73,6 +73,14 @@ impl MTRand {
     /// Generates a random number between 0.0 and 1.0
     fn get_f64(self: &MTRand) -> f64
         self.get_u32() as f64 / 0xffffffff.0;
+    
+
+    struct MTIter(&MTRand);
+    impl Iterator for MTIter
+        fn next(self: &MTIter) = Some(self.0.get_u32());
+
+    impl IntoIterator<u32> for MTRand
+        fn into_iter(self: &MTRand) = MTRand::MTIter(self);
 }
 
 
