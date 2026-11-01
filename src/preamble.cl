@@ -232,6 +232,9 @@ trait Iterator<T> {
     struct Take(&Self, usize, usize);
     /// Returns an iterator which yields at most `count` elements.
     fn take(self, count: usize) -> Take<T> = Take(self, 0, count);
+
+    struct Peekable<T>(&Self, Option<T>);
+    fn peekable(self) -> Peekable<T> = Peekable(self, None);
 }
 
 impl Iterator<T> for Iterator::Inspect<T> {
@@ -272,12 +275,24 @@ impl Iterator<(Option<T>, Option<U>)> for Iterator::ZipLongest {
     }
 }
 
-impl Iterator for Iterator::Take {
+impl Iterator<T> for Iterator::Take<T> {
     fn next(self: &Iterator::Take<T>) = if self.1 < self.2 {
         let out = self.0.next()?;
         self.1 += 1;
         Some(out)
     } else None
+}
+
+impl Iterator<T> for Iterator::Peekable<T> {
+    fn next(self: &Iterator::Peekable<T>) = match self.1 {
+        Option::Some(value) => (self.1 = None; Some(value));
+        Option::None => self.0.next();
+    }
+
+    fn peek(self) -> Option<T> {
+        if (self.1.is_none()) self.1 = self.0.next();
+        self.1
+    }
 }
 
 
