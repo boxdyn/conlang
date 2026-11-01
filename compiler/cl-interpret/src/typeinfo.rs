@@ -7,7 +7,7 @@ use cl_structures::intern::{interned::Interned, leaky_interner::LeakyInterner};
 
 use crate::{
     Callable,
-    convalue::{ConValue, Integer},
+    convalue::{ConStruct, ConValue, ConTuple, Integer},
     env::Environment,
     error::{Error, IResult},
     reserved_words::ReservedWords,
@@ -209,11 +209,17 @@ impl Model {
 
     pub fn make_tuple(&self, values: Vec<ConValue>) -> IResult<ConValue> {
         match self {
-            Model::Any => Ok(ConValue::TupleStruct(self.already_interned(), values)),
+            Model::Any => Ok(ConValue::TupleStruct(Box::new(ConTuple(
+                self.already_interned(),
+                values,
+            )))),
             Model::Tuple { fields, .. } if fields.len() != values.len() => {
                 Err(Error::ArgNumber(fields.len(), values.len()))
             }
-            Model::Tuple { .. } => Ok(ConValue::TupleStruct(self.already_interned(), values)),
+            Model::Tuple { .. } => Ok(ConValue::TupleStruct(Box::new(ConTuple(
+                self.already_interned(),
+                values,
+            )))),
             _ => Err(Error::NotCallable(ConValue::TypeInfo(
                 self.already_interned(),
             ))),
@@ -233,7 +239,10 @@ impl Model {
             _ => Err(Error::TypeError("struct", self.already_interned()))?,
         }
 
-        Ok(ConValue::Struct(self.already_interned(), Box::new(members)))
+        Ok(ConValue::Struct(Box::new(ConStruct(
+            self.already_interned(),
+            members,
+        ))))
     }
     #[rustfmt::skip]
     pub fn defaults(kw: &ReservedWords) -> Vec<(Symbol, Self)> {

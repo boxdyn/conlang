@@ -2,7 +2,7 @@
 
 use crate::{
     Callable,
-    convalue::{ConValue, Integer},
+    convalue::{ConTuple, ConValue, Integer},
     env::{Environment, Location},
     error::{Error, ErrorKind, IResult},
     function::{CallableFn, Clunktion},
@@ -91,7 +91,7 @@ fn compile_place(value: &At<Expr>) -> IResult<Option<Plexpr>> {
             (Op::Deref, [ptr]) => {
                 let ptr = compile(ptr)?;
                 Some(Box::new(move |e| match ptr(e)? {
-                    ConValue::Ref(place) => Ok(place),
+                    ConValue::Ref(place) => Ok(*place),
                     other => Err(Error::TypeError("&", other.type_of(e))),
                 }))
             }
@@ -143,10 +143,15 @@ fn compile_get_mut(expr: &At<Expr>) -> IResult<Option<GetMut>> {
                         refmut = place.clone().get_mut(e)?;
                     }
                     match refmut {
-                        ConValue::Tuple(values) | ConValue::TupleStruct(_, values) => {
+                        ConValue::Tuple(values) => {
                             let len = values.len();
                             let idx = i as usize;
                             values.get_mut(idx).ok_or(Error::OobIndex(idx, len))
+                        }
+                        ConValue::TupleStruct(values) => {
+                            let len = values.1.len();
+                            let idx = i as usize;
+                            values.1.get_mut(idx).ok_or(Error::OobIndex(idx, len))
                         }
                         other => todo!("{other}"),
                     }
@@ -163,11 +168,11 @@ fn compile_get_mut(expr: &At<Expr>) -> IResult<Option<GetMut>> {
                         refmut = place.clone().get_mut(e)?;
                     }
                     match refmut {
-                        ConValue::Struct(ty, values) => match ty.to_ref() {
+                        ConValue::Struct(s) => match s.0.to_ref() {
                             Model::Struct { exhaustive: false, .. } => {
-                                Ok(values.entry(name).or_default())
+                                Ok(s.1.entry(name).or_default())
                             }
-                            _ => values.get_mut(&name).ok_or(Error::NotDefined(name)),
+                            _ => s.1.get_mut(&name).ok_or(Error::NotDefined(name)),
                         },
                         other => Err(Error::TypeError(name, other.clone().type_of(e))),
                     }
@@ -238,10 +243,15 @@ fn compile_get(expr: &At<Expr>) -> IResult<Option<Get>> {
                         ptr = place.clone().get(e)?;
                     }
                     match ptr {
-                        ConValue::Tuple(values) | ConValue::TupleStruct(_, values) => {
+                        ConValue::Tuple(values) => {
                             let len = values.len();
                             let idx = i as usize;
                             values.get(idx).ok_or(Error::OobIndex(idx, len))
+                        }
+                        ConValue::TupleStruct(values) => {
+                            let len = values.1.len();
+                            let idx = i as usize;
+                            values.1.get(idx).ok_or(Error::OobIndex(idx, len))
                         }
                         other => todo!("{other}"),
                     }
@@ -259,8 +269,8 @@ fn compile_get(expr: &At<Expr>) -> IResult<Option<Get>> {
                     }
 
                     match ptr {
-                        ConValue::Struct(_, values) => {
-                            values.get(&name).ok_or(Error::NotDefined(name))
+                        ConValue::Struct(values) => {
+                            values.1.get(&name).ok_or(Error::NotDefined(name))
                         }
                         other => Err(Error::TypeError(name, other.clone().type_of(e))),
                     }
@@ -945,7 +955,7 @@ fn compile_op(op: Op, exprs: &[At<Expr>], within: &At<Expr>) -> IResult<OwnClexp
                         let callee = e
                             .get_impl(object.get(e)?.type_of(e), name)
                             .or_else(|_| e.get(name))?;
-                        let args = iter::once(Ok(ConValue::Ref(object)))
+                        let args = iter::once(Ok(ConValue::Ref(Box::new(object))))
                             .chain(args.iter().map(|f| f(e)))
                             .collect::<Result<_, _>>()?;
                         callee.call(e, args)
@@ -973,7 +983,7 @@ fn compile_op(op: Op, exprs: &[At<Expr>], within: &At<Expr>) -> IResult<OwnClexp
                 match compile_place(object)? {
                     Some(place) => Box::new(move |e| {
                         let object = place(e)?;
-                        let args = iter::once(Ok(ConValue::Ref(object)))
+                        let args = iter::once(Ok(ConValue::Ref(Box::new(object))))
                             .chain(args.iter().map(|f| f(e)))
                             .collect::<Result<_, _>>()?;
                         callee(e)?.call(e, args)
@@ -1013,28 +1023,34 @@ fn compile_op(op: Op, exprs: &[At<Expr>], within: &At<Expr>) -> IResult<OwnClexp
             let rhs = compile(rhs)?;
             Box::new(move |e| {
                 let ty = e.get_type_or_err(e.kw.RangeTo)?;
-                Ok(ConValue::TupleStruct(ty, vec![rhs(e)?]))
+                Ok(ConValue::TupleStruct(Box::new(ConTuple(ty, vec![rhs(e)?]))))
             })
         }
         (Op::RangeEx, [lhs, rhs]) => {
             let (lhs, rhs) = (compile(lhs)?, compile(rhs)?);
             Box::new(move |e| {
                 let ty = e.get_type_or_err(e.kw.RangeExc)?;
-                Ok(ConValue::TupleStruct(ty, vec![lhs(e)?, rhs(e)?]))
+                Ok(ConValue::TupleStruct(Box::new(ConTuple(
+                    ty,
+                    vec![lhs(e)?, rhs(e)?],
+                ))))
             })
         }
         (Op::RangeIn, [rhs]) => {
             let rhs = compile(rhs)?;
             Box::new(move |e| {
                 let ty = e.get_type_or_err(e.kw.RangeToInc)?;
-                Ok(ConValue::TupleStruct(ty, vec![rhs(e)?]))
+                Ok(ConValue::TupleStruct(Box::new(ConTuple(ty, vec![rhs(e)?]))))
             })
         }
         (Op::RangeIn, [lhs, rhs]) => {
             let (lhs, rhs) = (compile(lhs)?, compile(rhs)?);
             Box::new(move |e| {
                 let ty = e.get_type_or_err(e.kw.RangeInc)?;
-                Ok(ConValue::TupleStruct(ty, vec![lhs(e)?, rhs(e)?]))
+                Ok(ConValue::TupleStruct(Box::new(ConTuple(
+                    ty,
+                    vec![lhs(e)?, rhs(e)?],
+                ))))
             })
         }
         (Op::Neg, [body]) => {
@@ -1047,7 +1063,7 @@ fn compile_op(op: Op, exprs: &[At<Expr>], within: &At<Expr>) -> IResult<OwnClexp
         }
         (Op::Identity, [body]) => compile(body)?,
         (Op::Refer, [body]) if let Some(place) = compile_place(body)? => {
-            Box::new(move |e| Ok(ConValue::Ref(place(e)?)))
+            Box::new(move |e| Ok(ConValue::Ref(Box::new(place(e)?))))
         }
         (Op::Refer, [body]) => Err(Error::NotPlace().with_span(body.1))?,
         (Op::Deref, _) => cl_todo!()?,
@@ -1388,9 +1404,9 @@ fn let_inner_pattern(pat: &Pat) -> IResult<(Matcher, Binder)> {
                 // TODO: field exhaustiveness
                 got(
                     move |e, value| match value {
-                        ConValue::Struct(_, members) => {
+                        ConValue::Struct(members) => {
                             for (name, matcher) in &matchers {
-                                let Some(field) = members.get(name) else {
+                                let Some(field) = members.1.get(name) else {
                                     return Ok(false);
                                 };
                                 let _ = matcher(e, field)? || return Ok(false);
@@ -1400,11 +1416,11 @@ fn let_inner_pattern(pat: &Pat) -> IResult<(Matcher, Binder)> {
                         v => Err(Error::TypeError("struct", v.type_of(e))),
                     },
                     move |e, value| {
-                        let ConValue::Struct(_, mut members) = value else {
+                        let ConValue::Struct(mut members) = value else {
                             unreachable!("{value} is not struct")
                         };
                         for (name, binder) in &binders {
-                            let Some(value) = members.remove(name) else {
+                            let Some(value) = members.1.remove(name) else {
                                 continue;
                             };
                             binder(e, value)
@@ -1450,9 +1466,8 @@ fn let_inner_pattern(pat: &Pat) -> IResult<(Matcher, Binder)> {
                 got(
                     move |e, v| match ty(e)? {
                         ConValue::TypeInfo(ty) => match v {
-                            ConValue::Struct(t2, _) | ConValue::TupleStruct(t2, _) if ty != *t2 => {
-                                Ok(false)
-                            }
+                            ConValue::Struct(s) if ty != s.0 => Ok(false),
+                            ConValue::TupleStruct(s) if ty != s.0 => Ok(false),
                             _ => matcher(e, v),
                         },
                         other => Err(Error::TypeError("type", other.type_of(e))),
@@ -1466,9 +1481,8 @@ fn let_inner_pattern(pat: &Pat) -> IResult<(Matcher, Binder)> {
                 got(
                     move |e, v| match ty(e)? {
                         ConValue::TypeInfo(ty) => match v {
-                            ConValue::Struct(t2, _) | ConValue::TupleStruct(t2, _) if ty != *t2 => {
-                                Ok(false)
-                            }
+                            ConValue::Struct(s) if ty != s.0 => Ok(false),
+                            ConValue::TupleStruct(s) if ty != s.0 => Ok(false),
                             _ => matcher(e, v),
                         },
                         other => Err(Error::TypeError("type", other.type_of(e))),
@@ -1531,12 +1545,13 @@ fn slice_or_tuple_pat(slice: bool, pats: &[At<Pat>]) -> IResult<(Matcher, Binder
             ),
             false => got(
                 move |e, value| match value {
-                    ConValue::Tuple(values) if len <= values.len() => matcher(e, values),
-                    ConValue::TupleStruct(_, values) if len <= values.len() => matcher(e, values),
+                    ConValue::Tuple(vs) if len <= vs.len() => matcher(e, vs),
+                    ConValue::TupleStruct(vs) if len <= vs.1.len() => matcher(e, &vs.1),
                     _ => Ok(false),
                 },
                 move |e, value| match value {
-                    ConValue::Tuple(vs) | ConValue::TupleStruct(_, vs) => binder(e, vs),
+                    ConValue::Tuple(vs) => binder(e, vs),
+                    ConValue::TupleStruct(vs) => binder(e, vs.1),
                     _ => unreachable!("Cannot match {value} against tuple pattern!"),
                 },
             ),
@@ -1608,11 +1623,12 @@ fn slice_or_tuple_pat(slice: bool, pats: &[At<Pat>]) -> IResult<(Matcher, Binder
         false => got(
             move |e, value| match value {
                 ConValue::Tuple(values) if len <= values.len() => matcher(e, values),
-                ConValue::TupleStruct(_, values) if len <= values.len() => matcher(e, values),
+                ConValue::TupleStruct(vs) if len <= vs.1.len() => matcher(e, &vs.1),
                 _ => Ok(false),
             },
             move |e, value| match value {
-                ConValue::Tuple(vs) | ConValue::TupleStruct(_, vs) => binder(e, vs),
+                ConValue::Tuple(vs) => binder(e, vs),
+                ConValue::TupleStruct(vs) => binder(e, vs.1),
                 _ => unreachable!("Cannot match {value} against tuple pattern!"),
             },
         ),

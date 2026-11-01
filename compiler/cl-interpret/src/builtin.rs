@@ -232,7 +232,7 @@ pub const Builtins: &[Builtin] = &builtins![
 
     /// Constructs a reference from a raw integer
     fn raw_ref(ConValue::Int(index)) -> &_ {
-        Ok(ConValue::Ref(Place::from_index(Location::Stack(*index as _))))
+        Ok(ConValue::Ref(Box::new(Place::from_index(Location::Stack(*index as _)))))
     }
 
     /// Panics, with a message created by formatting `args` (as if by `fmt`)
@@ -753,7 +753,7 @@ pub const FuncMethods: &[Builtin] = &builtins![
         match func.dereference_in(env)? {
             ConValue::Clunktion(func) => Ok(ConValue::Module(Box::new(
                 func.inner().upvars.borrow().0.iter().map(|(&name, &idx)| {
-                    (name, ConValue::Ref(Place::from_index(idx)))
+                    (name, ConValue::Ref(Box::new(Place::from_index(idx))))
                 }).collect()
             ))),
             _ => Err(Error::TypeError("fn", func.type_of(env))),

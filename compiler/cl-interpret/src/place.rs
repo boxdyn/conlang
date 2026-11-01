@@ -1,7 +1,7 @@
 //! [Place]-expressions in the interpreter
 use crate::{
     Callable,
-    convalue::ConValue,
+    convalue::{ConStruct, ConTuple, ConValue},
     env::{Environment, Location},
     error::{Error, IResult},
     interpret::todo,
@@ -27,9 +27,17 @@ pub enum Projection {
 impl Callable for Place {
     fn call(&self, env: &mut Environment, args: Vec<ConValue>) -> IResult<ConValue> {
         match self.get(env)? {
-            ConValue::Struct(ty, _) | ConValue::TupleStruct(ty, _) => {
+            ConValue::Struct(s) => {
+                let ConStruct(ty, _) = s.as_ref();
                 let func = env.get_impl(*ty, env.kw.call)?;
-                let mut self_args = vec![ConValue::Ref(self.clone())];
+                let mut self_args = vec![ConValue::Ref(Box::new(self.clone()))];
+                self_args.extend(args);
+                func.call(env, self_args)
+            }
+            ConValue::TupleStruct(s) => {
+                let ConTuple(ty, _) = s.as_ref();
+                let func = env.get_impl(*ty, env.kw.call)?;
+                let mut self_args = vec![ConValue::Ref(Box::new(self.clone()))];
                 self_args.extend(args);
                 func.call(env, self_args)
             }
@@ -87,9 +95,9 @@ impl Place {
                     arr.get_mut(idx).ok_or_else(|| Error::OobIndex(idx, len))?
                 }
                 (_place, Projection::Index(_, _)) => Err(Error::NotIndexable())?,
-                (ConValue::Struct(ty, values), Projection::DotSym(sym)) => match ty.to_ref() {
-                    Model::Struct { exhaustive: false, .. } => values.entry(*sym).or_default(),
-                    _ => values.get_mut(sym).ok_or(Error::NotDefined(*sym))?,
+                (ConValue::Struct(s), Projection::DotSym(sym)) => match s.0.to_ref() {
+                    Model::Struct { exhaustive: false, .. } => s.1.entry(*sym).or_default(),
+                    _ => s.1.get_mut(sym).ok_or(Error::NotDefined(*sym))?,
                 },
                 (place, Projection::DotSym(name)) => {
                     Err(Error::TypeError(name, place.clone().type_of(env)))?
@@ -98,9 +106,9 @@ impl Place {
                     let len = values.len();
                     values.get_mut(idx).ok_or(Error::OobIndex(idx, len))?
                 }
-                (ConValue::TupleStruct(_, values), &Projection::DotIdx(idx)) => {
-                    let len = values.len();
-                    values.get_mut(idx).ok_or(Error::OobIndex(idx, len))?
+                (ConValue::TupleStruct(s), &Projection::DotIdx(idx)) => {
+                    let len = s.1.len();
+                    s.1.get_mut(idx).ok_or(Error::OobIndex(idx, len))?
                 }
                 (place, Projection::DotIdx(idx)) => todo!("{place}.{idx}")?,
             }
@@ -125,15 +133,15 @@ impl Place {
                     arr.get(idx).ok_or(Error::OobIndex(idx, len))?
                 }
                 (_place, Projection::Index(_, _)) => todo!("Index {self}")?,
-                (ConValue::Struct(_, values), Projection::DotSym(sym)) => {
-                    values.get(sym).ok_or(Error::NotDefined(*sym))?
+                (ConValue::Struct(s), Projection::DotSym(sym)) => {
+                    s.1.get(sym).ok_or(Error::NotDefined(*sym))?
                 }
                 (place, Projection::DotSym(sym)) => todo!(".{sym} projection for {place}")?,
                 (ConValue::Tuple(values), &Projection::DotIdx(idx)) => {
                     values.get(idx).ok_or(Error::OobIndex(idx, values.len()))?
                 }
-                (ConValue::TupleStruct(_, values), &Projection::DotIdx(idx)) => {
-                    values.get(idx).ok_or(Error::OobIndex(idx, values.len()))?
+                (ConValue::TupleStruct(s), &Projection::DotIdx(idx)) => {
+                    s.1.get(idx).ok_or(Error::OobIndex(idx, s.1.len()))?
                 }
                 (place, Projection::DotIdx(idx)) => todo!(".{idx} projection for {place}")?,
                 (value, place) => Err(Error::Panic(format!(

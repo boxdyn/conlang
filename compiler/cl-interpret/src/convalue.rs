@@ -58,16 +58,16 @@ pub enum ConValue {
     /// A dynamic string
     String(String),
     /// A reference
-    Ref(Place),
+    Ref(Box<Place>),
     /// An Array
     Array(Vec<ConValue>),
     /// A tuple
     Tuple(Vec<ConValue>),
     // TODO: Instead of storing the identifier, store the index of the struct module
     /// A value of a product type
-    Struct(Type, Box<HashMap<Symbol, ConValue>>),
+    Struct(Box<ConStruct>),
     /// A value of a product type with anonymous members
-    TupleStruct(Type, Vec<ConValue>),
+    TupleStruct(Box<ConTuple>),
     /// An entire namespace
     Module(Box<HashMap<Symbol, ConValue>>),
     /// A quoted expression
@@ -79,6 +79,12 @@ pub enum ConValue {
     /// The definition of a type, by index
     TypeInfo(Type),
 }
+
+#[derive(Clone, Debug)]
+pub struct ConStruct(pub Type, pub HashMap<Symbol, ConValue>);
+
+#[derive(Clone, Debug)]
+pub struct ConTuple(pub Type, pub Vec<ConValue>);
 
 impl Callable for ConValue {
     fn name(&self) -> Option<Symbol> {
@@ -126,10 +132,12 @@ impl ConValue {
     pub fn try_hard(self, env: &mut Environment) -> IResult<Self> {
         /// Special-case the builtin try-able data structures nominally, cuz it's fast
         fn be_lazy(value: ConValue) -> IResult<Result<ConValue, ConValue>> {
-            let (ty, mut vs) = match value {
-                ConValue::TupleStruct(ty, vs) if vs.len() == 1 => (ty, vs),
-                ConValue::TypeInfo(ty) if let "None" = ty.name() => Err(Error::Return(value))?,
-                _ => return Ok(Err(value)),
+            let ConValue::TupleStruct(s) = value else {
+                return Ok(Err(value));
+            };
+            let ConTuple(ty, mut vs) = *s;
+            if vs.len() != 1 {
+                return Ok(Err(ConValue::TupleStruct(Box::new(ConTuple(ty, vs)))));
             };
             match ty.name() {
                 // Tried::{Take, Return}
@@ -140,8 +148,12 @@ impl ConValue {
                 "None" => return Err(Error::Return(ConValue::TypeInfo(ty))),
                 // Result::{Ok, Err}
                 "Ok" => return Ok(Ok(vs[0].take())),
-                "Err" => return Err(Error::Return(ConValue::TupleStruct(ty, vs))),
-                _ => Ok(Err(ConValue::TupleStruct(ty, vs))),
+                "Err" => {
+                    return Err(Error::Return(ConValue::TupleStruct(Box::new(ConTuple(
+                        ty, vs,
+                    )))));
+                }
+                _ => Ok(Err(ConValue::TupleStruct(Box::new(ConTuple(ty, vs))))),
             }
         }
 
@@ -170,8 +182,8 @@ impl ConValue {
             | Self::String(_)
             | Self::Array(_)
             | Self::Tuple(_)
-            | Self::Struct(_, _)
-            | Self::TupleStruct(_, _) => false,
+            | Self::Struct(_)
+            | Self::TupleStruct(_) => false,
         }
     }
 
@@ -190,8 +202,8 @@ impl ConValue {
             ConValue::Quote(_) => true,
             ConValue::Clunktion(_) => true,
             ConValue::Builtin(_) => true,
-            ConValue::Struct(_, _) => false,
-            ConValue::TupleStruct(_, _) => false,
+            ConValue::Struct(_) => false,
+            ConValue::TupleStruct(_) => false,
             ConValue::TypeInfo(_) => false,
             ConValue::Module(_) => false,
         }
@@ -222,8 +234,8 @@ impl ConValue {
                 fields: vs.iter().map(|v| v.type_of(env)).collect(),
             }
             .intern(),
-            Self::Struct(ty, _) => *ty,
-            Self::TupleStruct(ty, _) => *ty,
+            Self::Struct(s) => s.0,
+            Self::TupleStruct(s) => s.0,
             Self::Module(_) => Model::Any.already_interned(),
             Self::Quote(_) => Model::Any.already_interned(),
             Self::Clunktion(_) => Model::Function.already_interned(),
@@ -529,11 +541,14 @@ impl std::fmt::Display for ConValue {
             ConValue::Ref(v) => write!(f, "&<{}>", v),
             ConValue::Array(array) => f.delimit('[', ']').list(array, ", "),
             ConValue::Tuple(tuple) => f.delimit('(', ')').list(tuple, ", "),
-            ConValue::TupleStruct(id, tuple) => f
-                .delimit(format_args!("{}(", id.name()), ")")
-                .list(tuple, ", "),
-            ConValue::Struct(id, map) => {
+            ConValue::TupleStruct(s) => {
+                let ConTuple(id, tuple) = s.as_ref();
+                f.delimit(format_args!("{}(", id.name()), ")")
+                    .list(tuple, ", ")
+            }
+            ConValue::Struct(s) => {
                 use std::fmt::Write;
+                let ConStruct(id, map) = s.as_ref();
                 match id.name() {
                     "" => {}
                     name => write!(f, "{name} ")?,
