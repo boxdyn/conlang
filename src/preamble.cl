@@ -133,14 +133,12 @@ impl f64 {
 }
 
 /// TODO: real interfaces
-struct IntoIterator<T>;
-impl IntoIterator<T> {
+trait IntoIterator<T> {
     /// Produces an Iterator instance from `self`
     fn into_iter(self: &Self) -> Iterator<T>;
 }
 
-struct Iterator<T>;
-impl Iterator<T> {
+trait Iterator<T> {
     /// All iterators<T> implement IntoIterator<T>
     impl IntoIterator<T> for Iterator<T>
         /// Produces an Iterator instance from `self`
@@ -283,6 +281,7 @@ impl Iterator for Iterator::Take {
 }
 
 
+struct RangeInc(_, _);
 impl IntoIterator<usize> for RangeInc {
     struct InclusiveIter(usize, usize);
     impl Iterator<usize> for InclusiveIter {
@@ -295,6 +294,8 @@ impl IntoIterator<usize> for RangeInc {
 
     fn into_iter(&RangeInc(start, end)) = RangeInc::InclusiveIter(start, end);
 }
+
+struct RangeExc(_, _);
 impl IntoIterator<usize> for RangeExc {
     struct ExclusiveIter(usize, usize);
     impl Iterator<usize> for ExclusiveIter {

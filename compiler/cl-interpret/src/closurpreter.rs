@@ -522,7 +522,7 @@ fn compile_bind(bind: &Bind, within: &At<Expr>) -> IResult<OwnClexpr> {
         // TODO: perform a naming pass, then do this
         (BindOp::Mod, _, [body]) => compile_mod(pat, body)?,
         (BindOp::Impl, _, [body]) => compile_impl(pat, body)?,
-        (BindOp::Impl, _, []) => compile_impl(pat, &Expr::Omitted.at(within.1))?,
+        (BindOp::Trait, _, [body]) => compile_trait(pat, body)?,
         (BindOp::Struct, _, []) => {
             let pat = pat.clone();
             Box::new(move |e| match struct_binds(pat.value(), e)? {
@@ -569,6 +569,32 @@ fn compile_bind(bind: &Bind, within: &At<Expr>) -> IResult<OwnClexpr> {
         }
         _ => unimplemented!("{bind}"),
     })
+}
+
+fn compile_trait(pat: &At<Pat>, body: &At<Expr>) -> IResult<OwnClexpr> {
+    let pat = pat.clone();
+    let body = compile(unblock(body))?;
+    Ok(Box::new(move |e: &mut Environment| {
+        let (name, model) = struct_binds(pat.value(), e)?;
+        let ty = model.intern(); // TODO: bad
+        let mut scope = e.frame(ty.name(), Some(pat.1), Some(ty));
+        body(&mut scope)?;
+        if let Some(values) = scope.pop_into_globals() {
+            for (name, value) in values {
+                if let Location::Global(loc) = value {
+                    e.implement_raw(ty, name, loc);
+                    match e.get_id(value).expect("Just bound") {
+                        ConValue::Clunktion(c) => c.clone().capture(e)?,
+                        _ => {}
+                    }
+                }
+            }
+        }
+        if let Some(name) = name {
+            e.bind(name, ConValue::TypeInfo(ty));
+        }
+        Ok(ConValue::TypeInfo(ty))
+    }))
 }
 
 fn compile_mod(pat: &At<Pat>, body: &At<Expr>) -> IResult<OwnClexpr> {
