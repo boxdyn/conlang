@@ -15,23 +15,15 @@ fn f64_abs(&n: &f64) -> f64 {
 }
 
 /// Square root approximation using Newton's method
-fn sqrt(n: f64) -> f64 {
-    let n = n as f64;
-    if n < 0.0 {
-        return 0.0 / 0.0; // TODO: NaN constant
-    }
-    if n == 0.0 {
-        return 0.0;
-    }
-
-    let z = n;
-    loop {
-        let adj = (z * z - n) / (2.0 * z);
+pub fn sqrt(mut n: f64) -> f64 {
+    if n < 0.0 return f64::NaN; // TODO: re-uppercase
+    if n == 0.0 return 0.0;
+    let z, err = n, f64::INF;
+    while let adj = (z * z - n) / (2.0 * z) && f64::exponent(adj) < f64::exponent(err) {
         z -= adj;
-        if adj.f64_abs() < EPSILON {
-            break z;
-        }
+        err = adj;
     }
+    z
 }
 
 /// Pythagorean theorem: a² + b² = c²
