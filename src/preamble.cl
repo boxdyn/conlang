@@ -133,14 +133,14 @@ impl f64 {
 }
 
 /// TODO: real interfaces
-trait IntoIterator<T> {
+trait IntoIter<T> {
     /// Produces an Iterator instance from `self`
     fn into_iter(self: &Self) -> Iterator<T>;
 }
 
 trait Iterator<T> {
-    /// All iterators<T> implement IntoIterator<T>
-    impl IntoIterator<T> for Iterator<T>
+    /// All iterators<T> implement IntoIter<T>
+    impl IntoIter<T> for Iterator<T>
         /// Produces an Iterator instance from `self`
         fn into_iter(&self) -> Self = self;
 
@@ -219,21 +219,34 @@ trait Iterator<T> {
     struct Zip<T, U>(&Self, Iterator<U>);
     /// Returns an iterator which yields elements from two iterators in parallel
     /// until either of them returns `None`
-    fn zip<U>(self, other: Iterator<U>) -> Zip<T, U> = Zip(self, other.into_iter());
+    fn zip<U>(self, other: IntoIter<U>) -> Zip<T, U> = Zip(self, other.into_iter());
 
     /// An Iterator which yields optional elements from two iterators in parallel
     /// until both of them return `None`
     struct ZipLongest<T, U>(&Self, Iterator<U>);
     /// Returns an iterator which yields optional elements from two iterators in parallel
     /// until both of them return `None`
-    fn zip_longest<T, U>(self, other: Iterator<U>) -> ZipLongest<T, U> = ZipLongest(self, other.into_iter());
+    fn zip_longest<T, U>(self, other: IntoIter<U>) -> ZipLongest<T, U> = ZipLongest(self, other.into_iter());
+
+    /// An Iterator which yields elements from its first iterator until exhaustion,
+    /// then yields elements from its second iterator
+    struct Chain<T>(&Self, Iterator<T>);
+    /// Returns an iterator which yields elements from `self` until exhaustion,
+    /// then yields elements from `other`
+    fn chain(self, other: IntoIter<T>) -> Chain<T> = Chain(self, other.into_iter());
 
     /// An Iterator which yields at most `count` elements.
     struct Take(&Self, usize, usize);
     /// Returns an iterator which yields at most `count` elements.
     fn take(self, count: usize) -> Take<T> = Take(self, 0, count);
 
+    /// An Iterator whose `peek` method looks one element ahead.
     struct Peekable<T>(&Self, Option<T>);
+    impl Peekable<T> fn peek(self) -> Option<T> {
+        if (self.1.is_none()) self.1 = self.0.next();
+        self.1
+    }
+    /// Returns an iterator whose `peek` method looks one element ahead.
     fn peekable(self) -> Peekable<T> = Peekable(self, None);
 }
 
@@ -265,13 +278,22 @@ impl Iterator<(T, U)> for Iterator::Zip<T, U> {
     fn next(self: &Iterator::Zip) = Some((self.0.next()?, self.1.next()?))
 }
 
-impl Iterator<(Option<T>, Option<U>)> for Iterator::ZipLongest {
+impl Iterator<(Option<T>, Option<U>)> for Iterator::ZipLongest<T, U> {
     fn next(self: &Iterator::ZipLongest<T, U>) -> Option<(Option<T>, Option<U>)> {
         let a = self.0.next();
         let b = self.1.next();
         if let Some(_) = a || let Some(_) = b {
             Some((a, b))
         } else None
+    }
+}
+
+impl Iterator<T> for Iterator::Chain<T> {
+    fn next(self: &Iterator::Chain<T>) -> Option<T> {
+        match self.0.next() {
+            Some(value) => Some(value);
+            None => self.1.next();
+        }
     }
 }
 
@@ -288,16 +310,11 @@ impl Iterator<T> for Iterator::Peekable<T> {
         Option::Some(value) => (self.1 = None; Some(value));
         Option::None => self.0.next();
     }
-
-    fn peek(self) -> Option<T> {
-        if (self.1.is_none()) self.1 = self.0.next();
-        self.1
-    }
 }
 
 
 struct RangeInc(_, _);
-impl IntoIterator<usize> for RangeInc {
+impl IntoIter<usize> for RangeInc {
     struct InclusiveIter(usize, usize);
     impl Iterator<usize> for InclusiveIter {
         fn next(self: &RangeInc::InclusiveIter) = if self.0 > self.1 None else {
@@ -311,7 +328,7 @@ impl IntoIterator<usize> for RangeInc {
 }
 
 struct RangeExc(_, _);
-impl IntoIterator<usize> for RangeExc {
+impl IntoIter<usize> for RangeExc {
     struct ExclusiveIter(usize, usize);
     impl Iterator<usize> for ExclusiveIter {
         fn next(self: &RangeExc::ExclusiveIter) = if self.0 >= self.1 None else {
@@ -324,7 +341,7 @@ impl IntoIterator<usize> for RangeExc {
     fn into_iter(&RangeExc(start, end)) = RangeExc::ExclusiveIter(start, end);
 }
 
-impl IntoIterator<T> for Array<T> {
+impl IntoIter<T> for Array<T> {
     /// An iterator over an array's contents
     struct ArrayIter(Self, usize);
     impl Iterator<_> for ArrayIter {
@@ -373,7 +390,7 @@ impl Array {
         for idx in 0..values.len() {if f(values[idx]) break Some(idx) } else None;
 
     /// Collects values from `iter` into a buffer
-    fn collect<T>(iter: &IntoIterator<T>) -> [T] {
+    fn collect<T>(iter: &IntoIter<T>) -> [T] {
         let out = [];
         let iter = iter.into_iter();
         while let Some(value) = iter.next() out.push(value);
@@ -383,7 +400,7 @@ impl Array {
     /// Returns a list of unique elements in `values`.
     ///
     /// Has `O(n^2)` time complexity.
-    fn unique<T>(iter: &IntoIterator<T>) -> [T] {
+    fn unique<T>(iter: &IntoIter<T>) -> [T] {
         let iter = iter.into_iter();
         let out = [];
         while let Some(value) = iter.next() {
@@ -411,7 +428,7 @@ impl str {
     fn bytes(self: &str) = str::Bytes(self, 0);
 }
 
-impl IntoIterator<char> for str {
+impl IntoIter<char> for str {
     /// An [Iterator] over the chars in a `str`
     struct Chars(&str, usize);
     impl Iterator<char> for Chars {
