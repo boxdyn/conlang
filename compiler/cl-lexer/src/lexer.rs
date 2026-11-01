@@ -168,7 +168,7 @@ impl<'t> Lexer<'t> {
             (Integer, Some('~')) => return self.consume().digits::<36>(),
             (Integer, _) => return self.digits::<10>(),
             (Identifier, Some('\'')) => return self.character(true),
-            (Identifier, Some('#' | '"')) => todo!("Raw strings!"),
+            (Identifier, Some('#' | '"')) => return self.raw_string(),
             (Identifier, Some(c)) if is_xid_continue(c) => return self.identifier(),
             (Amp, Some('&')) => AmpAmp,
             (Amp, Some('=')) => AmpEq,
@@ -331,6 +331,53 @@ impl<'t> Lexer<'t> {
                 Some('"') => break,
                 Some(c) => c,
             });
+        }
+        lexeme.shrink_to_fit();
+        Ok(self.produce_with_lexeme(TKind::String, Lexeme::String(lexeme)))
+    }
+
+    /// Parses a raw string-literal
+    pub fn raw_string(&mut self) -> Result<Token, LexError> {
+        let mut lexeme = String::new();
+        let mut hashes = 0;
+        while self.next_if('#').is_some() {
+            hashes += 1;
+        }
+
+        let expected_hashes = hashes;
+        hashes = 0;
+        if self.next_if('"').is_none() {
+            Err(self.error(LexFailure::UnterminatedString))?
+        }
+
+        // allow the first newline to be consumed
+        if self.next_if('\\').is_some() {
+            self.next_if('\n');
+        }
+
+        let mut hashing = false;
+        loop {
+            match (hashing, self.take()) {
+                (_, None) => Err(self.error(UnterminatedString))?,
+                (true, Some('#')) => {
+                    hashes += 1;
+                    if hashes >= expected_hashes {
+                        break;
+                    }
+                }
+                (true, Some(c)) => {
+                    lexeme.push('"');
+                    lexeme.extend((0..hashes).map(|_| '#'));
+                    hashes = 0;
+                    if c != '"' {
+                        lexeme.push(c);
+                        hashing = false;
+                    }
+                }
+                (false, Some('"')) if expected_hashes == 0 => break,
+                (false, Some('"')) => hashing = true,
+                (false, Some(c)) => lexeme.push(c),
+            }
         }
         lexeme.shrink_to_fit();
         Ok(self.produce_with_lexeme(TKind::String, Lexeme::String(lexeme)))
