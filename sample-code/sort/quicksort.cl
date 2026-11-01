@@ -1,6 +1,6 @@
 
 
-fn recursive_qsort<T>(arr: &[i128],head: usize,tail: usize) if head < tail {
+fn recursive_qsort<T>(arr: &[i128], head: usize,tail: usize) if head < tail {
     fn partition(arr: &[i128], head: usize, tail: usize) -> usize {
         fn swap(a, b) arr[a], arr[b] = arr[b], arr[a];
 
