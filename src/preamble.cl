@@ -242,9 +242,16 @@ trait Iterator<T> {
 
     /// An Iterator whose `peek` method looks one element ahead.
     struct Peekable<T>(&Self, Option<T>);
-    impl Peekable<T> fn peek(self) -> Option<T> {
-        if (self.1.is_none()) self.1 = self.0.next();
-        self.1
+    impl Peekable<T> {
+        fn peek(self) -> Option<T> {
+            if (self.1.is_none()) self.1 = self.0.next();
+            self.1
+        }
+        fn next_if(self, f: fn(T) -> bool) -> Option<T> {
+            if let Some(c) if f(c) = self.peek() {
+                self.next()
+            } else None
+        }
     }
     /// Returns an iterator whose `peek` method looks one element ahead.
     fn peekable(self) -> Peekable<T> = Peekable(self, None);
