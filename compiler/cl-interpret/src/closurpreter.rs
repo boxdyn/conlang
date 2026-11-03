@@ -2,7 +2,7 @@
 
 use crate::{
     Callable,
-    convalue::{ConTuple, ConValue, Integer},
+    convalue::{ConStruct, ConTuple, ConValue, Integer},
     env::{Environment, Location},
     error::{Error, ErrorKind, IResult},
     function::{CallableFn, Clunktion},
@@ -103,12 +103,19 @@ fn compile_place(value: &At<Expr>) -> IResult<Option<Plexpr>> {
 
 /// A function which performs the [Place::get_mut] algorithm
 type GetMut = Box<dyn Fn(&mut Environment) -> IResult<&mut ConValue>>;
+fn compile_get_mut_name(name: Symbol) -> GetMut {
+    Box::new(move |e| {
+        e.get_id_mut(e.id_of(name)?)
+            .ok_or_else(|| Error::NotDefined(name))
+    })
+}
+
 /// Performs the [Place::get_mut] algorithm without constructing an intermediate [Place]
 fn compile_get_mut(expr: &At<Expr>) -> IResult<Option<GetMut>> {
     Ok(match expr.inner().value() {
-        Expr::Id(Path { parts }) if let &[name] = parts.as_slice() => Some(Box::new(move |e| {
-            e.get_id_mut(e.id_of(name)?).ok_or(Error::NotDefined(name))
-        })),
+        Expr::Id(Path { parts }) if let &[name] = parts.as_slice() => {
+            Some(compile_get_mut_name(name))
+        }
         Expr::Op(op, exprs) => match (op, exprs.as_slice()) {
             (Op::Index, [place, idx]) if let Some(place) = compile_get_mut(place)? => {
                 let index = compile(idx)?;
@@ -122,21 +129,20 @@ fn compile_get_mut(expr: &At<Expr>) -> IResult<Option<GetMut>> {
                         (ConValue::Array(arr), ConValue::Int(i @ ..0)) => {
                             let len = arr.len();
                             let idx = len.wrapping_add_signed(i as _) as usize;
-                            arr.get_mut(idx).ok_or(Error::OobIndex(idx as _, len as _))
+                            arr.get_mut(idx).ok_or_else(|| Error::OobIndex(idx, len))
                         }
                         (ConValue::Array(arr), ConValue::Int(idx @ 0..)) => {
                             let len = arr.len();
                             let idx = idx as usize;
-                            arr.get_mut(idx).ok_or(Error::OobIndex(idx, len))
+                            arr.get_mut(idx).ok_or_else(|| Error::OobIndex(idx, len))
                         }
                         (other, _) => Err(Error::TypeError("Index", other.clone().type_of(e))),
                     }
                 }))
             }
-            (Op::Dot, &[ref place, At(Expr::Lit(Literal::Int(i, _)), _)]) => {
-                let Some(place) = compile_get_mut(place)? else {
-                    return Ok(None);
-                };
+            (Op::Dot, &[ref place, At(Expr::Lit(Literal::Int(i, _)), _)])
+                if let Some(place) = compile_get_mut(place)? =>
+            {
                 Some(Box::new(move |e| {
                     let mut refmut = place(e)?;
                     while let ConValue::Ref(place) = refmut {
@@ -146,21 +152,24 @@ fn compile_get_mut(expr: &At<Expr>) -> IResult<Option<GetMut>> {
                         ConValue::Tuple(values) => {
                             let len = values.len();
                             let idx = i as usize;
-                            values.get_mut(idx).ok_or(Error::OobIndex(idx, len))
+                            values.get_mut(idx).ok_or_else(|| Error::OobIndex(idx, len))
                         }
                         ConValue::TupleStruct(values) => {
                             let len = values.1.len();
                             let idx = i as usize;
-                            values.1.get_mut(idx).ok_or(Error::OobIndex(idx, len))
+                            values
+                                .1
+                                .get_mut(idx)
+                                .ok_or_else(|| Error::OobIndex(idx, len))
                         }
                         other => todo!("{other}"),
                     }
                 }))
             }
-            (Op::Dot, [place, At(Expr::Id(path), _)]) if path.parts.len() == 1 => {
-                let Some(place) = compile_get_mut(place)? else {
-                    return Ok(None);
-                };
+            (Op::Dot, [place, At(Expr::Id(path), _)])
+                if path.parts.len() == 1
+                    && let Some(place) = compile_get_mut(place)? =>
+            {
                 let name = path.parts[0];
                 Some(Box::new(move |e| {
                     let mut refmut = place(e)?;
@@ -172,7 +181,7 @@ fn compile_get_mut(expr: &At<Expr>) -> IResult<Option<GetMut>> {
                             Model::Struct { exhaustive: false, .. } => {
                                 Ok(s.1.entry(name).or_default())
                             }
-                            _ => s.1.get_mut(&name).ok_or(Error::NotDefined(name)),
+                            _ => s.1.get_mut(&name).ok_or_else(|| Error::NotDefined(name)),
                         },
                         other => Err(Error::TypeError(name, other.clone().type_of(e))),
                     }
@@ -203,7 +212,8 @@ type Get = Box<dyn Fn(&mut Environment) -> IResult<&ConValue>>;
 fn compile_get(expr: &At<Expr>) -> IResult<Option<Get>> {
     Ok(match expr.inner().value() {
         Expr::Id(Path { parts }) if let &[name] = parts.as_slice() => Some(Box::new(move |e| {
-            Ok(e.get_id(e.id_of(name)?).ok_or(Error::NotDefined(name))?)
+            Ok(e.get_id(e.id_of(name)?)
+                .ok_or_else(|| Error::NotDefined(name))?)
         })),
         Expr::Op(op, exprs) => match (op, exprs.as_slice()) {
             (Op::Index, [place, idx]) if let Some(place) = compile_get(place)? => {
@@ -218,21 +228,20 @@ fn compile_get(expr: &At<Expr>) -> IResult<Option<Get>> {
                         (ConValue::Array(arr), ConValue::Int(i @ ..0)) => {
                             let len = arr.len();
                             let idx = len.wrapping_add_signed(i as _) as usize;
-                            arr.get(idx).ok_or(Error::OobIndex(idx, len))
+                            arr.get(idx).ok_or_else(|| Error::OobIndex(idx, len))
                         }
                         (ConValue::Array(arr), ConValue::Int(idx @ 0..)) => {
                             let len = arr.len();
                             let idx = idx as usize;
-                            arr.get(idx).ok_or(Error::OobIndex(idx, len))
+                            arr.get(idx).ok_or_else(|| Error::OobIndex(idx, len))
                         }
                         (other, _) => Err(Error::TypeError("Index", other.clone().type_of(e))),
                     }
                 }))
             }
-            (Op::Dot, &[ref place, At(Expr::Lit(Literal::Int(i, _)), _)]) => {
-                let Some(place) = compile_get(place)? else {
-                    return Ok(None);
-                };
+            (Op::Dot, &[ref place, At(Expr::Lit(Literal::Int(i, _)), _)])
+                if let Some(place) = compile_get(place)? =>
+            {
                 Some(Box::new(move |e| {
                     let mut ptr = place(e)?;
                     while let ConValue::Ref(place) = ptr {
@@ -242,21 +251,21 @@ fn compile_get(expr: &At<Expr>) -> IResult<Option<Get>> {
                         ConValue::Tuple(values) => {
                             let len = values.len();
                             let idx = i as usize;
-                            values.get(idx).ok_or(Error::OobIndex(idx, len))
+                            values.get(idx).ok_or_else(|| Error::OobIndex(idx, len))
                         }
                         ConValue::TupleStruct(values) => {
                             let len = values.1.len();
                             let idx = i as usize;
-                            values.1.get(idx).ok_or(Error::OobIndex(idx, len))
+                            values.1.get(idx).ok_or_else(|| Error::OobIndex(idx, len))
                         }
                         other => todo!("{other}"),
                     }
                 }))
             }
-            (Op::Dot, [place, At(Expr::Id(path), _)]) if path.parts.len() == 1 => {
-                let Some(place) = compile_get(place)? else {
-                    return Ok(None);
-                };
+            (Op::Dot, [place, At(Expr::Id(path), _)])
+                if path.parts.len() == 1
+                    && let Some(place) = compile_get(place)? =>
+            {
                 let name = path.parts[0];
                 Some(Box::new(move |e| {
                     let mut ptr = place(e)?;
@@ -266,7 +275,7 @@ fn compile_get(expr: &At<Expr>) -> IResult<Option<Get>> {
 
                     match ptr {
                         ConValue::Struct(values) => {
-                            values.1.get(&name).ok_or(Error::NotDefined(name))
+                            values.1.get(&name).ok_or_else(|| Error::NotDefined(name))
                         }
                         other => Err(Error::TypeError(name, other.clone().type_of(e))),
                     }
@@ -1144,59 +1153,7 @@ fn compile_op(op: Op, exprs: &[At<Expr>], within: &At<Expr>) -> IResult<OwnClexp
                 if lhs.truthy(e)? { Ok(lhs) } else { rhs(e) }
             })
         }
-        (Op::Set, [place, value]) => {
-            type SetFn = Box<dyn Fn(&mut Environment, ConValue) -> IResult<()>>;
-            fn set_pattern(place: &At<Expr>) -> IResult<SetFn> {
-                Ok(match place {
-                    place if let Some(place) = compile_get_mut(place)? => {
-                        Box::new(move |e, value| Ok(*place(e)? = value))
-                    }
-                    At(Expr::Op(Op::Group, places), _) if let [place] = &places[..] => {
-                        set_pattern(place)?
-                    }
-                    At(Expr::Op(Op::Array, places), _) => {
-                        let places: Vec<_> = places
-                            .iter()
-                            .map(set_pattern)
-                            .collect::<Result<Vec<_>, _>>()?;
-                        Box::new(move |e, value| match value {
-                            ConValue::Array(values) if places.len() == values.len() => {
-                                for (place, value) in places.iter().zip(values) {
-                                    place(e, value)?;
-                                }
-                                Ok(())
-                            }
-                            other => Err(Error::TypeError("[_]", other.type_of(e))),
-                        })
-                    }
-                    At(Expr::Op(Op::Tuple, places), _) => {
-                        let places = places
-                            .iter()
-                            .map(set_pattern)
-                            .collect::<Result<Vec<_>, _>>()?;
-                        Box::new(move |e, value| match value {
-                            ConValue::Tuple(values) if places.len() == values.len() => {
-                                for (place, value) in places.iter().zip(values) {
-                                    place(e, value)?;
-                                }
-                                Ok(())
-                            }
-                            other => Err(Error::TypeError("[_]", other.type_of(e))),
-                        })
-                    }
-                    // Make for Struct, Call for NamedTuple, ...
-                    _ => cl_todo!("set_place({place}")?,
-                })
-            }
-
-            let set_place = set_pattern(place)?;
-            let value = compile(value)?;
-            Box::new(move |e| {
-                let value = value(e)?;
-                set_place(e, value)?;
-                Ok(ConValue::Unit)
-            })
-        }
+        (Op::Set, [place, value]) => compile_set(place, value)?,
         (Op::MulSet, [place, value]) => assign_modify!(place.mul(value)),
         (Op::DivSet, [place, value]) => assign_modify!(place.div(value)),
         (Op::RemSet, [place, value]) => assign_modify!(place.rem(value)),
@@ -1222,6 +1179,120 @@ macro assign_modify($place:ident . $op:ident ($value:ident)) {{
         Ok(ConValue::Unit)
     })
 }}
+
+/// Constructs an expression which decomposes `value` and assigns its constituents to `place`
+fn compile_set(place: &At<Expr>, value: &At<Expr>) -> IResult<OwnClexpr> {
+    type SetFn = Box<dyn Fn(&mut Environment, ConValue) -> IResult<()>>;
+    fn set_pattern(place: &At<Expr>) -> IResult<SetFn> {
+        Ok(match place {
+            place if let Some(place) = compile_get_mut(place)? => {
+                Box::new(move |e, value| Ok(*place(e)? = value))
+            }
+            At(Expr::Op(Op::Group, places), _) if let [place] = &places[..] => set_pattern(place)?,
+            At(Expr::Op(Op::Refer, places), _) if let [place] = &places[..] => {
+                let setter = set_pattern(place)?;
+                Box::new(move |e, value| match value {
+                    ConValue::Ref(p) => {
+                        let value = p.get(e)?.clone(); // TODO: when to clone, and when to take?
+                        setter(e, value)
+                    }
+                    _ => setter(e, value),
+                })
+            }
+            At(Expr::Op(Op::Array, places), _) => {
+                let places: Vec<_> = places
+                    .iter()
+                    .map(set_pattern)
+                    .collect::<Result<Vec<_>, _>>()?;
+                Box::new(move |e, value| match value {
+                    ConValue::Array(values) if places.len() == values.len() => {
+                        for (place, value) in places.iter().zip(values) {
+                            place(e, value)?;
+                        }
+                        Ok(())
+                    }
+                    other => Err(Error::TypeError("[_]", other.type_of(e))),
+                })
+            }
+            At(Expr::Op(Op::Tuple, places), _) => {
+                let places = places
+                    .iter()
+                    .map(set_pattern)
+                    .collect::<Result<Vec<_>, _>>()?;
+                Box::new(move |e, value| match value {
+                    ConValue::Tuple(values) if places.len() == values.len() => {
+                        for (place, value) in places.iter().zip(values) {
+                            place(e, value)?;
+                        }
+                        Ok(())
+                    }
+                    other => Err(Error::TypeError("(..)", other.type_of(e))),
+                })
+            }
+            At(Expr::Op(Op::Call, places), _)
+                if let [ty, At(Expr::Op(Op::Tuple, places), _)] = &places[..]
+                    && let Some(_ty) = compile_get(ty)? =>
+            {
+                let places = places
+                    .iter()
+                    .map(set_pattern)
+                    .collect::<Result<Vec<_>, _>>()?;
+                Box::new(move |e, value| match value {
+                    ConValue::TupleStruct(s) if places.len() == s.1.len() => {
+                        // TODO: check s.0 against ty
+                        for (place, value) in places.iter().zip(s.1) {
+                            place(e, value)?;
+                        }
+                        Ok(())
+                    }
+                    other => Err(Error::TypeError("_(..)", other.type_of(e))),
+                })
+            }
+            &At(Expr::Make(ref make), span)
+                if let Make(ty, arms) = make.as_ref()
+                    && let Some(_ty) = compile_get(ty)? =>
+            {
+                let (mut named_arms, mut unnamed_arms) = (vec![], vec![]);
+                for &MakeArm(name, ref body) in arms {
+                    match body {
+                        Some(body) => named_arms.push((name, set_pattern(body)?)),
+                        None => unnamed_arms.push((name, compile_get_mut_name(name))),
+                    }
+                }
+                Box::new(move |e, value| match value {
+                    ConValue::Struct(s) => {
+                        let ConStruct(_ty, mut values) = *s;
+                        // TODO: check type?
+                        for (name, setter) in named_arms.iter() {
+                            let Some(value) = values.remove(name) else {
+                                Err(Error::NotDefined(*name).with_span(span))?
+                            };
+                            setter(e, value)?;
+                        }
+                        for (name, getmut) in unnamed_arms.iter() {
+                            let Some(value) = values.remove(name) else {
+                                Err(Error::NotDefined(*name).with_span(span))?
+                            };
+                            *getmut(e)? = value;
+                        }
+                        Ok(())
+                    }
+                    _ => Err(Error::TypeError("struct", value.type_of(e))),
+                })
+            }
+            // Call for NamedTuple, ...
+            _ => cl_todo!("set_place({place})")?,
+        })
+    }
+
+    let set_place = set_pattern(place)?;
+    let value = compile(value)?;
+    Ok(Box::new(move |e| {
+        let value = value(e)?;
+        set_place(e, value)?;
+        Ok(ConValue::Unit)
+    }))
+}
 
 // /// PATTERN MATCHING CODE BELOW /// //
 
@@ -1494,7 +1565,7 @@ fn let_inner_pattern(pat: &Pat) -> IResult<(Matcher, Binder)> {
             (PatOp::Fn, [args, _]) => compile_let_pattern(args)?,
             (PatOp::Guard, [pat, _]) => compile_let_pattern(pat)?,
             (PatOp::Alt, _) => cl_todo!("Alt patterns (dynamic guards??)")?,
-            _ => unimplemented!("{pat}"),
+            _ => cl_unimplemented!("{pat} ({pat:?})")?,
         },
     })
 }
