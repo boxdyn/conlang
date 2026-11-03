@@ -231,7 +231,7 @@ impl<'t> Parse<'t> for Pat {
                     let mut elems = vec![head.at(span)];
                     while p.next_if(kind)?.is_ok() {
                         match p.peek()?.kind {
-                            TKind::RParen | TKind::RBrack | TKind::RCurly => break,
+                            TKind::RParen | TKind::RBrack | TKind::RCurly | TKind::Bar => break,
                             _ => elems.push(p.parse(prec.next()).no_eof()?),
                         }
                     }
