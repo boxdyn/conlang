@@ -746,6 +746,31 @@ mod std {
             let into_iter = chars;
         }
     }
+
+    impl char {
+        fn encode_utf8(self) -> [u8; 4] {
+            let value = self as i32;
+            let out = match value {
+                ..0x80     => return [0, 0, 0, value];
+                ..0x1000   => [0x00, 0x00, 0xc0, 0x80];
+                ..0x10000  => [0x00, 0xe0, 0x80, 0x80];
+                ..0x110000 => [0xf0, 0x80, 0x80, 0x80];
+                .. => panic("Invalid codepoint: ", value);
+            }
+            for i in (0..4)
+                out[i] |= value >> 18 - 6 * i & 0x3f;
+            out
+        }
+    }
+
+    impl [i128; 4] {
+        fn decode_utf8(self) -> char = match self {
+            [0, 0, 0, a] => (a & 0x7f);
+            [0, 0, b, a] => (a & 0x3f) | (b & 0x1f) << 6;
+            [0, c, b, a] => (a & 0x3f) | (b & 0x3f) << 6 | (c & 0x0f) << 12;
+            [d, c, b, a] => (a & 0x3f) | (b & 0x3f) << 6 | (c & 0x3f) << 12 | (d & 0x07) << 18;
+        } as char;
+    }
 }
 
 mod std {
