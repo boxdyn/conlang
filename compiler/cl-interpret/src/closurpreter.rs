@@ -203,11 +203,7 @@ type Get = Box<dyn Fn(&mut Environment) -> IResult<&ConValue>>;
 fn compile_get(expr: &At<Expr>) -> IResult<Option<Get>> {
     Ok(match expr.inner().value() {
         Expr::Id(Path { parts }) if let &[name] = parts.as_slice() => Some(Box::new(move |e| {
-            let mut ptr = e.get_id(e.id_of(name)?).ok_or(Error::NotDefined(name))?;
-            while let ConValue::Ref(place) = ptr {
-                ptr = place.clone().get(e)?;
-            }
-            Ok(ptr)
+            Ok(e.get_id(e.id_of(name)?).ok_or(Error::NotDefined(name))?)
         })),
         Expr::Op(op, exprs) => match (op, exprs.as_slice()) {
             (Op::Index, [place, idx]) if let Some(place) = compile_get(place)? => {
