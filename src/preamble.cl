@@ -487,6 +487,11 @@ mod std {
             /// then yields elements from `other`
             fn chain(self, other: IntoIter<T>) -> Chain<T> = Chain(self, other.into_iter());
 
+            /// An Iterator which pairs each yielded value with its index in the sequence
+            struct Enumerate<T>(&Self, usize);
+            /// Returns an iterator which pairs each yielded value with its index in the sequence
+            fn enumerate(self) -> Enumerate<T> = Enumerate(self, 0);
+
             /// An Iterator which yields at most `count` elements.
             struct Take(&Self, usize, usize);
             /// Returns an iterator which yields at most `count` elements.
@@ -553,6 +558,14 @@ mod std {
                     Some(value) => Some(value);
                     None => self.1.next();
                 }
+            }
+        }
+
+        impl Iterator<(usize, T)> for Iterator::Enumerate<T> {
+            fn next(self: &Iterator::Enumerate<T>) -> Option<T> {
+                let out = self.1, self.0.next()?;
+                self.1 += 1;
+                Some(out)
             }
         }
 
