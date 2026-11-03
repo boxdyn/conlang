@@ -226,7 +226,9 @@ impl ConValue {
             Self::Str(_) => Model::Str.already_interned(),
             Self::String(_) => Model::Str.already_interned(),
             Self::Ref(place) => Model::Ref(type_of_place(place, env)).intern(),
-            Self::Array(arr) if !arr.is_empty() => Model::Slice(arr[0].type_of(env)).intern(),
+            Self::Array(arr) if !arr.is_empty() => {
+                Model::Array(arr[0].type_of(env), arr.len()).intern()
+            }
             Self::Array(_) => Model::Slice(Model::Any.already_interned()).intern(),
             Self::Tuple(vs) => Model::Tuple {
                 name: None,

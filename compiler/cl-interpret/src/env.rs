@@ -169,6 +169,7 @@ impl Default for Environment {
                 }
                 Model::Any => this.add_methods(ty, &any_methods),
                 Model::Slice(_) => this.add_methods(ty, &array_methods),
+                Model::Array(_, _) => this.add_methods(ty, &array_methods),
                 Model::Function => this.add_methods(ty, &func_methods),
                 Model::Unit { name: None, .. } => this.add_methods(ty, &unit_or_tup_methods),
                 Model::Unit { .. } => {}

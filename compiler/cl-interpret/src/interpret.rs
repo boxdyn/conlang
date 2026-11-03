@@ -75,6 +75,17 @@ pub(crate) fn struct_binds(pat: &Pat, env: &mut Environment) -> IResult<(Option<
                     None => todo!("Ref {pat} in bind_struct_op?"),
                 }
             }
+            (PatOp::ArRep, [pat, At(Pat::Value(rep), _)]) => {
+                let (name, ty) = struct_binds(pat.value(), env)?;
+                let Some(ty) = find_interned_type(&ty) else {
+                    todo!("ArRep {pat} in bind_struct_op?")?
+                };
+                let rep = match compile(rep)?(env)? {
+                    ConValue::Int(i) => i as usize,
+                    _ => todo!("ArRep {pat} in bind_struct_op?")?,
+                };
+                Ok((name, Model::Array(ty, rep)))
+            }
             (PatOp::Ptr, [..]) => todo!("Ptr in bind_struct_op?"),
             (PatOp::Rest, [..]) => {
                 println!(

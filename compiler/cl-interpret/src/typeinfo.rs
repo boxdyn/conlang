@@ -7,7 +7,7 @@ use cl_structures::intern::{interned::Interned, leaky_interner::LeakyInterner};
 
 use crate::{
     Callable,
-    convalue::{ConStruct, ConValue, ConTuple, Integer},
+    convalue::{ConStruct, ConTuple, ConValue, Integer},
     env::Environment,
     error::{Error, IResult},
     reserved_words::ReservedWords,
@@ -53,6 +53,7 @@ pub enum Model {
     Ref(Type),
     /// Slice of a list of [Type]
     Slice(Type),
+    Array(Type, usize),
     /// An arbitrary function (TODO: encode signature)
     Function,
 }
@@ -102,6 +103,7 @@ impl Display for Model {
             }
             Self::Ref(t) => write!(f, "&{t}"),
             Self::Slice(t) => write!(f, "[{t}]"),
+            Self::Array(t, n) => write!(f, "[{t}; {n}]"),
             Self::Function => {
                 write!(f, "fn()")
             }
@@ -203,6 +205,7 @@ impl Model {
             Model::Ref(ty) => Some(*ty),
             Model::Slice(Interned(Model::Any, ..)) => None,
             Model::Slice(_) => Some(Model::Slice(Model::Any.already_interned()).intern()),
+            Model::Array(ty, _) => Some(Model::Slice(*ty).intern()),
             Model::Function => None,
         }
     }
