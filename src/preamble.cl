@@ -778,7 +778,7 @@ mod std {
         use super::{
             option::{Option, Option::{Some, None}},
             result::{Result, Result::{Ok, Err}},
-            ops::{RangeExc, RangeInc, RangeToExc, RangeToInc},
+            ops::{RangeExc, RangeInc, RangeToExc, RangeToInc, Cmp::{min, max}},
             iter::{Iterator, IntoIter},
         };
 
