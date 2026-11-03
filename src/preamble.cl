@@ -300,8 +300,8 @@ mod std {
 
             /// Returns the [char] representation of the `n`+1-ary digit `n` (up to base-36)
             pub fn as_digit(n: u32) -> char = match n {
-                ..10 => n + '0' as u32;
-                _ => n - 10 + 'a' as u32;
+                ..10 => n + r'0';
+                _ => n - 10 + r'a';
             } as char;
 
             /// Formats `n` as a string in base `radix`
