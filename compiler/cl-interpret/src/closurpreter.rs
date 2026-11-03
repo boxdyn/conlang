@@ -522,7 +522,10 @@ fn compile_bind(bind: &Bind, within: &At<Expr>) -> IResult<OwnClexpr> {
                     e.bind(name, ConValue::Clunktion(clunk.clone()));
                     Ok(ConValue::Clunktion(clunk.clone()))
                 }),
-                None => Box::new(move |_| Ok(ConValue::Clunktion(clunk.clone()))),
+                None => Box::new(move |e| {
+                    clunk.mark(e)?;
+                    Ok(ConValue::Clunktion(clunk.clone()))
+                }),
             }
         }
         // TODO: perform a naming pass, then do this
