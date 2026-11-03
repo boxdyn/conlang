@@ -658,6 +658,15 @@ mod std {
                 self
             }
 
+            /// Reverses the elements in `self`, returning the reversed Array
+            fn reverse<T>(self: &[T]) -> &[T] {
+                for i in 0..self.len() / 2 {
+                    let j = self.len() - 1 - i;
+                    self[i], self[j] = self[j], self[i]
+                }
+                self
+            }
+
             /// Computes the cartesian product of `values` with itself.
             fn grid<T>(&values: [T]) -> [[T; 2]] = values.cartesian(values);
 
