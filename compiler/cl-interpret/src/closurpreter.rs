@@ -1605,7 +1605,7 @@ fn slice_or_tuple_pat(slice: bool, pats: &[At<Pat>]) -> IResult<(Matcher, Binder
         return Ok(match slice {
             true => got(
                 move |e, value| match value {
-                    ConValue::Array(values) if len <= values.len() => matcher(e, values),
+                    ConValue::Array(values) if len == values.len() => matcher(e, values),
                     _ => Ok(false),
                 },
                 move |e, value| match value {
@@ -1615,8 +1615,8 @@ fn slice_or_tuple_pat(slice: bool, pats: &[At<Pat>]) -> IResult<(Matcher, Binder
             ),
             false => got(
                 move |e, value| match value {
-                    ConValue::Tuple(vs) if len <= vs.len() => matcher(e, vs),
-                    ConValue::TupleStruct(vs) if len <= vs.1.len() => matcher(e, &vs.1),
+                    ConValue::Tuple(vs) if len == vs.len() => matcher(e, vs),
+                    ConValue::TupleStruct(vs) if len == vs.1.len() => matcher(e, &vs.1),
                     _ => Ok(false),
                 },
                 move |e, value| match value {
