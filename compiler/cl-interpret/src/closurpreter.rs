@@ -918,11 +918,8 @@ fn compile_op(op: Op, exprs: &[At<Expr>], within: &At<Expr>) -> IResult<OwnClexp
             let fail = compile(unblock(fail))?;
             Box::new(move |e| {
                 let scope = &mut e.frame("if", Some(span), None);
-                if cond(scope)?.truthy(scope)? {
-                    pass(scope)
-                } else {
-                    fail(scope) // technically incorrect but w/e
-                }
+                let cond = cond(scope)?.truthy(scope)?;
+                if cond { pass(scope) } else { fail(scope) }
             })
         }
         (Op::Defer, _) => cl_todo!("defer in the interpreter's 'compiler'")?,
@@ -931,12 +928,7 @@ fn compile_op(op: Op, exprs: &[At<Expr>], within: &At<Expr>) -> IResult<OwnClexp
             // `break 'foo body` -> !, so we don't need to frame `body`
             let body = compile(unblock(body))?;
             let label = name.to_ref();
-            Box::new(move |e| {
-                Err(Error::BreakLabel(
-                    label,
-                    body(&mut e.frame(label, None, None))?,
-                ))
-            })
+            Box::new(move |e| Err(Error::BreakLabel(label, body(e)?)))
         }
         (Op::Break, [body]) => {
             // `break body` -> !, so we don't need to frame `body`
