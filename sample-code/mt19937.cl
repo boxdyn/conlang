@@ -96,7 +96,7 @@ fn main() {
         "\n#include <stdint.h>",
         "\n#include <stdio.h>",
         "\n",
-        "\nconst static uint32_t RANDOM_SEED = ", hex(seed), ";",
+        "\nconst static uint32_t RANDOM_SEED = ", seed.hex(), ";",
         "\nconst static uint32_t OUTPUT[", count, "] = {",
     );
     for i in 0..count match i & 7 {
