@@ -1,4 +1,5 @@
 //! A Conlang interpreter which "compiles" to a closure
+#![allow(clippy::diverging_sub_expression, clippy::unit_arg)]
 
 use crate::{
     Callable,
@@ -128,7 +129,7 @@ fn compile_get_mut(expr: &At<Expr>) -> IResult<Option<GetMut>> {
                     match (refmut, index) {
                         (ConValue::Array(arr), ConValue::Int(i @ ..0)) => {
                             let len = arr.len();
-                            let idx = len.wrapping_add_signed(i as _) as usize;
+                            let idx = len.wrapping_add_signed(i as _);
                             arr.get_mut(idx).ok_or_else(|| Error::OobIndex(idx, len))
                         }
                         (ConValue::Array(arr), ConValue::Int(idx @ 0..)) => {
@@ -212,8 +213,8 @@ type Get = Box<dyn Fn(&mut Environment) -> IResult<&ConValue>>;
 fn compile_get(expr: &At<Expr>) -> IResult<Option<Get>> {
     Ok(match expr.inner().value() {
         Expr::Id(Path { parts }) if let &[name] = parts.as_slice() => Some(Box::new(move |e| {
-            Ok(e.get_id(e.id_of(name)?)
-                .ok_or_else(|| Error::NotDefined(name))?)
+            e.get_id(e.id_of(name)?)
+                .ok_or_else(|| Error::NotDefined(name))
         })),
         Expr::Op(op, exprs) => match (op, exprs.as_slice()) {
             (Op::Index, [place, idx]) if let Some(place) = compile_get(place)? => {
@@ -227,7 +228,7 @@ fn compile_get(expr: &At<Expr>) -> IResult<Option<Get>> {
                     match (ptr, index) {
                         (ConValue::Array(arr), ConValue::Int(i @ ..0)) => {
                             let len = arr.len();
-                            let idx = len.wrapping_add_signed(i as _) as usize;
+                            let idx = len.wrapping_add_signed(i as _);
                             arr.get(idx).ok_or_else(|| Error::OobIndex(idx, len))
                         }
                         (ConValue::Array(arr), ConValue::Int(idx @ 0..)) => {
@@ -360,7 +361,7 @@ fn compile_use(tree: &Use, _within: &At<Expr>) -> IResult<OwnClexpr> {
             &Use::Name(name) => Box::new(move |e, ty| bind(e, ty, name, name)),
             &Use::Alias(from, to) => Box::new(move |e, ty| bind(e, ty, from, to)),
             &Use::Path(name, ref tree) => {
-                let tree = compile_use_ty(&tree, _within);
+                let tree = compile_use_ty(tree, _within);
                 Box::new(
                     move |e, ty| match e.get_impl(ty, name)?.dereference_in(e)? {
                         &ConValue::TypeInfo(ty) => tree(e, ty),
@@ -601,9 +602,8 @@ fn compile_trait(pat: &At<Pat>, body: &At<Expr>) -> IResult<OwnClexpr> {
             for (name, value) in values {
                 if let Location::Global(loc) = value {
                     e.implement_raw(ty, name, loc);
-                    match e.get_id(value).expect("Just bound") {
-                        ConValue::Clunktion(c) => c.clone().capture(e)?,
-                        _ => {}
+                    if let ConValue::Clunktion(c) = e.get_id(value).expect("Just bound") {
+                        c.clone().capture(e)?;
                     }
                 }
             }
@@ -692,9 +692,8 @@ fn compile_impl(pat: &At<Pat>, body: &At<Expr>) -> IResult<OwnClexpr> {
                             e.implement_raw(variant, name, loc);
                         }
                     }
-                    match e.get_id(value).expect("Just bound") {
-                        ConValue::Clunktion(c) => c.clone().capture(e)?,
-                        _ => {}
+                    if let ConValue::Clunktion(c) = e.get_id(value).expect("Just bound") {
+                        c.clone().capture(e)?;
                     }
                 }
             }
@@ -1320,7 +1319,7 @@ fn compile_guard_patterns(pat: &At<Pat>) -> IResult<Option<Guard>> {
                     return Ok(false);
                 }
             }
-            return Ok(true);
+            Ok(true)
         })),
     })
 }
@@ -1395,7 +1394,7 @@ fn let_inner_pattern(pat: &Pat) -> IResult<(Matcher, Binder)> {
             (PatOp::Rest, [rest]) => compile_let_pattern(rest)?,
             (PatOp::RangeEx, &[At(Pat::Value(ref start), _span)]) => {
                 let start = compile(start)?;
-                just_match(move |e, value| start(e)?.lt_eq(&value, e)?.truthy(e))
+                just_match(move |e, value| start(e)?.lt_eq(value, e)?.truthy(e))
             }
             (PatOp::RangeEx, [At(Pat::Value(start), _ssp), At(Pat::Value(end), _esp)]) => {
                 let (start, end) = (compile(start)?, compile(end)?);
@@ -1405,7 +1404,7 @@ fn let_inner_pattern(pat: &Pat) -> IResult<(Matcher, Binder)> {
             }
             (PatOp::RangeIn, &[At(Pat::Value(ref end), _span)]) => {
                 let end = compile(end)?;
-                just_match(move |e, value| end(e)?.gt_eq(&value, e)?.truthy(e))
+                just_match(move |e, value| end(e)?.gt_eq(value, e)?.truthy(e))
             }
             (PatOp::RangeIn, [At(Pat::Value(start), _ssp), At(Pat::Value(end), _esp)]) => {
                 let (start, end) = (compile(start)?, compile(end)?);

@@ -141,18 +141,16 @@ impl ConValue {
             };
             match ty.name() {
                 // Tried::{Take, Return}
-                "Take" => return Ok(Ok(vs[0].take())),
-                "Return" => return Err(Error::Return(vs[0].take())),
+                "Take" => Ok(Ok(vs[0].take())),
+                "Return" => Err(Error::Return(vs[0].take())),
                 // Option::{Some, None}
-                "Some" => return Ok(Ok(vs[0].take())),
-                "None" => return Err(Error::Return(ConValue::TypeInfo(ty))),
+                "Some" => Ok(Ok(vs[0].take())),
+                "None" => Err(Error::Return(ConValue::TypeInfo(ty))),
                 // Result::{Ok, Err}
-                "Ok" => return Ok(Ok(vs[0].take())),
-                "Err" => {
-                    return Err(Error::Return(ConValue::TupleStruct(Box::new(ConTuple(
-                        ty, vs,
-                    )))));
-                }
+                "Ok" => Ok(Ok(vs[0].take())),
+                "Err" => Err(Error::Return(ConValue::TupleStruct(Box::new(ConTuple(
+                    ty, vs,
+                ))))),
                 _ => Ok(Err(ConValue::TupleStruct(Box::new(ConTuple(ty, vs))))),
             }
         }
@@ -530,9 +528,9 @@ impl std::fmt::Display for ConValue {
                 "b" => write!(f, "{v:b}"),
                 "o" => write!(f, "{v:o}"),
                 "x" => write!(f, "{v:x}"),
-                "#b" => write!(f, "{v:#08b}"),
-                "#o" => write!(f, "{v:#03o}"),
-                "#x" => write!(f, "{v:#02x}"),
+                "#b" => write!(f, "{v:#010b}"),
+                "#o" => write!(f, "{v:#05o}"),
+                "#x" => write!(f, "{v:#04x}"),
                 _ => v.fmt(f),
             },
             ConValue::Float(v) => v.fmt(f),

@@ -761,17 +761,11 @@ pub const FuncMethods: &[Builtin] = &builtins![
     }
 
     fn is_builtin(func) @env -> bool {
-        Ok(match func.dereference_in(env)? {
-            ConValue::Builtin(_) => true,
-            _ => false
-        })
+        Ok(matches!(func.dereference_in(env)?, ConValue::Builtin(_)))
     }
 
     fn is_clunk(func) @env -> bool {
-        Ok(match func.dereference_in(env)? {
-            ConValue::Clunktion(_) => true,
-            _ => false
-        })
+        Ok(matches!(func.dereference_in(env)?, ConValue::Clunktion(_)))
     }
 ];
 

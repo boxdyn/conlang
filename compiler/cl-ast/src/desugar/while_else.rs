@@ -26,6 +26,12 @@ impl LoopLabelDesugar<DefaultTypes> {
     }
 }
 
+impl Default for LoopLabelDesugar<DefaultTypes> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<A: AstTypes> Fold<A, A> for LoopLabelDesugar<A> {
     type Error = A::Annotation;
     impl_default_fold!(A, A);
@@ -120,6 +126,12 @@ impl ForElseDesugar<DefaultTypes> {
             object_symbol,
             object_path: types::Path { parts: vec![object_symbol] },
         }
+    }
+}
+
+impl Default for ForElseDesugar<DefaultTypes> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
